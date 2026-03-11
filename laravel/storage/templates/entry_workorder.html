@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Work Order {{ wo.number }}</title>
+
+  <style>
+    /* =========================
+       PRINT + PAGE SETTINGS
+       ========================= */
+    @page { size: Letter; margin: 0.5in; }
+    @media print {
+      .no-print { display: none !important; }
+      a[href]::after { content: ""; }
+      html, body { background:#fff; }
+      .page { page-break-after: always; }
+      .page:last-child { page-break-after: auto; }
+    }
+
+    :root{ --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --soft:#f9fafb; }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; color:var(--ink);
+      font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,"Noto Sans","Liberation Sans",sans-serif;
+      background:#fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page{ max-width:8.5in; margin:0 auto; padding:0; }
+
+    /* typography */
+    h1{ font-size:20px; letter-spacing:.04em; margin:0; text-transform:uppercase; }
+    h2{ font-size:12px; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+    h3{ font-size:11px; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+    .small{ font-size:11px; color:var(--muted); }
+    .mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace; }
+    .addr{ white-space:pre-line; }
+    .muted{ color:var(--muted); }
+    .strong{ font-weight:800; }
+
+    /* toolbar */
+    .toolbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:10px 0 0 0;
+    }
+    .btn{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:8px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .select{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:8px 10px;
+      border-radius:10px;
+      font-weight:600;
+    }
+
+    /* header */
+    .header{
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      padding-bottom:14px;
+      border-bottom:2px solid var(--ink);
+      margin:14px 0 14px 0;
+    }
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      min-width:50%;
+    }
+    .logo-box{
+      width:140px; height:52px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      display:grid; place-items:center;
+      overflow:hidden;
+    }
+    .logo-box img{ width:100%; height:100%; object-fit:contain; }
+    .brand-lines{ display:flex; flex-direction:column; gap:2px; padding-top:2px; }
+    .brand-name{ font-weight:700; font-size:13px; }
+
+    .doc-title{
+      text-align:right;
+      min-width:40%;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      align-items:flex-end;
+    }
+    .meta{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      overflow:hidden;
+    }
+    .meta-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      border-bottom:1px solid var(--line);
+    }
+    .meta-row:last-child{ border-bottom:0; }
+    .meta-cell{
+      padding:8px 10px;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .meta-key{
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      font-size:10px;
+    }
+    .meta-val{ font-weight:600; }
+
+    /* cards / layout */
+    .grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      margin-bottom:14px;
+    }
+    .grid-3{
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      gap:14px;
+      margin-bottom:14px;
+    }
+    .card{
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:10px;
+    }
+
+    /* tables */
+    table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+    .table-wrap{
+      border:1px solid var(--line);
+      border-radius:10px;
+      overflow:hidden;
+      margin-bottom:14px;
+    }
+    thead th{
+      background:var(--soft);
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      font-size:10px;
+      padding:8px;
+      border-bottom:1px solid var(--line);
+      text-align:left;
+    }
+    tbody td{
+      padding:8px;
+      border-bottom:1px solid var(--line);
+      vertical-align:top;
+      word-wrap:break-word;
+    }
+    tbody tr:last-child td{ border-bottom:0; }
+    .num{ text-align:right; }
+    .center{ text-align:center; }
+    .check{
+      width:14px; height:14px; display:inline-block;
+      border:1px solid var(--muted); border-radius:3px;
+      vertical-align:middle;
+    }
+    .desc{ white-space:pre-line; }
+
+    /* badges */
+    .badge{
+      display:inline-block;
+      padding:2px 8px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      font-size:10px;
+      color:var(--muted);
+      background:#fff;
+      margin-left:6px;
+    }
+
+    /* notes box */
+    .notes{ min-height:120px; }
+    .hr{ height:1px; background:var(--line); margin:10px 0; }
+
+    /* view switching (screen only) */
+    [data-view]{ display:none; }
+    [data-view].active{ display:block; }
+
+    @media print{
+      [data-view]{ display:block !important; }
+      [data-view].active{ display:block; }
+      .toolbar{ display:none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Screen-only controls -->
+  <div class="page no-print">
+    <div class="toolbar">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <span class="small strong">View</span>
+        <select id="woView" class="select" onchange="setView(this.value)">
+          <option value="doors">Doors (Entry)</option>
+          <option value="frames">Frames (Entry)</option>
+          <option value="pick">Pick List (Parts)</option>
+          <option value="all">All Pages</option>
+        </select>
+        <span class="small muted">Tip: print always outputs all pages.</span>
+      </div>
+      <button class="btn" onclick="window.print()">Print / Save PDF</button>
+    </div>
+  </div>
+
+  <!-- =========================
+       PAGE 1: DOORS (ENTRY)
+       ========================= -->
+  <div class="page" data-view="doors">
+    <div class="header">
+      <div class="brand">
+        <div class="logo-box">
+          {{#if company.logo_url}}
+            <img src="{{ company.logo_url }}" alt="Company Logo" />
+          {{else}}
+            <div class="small">LOGO</div>
+          {{/if}}
+        </div>
+        <div class="brand-lines">
+          <div class="brand-name">{{ company.name }}</div>
+          <div class="small addr">{{ company.address_block }}</div>
+          <div class="small">{{ company.phone }} • {{ company.email }} • {{ company.website }}</div>
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <h1>Work Order <span class="badge">Doors</span></h1>
+        <div class="meta">
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">WO #</div><div class="meta-val mono">{{ wo.number }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Job</div><div class="meta-val">{{ wo.job_name }}</div></div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">Customer</div><div class="meta-val">{{ wo.customer_name }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Due Date</div><div class="meta-val">{{ wo.due_date }}</div></div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">Priority</div><div class="meta-val">{{ wo.priority }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Status</div><div class="meta-val">{{ wo.status }}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Project Info</h2>
+        <div><span class="muted">WO Ref:</span> <span class="mono">{{ wo.reference }}</span></div>
+        <div><span class="muted">Location:</span> {{ wo.site_location }}</div>
+        <div><span class="muted">PO / Contact:</span> {{ wo.customer_po }} • {{ wo.customer_contact }}</div>
+        <div class="hr"></div>
+        <div class="small">Notes</div>
+        <div class="addr">{{ wo.header_notes }}</div>
+      </div>
+
+      <div class="card">
+        <h2>Sign-Off</h2>
+        <div class="small muted">Initial each stage as completed.</div>
+        <div style="display:grid; gap:8px; margin-top:10px;">
+          <div><span class="check"></span> Cut list verified</div>
+          <div><span class="check"></span> Material pulled</div>
+          <div><span class="check"></span> Machining complete</div>
+          <div><span class="check"></span> Assembly complete</div>
+          <div><span class="check"></span> QA complete</div>
+          <div><span class="check"></span> Packed / Staged</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:10%;">Qty</th>
+            <th style="width:18%;">Door ID</th>
+            <th style="width:18%;">System</th>
+            <th style="width:14%;">Hand</th>
+            <th style="width:20%;">Size (W × H)</th>
+            <th style="width:20%;">Finish / Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each doors}}
+          <tr>
+            <td class="num">{{ qty }}</td>
+            <td class="mono">{{ door_id }}</td>
+            <td>{{ system }}</td>
+            <td>{{ hand }}</td>
+            <td class="mono">{{ width }} × {{ height }}</td>
+            <td class="desc">{{ finish }}{{#if notes}}\n{{ notes }}{{/if}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid">
+      <div class="card notes">
+        <h2>Door-Specific Instructions</h2>
+        <div class="addr">{{ doors_notes }}</div>
+      </div>
+      <div class="card notes">
+        <h2>Hardware / Prep</h2>
+        <div class="addr">{{ doors_hardware_notes }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       PAGE 2: FRAMES (ENTRY)
+       ========================= -->
+  <div class="page" data-view="frames">
+    <div class="header">
+      <div class="brand">
+        <div class="logo-box">
+          {{#if company.logo_url}}
+            <img src="{{ company.logo_url }}" alt="Company Logo" />
+          {{else}}
+            <div class="small">LOGO</div>
+          {{/if}}
+        </div>
+        <div class="brand-lines">
+          <div class="brand-name">{{ company.name }}</div>
+          <div class="small addr">{{ company.address_block }}</div>
+          <div class="small">{{ company.phone }} • {{ company.email }} • {{ company.website }}</div>
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <h1>Work Order <span class="badge">Frames</span></h1>
+        <div class="meta">
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">WO #</div><div class="meta-val mono">{{ wo.number }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Job</div><div class="meta-val">{{ wo.job_name }}</div></div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">Customer</div><div class="meta-val">{{ wo.customer_name }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Due Date</div><div class="meta-val">{{ wo.due_date }}</div></div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">Priority</div><div class="meta-val">{{ wo.priority }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Status</div><div class="meta-val">{{ wo.status }}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <h2>Frame Defaults</h2>
+        <div><span class="muted">Anchors:</span> {{ frames.defaults.anchors }}</div>
+        <div><span class="muted">Sill:</span> {{ frames.defaults.sill }}</div>
+        <div><span class="muted">Weeps:</span> {{ frames.defaults.weeps }}</div>
+      </div>
+      <div class="card">
+        <h2>Glazing / Stops</h2>
+        <div><span class="muted">Glass:</span> {{ frames.defaults.glass }}</div>
+        <div><span class="muted">Stops:</span> {{ frames.defaults.stops }}</div>
+        <div><span class="muted">Setting Blocks:</span> {{ frames.defaults.blocks }}</div>
+      </div>
+      <div class="card">
+        <h2>QA Checks</h2>
+        <div><span class="check"></span> Square</div>
+        <div><span class="check"></span> Fit</div>
+        <div><span class="check"></span> Weeps clear</div>
+        <div><span class="check"></span> Finish match</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:10%;">Qty</th>
+            <th style="width:18%;">Frame ID</th>
+            <th style="width:18%;">System</th>
+            <th style="width:20%;">Size (W × H)</th>
+            <th style="width:14%;">Type</th>
+            <th style="width:20%;">Finish / Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each frames}}
+          <tr>
+            <td class="num">{{ qty }}</td>
+            <td class="mono">{{ frame_id }}</td>
+            <td>{{ system }}</td>
+            <td class="mono">{{ width }} × {{ height }}</td>
+            <td>{{ frame_type }}</td>
+            <td class="desc">{{ finish }}{{#if notes}}\n{{ notes }}{{/if}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid">
+      <div class="card notes">
+        <h2>Frame-Specific Instructions</h2>
+        <div class="addr">{{ frames_notes }}</div>
+      </div>
+      <div class="card notes">
+        <h2>Packaging / Staging</h2>
+        <div class="addr">{{ frames_pack_notes }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       PAGE 3: PICK LIST (PARTS)
+       ========================= -->
+  <div class="page" data-view="pick">
+    <div class="header">
+      <div class="brand">
+        <div class="logo-box">
+          {{#if company.logo_url}}
+            <img src="{{ company.logo_url }}" alt="Company Logo" />
+          {{else}}
+            <div class="small">LOGO</div>
+          {{/if}}
+        </div>
+        <div class="brand-lines">
+          <div class="brand-name">{{ company.name }}</div>
+          <div class="small addr">{{ company.address_block }}</div>
+          <div class="small">{{ company.phone }} • {{ company.email }} • {{ company.website }}</div>
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <h1>Work Order <span class="badge">Pick List</span></h1>
+        <div class="meta">
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">WO #</div><div class="meta-val mono">{{ wo.number }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Job</div><div class="meta-val">{{ wo.job_name }}</div></div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">Pulled By</div><div class="meta-val">________________</div></div>
+            <div class="meta-cell"><div class="meta-key">Date</div><div class="meta-val">____ / ____ / ______</div></div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell"><div class="meta-key">Staging Area</div><div class="meta-val">{{ pick.staging_area }}</div></div>
+            <div class="meta-cell"><div class="meta-key">Batch</div><div class="meta-val mono">{{ pick.batch_id }}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Pull Notes</h2>
+        <div class="addr">{{ pick.notes }}</div>
+        <div class="hr"></div>
+        <div class="small muted">If it’s out of stock, circle it. If it’s missing, summon management using interpretive dance.</div>
+      </div>
+      <div class="card">
+        <h2>Shortage / Substitution</h2>
+        <div class="small muted">Record shortages or approved substitutes.</div>
+        <div class="hr"></div>
+        <div class="addr" style="min-height:92px;">{{ pick.shortage_notes }}</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:6%;" class="center">✓</th>
+            <th style="width:22%;">Part #</th>
+            <th style="width:38%;">Description</th>
+            <th style="width:10%;" class="num">Req Qty</th>
+            <th style="width:12%;">Location</th>
+            <th style="width:12%;">Pulled Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each pick.parts}}
+          <tr>
+            <td class="center"><span class="check"></span></td>
+            <td class="mono">{{ part_number }}</td>
+            <td class="desc">{{ description }}</td>
+            <td class="num">{{ required_qty }}</td>
+            <td class="mono">{{ location }}</td>
+            <td class="mono">________</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Picked By</h2>
+        <div class="sig-line"></div>
+        <div class="small">Name / Signature</div>
+      </div>
+      <div class="card">
+        <h2>Verified By</h2>
+        <div class="sig-line"></div>
+        <div class="small">QA / Lead</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       VIEW SWITCHING (SCREEN)
+       ========================= -->
+  <script>
+    function setView(viewName) {
+      const pages = document.querySelectorAll("[data-view]");
+      const sel = document.getElementById("woView");
+
+      if (viewName === "all") {
+        pages.forEach(p => p.classList.add("active"));
+      } else {
+        pages.forEach(p => p.classList.toggle("active", p.getAttribute("data-view") === viewName));
+      }
+
+      if (sel) sel.value = viewName;
+      try { localStorage.setItem("fd_wo_view", viewName); } catch (e) {}
+    }
+
+    (function initView() {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get("view"); // doors | frames | pick | all
+      let view = q || null;
+
+      if (!view) {
+        try { view = localStorage.getItem("fd_wo_view"); } catch (e) {}
+      }
+      if (!view) view = "doors";
+
+      setView(view);
+    })();
+  </script>
+</body>
+</html>

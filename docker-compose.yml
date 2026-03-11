@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forgedesk_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forgedesk
+      POSTGRES_USER: forgedesk
+      POSTGRES_PASSWORD: forgedesk_secure_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5430:5432"
+    networks:
+      - forgedesk_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgedesk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: forgedesk_redis
+    restart: unless-stopped
+    networks:
+      - forgedesk_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forgedesk_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./laravel:/var/www/html
+      - ./php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=forgedesk
+      - DB_USERNAME=forgedesk
+      - DB_PASSWORD=forgedesk_secure_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - forgedesk_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: forgedesk_nginx
+    restart: unless-stopped
+    ports:
+      - "8040:80"
+    volumes:
+      - ./laravel:/var/www/html
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - forgedesk_network
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forgedesk_queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    volumes:
+      - ./laravel:/var/www/html
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=forgedesk
+      - DB_USERNAME=forgedesk
+      - DB_PASSWORD=forgedesk_secure_password
+      - REDIS_HOST=redis
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - forgedesk_network
+
+networks:
+  forgedesk_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
