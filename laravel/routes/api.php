@@ -63,11 +63,14 @@ Route::post('/login', function (Request $request) {
 
     // Token expiration based on remember me
     $remember = $request->boolean('remember', false);
-    $expirationMinutes = $remember ? 43200 : config('sanctum.expiration', 480); // 30 days or 8 hours
+    $expirationMinutes = $remember ? 43200 : 480; // 30 days or 8 hours
     $expiresAt = now()->addMinutes($expirationMinutes);
 
+    // Use distinct token name to reliably detect remember-me on refresh
+    $tokenName = $remember ? 'auth-token-remember' : 'auth-token';
+
     // Create token with expiration
-    $tokenResult = $user->createToken('auth-token', ['*'], $expiresAt);
+    $tokenResult = $user->createToken($tokenName, ['*'], $expiresAt);
     $token = $tokenResult->plainTextToken;
 
     // Get user permissions
@@ -105,22 +108,15 @@ Route::post('/token/refresh', function (Request $request) {
     $user = $request->user();
     $currentToken = $request->user()->currentAccessToken();
 
-    // Get current token's abilities to check for remember me
+    // Get current token's abilities and name
     $abilities = $currentToken->abilities ?? ['*'];
     $tokenName = $currentToken->name;
 
-    // Check if this was a "remember me" token by checking expiration
-    $currentExpiration = $currentToken->expires_at;
-    $isRememberToken = false;
-
-    if ($currentExpiration) {
-        $minutesUntilExpiry = now()->diffInMinutes($currentExpiration, false);
-        // If token has more than 24 hours left, it's likely a remember me token
-        $isRememberToken = $minutesUntilExpiry > 1440;
-    }
+    // Detect remember-me by token name (set reliably at login time)
+    $isRememberToken = $tokenName === 'auth-token-remember';
 
     // Set expiration based on token type
-    $expirationMinutes = $isRememberToken ? 43200 : config('sanctum.expiration', 480);
+    $expirationMinutes = $isRememberToken ? 43200 : 480;
     $expiresAt = now()->addMinutes($expirationMinutes);
 
     // Delete old token
