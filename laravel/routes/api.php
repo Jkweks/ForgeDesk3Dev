@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\StatusController;
 use App\Http\Controllers\Api\BusinessJobController;
 use App\Http\Controllers\Api\DoorFrameConfigurationController;
 use App\Http\Controllers\Api\PasswordResetController;
+use App\Http\Controllers\Api\FabricationDocumentController;
 
 // Public test route (no auth required)
 Route::get('/test', function () {
@@ -403,5 +404,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/door-frame-configurations/{id}/frame-parts', [DoorFrameConfigurationController::class, 'updateFrameParts']);
         Route::put('/door-frame-configurations/{id}/door-config', [DoorFrameConfigurationController::class, 'updateDoorConfig']);
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release']);
+
+        // Fabrication Documents
+        Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions']);
+        Route::get('/fabrication-documents', [FabricationDocumentController::class, 'index']);
+        Route::post('/fabrication-documents', [FabricationDocumentController::class, 'store']);
+        Route::get('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'show']);
+        Route::post('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update']); // POST with _method=PUT for multipart
+        Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update']);
+        Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy']);
     });
 });

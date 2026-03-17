@@ -94,6 +94,14 @@
                     <a class="dropdown-item" href="/maintenance#tab-assets">Assets</a>
                   </div>
                 </li>
+                <li class="nav-item {{ Request::is('fabrication*') ? 'active' : '' }}" data-nav-permission="nav.fabrication">
+                  <a class="nav-link" href="/fabrication/documents" {{ Request::is('fabrication/documents') ? 'aria-current=page' : '' }}>
+                    <span class="nav-link-icon d-md-none d-lg-inline-block">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 9h9l4 3l-4 3h-9l-1 -3z" /><path d="M3 12h1" /><path d="M15 12h2l4 -4v-3h-2" /><path d="M15 12l2 0l4 4v3h-2" /><path d="M9 9v6" /></svg>
+                    </span>
+                    <span class="nav-link-title">Fabrication</span>
+                  </a>
+                </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">
                   <a class="nav-link" href="/admin" {{ Request::is('admin') ? 'aria-current=page' : '' }}>
                     <span class="nav-link-icon d-md-none d-lg-inline-block">
