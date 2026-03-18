@@ -68,6 +68,10 @@
                     <a class="dropdown-item" href="/fulfillment/job-reservations">
                       <i class="ti ti-clipboard-list me-2"></i>Job Reservations
                     </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">
+                      <i class="ti ti-door me-2"></i>Door Configurator <span class="badge bg-secondary ms-auto">Soon</span>
+                    </a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">
@@ -94,13 +98,21 @@
                     <a class="dropdown-item" href="/maintenance#tab-assets">Assets</a>
                   </div>
                 </li>
-                <li class="nav-item {{ Request::is('fabrication*') ? 'active' : '' }}" data-nav-permission="nav.fabrication">
-                  <a class="nav-link" href="/fabrication/documents" {{ Request::is('fabrication/documents') ? 'aria-current=page' : '' }}>
+                <li class="nav-item dropdown {{ Request::is('fabrication*') ? 'active' : '' }}" data-nav-permission="nav.fabrication">
+                  <a class="nav-link dropdown-toggle" href="#navbar-fabrication" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
                     <span class="nav-link-icon d-md-none d-lg-inline-block">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 9h9l4 3l-4 3h-9l-1 -3z" /><path d="M3 12h1" /><path d="M15 12h2l4 -4v-3h-2" /><path d="M15 12l2 0l4 4v3h-2" /><path d="M9 9v6" /></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M2 10a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M14 11a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z" /><path d="M18 12h3" /><path d="M6 16v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1 -1v-3" /><path d="M7 14l-1 -3" /></svg>
                     </span>
                     <span class="nav-link-title">Fabrication</span>
                   </a>
+                  <div class="dropdown-menu">
+                    <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">
+                      <i class="ti ti-files me-2"></i>Documents
+                    </a>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">
+                      <i class="ti ti-calendar-event me-2"></i>Schedule <span class="badge bg-secondary ms-auto">Soon</span>
+                    </a>
+                  </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">
                   <a class="nav-link" href="/admin" {{ Request::is('admin') ? 'aria-current=page' : '' }}>
