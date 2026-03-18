@@ -39,15 +39,9 @@
                     <span class="nav-link-title">Operations</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item" href="/purchase-orders">
-                      <i class="ti ti-shopping-cart me-2"></i>Purchase Orders
-                    </a>
-                    <a class="dropdown-item" href="/cycle-counting">
-                      <i class="ti ti-clipboard-check me-2"></i>Cycle Counting
-                    </a>
-                    <a class="dropdown-item" href="/storage-locations">
-                      <i class="ti ti-map-pin me-2"></i>Storage Locations
-                    </a>
+                    <a class="dropdown-item" href="/purchase-orders">Purchase Orders</a>
+                    <a class="dropdown-item" href="/cycle-counting">Cycle Counting</a>
+                    <a class="dropdown-item" href="/storage-locations">Storage Locations</a>
                   </div>
                 </li>
                 <li class="nav-item dropdown {{ Request::is('fulfillment*') ? 'active' : '' }}" data-nav-permission="nav.fulfillment">
@@ -58,20 +52,12 @@
                     <span class="nav-link-title">Fulfillment</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item" href="/jobs">
-                      <i class="ti ti-briefcase me-2"></i>Jobs Dashboard
-                    </a>
+                    <a class="dropdown-item" href="/jobs">Jobs Dashboard</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="/fulfillment/material-check">
-                      <i class="ti ti-checklist me-2"></i>Material Check
-                    </a>
-                    <a class="dropdown-item" href="/fulfillment/job-reservations">
-                      <i class="ti ti-clipboard-list me-2"></i>Job Reservations
-                    </a>
+                    <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
+                    <a class="dropdown-item" href="/fulfillment/job-reservations">Job Reservations</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">
-                      <i class="ti ti-door me-2"></i>Door Configurator <span class="badge bg-secondary ms-auto">Soon</span>
-                    </a>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Door Configurator <span class="badge bg-secondary ms-auto">Soon</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">
@@ -106,12 +92,8 @@
                     <span class="nav-link-title">Fabrication</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">
-                      <i class="ti ti-files me-2"></i>Documents
-                    </a>
-                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">
-                      <i class="ti ti-calendar-event me-2"></i>Schedule <span class="badge bg-secondary ms-auto">Soon</span>
-                    </a>
+                    <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">Documents</a>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Schedule <span class="badge bg-secondary ms-auto">Soon</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">
