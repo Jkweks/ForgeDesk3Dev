@@ -556,9 +556,9 @@ function fabFileIcon(name){
 function fabIsPdf(name){ return (name||'').split('.').pop().toLowerCase()==='pdf'; }
 function fabGetUnique(field){ return [...new Set(fabDocs.map(d=>d[field]).filter(Boolean))].sort(); }
 
-// Bootstrap modal helpers
-function fabShowModal(id){ const m=bootstrap.Modal.getOrCreateInstance(document.getElementById(id)); m.show(); return m; }
-function fabHideModal(id){ const m=bootstrap.Modal.getInstance(document.getElementById(id)); if(m)m.hide(); }
+// Bootstrap modal helpers (use window.bootstrap to match Tabler's bundle exposure)
+function fabShowModal(id){ const el=document.getElementById(id); showModal(el); }
+function fabHideModal(id){ const el=document.getElementById(id); hideModal(el); }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 async function fabApiJson(endpoint, options={}){
