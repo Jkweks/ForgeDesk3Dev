@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
@@ -399,5 +400,36 @@ class ProductController extends Controller
             'lead_time_days' => $product->lead_time_days,
             'safety_stock' => $product->safety_stock,
         ]);
+    }
+
+    public function uploadPhoto(Request $request, Product $product)
+    {
+        $request->validate([
+            'photo' => 'required|image|max:10240', // max 10MB
+        ]);
+
+        // Delete old photo if exists
+        if ($product->photo_path) {
+            Storage::disk('public')->delete($product->photo_path);
+        }
+
+        $path = $request->file('photo')->store("product-photos/{$product->id}", 'public');
+
+        $product->update(['photo_path' => $path]);
+
+        return response()->json([
+            'photo_path' => $product->photo_path,
+            'photo_url'  => $product->photo_url,
+        ]);
+    }
+
+    public function deletePhoto(Product $product)
+    {
+        if ($product->photo_path) {
+            Storage::disk('public')->delete($product->photo_path);
+            $product->update(['photo_path' => null]);
+        }
+
+        return response()->json(['message' => 'Photo deleted']);
     }
 }

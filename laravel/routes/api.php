@@ -248,6 +248,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products/{product}/issue-to-job', [ProductController::class, 'issueToJob']);
         Route::get('/products/{product}/transactions', [ProductController::class, 'getTransactions']);
         Route::get('/products/{product}/calculate-reorder', [ProductController::class, 'calculateReorderPoint']);
+        Route::post('/products/{product}/photo', [ProductController::class, 'uploadPhoto']);
+        Route::delete('/products/{product}/photo', [ProductController::class, 'deletePhoto']);
         Route::get('/finish-codes', [ProductController::class, 'getFinishCodes']);
         Route::get('/unit-of-measures', [ProductController::class, 'getUnitOfMeasures']);
 

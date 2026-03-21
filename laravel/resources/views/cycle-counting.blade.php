@@ -344,6 +344,137 @@
   </div>
 </div>
 
+<!-- Guided Count View (full-screen overlay, tablet-optimized) -->
+<div id="guidedCountView" style="display:none; position:fixed; inset:0; z-index:1100; background:#f4f6fa; overflow-y:auto; padding: 1rem;">
+  <div style="max-width: 700px; margin: 0 auto;">
+    <!-- Header bar -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h3 class="mb-0"><i class="ti ti-hand-click me-2" style="color:#6f42c1;"></i>Guided Count</h3>
+        <div class="text-muted small" id="guidedSessionLabel"></div>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="closeGuidedCount()">
+          <i class="ti ti-x me-1"></i>Exit
+        </button>
+        <button class="btn btn-warning btn-sm" onclick="showVarianceReviewFromGuided()">
+          <i class="ti ti-eye me-1"></i>Variances
+        </button>
+        <button class="btn btn-success btn-sm" onclick="completeSessionFromGuided()">
+          <i class="ti ti-check me-1"></i>Complete
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="mb-3">
+      <div class="d-flex justify-content-between small text-muted mb-1">
+        <span id="guidedProgressText">Item 0 of 0</span>
+        <span id="guidedProgressPct">0%</span>
+      </div>
+      <div class="progress" style="height:10px;">
+        <div class="progress-bar bg-success" id="guidedProgressBar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Item card -->
+    <div class="card shadow-sm mb-3" id="guidedItemCard">
+      <!-- Location banner -->
+      <div class="card-header py-2" style="background: #6f42c1; color: white;">
+        <div class="d-flex align-items-center gap-2">
+          <i class="ti ti-map-pin" style="font-size:1.3rem;"></i>
+          <div>
+            <div class="small opacity-75">Location</div>
+            <div class="fw-bold fs-5" id="guidedLocation">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="row g-3 align-items-start">
+          <!-- Photo column -->
+          <div class="col-md-4 text-center">
+            <div id="guidedPhotoWrap" style="min-height: 160px; display:flex; align-items:center; justify-content:center;">
+              <div class="text-muted">
+                <i class="ti ti-photo" style="font-size: 3rem; opacity:.3;"></i>
+              </div>
+            </div>
+          </div>
+          <!-- Info + count column -->
+          <div class="col-md-8">
+            <!-- SKU badge -->
+            <div class="mb-1">
+              <span class="badge text-bg-secondary fs-6" id="guidedSku">-</span>
+              <span class="badge text-bg-light text-dark ms-1" id="guidedUnitLabel"></span>
+            </div>
+            <!-- Description -->
+            <h4 class="mb-2" id="guidedDescription">-</h4>
+            <!-- System qty -->
+            <div class="mb-3 text-muted small">
+              System quantity: <strong id="guidedSystemQty">-</strong>
+              <span id="guidedPackInfo"></span>
+            </div>
+            <!-- Count input -->
+            <label class="form-label fw-bold fs-5">Counted Quantity</label>
+            <div class="input-group input-group-lg mb-2" style="max-width: 280px;">
+              <input type="number"
+                     id="guidedCountInput"
+                     class="form-control form-control-lg text-center fw-bold"
+                     inputmode="numeric"
+                     pattern="[0-9]*"
+                     min="0"
+                     placeholder="0"
+                     style="font-size: 2rem; height: 70px;"
+                     autocomplete="off">
+              <span class="input-group-text" id="guidedCountUnit"></span>
+            </div>
+            <!-- Notes -->
+            <div class="mb-2">
+              <input type="text" id="guidedNotes" class="form-control" placeholder="Notes (optional)">
+            </div>
+            <!-- Status badge -->
+            <div id="guidedStatusBadge"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation footer -->
+      <div class="card-footer">
+        <div class="d-flex justify-content-between align-items-center">
+          <button class="btn btn-outline-secondary btn-lg px-4" id="guidedPrevBtn" onclick="guidedNavigate(-1)">
+            <i class="ti ti-chevron-left me-1"></i>Prev
+          </button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-warning btn-lg px-3" onclick="guidedSkip()">
+              Skip
+            </button>
+            <button class="btn btn-primary btn-lg px-4" onclick="guidedSave()">
+              <i class="ti ti-check me-1"></i>Save &amp; Next
+            </button>
+          </div>
+          <button class="btn btn-outline-secondary btn-lg px-4" id="guidedNextBtn" onclick="guidedNavigate(1)">
+            Next<i class="ti ti-chevron-right ms-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Counted items mini list (collapsible) -->
+    <div class="card">
+      <div class="card-header" style="cursor:pointer;" onclick="toggleGuidedList()">
+        <div class="d-flex align-items-center justify-content-between">
+          <span><i class="ti ti-list me-1"></i>All Items</span>
+          <span class="badge text-bg-primary" id="guidedCountedBadge">0 counted</span>
+        </div>
+      </div>
+      <div id="guidedListBody" style="display:none; max-height: 300px; overflow-y:auto;">
+        <div class="list-group list-group-flush" id="guidedItemList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- Session Details Modal -->
 <div class="modal modal-blur fade" id="sessionDetailsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -569,8 +700,11 @@ function renderCycleCounts(sessions) {
               <i class="ti ti-eye"></i>
             </button>
             ${session.status === 'planned' || session.status === 'in_progress' ? `
-              <button class="btn btn-sm btn-ghost-success" onclick="enterCounts(${session.id})" title="Count">
+              <button class="btn btn-sm btn-ghost-success" onclick="enterCounts(${session.id})" title="List Count">
                 <i class="ti ti-clipboard-check"></i>
+              </button>
+              <button class="btn btn-sm btn-ghost-purple" onclick="enterGuidedCount(${session.id})" title="Guided Count" style="color: #6f42c1;">
+                <i class="ti ti-hand-click"></i>
               </button>
             ` : ''}
             ${session.status === 'completed' ? `
@@ -1402,6 +1536,282 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ============================================================
+// GUIDED COUNT VIEW
+// ============================================================
+let guidedSession = null;
+let guidedItems = [];    // sorted items
+let guidedIndex = 0;     // current item index
+
+function guidedSortItems(items) {
+  return [...items].sort((a, b) => {
+    const locA = (a.location?.storage_location?.name || a.location?.location || '').toLowerCase();
+    const locB = (b.location?.storage_location?.name || b.location?.location || '').toLowerCase();
+    if (locA !== locB) return locA.localeCompare(locB);
+    const skuA = (a.product?.sku || '').toLowerCase();
+    const skuB = (b.product?.sku || '').toLowerCase();
+    return skuA.localeCompare(skuB);
+  });
+}
+
+async function enterGuidedCount(sessionId) {
+  try {
+    const session = await authenticatedFetch(`/cycle-counts/${sessionId}`);
+    if (!session || !session.id) {
+      showNotification('Error loading session', 'danger');
+      return;
+    }
+    guidedSession = session;
+    guidedItems = guidedSortItems(session.items || []);
+    // Start at first uncounted item
+    guidedIndex = guidedItems.findIndex(i => i.counted_quantity === null);
+    if (guidedIndex < 0) guidedIndex = 0;
+
+    document.getElementById('guidedSessionLabel').textContent =
+      `Session ${session.session_number} · ${session.location || 'All Locations'}`;
+
+    document.getElementById('countSessionId').value = session.id; // keep in sync for complete/variance
+
+    renderGuidedItem();
+    renderGuidedList();
+    updateGuidedProgress();
+
+    document.getElementById('guidedCountView').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    // Focus input after short delay (avoids iOS keyboard issues)
+    setTimeout(() => {
+      const inp = document.getElementById('guidedCountInput');
+      if (inp) inp.focus();
+    }, 300);
+  } catch (err) {
+    console.error('Error starting guided count:', err);
+    showNotification('Error loading session', 'danger');
+  }
+}
+
+function closeGuidedCount() {
+  document.getElementById('guidedCountView').style.display = 'none';
+  document.body.style.overflow = '';
+  // Refresh session list
+  loadCycleCounts();
+  loadStatistics();
+}
+
+function renderGuidedItem() {
+  if (!guidedItems.length) return;
+  const item = guidedItems[guidedIndex];
+  const product = item.product || {};
+
+  // Location
+  const locName = item.location?.storage_location?.name || item.location?.location || '—';
+  document.getElementById('guidedLocation').textContent = locName;
+
+  // SKU + description
+  document.getElementById('guidedSku').textContent = product.sku || '-';
+  document.getElementById('guidedDescription').textContent = product.description || '-';
+
+  // Pack info
+  const packSize = item.pack_size || product.pack_size || 1;
+  const hasPackSize = packSize > 1;
+  const unitLabel = hasPackSize ? 'packs' : '';
+  document.getElementById('guidedUnitLabel').textContent = hasPackSize ? `${packSize} per pack` : '';
+  document.getElementById('guidedSystemQty').textContent = item.system_quantity + (unitLabel ? ' ' + unitLabel : '');
+  document.getElementById('guidedPackInfo').textContent = hasPackSize ? ` (${item.system_quantity * packSize} ea total)` : '';
+  document.getElementById('guidedCountUnit').textContent = unitLabel;
+
+  // Photo
+  const photoWrap = document.getElementById('guidedPhotoWrap');
+  if (product.photo_url) {
+    photoWrap.innerHTML = `<img src="${escapeHtml(product.photo_url)}" alt="Product" style="max-height:160px; max-width:100%; object-fit:contain; border-radius:8px;">`;
+  } else {
+    photoWrap.innerHTML = `<div class="text-muted text-center"><i class="ti ti-photo" style="font-size:3rem; opacity:.25;"></i><div class="small mt-1">No photo</div></div>`;
+  }
+
+  // Count input
+  const countInput = document.getElementById('guidedCountInput');
+  countInput.value = item.counted_quantity !== null ? item.counted_quantity : '';
+  document.getElementById('guidedNotes').value = item.count_notes || '';
+
+  // Status badge
+  const statusEl = document.getElementById('guidedStatusBadge');
+  if (item.counted_quantity !== null) {
+    statusEl.innerHTML = `<span class="badge ${getVarianceStatusBadge(item.variance_status)}">${formatVarianceStatus(item.variance_status)}</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="badge text-bg-secondary">Not counted</span>`;
+  }
+
+  // Nav buttons
+  document.getElementById('guidedPrevBtn').disabled = guidedIndex === 0;
+  document.getElementById('guidedNextBtn').disabled = guidedIndex === guidedItems.length - 1;
+}
+
+function renderGuidedList() {
+  const list = document.getElementById('guidedItemList');
+  list.innerHTML = guidedItems.map((item, idx) => {
+    const product = item.product || {};
+    const locName = item.location?.storage_location?.name || item.location?.location || '—';
+    const isCurrent = idx === guidedIndex;
+    const isCounted = item.counted_quantity !== null;
+    return `
+      <button type="button" class="list-group-item list-group-item-action py-2 px-3 ${isCurrent ? 'active' : ''}"
+              onclick="guidedJumpTo(${idx})" style="${isCurrent ? 'background:#6f42c1; border-color:#6f42c1;' : ''}">
+        <div class="d-flex align-items-center gap-2">
+          <i class="ti ${isCounted ? 'ti-circle-check text-success' : 'ti-circle'}" style="${isCurrent ? 'color:white!important' : ''}"></i>
+          <div class="flex-grow-1 text-start">
+            <div class="small fw-bold">${escapeHtml(product.sku || '-')}</div>
+            <div class="small opacity-75">${escapeHtml(locName)}</div>
+          </div>
+          ${isCounted ? `<span class="badge text-bg-success">${item.counted_quantity}</span>` : ''}
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+function updateGuidedProgress() {
+  const total = guidedItems.length;
+  const counted = guidedItems.filter(i => i.counted_quantity !== null).length;
+  const pct = total > 0 ? Math.round((counted / total) * 100) : 0;
+  document.getElementById('guidedProgressText').textContent = `Item ${guidedIndex + 1} of ${total}`;
+  document.getElementById('guidedProgressPct').textContent = `${counted} / ${total} counted (${pct}%)`;
+  document.getElementById('guidedProgressBar').style.width = pct + '%';
+  document.getElementById('guidedCountedBadge').textContent = `${counted} counted`;
+}
+
+function guidedNavigate(delta) {
+  const newIdx = guidedIndex + delta;
+  if (newIdx < 0 || newIdx >= guidedItems.length) return;
+  guidedIndex = newIdx;
+  renderGuidedItem();
+  renderGuidedList();
+  updateGuidedProgress();
+  // Auto-focus count input
+  setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+}
+
+function guidedJumpTo(idx) {
+  guidedIndex = idx;
+  renderGuidedItem();
+  renderGuidedList();
+  updateGuidedProgress();
+  // Close list panel on small screens
+  document.getElementById('guidedListBody').style.display = 'none';
+  setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+}
+
+function guidedSkip() {
+  // Move to next uncounted item, or next item if none
+  let nextIdx = -1;
+  for (let i = guidedIndex + 1; i < guidedItems.length; i++) {
+    if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+  }
+  if (nextIdx < 0) {
+    // try from beginning
+    for (let i = 0; i < guidedIndex; i++) {
+      if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+    }
+  }
+  if (nextIdx >= 0) {
+    guidedIndex = nextIdx;
+    renderGuidedItem();
+    renderGuidedList();
+    updateGuidedProgress();
+  } else {
+    showNotification('All items have been counted!', 'success');
+  }
+  setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+}
+
+async function guidedSave() {
+  const countInput = document.getElementById('guidedCountInput');
+  const notesInput = document.getElementById('guidedNotes');
+  const countVal = countInput.value.trim();
+
+  if (countVal === '' || isNaN(parseInt(countVal))) {
+    showNotification('Please enter a count before saving', 'warning');
+    countInput.focus();
+    return;
+  }
+
+  const item = guidedItems[guidedIndex];
+  const sessionId = guidedSession.id;
+
+  try {
+    const response = await authenticatedFetch(`/cycle-counts/${sessionId}/record-count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: item.id,
+        counted_quantity: parseInt(countVal),
+        notes: notesInput.value || null,
+      }),
+    });
+
+    // Update local item data
+    guidedItems[guidedIndex].counted_quantity = parseInt(countVal);
+    guidedItems[guidedIndex].count_notes = notesInput.value || null;
+    guidedItems[guidedIndex].variance_status = response.item?.variance_status || 'pending';
+
+    renderGuidedList();
+    updateGuidedProgress();
+
+    // Auto-advance to next uncounted item
+    let nextIdx = -1;
+    for (let i = guidedIndex + 1; i < guidedItems.length; i++) {
+      if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+    }
+    if (nextIdx < 0) {
+      // try from beginning
+      for (let i = 0; i < guidedIndex; i++) {
+        if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+      }
+    }
+
+    if (nextIdx >= 0) {
+      guidedIndex = nextIdx;
+      renderGuidedItem();
+      renderGuidedList();
+    } else {
+      // All counted - update status on current item and notify
+      renderGuidedItem();
+      showNotification('All items counted! Review variances or complete the session.', 'success');
+    }
+
+    updateGuidedProgress();
+    setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+  } catch (err) {
+    console.error('Error saving count:', err);
+    showNotification(err.message || 'Error saving count', 'danger');
+  }
+}
+
+function toggleGuidedList() {
+  const body = document.getElementById('guidedListBody');
+  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+async function showVarianceReviewFromGuided() {
+  const sessionId = guidedSession?.id;
+  if (!sessionId) return;
+  document.getElementById('countSessionId').value = sessionId;
+  document.getElementById('guidedCountView').style.display = 'none';
+  document.body.style.overflow = '';
+  await viewVarianceReport(sessionId);
+}
+
+async function completeSessionFromGuided() {
+  const sessionId = guidedSession?.id;
+  if (!sessionId) return;
+  document.getElementById('countSessionId').value = sessionId;
+  currentSession = guidedSession;
+  currentSession.items = guidedItems;
+  await completeSession();
+  if (document.getElementById('guidedCountView').style.display !== 'none') {
+    closeGuidedCount();
+  }
 }
 </script>
 @endsection

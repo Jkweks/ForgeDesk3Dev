@@ -12,6 +12,7 @@ class Product extends Model
 
     protected $fillable = [
         'sku', 'part_number', 'finish', 'description', 'long_description',
+        'photo_path',
         'category_id',
         'unit_cost', 'unit_price', 'net_cost', 'pricing_category',
         'finish_multiplier', 'category_multiplier', 'price_per_length', 'price_per_package',
@@ -56,6 +57,7 @@ class Product extends Model
         'counting_unit',
         'pack_cost',
         'pack_price',
+        'photo_url',
     ];
 
     // Finish codes configuration
@@ -538,6 +540,17 @@ class Product extends Model
     public function getPackPriceAttribute()
     {
         return $this->unit_price;
+    }
+
+    /**
+     * Get the public URL for the product photo
+     */
+    public function getPhotoUrlAttribute(): ?string
+    {
+        if (!$this->photo_path) {
+            return null;
+        }
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo_path);
     }
 
     /**
