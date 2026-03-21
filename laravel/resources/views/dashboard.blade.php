@@ -1661,6 +1661,35 @@
         const suggestedOrderQty = product.suggested_order_qty || 0;
 
         document.getElementById('productDetailsView').innerHTML = `
+          ${product.photo_url ? `
+          <div class="row mb-3">
+            <div class="col-md-12 text-center">
+              <img src="${product.photo_url}" alt="Product photo" class="img-fluid rounded" style="max-height: 200px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px;">
+              <div class="mt-1">
+                <button class="btn btn-sm btn-outline-secondary" onclick="triggerProductPhotoUpload(${product.id})">
+                  <i class="ti ti-photo-edit me-1"></i>Change Photo
+                </button>
+                <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteProductPhoto(${product.id})">
+                  <i class="ti ti-trash me-1"></i>Remove
+                </button>
+              </div>
+              <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
+            </div>
+          </div>
+          ` : `
+          <div class="row mb-3">
+            <div class="col-md-12 text-center">
+              <div class="border rounded p-3 text-muted" style="background: #f8f9fa;">
+                <i class="ti ti-photo" style="font-size: 2rem;"></i>
+                <p class="mb-1 mt-1">No product photo</p>
+                <button class="btn btn-sm btn-outline-primary" onclick="triggerProductPhotoUpload(${product.id})">
+                  <i class="ti ti-upload me-1"></i>Upload Photo
+                </button>
+              </div>
+              <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
+            </div>
+          </div>
+          `}
           <div class="row mb-3">
             <div class="col-md-4">
               <label class="form-label fw-bold">SKU</label>
@@ -2018,8 +2047,113 @@
               <input type="text" class="form-control" name="supplier_sku" value="${product.supplier_sku || ''}">
             </div>
           </div>
+
+          <hr>
+          <h5 class="mb-3"><i class="ti ti-photo me-2"></i>Product Photo</h5>
+          <div class="row mb-3">
+            <div class="col-md-12">
+              <div id="editPhotoPreview">
+                ${product.photo_url ? `
+                  <img src="${product.photo_url}" alt="Product photo" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px; display: block;">
+                ` : `
+                  <div class="border rounded p-3 text-center text-muted mb-2" style="background: #f8f9fa;" id="editPhotoPlaceholder">
+                    <i class="ti ti-photo" style="font-size: 1.5rem;"></i>
+                    <p class="mb-0 mt-1 small">No photo uploaded</p>
+                  </div>
+                `}
+              </div>
+              <div class="d-flex gap-2 align-items-center flex-wrap">
+                <label class="btn btn-sm btn-outline-primary mb-0" style="cursor:pointer;">
+                  <i class="ti ti-upload me-1"></i>${product.photo_url ? 'Change Photo' : 'Upload Photo'}
+                  <input type="file" id="editPhotoFileInput" accept="image/*" style="display:none" onchange="handleEditPhotoSelect(${product.id}, this)">
+                </label>
+                ${product.photo_url ? `
+                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteProductPhoto(${product.id})">
+                    <i class="ti ti-trash me-1"></i>Remove Photo
+                  </button>
+                ` : ''}
+                <small class="text-muted">Accepted: JPG, PNG, GIF, WebP. Max 10MB.</small>
+              </div>
+            </div>
+          </div>
         </form>
       `;
+    }
+
+    function triggerProductPhotoUpload(productId) {
+      const input = document.getElementById(`productPhotoInput_${productId}`);
+      if (input) input.click();
+    }
+
+    async function uploadProductPhoto(productId, input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('photo', file);
+
+      try {
+        const authToken = localStorage.getItem('authToken');
+        const response = await fetch(`${API_BASE}/products/${productId}/photo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+          },
+          body: formData,
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        showNotification('Photo uploaded successfully', 'success');
+        await viewProduct(productId);
+      } catch (err) {
+        showNotification('Failed to upload photo: ' + err.message, 'danger');
+      }
+    }
+
+    async function handleEditPhotoSelect(productId, input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      // Show local preview immediately
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const preview = document.getElementById('editPhotoPreview');
+        if (preview) {
+          preview.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px; display: block;">`;
+        }
+      };
+      reader.readAsDataURL(file);
+
+      // Upload immediately
+      const formData = new FormData();
+      formData.append('photo', file);
+      try {
+        const authToken = localStorage.getItem('authToken');
+        const response = await fetch(`${API_BASE}/products/${productId}/photo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+          },
+          body: formData,
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        showNotification('Photo uploaded successfully', 'success');
+      } catch (err) {
+        showNotification('Failed to upload photo: ' + err.message, 'danger');
+      }
+    }
+
+    async function deleteProductPhoto(productId) {
+      if (!confirm('Remove product photo?')) return;
+      try {
+        const response = await apiCall(`/products/${productId}/photo`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Delete failed');
+        showNotification('Photo removed', 'success');
+        await viewProduct(productId);
+      } catch (err) {
+        showNotification('Failed to remove photo: ' + err.message, 'danger');
+      }
     }
 
     async function saveProductChanges() {

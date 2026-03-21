@@ -344,6 +344,299 @@
   </div>
 </div>
 
+<!-- Guided Count View (full-screen overlay, iPad-optimized) -->
+<style>
+  /* ── Outer shell ───────────────────────────────────────────── */
+  #guidedCountView {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: var(--tblr-body-bg);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Sticky header ─────────────────────────────────────────── */
+  #guidedHeader {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--tblr-bg-surface);
+    border-bottom: 3px solid var(--tblr-purple);
+    box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  }
+  #guidedHeader .header-inner {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 0.75rem 1rem 0.6rem;
+  }
+
+  /* ── Main scroll area ──────────────────────────────────────── */
+  #guidedMain {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 1rem;
+  }
+
+  /* ── Location banner ───────────────────────────────────────── */
+  /* Purple background intentional — white text works in both modes */
+  .guided-location-banner {
+    background: var(--tblr-purple);
+    color: #fff;
+    border-radius: 12px;
+    padding: 0.9rem 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  /* ── Product card ──────────────────────────────────────────── */
+  .guided-product-card {
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+  }
+  .guided-product-inner {
+    display: flex;
+    flex-direction: row;
+  }
+  .guided-photo-col {
+    width: 200px;
+    min-width: 200px;
+    background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+    border-right: 1px solid var(--tblr-border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 190px;
+    padding: 1rem;
+  }
+  .guided-info-col {
+    flex: 1;
+    padding: 1.25rem;
+    min-width: 0;
+  }
+
+  /* ── Count input ───────────────────────────────────────────── */
+  .guided-count-card {
+    border-radius: 12px;
+    margin-bottom: 1rem;
+  }
+  /* Extend Bootstrap's .form-control — only non-colour properties here */
+  #guidedCountInput {
+    font-size: 2.8rem;
+    font-weight: 700;
+    height: 84px;
+    text-align: center;
+    border-width: 2px;
+    border-radius: 10px;
+    transition: border-color .15s, box-shadow .15s;
+    flex: 1;
+  }
+  #guidedCountInput:focus {
+    border-color: var(--tblr-purple) !important;
+    box-shadow: 0 0 0 0.25rem rgba(var(--tblr-purple-rgb, 111, 66, 193), .2) !important;
+    outline: none;
+  }
+
+  /* ── Unit label box ────────────────────────────────────────── */
+  .guided-unit-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+    border: 2px solid var(--tblr-border-color);
+    border-radius: 10px;
+    min-width: 70px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--tblr-secondary-color, var(--tblr-muted));
+    padding: 0 0.75rem;
+  }
+
+  /* ── Action buttons ────────────────────────────────────────── */
+  .guided-save-btn {
+    height: 64px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    border-radius: 10px;
+    letter-spacing: 0.03em;
+    width: 100%;
+  }
+  .guided-nav-btn {
+    height: 52px;
+    border-radius: 8px;
+    flex: 1;
+    font-size: 0.95rem;
+  }
+
+  /* ── All-items panel ───────────────────────────────────────── */
+  .guided-items-card {
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  /* ── Portrait: stack photo above info ─────────────────────── */
+  @media (max-width: 600px) {
+    .guided-product-inner { flex-direction: column; }
+    .guided-photo-col {
+      width: 100%;
+      min-width: 0;
+      border-right: none;
+      border-bottom: 1px solid var(--tblr-border-color);
+      min-height: 160px;
+    }
+  }
+</style>
+
+<div id="guidedCountView" style="display:none;">
+
+  <!-- Sticky header -->
+  <div id="guidedHeader">
+    <div class="header-inner">
+      <!-- Row 1: exit / title / actions -->
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <button class="btn btn-outline-secondary d-flex align-items-center justify-content-center"
+                style="min-width:44px; min-height:44px; padding:0; flex-shrink:0;"
+                onclick="closeGuidedCount()" title="Exit">
+          <i class="ti ti-x" style="font-size:1.2rem;"></i>
+        </button>
+        <div class="flex-grow-1 ms-1 overflow-hidden">
+          <div class="fw-bold text-truncate" style="font-size:1rem; color:var(--tblr-purple);">
+            <i class="ti ti-hand-click me-1"></i>Guided Count
+          </div>
+          <div class="text-muted text-truncate" style="font-size:0.78rem;" id="guidedSessionLabel"></div>
+        </div>
+        <button class="btn btn-outline-warning d-flex align-items-center gap-1"
+                style="min-height:44px; flex-shrink:0;"
+                onclick="showVarianceReviewFromGuided()">
+          <i class="ti ti-alert-triangle"></i>
+          <span class="d-none d-sm-inline">Variances</span>
+        </button>
+        <button class="btn btn-success d-flex align-items-center gap-1"
+                style="min-height:44px; flex-shrink:0;"
+                onclick="completeSessionFromGuided()">
+          <i class="ti ti-clipboard-check"></i>
+          <span class="d-none d-sm-inline">Complete</span>
+        </button>
+      </div>
+      <!-- Row 2: progress -->
+      <div>
+        <div class="d-flex justify-content-between mb-1" style="font-size:0.8rem;">
+          <span class="text-muted fw-semibold" id="guidedProgressText">Item 1 of 0</span>
+          <span class="text-success fw-semibold" id="guidedProgressPct">0 counted (0%)</span>
+        </div>
+        <div class="progress" style="height:7px; border-radius:4px;">
+          <div class="progress-bar bg-success" id="guidedProgressBar" style="width:0%; transition:width .4s ease;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scrollable main content -->
+  <div id="guidedMain">
+
+    <!-- Location banner -->
+    <div class="guided-location-banner">
+      <i class="ti ti-map-pin" style="font-size:1.75rem; flex-shrink:0;"></i>
+      <div style="min-width:0;">
+        <div style="font-size:0.7rem; opacity:0.7; text-transform:uppercase; letter-spacing:.07em; margin-bottom:2px;">Location</div>
+        <div style="font-size:1.4rem; font-weight:700; line-height:1.2; word-break:break-word;" id="guidedLocation">—</div>
+      </div>
+    </div>
+
+    <!-- Product card -->
+    <div class="card guided-product-card">
+      <div class="guided-product-inner">
+        <!-- Photo -->
+        <div class="guided-photo-col">
+          <div id="guidedPhotoWrap" style="width:100%; display:flex; align-items:center; justify-content:center; min-height:160px;">
+            <div class="text-muted text-center">
+              <i class="ti ti-photo" style="font-size:3rem; opacity:.2;"></i>
+            </div>
+          </div>
+        </div>
+        <!-- Info -->
+        <div class="guided-info-col">
+          <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+            <span class="badge text-bg-dark" style="font-size:1rem; padding:.3em .65em;" id="guidedSku">—</span>
+            <span class="badge text-bg-secondary" style="font-size:0.8rem;" id="guidedUnitLabel"></span>
+            <span class="ms-auto" id="guidedStatusBadge"></span>
+          </div>
+          <div class="fw-semibold mb-2" style="font-size:1.15rem; line-height:1.35;" id="guidedDescription">—</div>
+          <div class="text-muted" style="font-size:0.88rem;">
+            System qty: <strong id="guidedSystemQty">—</strong><span id="guidedPackInfo" class="ms-1"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Count entry card -->
+    <div class="card guided-count-card">
+      <div class="card-body p-3">
+        <label class="form-label fw-semibold mb-2" style="font-size:0.95rem;">
+          <i class="ti ti-123 me-1" style="color:var(--tblr-purple);"></i>How many did you count?
+        </label>
+        <div class="d-flex gap-2 mb-2">
+          <input type="number"
+                 id="guidedCountInput"
+                 class="form-control"
+                 inputmode="numeric"
+                 pattern="[0-9]*"
+                 min="0"
+                 placeholder="0"
+                 autocomplete="off">
+          <div class="guided-unit-box" id="guidedCountUnit"></div>
+        </div>
+        <input type="text"
+               id="guidedNotes"
+               class="form-control"
+               placeholder="Notes (optional)"
+               style="border-radius:8px; height:44px;">
+      </div>
+    </div>
+
+    <!-- Action buttons card -->
+    <div class="card guided-count-card">
+      <div class="card-body p-3">
+        <button class="btn btn-primary guided-save-btn mb-2" onclick="guidedSave()">
+          <i class="ti ti-check me-2"></i>Save &amp; Next
+        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary guided-nav-btn" id="guidedPrevBtn" onclick="guidedNavigate(-1)">
+            <i class="ti ti-chevron-left"></i> Prev
+          </button>
+          <button class="btn btn-outline-warning guided-nav-btn" onclick="guidedSkip()">
+            Skip
+          </button>
+          <button class="btn btn-outline-secondary guided-nav-btn" id="guidedNextBtn" onclick="guidedNavigate(1)">
+            Next <i class="ti ti-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- All items collapsible -->
+    <div class="guided-items-card card">
+      <div class="card-header" style="cursor:pointer; user-select:none; -webkit-user-select:none;" onclick="toggleGuidedList()">
+        <div class="d-flex align-items-center justify-content-between">
+          <span class="fw-semibold"><i class="ti ti-list-check me-2" style="color:var(--tblr-purple);"></i>All Items</span>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge text-bg-success" id="guidedCountedBadge">0 counted</span>
+            <i class="ti ti-chevron-down" id="guidedListChevron" style="transition:transform .2s; color:var(--tblr-secondary-color);"></i>
+          </div>
+        </div>
+      </div>
+      <div id="guidedListBody" style="display:none; max-height:340px; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+        <div class="list-group list-group-flush" id="guidedItemList"></div>
+      </div>
+    </div>
+
+  </div><!-- /guidedMain -->
+</div><!-- /guidedCountView -->
+
 <!-- Session Details Modal -->
 <div class="modal modal-blur fade" id="sessionDetailsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -569,8 +862,11 @@ function renderCycleCounts(sessions) {
               <i class="ti ti-eye"></i>
             </button>
             ${session.status === 'planned' || session.status === 'in_progress' ? `
-              <button class="btn btn-sm btn-ghost-success" onclick="enterCounts(${session.id})" title="Count">
+              <button class="btn btn-sm btn-ghost-success" onclick="enterCounts(${session.id})" title="List Count">
                 <i class="ti ti-clipboard-check"></i>
+              </button>
+              <button class="btn btn-sm btn-ghost-purple" onclick="enterGuidedCount(${session.id})" title="Guided Count" style="color: #6f42c1;">
+                <i class="ti ti-hand-click"></i>
               </button>
             ` : ''}
             ${session.status === 'completed' ? `
@@ -1402,6 +1698,285 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ============================================================
+// GUIDED COUNT VIEW
+// ============================================================
+let guidedSession = null;
+let guidedItems = [];    // sorted items
+let guidedIndex = 0;     // current item index
+
+function guidedSortItems(items) {
+  return [...items].sort((a, b) => {
+    const locA = (a.location?.storage_location?.name || a.location?.location || '').toLowerCase();
+    const locB = (b.location?.storage_location?.name || b.location?.location || '').toLowerCase();
+    if (locA !== locB) return locA.localeCompare(locB);
+    const skuA = (a.product?.sku || '').toLowerCase();
+    const skuB = (b.product?.sku || '').toLowerCase();
+    return skuA.localeCompare(skuB);
+  });
+}
+
+async function enterGuidedCount(sessionId) {
+  try {
+    const session = await authenticatedFetch(`/cycle-counts/${sessionId}`);
+    if (!session || !session.id) {
+      showNotification('Error loading session', 'danger');
+      return;
+    }
+    guidedSession = session;
+    guidedItems = guidedSortItems(session.items || []);
+    // Start at first uncounted item
+    guidedIndex = guidedItems.findIndex(i => i.counted_quantity === null);
+    if (guidedIndex < 0) guidedIndex = 0;
+
+    document.getElementById('guidedSessionLabel').textContent =
+      `${session.session_number} · ${session.location || 'All Locations'}`;
+    document.getElementById('countSessionId').value = session.id;
+
+    renderGuidedItem();
+    renderGuidedList();
+    updateGuidedProgress();
+
+    document.getElementById('guidedCountView').style.display = 'block';
+    // Scroll guided view to top
+    document.getElementById('guidedCountView').scrollTop = 0;
+
+    // Bind Enter key on count input to save
+    const inp = document.getElementById('guidedCountInput');
+    inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); guidedSave(); } };
+  } catch (err) {
+    console.error('Error starting guided count:', err);
+    showNotification('Error loading session', 'danger');
+  }
+}
+
+function closeGuidedCount() {
+  document.getElementById('guidedCountView').style.display = 'none';
+  loadCycleCounts();
+  loadStatistics();
+}
+
+function renderGuidedItem() {
+  if (!guidedItems.length) return;
+  const item = guidedItems[guidedIndex];
+  const product = item.product || {};
+
+  // Location
+  const locName = item.location?.storage_location?.name || item.location?.location || '—';
+  document.getElementById('guidedLocation').textContent = locName;
+
+  // SKU + description
+  document.getElementById('guidedSku').textContent = product.sku || '-';
+  document.getElementById('guidedDescription').textContent = product.description || '-';
+
+  // Pack info
+  const packSize = item.pack_size || product.pack_size || 1;
+  const hasPackSize = packSize > 1;
+  const unitLabel = hasPackSize ? 'packs' : '';
+  const unitLabelEl = document.getElementById('guidedUnitLabel');
+  unitLabelEl.textContent = hasPackSize ? `${packSize} per pack` : '';
+  unitLabelEl.style.display = hasPackSize ? '' : 'none';
+  document.getElementById('guidedSystemQty').textContent = item.system_quantity + (unitLabel ? ' ' + unitLabel : '');
+  document.getElementById('guidedPackInfo').textContent = hasPackSize ? `(${item.system_quantity * packSize} ea total)` : '';
+  const countUnitEl = document.getElementById('guidedCountUnit');
+  countUnitEl.textContent = unitLabel;
+  countUnitEl.style.display = unitLabel ? '' : 'none';
+
+  // Photo
+  const photoWrap = document.getElementById('guidedPhotoWrap');
+  if (product.photo_url) {
+    photoWrap.innerHTML = `<img src="${escapeHtml(product.photo_url)}" alt="Product" style="max-height:170px; max-width:100%; object-fit:contain; border-radius:8px; display:block;">`;
+  } else {
+    photoWrap.innerHTML = `<div class="text-muted text-center"><i class="ti ti-photo" style="font-size:3.5rem; opacity:.2;"></i><div class="small mt-2" style="font-size:0.78rem;">No photo</div></div>`;
+  }
+
+  // Count input
+  const countInput = document.getElementById('guidedCountInput');
+  countInput.value = item.counted_quantity !== null ? item.counted_quantity : '';
+  document.getElementById('guidedNotes').value = item.count_notes || '';
+
+  // Status badge
+  const statusEl = document.getElementById('guidedStatusBadge');
+  if (item.counted_quantity !== null) {
+    statusEl.innerHTML = `<span class="badge ${getVarianceStatusBadge(item.variance_status)}">${formatVarianceStatus(item.variance_status)}</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="badge text-bg-secondary">Not counted</span>`;
+  }
+
+  // Nav buttons
+  document.getElementById('guidedPrevBtn').disabled = guidedIndex === 0;
+  document.getElementById('guidedNextBtn').disabled = guidedIndex === guidedItems.length - 1;
+}
+
+function renderGuidedList() {
+  const list = document.getElementById('guidedItemList');
+  list.innerHTML = guidedItems.map((item, idx) => {
+    const product = item.product || {};
+    const locName = item.location?.storage_location?.name || item.location?.location || '—';
+    const isCurrent = idx === guidedIndex;
+    const isCounted = item.counted_quantity !== null;
+    return `
+      <button type="button" class="list-group-item list-group-item-action py-2 px-3 ${isCurrent ? 'active' : ''}"
+              onclick="guidedJumpTo(${idx})" style="${isCurrent ? 'background:#6f42c1; border-color:#6f42c1;' : ''}">
+        <div class="d-flex align-items-center gap-2">
+          <i class="ti ${isCounted ? 'ti-circle-check text-success' : 'ti-circle'}" style="${isCurrent ? 'color:white!important' : ''}"></i>
+          <div class="flex-grow-1 text-start">
+            <div class="small fw-bold">${escapeHtml(product.sku || '-')}</div>
+            <div class="small opacity-75">${escapeHtml(locName)}</div>
+          </div>
+          ${isCounted ? `<span class="badge text-bg-success">${item.counted_quantity}</span>` : ''}
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+function updateGuidedProgress() {
+  const total = guidedItems.length;
+  const counted = guidedItems.filter(i => i.counted_quantity !== null).length;
+  const pct = total > 0 ? Math.round((counted / total) * 100) : 0;
+  document.getElementById('guidedProgressText').textContent = `Item ${guidedIndex + 1} of ${total}`;
+  document.getElementById('guidedProgressPct').textContent = `${counted} counted (${pct}%)`;
+  document.getElementById('guidedProgressBar').style.width = pct + '%';
+  document.getElementById('guidedCountedBadge').textContent = `${counted} counted`;
+}
+
+function guidedNavigate(delta) {
+  const newIdx = guidedIndex + delta;
+  if (newIdx < 0 || newIdx >= guidedItems.length) return;
+  guidedIndex = newIdx;
+  renderGuidedItem();
+  renderGuidedList();
+  updateGuidedProgress();
+  // Auto-focus count input
+  setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+}
+
+function guidedJumpTo(idx) {
+  guidedIndex = idx;
+  renderGuidedItem();
+  renderGuidedList();
+  updateGuidedProgress();
+  // Close list panel on small screens
+  document.getElementById('guidedListBody').style.display = 'none';
+  setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+}
+
+function guidedSkip() {
+  // Move to next uncounted item, or next item if none
+  let nextIdx = -1;
+  for (let i = guidedIndex + 1; i < guidedItems.length; i++) {
+    if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+  }
+  if (nextIdx < 0) {
+    // try from beginning
+    for (let i = 0; i < guidedIndex; i++) {
+      if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+    }
+  }
+  if (nextIdx >= 0) {
+    guidedIndex = nextIdx;
+    renderGuidedItem();
+    renderGuidedList();
+    updateGuidedProgress();
+  } else {
+    showNotification('All items have been counted!', 'success');
+  }
+  setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+}
+
+async function guidedSave() {
+  const countInput = document.getElementById('guidedCountInput');
+  const notesInput = document.getElementById('guidedNotes');
+  const countVal = countInput.value.trim();
+
+  if (countVal === '' || isNaN(parseInt(countVal))) {
+    showNotification('Please enter a count before saving', 'warning');
+    countInput.focus();
+    return;
+  }
+
+  const item = guidedItems[guidedIndex];
+  const sessionId = guidedSession.id;
+
+  try {
+    const response = await authenticatedFetch(`/cycle-counts/${sessionId}/record-count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: item.id,
+        counted_quantity: parseInt(countVal),
+        notes: notesInput.value || null,
+      }),
+    });
+
+    // Update local item data
+    guidedItems[guidedIndex].counted_quantity = parseInt(countVal);
+    guidedItems[guidedIndex].count_notes = notesInput.value || null;
+    guidedItems[guidedIndex].variance_status = response.item?.variance_status || 'pending';
+
+    renderGuidedList();
+    updateGuidedProgress();
+
+    // Auto-advance to next uncounted item
+    let nextIdx = -1;
+    for (let i = guidedIndex + 1; i < guidedItems.length; i++) {
+      if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+    }
+    if (nextIdx < 0) {
+      // try from beginning
+      for (let i = 0; i < guidedIndex; i++) {
+        if (guidedItems[i].counted_quantity === null) { nextIdx = i; break; }
+      }
+    }
+
+    if (nextIdx >= 0) {
+      guidedIndex = nextIdx;
+      renderGuidedItem();
+      renderGuidedList();
+    } else {
+      // All counted - update status on current item and notify
+      renderGuidedItem();
+      showNotification('All items counted! Review variances or complete the session.', 'success');
+    }
+
+    updateGuidedProgress();
+    setTimeout(() => { document.getElementById('guidedCountInput').focus(); }, 100);
+  } catch (err) {
+    console.error('Error saving count:', err);
+    showNotification(err.message || 'Error saving count', 'danger');
+  }
+}
+
+function toggleGuidedList() {
+  const body = document.getElementById('guidedListBody');
+  const chevron = document.getElementById('guidedListChevron');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+async function showVarianceReviewFromGuided() {
+  const sessionId = guidedSession?.id;
+  if (!sessionId) return;
+  document.getElementById('countSessionId').value = sessionId;
+  document.getElementById('guidedCountView').style.display = 'none';
+  document.body.style.overflow = '';
+  await viewVarianceReport(sessionId);
+}
+
+async function completeSessionFromGuided() {
+  const sessionId = guidedSession?.id;
+  if (!sessionId) return;
+  document.getElementById('countSessionId').value = sessionId;
+  currentSession = guidedSession;
+  currentSession.items = guidedItems;
+  await completeSession();
+  if (document.getElementById('guidedCountView').style.display !== 'none') {
+    closeGuidedCount();
+  }
 }
 </script>
 @endsection
