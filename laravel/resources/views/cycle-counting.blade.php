@@ -346,35 +346,43 @@
 
 <!-- Guided Count View (full-screen overlay, iPad-optimized) -->
 <style>
+  /* ── Outer shell ───────────────────────────────────────────── */
   #guidedCountView {
     position: fixed;
     inset: 0;
     z-index: 1100;
-    background: #f0f2f5;
+    background: var(--tblr-body-bg);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* ── Sticky header ─────────────────────────────────────────── */
   #guidedHeader {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: #fff;
-    border-bottom: 3px solid #6f42c1;
-    box-shadow: 0 2px 10px rgba(0,0,0,.1);
+    background: var(--tblr-bg-surface);
+    border-bottom: 3px solid var(--tblr-purple);
+    box-shadow: 0 2px 10px rgba(0,0,0,.12);
   }
   #guidedHeader .header-inner {
     max-width: 920px;
     margin: 0 auto;
     padding: 0.75rem 1rem 0.6rem;
   }
+
+  /* ── Main scroll area ──────────────────────────────────────── */
   #guidedMain {
     max-width: 920px;
     margin: 0 auto;
     padding: 1rem;
   }
+
+  /* ── Location banner ───────────────────────────────────────── */
+  /* Purple background intentional — white text works in both modes */
   .guided-location-banner {
-    background: #6f42c1;
-    color: white;
+    background: var(--tblr-purple);
+    color: #fff;
     border-radius: 12px;
     padding: 0.9rem 1.25rem;
     margin-bottom: 1rem;
@@ -382,10 +390,11 @@
     align-items: center;
     gap: 0.75rem;
   }
+
+  /* ── Product card ──────────────────────────────────────────── */
   .guided-product-card {
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,.08);
     margin-bottom: 1rem;
   }
   .guided-product-inner {
@@ -395,8 +404,8 @@
   .guided-photo-col {
     width: 200px;
     min-width: 200px;
-    background: #f8f9fa;
-    border-right: 1px solid #e9ecef;
+    background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+    border-right: 1px solid var(--tblr-border-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -408,39 +417,45 @@
     padding: 1.25rem;
     min-width: 0;
   }
+
+  /* ── Count input ───────────────────────────────────────────── */
   .guided-count-card {
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.08);
     margin-bottom: 1rem;
   }
+  /* Extend Bootstrap's .form-control — only non-colour properties here */
   #guidedCountInput {
     font-size: 2.8rem;
     font-weight: 700;
     height: 84px;
     text-align: center;
-    border: 2px solid #dee2e6;
+    border-width: 2px;
     border-radius: 10px;
     transition: border-color .15s, box-shadow .15s;
     flex: 1;
   }
   #guidedCountInput:focus {
-    border-color: #6f42c1;
-    box-shadow: 0 0 0 3px rgba(111,66,193,.18);
+    border-color: var(--tblr-purple) !important;
+    box-shadow: 0 0 0 0.25rem rgba(var(--tblr-purple-rgb, 111, 66, 193), .2) !important;
     outline: none;
   }
+
+  /* ── Unit label box ────────────────────────────────────────── */
   .guided-unit-box {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f0f2f5;
-    border: 2px solid #dee2e6;
+    background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+    border: 2px solid var(--tblr-border-color);
     border-radius: 10px;
     min-width: 70px;
     font-weight: 600;
     font-size: 0.9rem;
-    color: #495057;
+    color: var(--tblr-secondary-color, var(--tblr-muted));
     padding: 0 0.75rem;
   }
+
+  /* ── Action buttons ────────────────────────────────────────── */
   .guided-save-btn {
     height: 64px;
     font-size: 1.2rem;
@@ -455,20 +470,24 @@
     flex: 1;
     font-size: 0.95rem;
   }
+
+  /* ── All-items panel ───────────────────────────────────────── */
   .guided-items-card {
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,.08);
     margin-bottom: 2rem;
   }
-  /* Portrait / small tablet: stack photo above info */
+
+  /* ── Portrait: stack photo above info ─────────────────────── */
   @media (max-width: 600px) {
     .guided-product-inner { flex-direction: column; }
-    .guided-photo-col { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid #e9ecef; min-height: 160px; }
-  }
-  /* Landscape: photo sits beside info */
-  @media (min-width: 601px) {
-    .guided-photo-col { width: 200px; min-width: 200px; }
+    .guided-photo-col {
+      width: 100%;
+      min-width: 0;
+      border-right: none;
+      border-bottom: 1px solid var(--tblr-border-color);
+      min-height: 160px;
+    }
   }
 </style>
 
@@ -477,7 +496,7 @@
   <!-- Sticky header -->
   <div id="guidedHeader">
     <div class="header-inner">
-      <!-- Top row: exit / title / actions -->
+      <!-- Row 1: exit / title / actions -->
       <div class="d-flex align-items-center gap-2 mb-2">
         <button class="btn btn-outline-secondary d-flex align-items-center justify-content-center"
                 style="min-width:44px; min-height:44px; padding:0; flex-shrink:0;"
@@ -485,7 +504,7 @@
           <i class="ti ti-x" style="font-size:1.2rem;"></i>
         </button>
         <div class="flex-grow-1 ms-1 overflow-hidden">
-          <div class="fw-bold text-truncate" style="font-size:1rem; color:#6f42c1;">
+          <div class="fw-bold text-truncate" style="font-size:1rem; color:var(--tblr-purple);">
             <i class="ti ti-hand-click me-1"></i>Guided Count
           </div>
           <div class="text-muted text-truncate" style="font-size:0.78rem;" id="guidedSessionLabel"></div>
@@ -503,7 +522,7 @@
           <span class="d-none d-sm-inline">Complete</span>
         </button>
       </div>
-      <!-- Progress row -->
+      <!-- Row 2: progress -->
       <div>
         <div class="d-flex justify-content-between mb-1" style="font-size:0.8rem;">
           <span class="text-muted fw-semibold" id="guidedProgressText">Item 1 of 0</span>
@@ -533,7 +552,7 @@
       <div class="guided-product-inner">
         <!-- Photo -->
         <div class="guided-photo-col">
-          <div id="guidedPhotoWrap" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+          <div id="guidedPhotoWrap" style="width:100%; display:flex; align-items:center; justify-content:center; min-height:160px;">
             <div class="text-muted text-center">
               <i class="ti ti-photo" style="font-size:3rem; opacity:.2;"></i>
             </div>
@@ -543,12 +562,12 @@
         <div class="guided-info-col">
           <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
             <span class="badge text-bg-dark" style="font-size:1rem; padding:.3em .65em;" id="guidedSku">—</span>
-            <span class="badge border text-muted" style="font-size:0.8rem; background:#f8f9fa;" id="guidedUnitLabel"></span>
+            <span class="badge text-bg-secondary" style="font-size:0.8rem;" id="guidedUnitLabel"></span>
             <span class="ms-auto" id="guidedStatusBadge"></span>
           </div>
-          <div style="font-size:1.15rem; font-weight:600; line-height:1.35; color:#212529; margin-bottom:0.6rem;" id="guidedDescription">—</div>
+          <div class="fw-semibold mb-2" style="font-size:1.15rem; line-height:1.35;" id="guidedDescription">—</div>
           <div class="text-muted" style="font-size:0.88rem;">
-            System qty: <strong id="guidedSystemQty">—</strong><span id="guidedPackInfo" class="ms-1 text-muted"></span>
+            System qty: <strong id="guidedSystemQty">—</strong><span id="guidedPackInfo" class="ms-1"></span>
           </div>
         </div>
       </div>
@@ -557,12 +576,13 @@
     <!-- Count entry card -->
     <div class="card guided-count-card">
       <div class="card-body p-3">
-        <label class="form-label fw-semibold mb-2" style="font-size:0.95rem; color:#495057;">
-          <i class="ti ti-123 me-1" style="color:#6f42c1;"></i>How many did you count?
+        <label class="form-label fw-semibold mb-2" style="font-size:0.95rem;">
+          <i class="ti ti-123 me-1" style="color:var(--tblr-purple);"></i>How many did you count?
         </label>
         <div class="d-flex gap-2 mb-2">
           <input type="number"
                  id="guidedCountInput"
+                 class="form-control"
                  inputmode="numeric"
                  pattern="[0-9]*"
                  min="0"
@@ -602,10 +622,10 @@
     <div class="guided-items-card card">
       <div class="card-header" style="cursor:pointer; user-select:none; -webkit-user-select:none;" onclick="toggleGuidedList()">
         <div class="d-flex align-items-center justify-content-between">
-          <span class="fw-semibold"><i class="ti ti-list-check me-2" style="color:#6f42c1;"></i>All Items</span>
+          <span class="fw-semibold"><i class="ti ti-list-check me-2" style="color:var(--tblr-purple);"></i>All Items</span>
           <div class="d-flex align-items-center gap-2">
             <span class="badge text-bg-success" id="guidedCountedBadge">0 counted</span>
-            <i class="ti ti-chevron-down" id="guidedListChevron" style="transition:transform .2s;"></i>
+            <i class="ti ti-chevron-down" id="guidedListChevron" style="transition:transform .2s; color:var(--tblr-secondary-color);"></i>
           </div>
         </div>
       </div>
