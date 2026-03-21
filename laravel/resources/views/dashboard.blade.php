@@ -1328,7 +1328,7 @@
         return;
       }
 
-      products.forEach(product => {
+      tbody.innerHTML = products.map(product => {
         const statusBadge = getStatusBadge(product.status, product.on_order_qty);
         const locationCount = product.inventory_locations?.length || 0;
         const locationsDisplay = locationCount > 0
@@ -1340,7 +1340,7 @@
         const committedDisplay = formatCommittedDisplay(product, true);
         const availableDisplay = formatAvailableDisplay(product);
 
-        const row = `
+        return `
           <tr>
             <td><span class="text-muted">${product.sku}</span></td>
             <td>${product.description}</td>
@@ -1356,8 +1356,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
     }
 
     function renderPagination(pagination) {
@@ -2309,8 +2308,7 @@
         return;
       }
 
-      tbody.innerHTML = '';
-      currentProductLocations.forEach(location => {
+      tbody.innerHTML = currentProductLocations.map(location => {
         const primaryBadge = location.is_primary
           ? '<span class="badge text-bg-primary ms-1">Primary</span>'
           : '';
@@ -2320,7 +2318,7 @@
         // Display storage location name if available, otherwise fall back to location string
         const locationDisplay = location.storage_location ? location.storage_location.name : location.location;
 
-        const row = `
+        return `
           <tr>
             <td>
               <strong>${locationDisplay}</strong>${primaryBadge}
@@ -2350,8 +2348,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
 
       // Update transfer dropdowns
       updateTransferDropdowns();
@@ -2504,7 +2501,7 @@
           showNotification(locationId ? 'Location updated successfully' : 'Location added successfully', 'success');
           hideLocationForm();
           await loadProductLocations(currentProductId);
-          await loadDashboard(); // Refresh main dashboard
+          loadDashboard(); // Refresh main dashboard in background
         } else {
           const error = await response.json();
           showNotification(error.message || 'Failed to save location', 'danger');
@@ -2593,7 +2590,7 @@
           showNotification('Inventory transferred successfully', 'success');
           hideTransferForm();
           await loadProductLocations(currentProductId);
-          await loadDashboard(); // Refresh main dashboard
+          loadDashboard(); // Refresh main dashboard in background
         } else {
           const error = await response.json();
           showNotification(error.message || 'Failed to transfer inventory', 'danger');
@@ -2665,7 +2662,7 @@
 
           // Reload product data
           await viewProduct(currentProductId);
-          await loadDashboard();
+          loadDashboard(); // Refresh main dashboard in background
         } else {
           const error = await response.json();
           showNotification(error.message || 'Failed to issue material', 'danger');
@@ -3191,15 +3188,14 @@
         return;
       }
 
-      tbody.innerHTML = '';
-      filteredReservations.forEach(reservation => {
+      tbody.innerHTML = filteredReservations.map(reservation => {
         const statusBadge = getReservationStatusBadge(reservation.status);
         const remaining = reservation.quantity_reserved - reservation.quantity_fulfilled;
         const reservedBy = reservation.reserved_by ? `by ${reservation.reserved_by.name}` : '';
         const requiredDate = reservation.required_date ? new Date(reservation.required_date).toLocaleDateString() : '-';
         const isOverdue = reservation.required_date && new Date(reservation.required_date) < new Date() && (reservation.status === 'active' || reservation.status === 'partially_fulfilled');
 
-        const row = `
+        return `
           <tr ${isOverdue ? 'class="table-danger"' : ''}>
             <td>
               <strong>${reservation.job_number}</strong>
@@ -3234,8 +3230,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
 
       // Apply action permissions to dynamically created buttons
       if (typeof applyActionPermissions === 'function') {
@@ -3313,7 +3308,7 @@
         if (response.ok) {
           showNotification('Reservation released successfully', 'success');
           await loadProductReservations(currentProductId);
-          await loadDashboard(); // Refresh main dashboard
+          loadDashboard(); // Refresh main dashboard in background
         } else {
           const error = await response.json();
           showNotification(error.message || 'Failed to release reservation', 'danger');
@@ -3355,7 +3350,7 @@
         if (response.ok) {
           showNotification('Reservation fulfilled successfully', 'success');
           await loadProductReservations(currentProductId);
-          await loadDashboard(); // Refresh main dashboard
+          loadDashboard(); // Refresh main dashboard in background
         } else {
           const error = await response.json();
           showNotification(error.message || 'Failed to fulfill reservation', 'danger');
@@ -3430,7 +3425,7 @@
           showNotification(reservationId ? 'Reservation updated successfully' : 'Inventory reserved successfully', 'success');
           hideReservationForm();
           await loadProductReservations(currentProductId);
-          await loadDashboard(); // Refresh main dashboard
+          loadDashboard(); // Refresh main dashboard in background
         } else {
           const error = await response.json();
           showNotification(error.message || 'Failed to save reservation', 'danger');

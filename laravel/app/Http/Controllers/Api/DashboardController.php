@@ -165,13 +165,31 @@ class DashboardController extends Controller
             });
         }
 
-        // Handle sorting - for calculated fields, we need to sort after fetching
+        // Handle sorting - for calculated fields, use a subquery to sort at the DB level
         if (in_array($sortBy, ['quantity_committed', 'quantity_available'])) {
-            // Fetch all matching products first, enrich, then sort and paginate manually
-            $allProducts = $inventoryQuery->get();
+            // Add a computed committed_qty column via correlated subquery for DB-level sorting
+            $committedSubquery = "COALESCE((
+                SELECT SUM(ri.committed_qty)
+                FROM job_reservation_items ri
+                INNER JOIN job_reservations r ON ri.reservation_id = r.id
+                WHERE ri.product_id = products.id
+                  AND r.status IN ('active', 'in_progress', 'on_hold')
+                  AND r.deleted_at IS NULL
+            ), 0)";
+
+            $inventoryQuery->selectRaw("products.*, {$committedSubquery} as committed_qty_computed");
+
+            if ($sortBy === 'quantity_committed') {
+                $inventoryQuery->orderByRaw("committed_qty_computed {$sortDir}");
+            } else {
+                // quantity_available = quantity_on_hand - committed_qty_computed
+                $inventoryQuery->orderByRaw("(products.quantity_on_hand - committed_qty_computed) {$sortDir}");
+            }
+
+            $inventory = $inventoryQuery->paginate($perPage);
 
             // Enrich with committed quantities (eaches and packs)
-            $allProducts->transform(function ($product) use ($committedByProduct) {
+            $inventory->getCollection()->transform(function ($product) use ($committedByProduct) {
                 $committedQty = $committedByProduct[$product->id] ?? 0;
                 $committedPacks = $product->eachesToPacksNeeded($committedQty);
                 $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
@@ -182,25 +200,6 @@ class DashboardController extends Controller
                 $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
                 return $product;
             });
-
-            // Sort by the calculated field
-            $allProducts = $sortDir === 'asc'
-                ? $allProducts->sortBy($sortBy)->values()
-                : $allProducts->sortByDesc($sortBy)->values();
-
-            // Manual pagination
-            $total = $allProducts->count();
-            $page = $request->get('page', 1);
-            $offset = ($page - 1) * $perPage;
-            $items = $allProducts->slice($offset, $perPage)->values();
-
-            $inventory = new \Illuminate\Pagination\LengthAwarePaginator(
-                $items,
-                $total,
-                $perPage,
-                $page,
-                ['path' => $request->url(), 'query' => $request->query()]
-            );
         } else {
             // Standard database sorting
             $inventory = $inventoryQuery->orderBy($sortBy, $sortDir)->paginate($perPage);

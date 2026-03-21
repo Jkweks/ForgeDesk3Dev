@@ -1011,22 +1011,24 @@
         const tbody = document.getElementById('usersTableBody');
         tbody.innerHTML = '';
 
-        users.forEach(user => {
+        const roleBadges = {
+          admin: '<span class="badge bg-red">Admin</span>',
+          manager: '<span class="badge bg-blue">Manager</span>',
+          fabricator: '<span class="badge bg-green">Fabricator</span>',
+          viewer: '<span class="badge bg-gray">Viewer</span>'
+        };
+
+        tbody.innerHTML = users.map(user => {
           const statusBadge = user.is_active
             ? '<span class="badge bg-success">Active</span>'
             : '<span class="badge bg-secondary">Inactive</span>';
 
-          const roleBadge = {
-            admin: '<span class="badge bg-red">Admin</span>',
-            manager: '<span class="badge bg-blue">Manager</span>',
-            fabricator: '<span class="badge bg-green">Fabricator</span>',
-            viewer: '<span class="badge bg-gray">Viewer</span>'
-          }[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
+          const roleBadge = roleBadges[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
 
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
 
-          const row = `
+          return `
             <tr>
               <td>${user.name}</td>
               <td>${user.email}</td>
@@ -1044,8 +1046,7 @@
               </td>
             </tr>
           `;
-          tbody.innerHTML += row;
-        });
+        }).join('');
 
         // Apply action permissions to dynamically created buttons
         if (typeof applyActionPermissions === 'function') {
@@ -1074,7 +1075,7 @@
         const container = document.getElementById('rolesContainer');
         container.innerHTML = '';
 
-        roles.forEach(role => {
+        container.innerHTML = roles.map(role => {
           const systemBadge = role.is_system ? '<span class="badge bg-info ms-2">System</span>' : '';
           const deleteOption = role.is_system
             ? ''
@@ -1082,7 +1083,7 @@
                  <i class="ti ti-trash me-2"></i>Delete
                </a>`;
 
-          const card = `
+          return `
             <div class="col-md-6 col-lg-4">
               <div class="card">
                 <div class="card-body">
@@ -1119,8 +1120,7 @@
               </div>
             </div>
           `;
-          container.innerHTML += card;
-        });
+        }).join('');
 
         // Update role dropdowns after loading roles
         populateRoleDropdowns();
@@ -1133,34 +1133,27 @@
 
       // Populate all role dropdowns with loaded roles
       function populateRoleDropdowns() {
+        const roleOptions = roles.map(role => `<option value="${role.name}">${role.display_name}</option>`).join('');
+
         // Populate filter dropdown
         const filterRole = document.getElementById('filterRole');
         if (filterRole) {
           const currentFilter = filterRole.value;
-          filterRole.innerHTML = '<option value="">All Roles</option>';
-          roles.forEach(role => {
-            filterRole.innerHTML += `<option value="${role.name}">${role.display_name}</option>`;
-          });
+          filterRole.innerHTML = '<option value="">All Roles</option>' + roleOptions;
           filterRole.value = currentFilter; // Restore previous selection
         }
 
         // Populate add user role dropdown
         const addUserRole = document.getElementById('addUserRole');
         if (addUserRole) {
-          addUserRole.innerHTML = '<option value="">Select role...</option>';
-          roles.forEach(role => {
-            addUserRole.innerHTML += `<option value="${role.name}">${role.display_name}</option>`;
-          });
+          addUserRole.innerHTML = '<option value="">Select role...</option>' + roleOptions;
         }
 
         // Populate edit user role dropdown
         const editUserRole = document.getElementById('editUserRole');
         if (editUserRole) {
           const currentRole = editUserRole.value;
-          editUserRole.innerHTML = '';
-          roles.forEach(role => {
-            editUserRole.innerHTML += `<option value="${role.name}">${role.display_name}</option>`;
-          });
+          editUserRole.innerHTML = roleOptions;
           editUserRole.value = currentRole; // Restore previous selection
         }
       }

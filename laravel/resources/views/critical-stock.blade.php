@@ -207,13 +207,13 @@
         return a.quantity_available - b.quantity_available;
       });
 
-      products.forEach((product, index) => {
+      tbody.innerHTML = products.map((product, index) => {
         const statusBadge = getStatusBadge(product.status);
         const priorityBadge = product.status === 'out_of_stock'
           ? '<span class="badge bg-dark">URGENT</span>'
           : `<span class="badge bg-danger">${index + 1}</span>`;
 
-        const row = `
+        return `
           <tr class="${product.status === 'out_of_stock' ? 'table-danger' : ''}">
             <td>${priorityBadge}</td>
             <td><span class="text-muted">${product.sku}</span></td>
@@ -230,8 +230,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
     }
 
     function getStatusBadge(status) {

@@ -13,8 +13,10 @@
   <link href="{{ asset('assets/tabler/css/tabler-marketing.min.css') }}" rel="stylesheet">
   <link href="{{ asset('assets/tabler/css/tabler-themes.min.css') }}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://rsms.me">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://rsms.me/inter/inter.css"></noscript>
   <style>
-    @import url("https://rsms.me/inter/inter.css");
 
     /* Dark mode compatible styles using Tabler CSS variables */
     .status-badge { font-size: 0.75rem; padding: 0.25rem 0.5rem; }

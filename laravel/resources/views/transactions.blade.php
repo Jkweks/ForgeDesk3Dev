@@ -350,24 +350,24 @@
       const end = start + perPage;
       const pageTransactions = filteredTransactions.slice(start, end);
 
-      pageTransactions.forEach(trans => {
-        const typeColors = {
-          'receipt': 'success',
-          'shipment': 'warning',
-          'adjustment': 'info',
-          'transfer': 'purple',
-          'return': 'danger',
-          'cycle_count': 'azure',
-          'job_issue': 'orange',
-          'issue': 'red',
-          'job_material_transfer': 'teal'
-        };
-        const typeColor = typeColors[trans.type] || 'secondary';
+      const typeColors = {
+        'receipt': 'success',
+        'shipment': 'warning',
+        'adjustment': 'info',
+        'transfer': 'purple',
+        'return': 'danger',
+        'cycle_count': 'azure',
+        'job_issue': 'orange',
+        'issue': 'red',
+        'job_material_transfer': 'teal'
+      };
 
+      tbody.innerHTML = pageTransactions.map(trans => {
+        const typeColor = typeColors[trans.type] || 'secondary';
         const quantityClass = trans.quantity >= 0 ? 'text-success' : 'text-danger';
         const quantitySign = trans.quantity >= 0 ? '+' : '';
 
-        const row = `
+        return `
           <tr>
             <td>
               <div class="small">${formatDateTime(trans.transaction_date)}</div>
@@ -397,8 +397,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
 
       updatePagination();
     }
@@ -423,32 +422,36 @@
 
       document.getElementById('paginationContainer').style.display = 'flex';
 
+      const pageItems = [];
+
       // Previous button
-      paginationLinks.innerHTML += `
+      pageItems.push(`
         <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
           <a class="page-link" href="#" onclick="goToPage(${currentPage - 1}); return false;">Prev</a>
         </li>
-      `;
+      `);
 
       // Page numbers
       for (let i = 1; i <= totalPages; i++) {
         if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-          paginationLinks.innerHTML += `
+          pageItems.push(`
             <li class="page-item ${i === currentPage ? 'active' : ''}">
               <a class="page-link" href="#" onclick="goToPage(${i}); return false;">${i}</a>
             </li>
-          `;
+          `);
         } else if (i === currentPage - 3 || i === currentPage + 3) {
-          paginationLinks.innerHTML += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+          pageItems.push('<li class="page-item disabled"><span class="page-link">...</span></li>');
         }
       }
 
       // Next button
-      paginationLinks.innerHTML += `
+      pageItems.push(`
         <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
           <a class="page-link" href="#" onclick="goToPage(${currentPage + 1}); return false;">Next</a>
         </li>
-      `;
+      `);
+
+      paginationLinks.innerHTML = pageItems.join('');
     }
 
     function goToPage(page) {
