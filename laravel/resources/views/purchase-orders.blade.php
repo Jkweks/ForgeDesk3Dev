@@ -156,7 +156,7 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label required">Supplier</label>
-              <select class="form-select" id="poSupplier" required>
+              <select class="form-select" id="poSupplier" required onchange="onSupplierChange()">
                 <option value="">Select supplier...</option>
               </select>
             </div>
@@ -578,8 +578,37 @@ function showCreatePOModal() {
   safeShowModal('createPOModal');
 }
 
+// Get products filtered by the currently selected supplier
+function getSupplierProducts() {
+  const supplierId = parseInt(document.getElementById('poSupplier').value);
+  if (!supplierId) return [];
+  return allProducts.filter(p => p.supplier_id === supplierId);
+}
+
+// Build product <option> HTML for a given product list
+function buildProductOptions(products) {
+  if (products.length === 0) {
+    return '<option value="" disabled>No products for this supplier</option>';
+  }
+  return products.map(p => `<option value="${p.id}" data-cost="${p.unit_cost}">${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
+}
+
+// Called when supplier selection changes — clear line items and reset the table
+function onSupplierChange() {
+  const tbody = document.getElementById('poLineItems');
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+  document.getElementById('poTotalAmount').textContent = '$0.00';
+  lineItemCounter = 0;
+}
+
 // Add PO line item
 function addPOLineItem() {
+  const supplierId = document.getElementById('poSupplier').value;
+  if (!supplierId) {
+    showNotification('Please select a supplier before adding items', 'warning');
+    return;
+  }
+
   lineItemCounter++;
   const tbody = document.getElementById('poLineItems');
 
@@ -588,13 +617,16 @@ function addPOLineItem() {
     tbody.innerHTML = '';
   }
 
+  const supplierProducts = getSupplierProducts();
+  const productOptionsHtml = buildProductOptions(supplierProducts);
+
   const row = document.createElement('tr');
   row.id = `lineItem${lineItemCounter}`;
   row.innerHTML = `
     <td>
       <select class="form-select form-select-sm" id="product${lineItemCounter}" onchange="updateLineItemCost(${lineItemCounter})" required>
         <option value="">Select product...</option>
-        ${allProducts.map(p => `<option value="${p.id}" data-cost="${p.unit_cost}">${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('')}
+        ${productOptionsHtml}
       </select>
     </td>
     <td>

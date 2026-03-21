@@ -67,6 +67,11 @@ Route::get('/maintenance', function () {
     return view('maintenance');
 });
 
+// Fabrication
+Route::get('/fabrication/documents', function () {
+    return view('fabrication.documents');
+});
+
 // System Status
 Route::get('/status', function () {
     return view('status');

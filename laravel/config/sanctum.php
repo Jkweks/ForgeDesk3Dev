@@ -45,12 +45,13 @@ return [
     | considered expired. This will override any values set in the token's
     | "expires_at" attribute, but first-party sessions are not affected.
     |
-    | Default: 480 minutes (8 hours) - can be overridden per token
-    | Remember Me: 43200 minutes (30 days) - set via abilities
+    | Default: null - per-token expires_at is used (set during createToken())
+    | Remember Me: 43200 minutes (30 days)
+    | Standard:    480 minutes (8 hours)
     |
     */
 
-    'expiration' => env('SANCTUM_EXPIRATION', 480),
+    'expiration' => env('SANCTUM_EXPIRATION', null),
 
     /*
     |--------------------------------------------------------------------------

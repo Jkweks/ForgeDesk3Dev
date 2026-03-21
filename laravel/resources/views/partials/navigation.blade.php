@@ -1,7 +1,7 @@
 <div class="navbar-expand-md">
   <div class="collapse navbar-collapse" id="navbar-menu">
     <div class="navbar">
-      <div class="container-xl">
+      <div class="container-fluid">
         <div class="row flex-column flex-md-row flex-fill align-items-center">
           <div class="col">
             <nav aria-label="Primary">
@@ -39,15 +39,9 @@
                     <span class="nav-link-title">Operations</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item" href="/purchase-orders">
-                      <i class="ti ti-shopping-cart me-2"></i>Purchase Orders
-                    </a>
-                    <a class="dropdown-item" href="/cycle-counting">
-                      <i class="ti ti-clipboard-check me-2"></i>Cycle Counting
-                    </a>
-                    <a class="dropdown-item" href="/storage-locations">
-                      <i class="ti ti-map-pin me-2"></i>Storage Locations
-                    </a>
+                    <a class="dropdown-item" href="/purchase-orders">Purchase Orders</a>
+                    <a class="dropdown-item" href="/cycle-counting">Cycle Counting</a>
+                    <a class="dropdown-item" href="/storage-locations">Storage Locations</a>
                   </div>
                 </li>
                 <li class="nav-item dropdown {{ Request::is('fulfillment*') ? 'active' : '' }}" data-nav-permission="nav.fulfillment">
@@ -58,16 +52,12 @@
                     <span class="nav-link-title">Fulfillment</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item" href="/jobs">
-                      <i class="ti ti-briefcase me-2"></i>Jobs Dashboard
-                    </a>
+                    <a class="dropdown-item" href="/jobs">Jobs Dashboard</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="/fulfillment/material-check">
-                      <i class="ti ti-checklist me-2"></i>Material Check
-                    </a>
-                    <a class="dropdown-item" href="/fulfillment/job-reservations">
-                      <i class="ti ti-clipboard-list me-2"></i>Job Reservations
-                    </a>
+                    <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
+                    <a class="dropdown-item" href="/fulfillment/job-reservations">Job Reservations</a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Door Configurator <span class="badge bg-secondary ms-auto">Soon</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">
@@ -92,6 +82,18 @@
                     <a class="dropdown-item" href="/maintenance#tab-records">Service Log</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/maintenance#tab-assets">Assets</a>
+                  </div>
+                </li>
+                <li class="nav-item dropdown {{ Request::is('fabrication*') ? 'active' : '' }}" data-nav-permission="nav.fabrication">
+                  <a class="nav-link dropdown-toggle" href="#navbar-fabrication" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M2 10a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M14 11a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z" /><path d="M18 12h3" /><path d="M6 16v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1 -1v-3" /><path d="M7 14l-1 -3" /></svg>
+                    </span>
+                    <span class="nav-link-title">Fabrication</span>
+                  </a>
+                  <div class="dropdown-menu">
+                    <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">Documents</a>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Schedule <span class="badge bg-secondary ms-auto">Soon</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">

@@ -192,6 +192,11 @@
       border-color: rgba(66, 153, 225, 0.25) !important;
     }
 
+    /* Ensure consistent gap between nav bar and page content on all pages */
+    .page-header {
+      margin-top: var(--tblr-page-padding-y);
+    }
+
     @yield('styles')
   </style>
 </head>
