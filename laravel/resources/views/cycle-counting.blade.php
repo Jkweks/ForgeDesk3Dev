@@ -344,136 +344,278 @@
   </div>
 </div>
 
-<!-- Guided Count View (full-screen overlay, tablet-optimized) -->
-<div id="guidedCountView" style="display:none; position:fixed; inset:0; z-index:1100; background:#f4f6fa; overflow-y:auto; padding: 1rem;">
-  <div style="max-width: 700px; margin: 0 auto;">
-    <!-- Header bar -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
+<!-- Guided Count View (full-screen overlay, iPad-optimized) -->
+<style>
+  #guidedCountView {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: #f0f2f5;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #guidedHeader {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    border-bottom: 3px solid #6f42c1;
+    box-shadow: 0 2px 10px rgba(0,0,0,.1);
+  }
+  #guidedHeader .header-inner {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 0.75rem 1rem 0.6rem;
+  }
+  #guidedMain {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 1rem;
+  }
+  .guided-location-banner {
+    background: #6f42c1;
+    color: white;
+    border-radius: 12px;
+    padding: 0.9rem 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .guided-product-card {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    margin-bottom: 1rem;
+  }
+  .guided-product-inner {
+    display: flex;
+    flex-direction: row;
+  }
+  .guided-photo-col {
+    width: 200px;
+    min-width: 200px;
+    background: #f8f9fa;
+    border-right: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 190px;
+    padding: 1rem;
+  }
+  .guided-info-col {
+    flex: 1;
+    padding: 1.25rem;
+    min-width: 0;
+  }
+  .guided-count-card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    margin-bottom: 1rem;
+  }
+  #guidedCountInput {
+    font-size: 2.8rem;
+    font-weight: 700;
+    height: 84px;
+    text-align: center;
+    border: 2px solid #dee2e6;
+    border-radius: 10px;
+    transition: border-color .15s, box-shadow .15s;
+    flex: 1;
+  }
+  #guidedCountInput:focus {
+    border-color: #6f42c1;
+    box-shadow: 0 0 0 3px rgba(111,66,193,.18);
+    outline: none;
+  }
+  .guided-unit-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f0f2f5;
+    border: 2px solid #dee2e6;
+    border-radius: 10px;
+    min-width: 70px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #495057;
+    padding: 0 0.75rem;
+  }
+  .guided-save-btn {
+    height: 64px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    border-radius: 10px;
+    letter-spacing: 0.03em;
+    width: 100%;
+  }
+  .guided-nav-btn {
+    height: 52px;
+    border-radius: 8px;
+    flex: 1;
+    font-size: 0.95rem;
+  }
+  .guided-items-card {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    margin-bottom: 2rem;
+  }
+  /* Portrait / small tablet: stack photo above info */
+  @media (max-width: 600px) {
+    .guided-product-inner { flex-direction: column; }
+    .guided-photo-col { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid #e9ecef; min-height: 160px; }
+  }
+  /* Landscape: photo sits beside info */
+  @media (min-width: 601px) {
+    .guided-photo-col { width: 200px; min-width: 200px; }
+  }
+</style>
+
+<div id="guidedCountView" style="display:none;">
+
+  <!-- Sticky header -->
+  <div id="guidedHeader">
+    <div class="header-inner">
+      <!-- Top row: exit / title / actions -->
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <button class="btn btn-outline-secondary d-flex align-items-center justify-content-center"
+                style="min-width:44px; min-height:44px; padding:0; flex-shrink:0;"
+                onclick="closeGuidedCount()" title="Exit">
+          <i class="ti ti-x" style="font-size:1.2rem;"></i>
+        </button>
+        <div class="flex-grow-1 ms-1 overflow-hidden">
+          <div class="fw-bold text-truncate" style="font-size:1rem; color:#6f42c1;">
+            <i class="ti ti-hand-click me-1"></i>Guided Count
+          </div>
+          <div class="text-muted text-truncate" style="font-size:0.78rem;" id="guidedSessionLabel"></div>
+        </div>
+        <button class="btn btn-outline-warning d-flex align-items-center gap-1"
+                style="min-height:44px; flex-shrink:0;"
+                onclick="showVarianceReviewFromGuided()">
+          <i class="ti ti-alert-triangle"></i>
+          <span class="d-none d-sm-inline">Variances</span>
+        </button>
+        <button class="btn btn-success d-flex align-items-center gap-1"
+                style="min-height:44px; flex-shrink:0;"
+                onclick="completeSessionFromGuided()">
+          <i class="ti ti-clipboard-check"></i>
+          <span class="d-none d-sm-inline">Complete</span>
+        </button>
+      </div>
+      <!-- Progress row -->
       <div>
-        <h3 class="mb-0"><i class="ti ti-hand-click me-2" style="color:#6f42c1;"></i>Guided Count</h3>
-        <div class="text-muted small" id="guidedSessionLabel"></div>
+        <div class="d-flex justify-content-between mb-1" style="font-size:0.8rem;">
+          <span class="text-muted fw-semibold" id="guidedProgressText">Item 1 of 0</span>
+          <span class="text-success fw-semibold" id="guidedProgressPct">0 counted (0%)</span>
+        </div>
+        <div class="progress" style="height:7px; border-radius:4px;">
+          <div class="progress-bar bg-success" id="guidedProgressBar" style="width:0%; transition:width .4s ease;"></div>
+        </div>
       </div>
-      <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary btn-sm" onclick="closeGuidedCount()">
-          <i class="ti ti-x me-1"></i>Exit
-        </button>
-        <button class="btn btn-warning btn-sm" onclick="showVarianceReviewFromGuided()">
-          <i class="ti ti-eye me-1"></i>Variances
-        </button>
-        <button class="btn btn-success btn-sm" onclick="completeSessionFromGuided()">
-          <i class="ti ti-check me-1"></i>Complete
-        </button>
+    </div>
+  </div>
+
+  <!-- Scrollable main content -->
+  <div id="guidedMain">
+
+    <!-- Location banner -->
+    <div class="guided-location-banner">
+      <i class="ti ti-map-pin" style="font-size:1.75rem; flex-shrink:0;"></i>
+      <div style="min-width:0;">
+        <div style="font-size:0.7rem; opacity:0.7; text-transform:uppercase; letter-spacing:.07em; margin-bottom:2px;">Location</div>
+        <div style="font-size:1.4rem; font-weight:700; line-height:1.2; word-break:break-word;" id="guidedLocation">—</div>
       </div>
     </div>
 
-    <!-- Progress bar -->
-    <div class="mb-3">
-      <div class="d-flex justify-content-between small text-muted mb-1">
-        <span id="guidedProgressText">Item 0 of 0</span>
-        <span id="guidedProgressPct">0%</span>
-      </div>
-      <div class="progress" style="height:10px;">
-        <div class="progress-bar bg-success" id="guidedProgressBar" style="width:0%"></div>
+    <!-- Product card -->
+    <div class="card guided-product-card">
+      <div class="guided-product-inner">
+        <!-- Photo -->
+        <div class="guided-photo-col">
+          <div id="guidedPhotoWrap" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+            <div class="text-muted text-center">
+              <i class="ti ti-photo" style="font-size:3rem; opacity:.2;"></i>
+            </div>
+          </div>
+        </div>
+        <!-- Info -->
+        <div class="guided-info-col">
+          <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+            <span class="badge text-bg-dark" style="font-size:1rem; padding:.3em .65em;" id="guidedSku">—</span>
+            <span class="badge border text-muted" style="font-size:0.8rem; background:#f8f9fa;" id="guidedUnitLabel"></span>
+            <span class="ms-auto" id="guidedStatusBadge"></span>
+          </div>
+          <div style="font-size:1.15rem; font-weight:600; line-height:1.35; color:#212529; margin-bottom:0.6rem;" id="guidedDescription">—</div>
+          <div class="text-muted" style="font-size:0.88rem;">
+            System qty: <strong id="guidedSystemQty">—</strong><span id="guidedPackInfo" class="ms-1 text-muted"></span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Item card -->
-    <div class="card shadow-sm mb-3" id="guidedItemCard">
-      <!-- Location banner -->
-      <div class="card-header py-2" style="background: #6f42c1; color: white;">
-        <div class="d-flex align-items-center gap-2">
-          <i class="ti ti-map-pin" style="font-size:1.3rem;"></i>
-          <div>
-            <div class="small opacity-75">Location</div>
-            <div class="fw-bold fs-5" id="guidedLocation">-</div>
-          </div>
+    <!-- Count entry card -->
+    <div class="card guided-count-card">
+      <div class="card-body p-3">
+        <label class="form-label fw-semibold mb-2" style="font-size:0.95rem; color:#495057;">
+          <i class="ti ti-123 me-1" style="color:#6f42c1;"></i>How many did you count?
+        </label>
+        <div class="d-flex gap-2 mb-2">
+          <input type="number"
+                 id="guidedCountInput"
+                 inputmode="numeric"
+                 pattern="[0-9]*"
+                 min="0"
+                 placeholder="0"
+                 autocomplete="off">
+          <div class="guided-unit-box" id="guidedCountUnit"></div>
         </div>
+        <input type="text"
+               id="guidedNotes"
+               class="form-control"
+               placeholder="Notes (optional)"
+               style="border-radius:8px; height:44px;">
       </div>
+    </div>
 
-      <div class="card-body">
-        <div class="row g-3 align-items-start">
-          <!-- Photo column -->
-          <div class="col-md-4 text-center">
-            <div id="guidedPhotoWrap" style="min-height: 160px; display:flex; align-items:center; justify-content:center;">
-              <div class="text-muted">
-                <i class="ti ti-photo" style="font-size: 3rem; opacity:.3;"></i>
-              </div>
-            </div>
-          </div>
-          <!-- Info + count column -->
-          <div class="col-md-8">
-            <!-- SKU badge -->
-            <div class="mb-1">
-              <span class="badge text-bg-secondary fs-6" id="guidedSku">-</span>
-              <span class="badge text-bg-light text-dark ms-1" id="guidedUnitLabel"></span>
-            </div>
-            <!-- Description -->
-            <h4 class="mb-2" id="guidedDescription">-</h4>
-            <!-- System qty -->
-            <div class="mb-3 text-muted small">
-              System quantity: <strong id="guidedSystemQty">-</strong>
-              <span id="guidedPackInfo"></span>
-            </div>
-            <!-- Count input -->
-            <label class="form-label fw-bold fs-5">Counted Quantity</label>
-            <div class="input-group input-group-lg mb-2" style="max-width: 280px;">
-              <input type="number"
-                     id="guidedCountInput"
-                     class="form-control form-control-lg text-center fw-bold"
-                     inputmode="numeric"
-                     pattern="[0-9]*"
-                     min="0"
-                     placeholder="0"
-                     style="font-size: 2rem; height: 70px;"
-                     autocomplete="off">
-              <span class="input-group-text" id="guidedCountUnit"></span>
-            </div>
-            <!-- Notes -->
-            <div class="mb-2">
-              <input type="text" id="guidedNotes" class="form-control" placeholder="Notes (optional)">
-            </div>
-            <!-- Status badge -->
-            <div id="guidedStatusBadge"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Navigation footer -->
-      <div class="card-footer">
-        <div class="d-flex justify-content-between align-items-center">
-          <button class="btn btn-outline-secondary btn-lg px-4" id="guidedPrevBtn" onclick="guidedNavigate(-1)">
-            <i class="ti ti-chevron-left me-1"></i>Prev
+    <!-- Action buttons card -->
+    <div class="card guided-count-card">
+      <div class="card-body p-3">
+        <button class="btn btn-primary guided-save-btn mb-2" onclick="guidedSave()">
+          <i class="ti ti-check me-2"></i>Save &amp; Next
+        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary guided-nav-btn" id="guidedPrevBtn" onclick="guidedNavigate(-1)">
+            <i class="ti ti-chevron-left"></i> Prev
           </button>
-          <div class="d-flex gap-2">
-            <button class="btn btn-outline-warning btn-lg px-3" onclick="guidedSkip()">
-              Skip
-            </button>
-            <button class="btn btn-primary btn-lg px-4" onclick="guidedSave()">
-              <i class="ti ti-check me-1"></i>Save &amp; Next
-            </button>
-          </div>
-          <button class="btn btn-outline-secondary btn-lg px-4" id="guidedNextBtn" onclick="guidedNavigate(1)">
-            Next<i class="ti ti-chevron-right ms-1"></i>
+          <button class="btn btn-outline-warning guided-nav-btn" onclick="guidedSkip()">
+            Skip
+          </button>
+          <button class="btn btn-outline-secondary guided-nav-btn" id="guidedNextBtn" onclick="guidedNavigate(1)">
+            Next <i class="ti ti-chevron-right"></i>
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Counted items mini list (collapsible) -->
-    <div class="card">
-      <div class="card-header" style="cursor:pointer;" onclick="toggleGuidedList()">
+    <!-- All items collapsible -->
+    <div class="guided-items-card card">
+      <div class="card-header" style="cursor:pointer; user-select:none; -webkit-user-select:none;" onclick="toggleGuidedList()">
         <div class="d-flex align-items-center justify-content-between">
-          <span><i class="ti ti-list me-1"></i>All Items</span>
-          <span class="badge text-bg-primary" id="guidedCountedBadge">0 counted</span>
+          <span class="fw-semibold"><i class="ti ti-list-check me-2" style="color:#6f42c1;"></i>All Items</span>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge text-bg-success" id="guidedCountedBadge">0 counted</span>
+            <i class="ti ti-chevron-down" id="guidedListChevron" style="transition:transform .2s;"></i>
+          </div>
         </div>
       </div>
-      <div id="guidedListBody" style="display:none; max-height: 300px; overflow-y:auto;">
+      <div id="guidedListBody" style="display:none; max-height:340px; overflow-y:auto; -webkit-overflow-scrolling:touch;">
         <div class="list-group list-group-flush" id="guidedItemList"></div>
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /guidedMain -->
+</div><!-- /guidedCountView -->
 
 <!-- Session Details Modal -->
 <div class="modal modal-blur fade" id="sessionDetailsModal" tabindex="-1">
@@ -1570,22 +1712,20 @@ async function enterGuidedCount(sessionId) {
     if (guidedIndex < 0) guidedIndex = 0;
 
     document.getElementById('guidedSessionLabel').textContent =
-      `Session ${session.session_number} · ${session.location || 'All Locations'}`;
-
-    document.getElementById('countSessionId').value = session.id; // keep in sync for complete/variance
+      `${session.session_number} · ${session.location || 'All Locations'}`;
+    document.getElementById('countSessionId').value = session.id;
 
     renderGuidedItem();
     renderGuidedList();
     updateGuidedProgress();
 
     document.getElementById('guidedCountView').style.display = 'block';
-    document.body.style.overflow = 'hidden';
+    // Scroll guided view to top
+    document.getElementById('guidedCountView').scrollTop = 0;
 
-    // Focus input after short delay (avoids iOS keyboard issues)
-    setTimeout(() => {
-      const inp = document.getElementById('guidedCountInput');
-      if (inp) inp.focus();
-    }, 300);
+    // Bind Enter key on count input to save
+    const inp = document.getElementById('guidedCountInput');
+    inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); guidedSave(); } };
   } catch (err) {
     console.error('Error starting guided count:', err);
     showNotification('Error loading session', 'danger');
@@ -1594,8 +1734,6 @@ async function enterGuidedCount(sessionId) {
 
 function closeGuidedCount() {
   document.getElementById('guidedCountView').style.display = 'none';
-  document.body.style.overflow = '';
-  // Refresh session list
   loadCycleCounts();
   loadStatistics();
 }
@@ -1617,17 +1755,21 @@ function renderGuidedItem() {
   const packSize = item.pack_size || product.pack_size || 1;
   const hasPackSize = packSize > 1;
   const unitLabel = hasPackSize ? 'packs' : '';
-  document.getElementById('guidedUnitLabel').textContent = hasPackSize ? `${packSize} per pack` : '';
+  const unitLabelEl = document.getElementById('guidedUnitLabel');
+  unitLabelEl.textContent = hasPackSize ? `${packSize} per pack` : '';
+  unitLabelEl.style.display = hasPackSize ? '' : 'none';
   document.getElementById('guidedSystemQty').textContent = item.system_quantity + (unitLabel ? ' ' + unitLabel : '');
-  document.getElementById('guidedPackInfo').textContent = hasPackSize ? ` (${item.system_quantity * packSize} ea total)` : '';
-  document.getElementById('guidedCountUnit').textContent = unitLabel;
+  document.getElementById('guidedPackInfo').textContent = hasPackSize ? `(${item.system_quantity * packSize} ea total)` : '';
+  const countUnitEl = document.getElementById('guidedCountUnit');
+  countUnitEl.textContent = unitLabel;
+  countUnitEl.style.display = unitLabel ? '' : 'none';
 
   // Photo
   const photoWrap = document.getElementById('guidedPhotoWrap');
   if (product.photo_url) {
-    photoWrap.innerHTML = `<img src="${escapeHtml(product.photo_url)}" alt="Product" style="max-height:160px; max-width:100%; object-fit:contain; border-radius:8px;">`;
+    photoWrap.innerHTML = `<img src="${escapeHtml(product.photo_url)}" alt="Product" style="max-height:170px; max-width:100%; object-fit:contain; border-radius:8px; display:block;">`;
   } else {
-    photoWrap.innerHTML = `<div class="text-muted text-center"><i class="ti ti-photo" style="font-size:3rem; opacity:.25;"></i><div class="small mt-1">No photo</div></div>`;
+    photoWrap.innerHTML = `<div class="text-muted text-center"><i class="ti ti-photo" style="font-size:3.5rem; opacity:.2;"></i><div class="small mt-2" style="font-size:0.78rem;">No photo</div></div>`;
   }
 
   // Count input
@@ -1676,7 +1818,7 @@ function updateGuidedProgress() {
   const counted = guidedItems.filter(i => i.counted_quantity !== null).length;
   const pct = total > 0 ? Math.round((counted / total) * 100) : 0;
   document.getElementById('guidedProgressText').textContent = `Item ${guidedIndex + 1} of ${total}`;
-  document.getElementById('guidedProgressPct').textContent = `${counted} / ${total} counted (${pct}%)`;
+  document.getElementById('guidedProgressPct').textContent = `${counted} counted (${pct}%)`;
   document.getElementById('guidedProgressBar').style.width = pct + '%';
   document.getElementById('guidedCountedBadge').textContent = `${counted} counted`;
 }
@@ -1790,7 +1932,10 @@ async function guidedSave() {
 
 function toggleGuidedList() {
   const body = document.getElementById('guidedListBody');
-  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+  const chevron = document.getElementById('guidedListChevron');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
 
 async function showVarianceReviewFromGuided() {
