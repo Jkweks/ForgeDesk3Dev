@@ -655,19 +655,6 @@
   </div>
 @push('scripts')
   <script>
-    // ========== PRODUCT MODAL GLOBALS ==========
-    let currentProductId = null;
-    let currentProductLocations = [];
-    let currentProductData = null;
-    let isEditMode = false;
-    let currentProductReservations = [];
-    let currentReservationFilter = 'all';
-    let currentProductTransactions = [];
-    let activitySortCol = 'transaction_date';
-    let activitySortDir = 'desc';
-    let currentBOM = [];
-    let allProducts = []; // For part selector
-
     // Config data — populated by loadConfigurations() on pages that call it,
     // or lazy-loaded inside renderEditForm on pages that don't.
     let categories = [];
