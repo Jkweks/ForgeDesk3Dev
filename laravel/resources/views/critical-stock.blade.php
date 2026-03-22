@@ -195,7 +195,10 @@
         if (category) params.append('category_id', category);
 
         const data = await authenticatedFetch(`/products?${params}`);
-        csProducts = data.data || [];
+                // Exclude out-of-stock items with no reorder point or maximum quantity — they aren't actively managed
+        csProducts = (data.data || []).filter(p =>
+          !(p.status === 'out_of_stock' && !p.reorder_point && !p.maximum_quantity)
+        );
 
         // Calculate stats — use pack-based quantities for pack products (unit_cost is per pack)
         const criticalCount = csProducts.filter(p => p.status === 'critical').length;
