@@ -406,6 +406,10 @@ function compareItems(a, b) {
     case 'unit_cost':
       aVal = a.unit_cost ?? 0; bVal = b.unit_cost ?? 0;
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    case 'line_total':
+      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.unit_cost || 0);
+      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.unit_cost || 0);
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     default: // 'status' — urgency order, then days
       const urgencyDiff = (URGENCY_ORDER[a.status] ?? 99) - (URGENCY_ORDER[b.status] ?? 99);
       if (urgencyDiff !== 0) return urgencyDiff;
@@ -463,7 +467,7 @@ function renderVendorCard(container, group) {
             ${sortHeaderHtml('Days Left', 'days_until_stockout', 'text-end')}
             <th class="text-end" style="width:140px">Order Qty</th>
             ${sortHeaderHtml('Pack Cost', 'unit_cost', 'text-end')}
-            <th class="text-end">Line Total</th>
+            ${sortHeaderHtml('Line Total', 'line_total', 'text-end')}
             ${sortHeaderHtml('Status', 'status', '')}
           </tr>
         </thead>
