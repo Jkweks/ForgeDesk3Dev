@@ -6,15 +6,21 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration
 {
     /**
-     * Recalculate all product statuses using the new 5-tier logic:
-     *   in_stock  : available > reorder_point
-     *   low       : safety_stock < available <= reorder_point
-     *   very_low  : 0 < available <= safety_stock
+     * Expand the products.status enum to include 'low' and 'very_low',
+     * then recalculate all statuses using the new 5-tier logic:
+     *   in_stock   : available > reorder_point
+     *   low        : safety_stock < available <= reorder_point
+     *   very_low   : 0 < available <= safety_stock
      *   out_of_stock: available <= 0  (or overcommitted with reorder_point = 0)
-     *   critical  : available < 0 (overcommitted) AND reorder_point > 0
+     *   critical   : available < 0 (overcommitted) AND reorder_point > 0
      */
     public function up(): void
     {
+        // PostgreSQL enums are implemented as CHECK constraints by Laravel.
+        // Drop the old constraint and add a new one with the expanded value set.
+        DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+        DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low', 'very_low', 'critical', 'out_of_stock'))");
+
         DB::statement("
             UPDATE products
             SET status = CASE
@@ -81,6 +87,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        // No rollback — status is a derived value, not source-of-truth data
+        DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+        DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low_stock', 'critical', 'out_of_stock'))");
+        // Remap new statuses back to closest old equivalents
+        DB::statement("UPDATE products SET status = 'low_stock' WHERE status IN ('low', 'very_low')");
     }
 };
