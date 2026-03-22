@@ -723,6 +723,17 @@ async function createAllPendingPOs() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text ?? '';
+  return div.innerHTML;
+}
+
+function formatCurrency(value) {
+  if (typeof formatPrice === 'function') return formatPrice(value);
+  return '$' + parseFloat(value || 0).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+}
+
 function statusBadgeHtml(status) {
   const map = {
     critical:  ['bg-danger',  'Critical'],
