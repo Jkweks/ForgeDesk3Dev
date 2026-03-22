@@ -1824,9 +1824,10 @@ function getReportPageNumbers(current, last, maxVisible) {
 // ============================================
 function getStatusBadge(status) {
   const badges = {
-    'in_stock': '<span class="badge text-bg-success">In Stock</span>',
-    'low_stock': '<span class="badge text-bg-warning">Low Stock</span>',
-    'critical': '<span class="badge text-bg-danger">Critical</span>',
+    'in_stock':     '<span class="badge text-bg-success">In Stock</span>',
+    'low':          '<span class="badge text-bg-warning">Low Stock</span>',
+    'very_low':     '<span class="badge" style="background-color:#fd7e14;color:#fff;">Very Low</span>',
+    'critical':     '<span class="badge text-bg-danger">Critical</span>',
     'out_of_stock': '<span class="badge text-bg-dark">Out of Stock</span>'
   };
   return badges[status] || status;

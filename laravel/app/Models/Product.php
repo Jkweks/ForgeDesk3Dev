@@ -278,18 +278,23 @@ class Product extends Model
 
     public function updateStatus()
     {
-        $available = $this->quantity_available;
-        
-        if ($available <= 0) {
+        $available    = $this->quantity_available;
+        $reorderPoint = $this->reorder_point ?? 0;
+        $safetyStock  = $this->safety_stock ?? 0;
+
+        if ($available < 0) {
+            // Overcommitted — critical, unless reorder_point is 0 (treat as out_of_stock)
+            $this->status = ($reorderPoint == 0) ? 'out_of_stock' : 'critical';
+        } elseif ($available == 0) {
             $this->status = 'out_of_stock';
-        } elseif ($available <= ($this->minimum_quantity * 0.5)) {
-            $this->status = 'critical';
-        } elseif ($available <= $this->minimum_quantity) {
-            $this->status = 'low_stock';
-        } else {
+        } elseif ($available > $reorderPoint) {
             $this->status = 'in_stock';
+        } elseif ($available > $safetyStock) {
+            $this->status = 'low';
+        } else {
+            $this->status = 'very_low';
         }
-        
+
         $this->save();
     }
 

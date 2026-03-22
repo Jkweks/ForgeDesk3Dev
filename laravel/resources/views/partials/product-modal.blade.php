@@ -738,9 +738,10 @@
 
     function getStatusBadge(status, onOrderQty = 0) {
       const badges = {
-        'in_stock': '<span class="badge text-bg-success status-badge">In Stock</span>',
-        'low_stock': '<span class="badge text-bg-warning status-badge">Low Stock</span>',
-        'critical': '<span class="badge text-bg-danger status-badge">Critical</span>',
+        'in_stock':     '<span class="badge text-bg-success status-badge">In Stock</span>',
+        'low':          '<span class="badge text-bg-warning status-badge">Low Stock</span>',
+        'very_low':     '<span class="badge status-badge" style="background-color:#fd7e14;color:#fff;">Very Low</span>',
+        'critical':     '<span class="badge text-bg-danger status-badge">Critical</span>',
         'out_of_stock': '<span class="badge text-bg-dark status-badge">Out of Stock</span>'
       };
       let badge = badges[status] || badges['in_stock'];

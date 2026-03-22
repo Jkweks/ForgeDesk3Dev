@@ -160,7 +160,7 @@
         const search = document.getElementById('searchInput').value;
         const category = document.getElementById('categoryFilter').value;
 
-        const params = new URLSearchParams({ status: 'low_stock', per_page: 100 });
+        const params = new URLSearchParams({ status: 'low,very_low', per_page: 100 });
         if (search) params.append('search', search);
         if (category) params.append('category_id', category);
 
@@ -254,7 +254,7 @@
         const search = document.getElementById('searchInput').value;
         const category = document.getElementById('categoryFilter').value;
 
-        const params = new URLSearchParams({ status: 'low_stock', export: 'csv' });
+        const params = new URLSearchParams({ status: 'low,very_low', export: 'csv' });
         if (search) params.append('search', search);
         if (category) params.append('category_id', category);
 

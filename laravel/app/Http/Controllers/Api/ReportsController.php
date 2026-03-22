@@ -16,7 +16,7 @@ class ReportsController extends Controller
      */
     public function lowStockReport(Request $request)
     {
-        $lowStock = Product::where('status', 'low_stock')
+        $lowStock = Product::whereIn('status', ['low', 'very_low'])
             ->where('is_active', true)
             ->with(['category', 'supplier', 'inventoryLocations'])
             ->get()
@@ -690,7 +690,8 @@ class ReportsController extends Controller
             // Priority score (higher = more urgent)
             $priorityScore = 0;
             if ($product->status === 'critical') $priorityScore += 100;
-            elseif ($product->status === 'low_stock') $priorityScore += 50;
+            elseif ($product->status === 'very_low') $priorityScore += 75;
+            elseif ($product->status === 'low') $priorityScore += 50;
 
             if ($product->days_until_stockout && $product->days_until_stockout < 7) {
                 $priorityScore += 50;
