@@ -112,14 +112,13 @@
                       <thead>
                         <tr>
                           <th>Priority</th>
-                          <th>SKU</th>
-                          <th>Description</th>
-                          <th class="text-end">Available</th>
-                          <th class="text-end">Committed</th>
-                          <th class="text-end">Reorder Point</th>
-                          <th class="text-end">Suggested Order</th>
-                          <th>Status</th>
-                          <th class="w-1"></th>
+                          <th class="sortable-cs" data-col="sku" style="cursor:pointer;">SKU <span class="cs-sort-icon" data-col="sku"></span></th>
+                          <th class="sortable-cs" data-col="description" style="cursor:pointer;">Description <span class="cs-sort-icon" data-col="description"></span></th>
+                          <th class="text-end sortable-cs" data-col="quantity_available" style="cursor:pointer;">Available <span class="cs-sort-icon" data-col="quantity_available"></span></th>
+                          <th class="text-end sortable-cs" data-col="quantity_committed" style="cursor:pointer;">Committed <span class="cs-sort-icon" data-col="quantity_committed"></span></th>
+                          <th class="text-end sortable-cs" data-col="reorder_point" style="cursor:pointer;">Reorder Point <span class="cs-sort-icon" data-col="reorder_point"></span></th>
+                          <th class="text-end sortable-cs" data-col="suggested_order_qty" style="cursor:pointer;">Suggested Order <span class="cs-sort-icon" data-col="suggested_order_qty"></span></th>
+                          <th class="sortable-cs" data-col="status" style="cursor:pointer;">Status <span class="cs-sort-icon" data-col="status"></span></th>
                         </tr>
                       </thead>
                       <tbody id="inventoryTableBody"></tbody>
@@ -134,19 +133,51 @@
     </div>
   </div>
 
+  @include('partials.product-modal')
+
 @endsection
 
 @push('scripts')
   <script>
+    let csProducts = [];
+    let csSortCol = null; // null = default priority sort
+    let csSortDir = 'asc';
+
+    function refreshTable() { loadCriticalStockItems(); }
+
     document.addEventListener('DOMContentLoaded', () => {
       loadCriticalStockItems();
       loadCategories();
 
-      // Search functionality
       document.getElementById('searchInput').addEventListener('input', debounce(loadCriticalStockItems, 300));
       document.getElementById('categoryFilter').addEventListener('change', loadCriticalStockItems);
       document.getElementById('statusFilter').addEventListener('change', loadCriticalStockItems);
+
+      document.querySelectorAll('.sortable-cs').forEach(th => {
+        th.addEventListener('click', function() {
+          const col = this.dataset.col;
+          if (csSortCol === col) {
+            csSortDir = csSortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            csSortCol = col;
+            csSortDir = 'asc';
+          }
+          renderInventoryTable(csProducts);
+          updateCsSortIcons();
+        });
+      });
     });
+
+    function updateCsSortIcons() {
+      document.querySelectorAll('.cs-sort-icon').forEach(icon => {
+        const col = icon.dataset.col;
+        if (col === csSortCol) {
+          icon.textContent = csSortDir === 'asc' ? ' ↑' : ' ↓';
+        } else {
+          icon.textContent = '';
+        }
+      });
+    }
 
     async function loadCriticalStockItems() {
       try {
@@ -154,34 +185,31 @@
         const category = document.getElementById('categoryFilter').value;
         const statusFilter = document.getElementById('statusFilter').value;
 
-        const params = new URLSearchParams({
-          per_page: 100
-        });
-
-        // If specific status selected, use it; otherwise get both critical and out_of_stock
+        const params = new URLSearchParams({ per_page: 100 });
         if (statusFilter) {
           params.append('status', statusFilter);
         } else {
           params.append('status', 'critical,out_of_stock');
         }
-
         if (search) params.append('search', search);
         if (category) params.append('category_id', category);
 
         const data = await authenticatedFetch(`/products?${params}`);
+        csProducts = data.data || [];
 
         // Calculate stats
-        const criticalCount = data.data.filter(p => p.status === 'critical').length;
-        const outOfStockCount = data.data.filter(p => p.status === 'out_of_stock').length;
-        const totalValue = data.data.reduce((sum, p) => sum + (p.quantity_available * p.unit_cost), 0);
-        const emergencyPO = data.data.reduce((sum, p) => sum + ((p.suggested_order_qty || 0) * p.unit_cost), 0);
+        const criticalCount = csProducts.filter(p => p.status === 'critical').length;
+        const outOfStockCount = csProducts.filter(p => p.status === 'out_of_stock').length;
+        const totalValue = csProducts.reduce((sum, p) => sum + (p.quantity_available * (p.unit_cost || 0)), 0);
+        const emergencyPO = csProducts.reduce((sum, p) => sum + ((p.suggested_order_qty || 0) * (p.unit_cost || 0)), 0);
 
         document.getElementById('statCriticalCount').textContent = criticalCount.toLocaleString();
         document.getElementById('statOutOfStock').textContent = outOfStockCount.toLocaleString();
         document.getElementById('statTotalValue').textContent = `$${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('statEmergencyPO').textContent = `$${emergencyPO.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
-        renderInventoryTable(data.data);
+        renderInventoryTable(csProducts);
+        updateCsSortIcons();
 
         document.getElementById('loadingIndicator').style.display = 'none';
         document.getElementById('inventoryTableContainer').style.display = 'block';
@@ -193,67 +221,68 @@
 
     function renderInventoryTable(products) {
       const tbody = document.getElementById('inventoryTableBody');
-      tbody.innerHTML = '';
 
       if (products.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-success py-5"><i class="ti ti-check" style="font-size: 2rem;"></i><br>No critical stock items - all inventory levels are healthy!</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-success py-5"><i class="ti ti-check" style="font-size: 2rem;"></i><br>No critical stock items — all inventory levels are healthy!</td></tr>';
         return;
       }
 
-      // Sort by priority: out of stock first, then by available quantity
-      products.sort((a, b) => {
-        if (a.status === 'out_of_stock' && b.status !== 'out_of_stock') return -1;
-        if (a.status !== 'out_of_stock' && b.status === 'out_of_stock') return 1;
-        return a.quantity_available - b.quantity_available;
-      });
+      let sorted;
+      if (csSortCol) {
+        // User-selected sort
+        sorted = [...products].sort((a, b) => {
+          let valA = a[csSortCol] ?? '';
+          let valB = b[csSortCol] ?? '';
+          if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB + '').toLowerCase(); }
+          if (valA < valB) return csSortDir === 'asc' ? -1 : 1;
+          if (valA > valB) return csSortDir === 'asc' ? 1 : -1;
+          return 0;
+        });
+      } else {
+        // Default: out of stock first, then by available quantity ascending
+        sorted = [...products].sort((a, b) => {
+          if (a.status === 'out_of_stock' && b.status !== 'out_of_stock') return -1;
+          if (a.status !== 'out_of_stock' && b.status === 'out_of_stock') return 1;
+          return (a.quantity_available ?? 0) - (b.quantity_available ?? 0);
+        });
+      }
 
-      tbody.innerHTML = products.map((product, index) => {
-        const statusBadge = getStatusBadge(product.status);
+      tbody.innerHTML = sorted.map((product, index) => {
         const priorityBadge = product.status === 'out_of_stock'
           ? '<span class="badge bg-dark">URGENT</span>'
           : `<span class="badge bg-danger">${index + 1}</span>`;
 
         return `
-          <tr class="${product.status === 'out_of_stock' ? 'table-danger' : ''}">
+          <tr class="${product.status === 'out_of_stock' ? 'table-danger' : ''}" onclick="viewProduct(${product.id})" style="cursor:pointer;">
             <td>${priorityBadge}</td>
             <td><span class="text-muted">${product.sku}</span></td>
             <td>${product.description}</td>
-            <td class="text-end text-danger fw-bold">${product.quantity_available.toLocaleString()}</td>
-            <td class="text-end text-warning">${product.quantity_committed.toLocaleString()}</td>
+            <td class="text-end text-danger fw-bold">${(product.quantity_available ?? 0).toLocaleString()}</td>
+            <td class="text-end text-warning">${(product.quantity_committed ?? 0).toLocaleString()}</td>
             <td class="text-end">${product.reorder_point ? product.reorder_point.toLocaleString() : '-'}</td>
             <td class="text-end text-info fw-bold">${product.suggested_order_qty ? product.suggested_order_qty.toLocaleString() : '-'}</td>
-            <td>${statusBadge}</td>
-            <td class="table-actions">
-              <a href="/?product=${product.id}" class="btn btn-sm btn-icon btn-ghost-primary" title="View">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
-              </a>
-            </td>
+            <td>${getStatusBadge(product.status, product.on_order_qty)}</td>
           </tr>
         `;
       }).join('');
     }
 
-    function getStatusBadge(status) {
-      const badges = {
-        'in_stock': '<span class="badge text-bg-success">In Stock</span>',
-        'low_stock': '<span class="badge text-bg-warning">Low Stock</span>',
-        'critical': '<span class="badge text-bg-danger">Critical</span>',
-        'out_of_stock': '<span class="badge text-bg-dark">Out of Stock</span>'
-      };
-      return badges[status] || '<span class="badge text-bg-secondary">Unknown</span>';
-    }
-
     async function loadCategories() {
       try {
-        const categories = await authenticatedFetch(`/categories`);
-
+        const response = await apiCall('/categories-tree');
+        const tree = await response.json();
         const select = document.getElementById('categoryFilter');
-        categories.forEach(category => {
-          const option = document.createElement('option');
-          option.value = category.id;
-          option.textContent = category.name;
-          select.appendChild(option);
-        });
+
+        function addOptions(nodes, level) {
+          nodes.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = '\u00A0'.repeat(level * 3) + cat.name;
+            select.appendChild(option);
+            if (cat.children && cat.children.length > 0) addOptions(cat.children, level + 1);
+          });
+        }
+        addOptions(Array.isArray(tree) ? tree : [], 0);
       } catch (error) {
         console.error('Error loading categories:', error);
       }
@@ -266,29 +295,20 @@
         const category = document.getElementById('categoryFilter').value;
         const statusFilter = document.getElementById('statusFilter').value;
 
-        const params = new URLSearchParams({
-          export: 'csv'
-        });
-
+        const params = new URLSearchParams({ export: 'csv' });
         if (statusFilter) {
           params.append('status', statusFilter);
         } else {
           params.append('status', 'critical,out_of_stock');
         }
-
         if (search) params.append('search', search);
         if (category) params.append('category_id', category);
 
         const response = await fetch(`${API_BASE}/products?${params}`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Accept': 'text/csv'
-          }
+          headers: { 'Authorization': `Bearer ${authToken}`, 'Accept': 'text/csv' }
         });
 
-        if (!response.ok) {
-          throw new Error('Export failed');
-        }
+        if (!response.ok) throw new Error('Export failed');
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -309,17 +329,12 @@
 
     function generateEmergencyPO() {
       showNotification('Emergency PO generation feature coming soon', 'info');
-      // TODO: Implement emergency PO generation
-      // This would collect all critical items and create a draft PO
     }
 
     function debounce(func, wait) {
       let timeout;
       return function executedFunction(...args) {
-        const later = () => {
-          clearTimeout(timeout);
-          func(...args);
-        };
+        const later = () => { clearTimeout(timeout); func(...args); };
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
       };
