@@ -102,48 +102,27 @@
       return;
     }
 
-    // Find all elements with permission requirements
-    const permissionElements = document.querySelectorAll('[data-permission]');
+    // Use a Set for O(1) permission lookups instead of Array.includes()
+    const permSet = new Set(currentUser.permissions);
 
-    permissionElements.forEach(element => {
-      const requiredPermission = element.getAttribute('data-permission');
+    // Single DOM query for all permission-gated elements
+    const allElements = document.querySelectorAll('[data-permission], [data-permission-any], [data-permission-all]');
 
-      // Check if user has the required permission
-      if (!hasPermission(requiredPermission)) {
-        // Hide the element
-        element.style.display = 'none';
+    allElements.forEach(element => {
+      let allowed = false;
 
-        // Also disable it if it's an input/button to prevent keyboard access
-        if (element.tagName === 'BUTTON' || element.tagName === 'INPUT' || element.tagName === 'A') {
-          element.disabled = true;
-          element.setAttribute('aria-hidden', 'true');
-          element.tabIndex = -1;
-        }
-      } else {
-        // Ensure it's visible and enabled
-        element.style.display = '';
-
-        if (element.tagName === 'BUTTON' || element.tagName === 'INPUT' || element.tagName === 'A') {
-          element.disabled = false;
-          element.removeAttribute('aria-hidden');
-          element.tabIndex = 0;
-        }
+      if (element.hasAttribute('data-permission')) {
+        allowed = permSet.has(element.getAttribute('data-permission'));
+      } else if (element.hasAttribute('data-permission-any')) {
+        const perms = element.getAttribute('data-permission-any').split(',').map(p => p.trim());
+        allowed = perms.some(p => permSet.has(p));
+      } else if (element.hasAttribute('data-permission-all')) {
+        const perms = element.getAttribute('data-permission-all').split(',').map(p => p.trim());
+        allowed = perms.every(p => permSet.has(p));
       }
-    });
 
-    // Also check for multiple permissions (any match)
-    const anyPermissionElements = document.querySelectorAll('[data-permission-any]');
-
-    anyPermissionElements.forEach(element => {
-      const permissionsStr = element.getAttribute('data-permission-any');
-      const permissions = permissionsStr.split(',').map(p => p.trim());
-
-      // Check if user has ANY of the required permissions
-      const hasAnyPermission = permissions.some(perm => hasPermission(perm));
-
-      if (!hasAnyPermission) {
+      if (!allowed) {
         element.style.display = 'none';
-
         if (element.tagName === 'BUTTON' || element.tagName === 'INPUT' || element.tagName === 'A') {
           element.disabled = true;
           element.setAttribute('aria-hidden', 'true');
@@ -151,36 +130,6 @@
         }
       } else {
         element.style.display = '';
-
-        if (element.tagName === 'BUTTON' || element.tagName === 'INPUT' || element.tagName === 'A') {
-          element.disabled = false;
-          element.removeAttribute('aria-hidden');
-          element.tabIndex = 0;
-        }
-      }
-    });
-
-    // Check for elements requiring ALL permissions
-    const allPermissionElements = document.querySelectorAll('[data-permission-all]');
-
-    allPermissionElements.forEach(element => {
-      const permissionsStr = element.getAttribute('data-permission-all');
-      const permissions = permissionsStr.split(',').map(p => p.trim());
-
-      // Check if user has ALL of the required permissions
-      const hasAllPermissions = permissions.every(perm => hasPermission(perm));
-
-      if (!hasAllPermissions) {
-        element.style.display = 'none';
-
-        if (element.tagName === 'BUTTON' || element.tagName === 'INPUT' || element.tagName === 'A') {
-          element.disabled = true;
-          element.setAttribute('aria-hidden', 'true');
-          element.tabIndex = -1;
-        }
-      } else {
-        element.style.display = '';
-
         if (element.tagName === 'BUTTON' || element.tagName === 'INPUT' || element.tagName === 'A') {
           element.disabled = false;
           element.removeAttribute('aria-hidden');
@@ -225,14 +174,16 @@
       return;
     }
 
+    let permissionDebounceTimer = null;
+
     // Create a MutationObserver to watch for DOM changes
     const observer = new MutationObserver((mutations) => {
       let shouldReapply = false;
 
-      mutations.forEach((mutation) => {
+      for (const mutation of mutations) {
         // Check if nodes were added
         if (mutation.addedNodes.length > 0) {
-          mutation.addedNodes.forEach((node) => {
+          for (const node of mutation.addedNodes) {
             // Check if the added node or its children have permission attributes
             if (node.nodeType === 1) { // Element node
               if (node.hasAttribute && (
@@ -241,20 +192,23 @@
                   node.hasAttribute('data-permission-all')
                 )) {
                 shouldReapply = true;
+                break;
               } else if (node.querySelector) {
-                const hasPermissionElements = node.querySelector('[data-permission], [data-permission-any], [data-permission-all]');
-                if (hasPermissionElements) {
+                if (node.querySelector('[data-permission], [data-permission-any], [data-permission-all]')) {
                   shouldReapply = true;
+                  break;
                 }
               }
             }
-          });
+          }
         }
-      });
+        if (shouldReapply) break;
+      }
 
-      // Reapply permissions if needed
+      // Debounce reapplication to avoid thrashing during bulk DOM updates
       if (shouldReapply) {
-        applyActionPermissions();
+        clearTimeout(permissionDebounceTimer);
+        permissionDebounceTimer = setTimeout(applyActionPermissions, 50);
       }
     });
 

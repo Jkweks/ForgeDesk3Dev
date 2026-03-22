@@ -169,13 +169,13 @@
         return;
       }
 
-      products.forEach(product => {
+      tbody.innerHTML = products.map(product => {
         const statusBadge = getStatusBadge(product.status);
         const daysDisplay = product.days_until_stockout
           ? `<span class="badge ${product.days_until_stockout <= 7 ? 'bg-danger' : 'bg-warning'}">${product.days_until_stockout} days</span>`
           : '<span class="text-muted">-</span>';
 
-        const row = `
+        return `
           <tr>
             <td><span class="text-muted">${product.sku}</span></td>
             <td>${product.description}</td>
@@ -191,8 +191,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
     }
 
     function getStatusBadge(status) {

@@ -545,12 +545,12 @@
         return a.name.localeCompare(b.name);
       });
 
-      locations.forEach(location => {
+      tbody.innerHTML = locations.map(location => {
         const statusBadge = location.stats.products_count > 0
           ? '<span class="badge text-bg-success">In Use</span>'
           : '<span class="badge text-bg-secondary">Empty</span>';
 
-        const row = `
+        return `
           <tr>
             <td>
               <div class="d-flex align-items-center">
@@ -580,8 +580,7 @@
             </td>
           </tr>
         `;
-        tbody.innerHTML += row;
-      });
+      }).join('');
     }
 
     function filterLocations() {
@@ -673,8 +672,7 @@
         if (inventoryLocs.length === 0) {
           tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No products at this location</td></tr>';
         } else {
-          tbody.innerHTML = '';
-          inventoryLocs.forEach(item => {
+          tbody.innerHTML = inventoryLocs.map(item => {
             const product = item.product;
             const qtyEaches = parseFloat(item.quantity || 0);
             const committedEaches = parseFloat(item.quantity_committed || 0);
@@ -691,7 +689,7 @@
 
             const isPrimary = item.is_primary ? '<i class="ti ti-check text-success"></i>' : '';
 
-            const row = `
+            return `
               <tr>
                 <td><span class="text-muted">${product?.sku || '-'}</span></td>
                 <td>${product?.description || '-'}</td>
@@ -702,8 +700,7 @@
                 <td class="text-center">${isPrimary}</td>
               </tr>
             `;
-            tbody.innerHTML += row;
-          });
+          }).join('');
         }
 
         showModal(document.getElementById('viewLocationModal'));

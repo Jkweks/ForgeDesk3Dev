@@ -5,42 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Order;
-use App\Models\JobReservation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
     /**
-     * Calculate committed quantities from the fulfillment system (job_reservation_items)
-     * Only includes reservations with active statuses: active, in_progress, on_hold
+     * Get committed quantities grouped by product ID (single query, reused everywhere)
      */
-    private function getCommittedFromFulfillment($categoryId = null)
-    {
-        $query = DB::table('job_reservation_items as ri')
-            ->join('job_reservations as r', 'ri.reservation_id', '=', 'r.id')
-            ->join('products as p', 'ri.product_id', '=', 'p.id')
-            ->whereIn('r.status', ['active', 'in_progress', 'on_hold'])
-            ->whereNull('r.deleted_at')
-            ->where('p.is_active', true);
-
-        if ($categoryId) {
-            // Filter by category using the category_product pivot table
-            $query->whereExists(function ($subquery) use ($categoryId) {
-                $subquery->select(DB::raw(1))
-                    ->from('category_product as cp')
-                    ->whereColumn('cp.product_id', 'p.id')
-                    ->where('cp.category_id', $categoryId);
-            });
-        }
-
-        return $query->sum('ri.committed_qty');
-    }
-
-    /**
-     * Get committed quantities grouped by product ID
-     */
-    private function getCommittedByProduct()
+    private function getCommittedByProduct(): array
     {
         return DB::table('job_reservation_items as ri')
             ->join('job_reservations as r', 'ri.reservation_id', '=', 'r.id')
@@ -53,57 +26,38 @@ class DashboardController extends Controller
     }
 
     /**
-     * Calculate units in packs (for products with pack_size) or eaches (for products without)
+     * Calculate total committed units in packs via a single SQL aggregate
      */
-    private function calculateUnitsAsPacks($query)
+    private function calcUnitsCommitted($categoryId = null): float
     {
-        $products = (clone $query)->get(['id', 'quantity_on_hand', 'pack_size']);
-        $total = 0;
+        $query = DB::table('job_reservation_items as ri')
+            ->join('job_reservations as r', 'ri.reservation_id', '=', 'r.id')
+            ->join('products as p', 'ri.product_id', '=', 'p.id')
+            ->whereIn('r.status', ['active', 'in_progress', 'on_hold'])
+            ->whereNull('r.deleted_at')
+            ->where('p.is_active', true);
 
-        foreach ($products as $product) {
-            if ($product->pack_size && $product->pack_size > 1) {
-                // Count in packs (floor to get full packs only)
-                $total += floor($product->quantity_on_hand / $product->pack_size);
-            } else {
-                // Count in eaches
-                $total += $product->quantity_on_hand ?? 0;
-            }
+        if ($categoryId) {
+            $query->whereExists(function ($sub) use ($categoryId) {
+                $sub->select(DB::raw(1))
+                    ->from('category_product as cp')
+                    ->whereColumn('cp.product_id', 'p.id')
+                    ->where('cp.category_id', $categoryId);
+            });
         }
 
-        return $total;
-    }
-
-    /**
-     * Calculate committed units in packs
-     */
-    private function calculateCommittedAsPacks($query)
-    {
-        $committedByProduct = $this->getCommittedByProduct();
-        $products = (clone $query)->get(['id', 'pack_size']);
-        $total = 0;
-
-        foreach ($products as $product) {
-            $committedQty = $committedByProduct[$product->id] ?? 0;
-
-            if ($product->pack_size && $product->pack_size > 1) {
-                // Count in packs (ceil to get packs needed)
-                $total += ceil($committedQty / $product->pack_size);
-            } else {
-                // Count in eaches
-                $total += $committedQty;
-            }
-        }
-
-        return $total;
+        return (float) ($query->selectRaw(
+            'SUM(CASE WHEN p.pack_size > 1 THEN CEIL(ri.committed_qty / p.pack_size) ELSE ri.committed_qty END) as total'
+        )->value('total') ?? 0);
     }
 
     public function index(Request $request)
     {
         $categoryId = $request->get('category_id');
-        $perPage = $request->get('per_page', 50);
-        $sortBy = $request->get('sort_by', 'sku');
-        $sortDir = $request->get('sort_dir', 'asc');
-        $search = $request->get('search');
+        $perPage    = $request->get('per_page', 50);
+        $sortBy     = $request->get('sort_by', 'sku');
+        $sortDir    = $request->get('sort_dir', 'asc');
+        $search     = $request->get('search');
 
         // Validate sort column to prevent SQL injection
         $allowedSortColumns = ['sku', 'description', 'quantity_on_hand', 'quantity_committed', 'quantity_available', 'status'];
@@ -112,198 +66,134 @@ class DashboardController extends Controller
         }
         $sortDir = strtolower($sortDir) === 'desc' ? 'desc' : 'asc';
 
-        // Get committed quantities from fulfillment system
+        // Single committed-by-product query — reused for both stats and row enrichment
         $committedByProduct = $this->getCommittedByProduct();
 
-        // Base query for stats (apply category filter if present)
+        // Base query for stats (apply filters once)
         $statsQuery = Product::where('is_active', true);
         if ($categoryId) {
-            $statsQuery->whereHas('categories', function($q) use ($categoryId) {
+            $statsQuery->whereHas('categories', function ($q) use ($categoryId) {
                 $q->where('categories.id', $categoryId);
             });
         }
         if ($search) {
             $searchLower = strtolower($search);
-            $statsQuery->where(function($q) use ($searchLower) {
+            $statsQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
-        // Calculate units in packs (or eaches for non-packed items)
-        $unitsOnHand = $this->calculateUnitsAsPacks($statsQuery);
-        $unitsCommitted = $this->calculateCommittedAsPacks($statsQuery);
+        // ONE query for all count stats + on-hand sum (replaces 4 separate queries)
+        $statRow = (clone $statsQuery)->selectRaw("
+            COUNT(*) as skus_tracked,
+            SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
+            SUM(CASE WHEN status IN ('low_stock', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
+            SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
+        ")->first();
+
+        $unitsOnHand   = (float) ($statRow->units_on_hand ?? 0);
+        $unitsCommitted = $this->calcUnitsCommitted($categoryId);
 
         $stats = [
-            'skus_tracked' => (clone $statsQuery)->count(),
-            'units_on_hand' => $unitsOnHand,
+            'skus_tracked'    => (int) ($statRow->skus_tracked ?? 0),
+            'units_on_hand'   => $unitsOnHand,
             'units_committed' => $unitsCommitted,
             'units_available' => max(0, $unitsOnHand - $unitsCommitted),
-            'low_stock_alerts' => (clone $statsQuery)->where(function($q) {
-                $q->where('status', 'low_stock')->orWhere('status', 'critical');
-            })->count(),
-            'critical_count' => (clone $statsQuery)->where('status', 'critical')->count(),
-            'pending_orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
+            'low_stock_alerts' => (int) ($statRow->low_stock_alerts ?? 0),
+            'critical_count'  => (int) ($statRow->critical_count ?? 0),
+            'pending_orders'  => Order::whereIn('status', ['pending', 'processing'])->count(),
         ];
 
         $inventoryQuery = Product::with(['inventoryLocations', 'categories'])
             ->where('is_active', true);
 
         if ($categoryId) {
-            $inventoryQuery->whereHas('categories', function($q) use ($categoryId) {
+            $inventoryQuery->whereHas('categories', function ($q) use ($categoryId) {
                 $q->where('categories.id', $categoryId);
             });
         }
 
         if ($search) {
             $searchLower = strtolower($search);
-            $inventoryQuery->where(function($q) use ($searchLower) {
+            $inventoryQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
-        // Handle sorting - for calculated fields, we need to sort after fetching
+        // Enrich callback — shared between both branches
+        $enrich = function ($product) use ($committedByProduct) {
+            $committedQty  = $committedByProduct[$product->id] ?? 0;
+            $committedPacks = $product->eachesToPacksNeeded($committedQty);
+            $onHandPacks   = $product->eachesToFullPacks($product->quantity_on_hand);
+
+            $product->quantity_committed       = $committedQty;
+            $product->quantity_committed_packs  = $committedPacks;
+            $product->quantity_available        = $product->quantity_on_hand - $committedQty;
+            $product->quantity_available_packs  = max(0, $onHandPacks - $committedPacks);
+            return $product;
+        };
+
+        // Handle sorting - for calculated fields, use a DB-level correlated subquery
         if (in_array($sortBy, ['quantity_committed', 'quantity_available'])) {
-            // Fetch all matching products first, enrich, then sort and paginate manually
-            $allProducts = $inventoryQuery->get();
+            $committedSubquery = "COALESCE((
+                SELECT SUM(ri.committed_qty)
+                FROM job_reservation_items ri
+                INNER JOIN job_reservations r ON ri.reservation_id = r.id
+                WHERE ri.product_id = products.id
+                  AND r.status IN ('active', 'in_progress', 'on_hold')
+                  AND r.deleted_at IS NULL
+            ), 0)";
 
-            // Enrich with committed quantities (eaches and packs)
-            $allProducts->transform(function ($product) use ($committedByProduct) {
-                $committedQty = $committedByProduct[$product->id] ?? 0;
-                $committedPacks = $product->eachesToPacksNeeded($committedQty);
-                $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
+            $inventoryQuery->selectRaw("products.*, {$committedSubquery} as committed_qty_computed");
 
-                $product->quantity_committed = $committedQty;
-                $product->quantity_committed_packs = $committedPacks;
-                $product->quantity_available = $product->quantity_on_hand - $committedQty;
-                $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
-                return $product;
-            });
-
-            // Sort by the calculated field
-            $allProducts = $sortDir === 'asc'
-                ? $allProducts->sortBy($sortBy)->values()
-                : $allProducts->sortByDesc($sortBy)->values();
-
-            // Manual pagination
-            $total = $allProducts->count();
-            $page = $request->get('page', 1);
-            $offset = ($page - 1) * $perPage;
-            $items = $allProducts->slice($offset, $perPage)->values();
-
-            $inventory = new \Illuminate\Pagination\LengthAwarePaginator(
-                $items,
-                $total,
-                $perPage,
-                $page,
-                ['path' => $request->url(), 'query' => $request->query()]
-            );
+            if ($sortBy === 'quantity_committed') {
+                $inventoryQuery->orderByRaw("committed_qty_computed {$sortDir}");
+            } else {
+                $inventoryQuery->orderByRaw("(products.quantity_on_hand - committed_qty_computed) {$sortDir}");
+            }
         } else {
-            // Standard database sorting
-            $inventory = $inventoryQuery->orderBy($sortBy, $sortDir)->paginate($perPage);
-
-            // Enrich inventory items with real-time committed quantities from fulfillment (eaches and packs)
-            $inventory->getCollection()->transform(function ($product) use ($committedByProduct) {
-                $committedQty = $committedByProduct[$product->id] ?? 0;
-                $committedPacks = $product->eachesToPacksNeeded($committedQty);
-                $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
-
-                $product->quantity_committed = $committedQty;
-                $product->quantity_committed_packs = $committedPacks;
-                $product->quantity_available = $product->quantity_on_hand - $committedQty;
-                $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
-                return $product;
-            });
+            $inventoryQuery->orderBy($sortBy, $sortDir);
         }
 
-        $lowStock = Product::where('status', 'low_stock')
-            ->where('is_active', true)
-            ->when($categoryId, function($q) use ($categoryId) {
-                return $q->whereHas('categories', function($sq) use ($categoryId) {
-                    $sq->where('categories.id', $categoryId);
-                });
-            })
-            ->get();
-
-        $criticalStock = Product::where('status', 'critical')
-            ->where('is_active', true)
-            ->when($categoryId, function($q) use ($categoryId) {
-                return $q->whereHas('categories', function($sq) use ($categoryId) {
-                    $sq->where('categories.id', $categoryId);
-                });
-            })
-            ->get();
-
-        // Get committed parts from fulfillment system
-        $committedParts = Product::whereHas('reservationItems', function($query) {
-                $query->whereHas('reservation', function($resQuery) {
-                    $resQuery->whereIn('status', ['active', 'in_progress', 'on_hold']);
-                });
-            })
-            ->with(['reservationItems' => function($query) {
-                $query->whereHas('reservation', function($resQuery) {
-                    $resQuery->whereIn('status', ['active', 'in_progress', 'on_hold']);
-                })->with('reservation');
-            }])
-            ->where('is_active', true)
-            ->when($categoryId, function($q) use ($categoryId) {
-                return $q->whereHas('categories', function($sq) use ($categoryId) {
-                    $sq->where('categories.id', $categoryId);
-                });
-            })
-            ->get()
-            ->map(function ($product) {
-                $committedQty = $product->reservationItems->sum('committed_qty');
-                $committedPacks = $product->eachesToPacksNeeded($committedQty);
-                $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
-
-                $product->quantity_committed = $committedQty;
-                $product->quantity_committed_packs = $committedPacks;
-                $product->quantity_available = $product->quantity_on_hand - $committedQty;
-                $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
-                return $product;
-            });
+        $inventory = $inventoryQuery->paginate($perPage);
+        $inventory->getCollection()->transform($enrich);
 
         return response()->json([
-            'stats' => $stats,
+            'stats'     => $stats,
             'inventory' => $inventory,
-            'low_stock' => $lowStock,
-            'critical_stock' => $criticalStock,
-            'committed_parts' => $committedParts,
         ]);
     }
 
     public function inventoryByStatus(Request $request, $status)
     {
         $categoryId = $request->get('category_id');
-        $perPage = $request->get('per_page', 50);
-        $sortBy = $request->get('sort_by', 'sku');
-        $sortDir = $request->get('sort_dir', 'asc');
-        $search = $request->get('search');
+        $perPage    = $request->get('per_page', 50);
+        $sortBy     = $request->get('sort_by', 'sku');
+        $sortDir    = $request->get('sort_dir', 'asc');
+        $search     = $request->get('search');
 
-        // Validate sort column
         $allowedSortColumns = ['sku', 'description', 'quantity_on_hand', 'quantity_committed', 'quantity_available', 'status'];
         if (!in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'sku';
         }
         $sortDir = strtolower($sortDir) === 'desc' ? 'desc' : 'asc';
 
-        // Get committed quantities from fulfillment system
         $committedByProduct = $this->getCommittedByProduct();
 
         $query = Product::where('status', $status)
             ->where('is_active', true)
-            ->when($categoryId, function($q) use ($categoryId) {
-                return $q->whereHas('categories', function($sq) use ($categoryId) {
+            ->when($categoryId, function ($q) use ($categoryId) {
+                return $q->whereHas('categories', function ($sq) use ($categoryId) {
                     $sq->where('categories.id', $categoryId);
                 });
             })
-            ->when($search, function($q) use ($search) {
+            ->when($search, function ($q) use ($search) {
                 $searchLower = strtolower($search);
-                return $q->where(function($sq) use ($searchLower) {
+                return $q->where(function ($sq) use ($searchLower) {
                     $sq->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
                        ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
@@ -311,72 +201,65 @@ class DashboardController extends Controller
             })
             ->with('categories');
 
-        // Handle sorting for calculated fields
+        $enrich = function ($product) use ($committedByProduct) {
+            $committedQty  = $committedByProduct[$product->id] ?? 0;
+            $committedPacks = $product->eachesToPacksNeeded($committedQty);
+            $onHandPacks   = $product->eachesToFullPacks($product->quantity_on_hand);
+
+            $product->quantity_committed       = $committedQty;
+            $product->quantity_committed_packs  = $committedPacks;
+            $product->quantity_available        = $product->quantity_on_hand - $committedQty;
+            $product->quantity_available_packs  = max(0, $onHandPacks - $committedPacks);
+            return $product;
+        };
+
         if (in_array($sortBy, ['quantity_committed', 'quantity_available'])) {
-            $allProducts = $query->get();
+            $committedSubquery = "COALESCE((
+                SELECT SUM(ri.committed_qty)
+                FROM job_reservation_items ri
+                INNER JOIN job_reservations r ON ri.reservation_id = r.id
+                WHERE ri.product_id = products.id
+                  AND r.status IN ('active', 'in_progress', 'on_hold')
+                  AND r.deleted_at IS NULL
+            ), 0)";
 
-            $allProducts->transform(function ($product) use ($committedByProduct) {
-                $committedQty = $committedByProduct[$product->id] ?? 0;
-                $committedPacks = $product->eachesToPacksNeeded($committedQty);
-                $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
+            $query->selectRaw("products.*, {$committedSubquery} as committed_qty_computed");
 
-                $product->quantity_committed = $committedQty;
-                $product->quantity_committed_packs = $committedPacks;
-                $product->quantity_available = $product->quantity_on_hand - $committedQty;
-                $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
-                return $product;
-            });
-
-            $allProducts = $sortDir === 'asc'
-                ? $allProducts->sortBy($sortBy)->values()
-                : $allProducts->sortByDesc($sortBy)->values();
-
-            $total = $allProducts->count();
-            $page = $request->get('page', 1);
-            $offset = ($page - 1) * $perPage;
-            $items = $allProducts->slice($offset, $perPage)->values();
-
-            $products = new \Illuminate\Pagination\LengthAwarePaginator(
-                $items,
-                $total,
-                $perPage,
-                $page,
-                ['path' => $request->url(), 'query' => $request->query()]
-            );
+            if ($sortBy === 'quantity_committed') {
+                $query->orderByRaw("committed_qty_computed {$sortDir}");
+            } else {
+                $query->orderByRaw("(products.quantity_on_hand - committed_qty_computed) {$sortDir}");
+            }
         } else {
-            $products = $query->orderBy($sortBy, $sortDir)->paginate($perPage);
-
-            $products->getCollection()->transform(function ($product) use ($committedByProduct) {
-                $committedQty = $committedByProduct[$product->id] ?? 0;
-                $committedPacks = $product->eachesToPacksNeeded($committedQty);
-                $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
-
-                $product->quantity_committed = $committedQty;
-                $product->quantity_committed_packs = $committedPacks;
-                $product->quantity_available = $product->quantity_on_hand - $committedQty;
-                $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
-                return $product;
-            });
+            $query->orderBy($sortBy, $sortDir);
         }
+
+        $products = $query->paginate($perPage);
+        $products->getCollection()->transform($enrich);
 
         return response()->json($products);
     }
 
     public function stats()
     {
-        // Calculate in packs (or eaches for non-packed items)
-        $query = Product::where('is_active', true);
-        $unitsOnHand = $this->calculateUnitsAsPacks($query);
-        $unitsCommitted = $this->calculateCommittedAsPacks($query);
+        $statRow = Product::where('is_active', true)->selectRaw("
+            COUNT(*) as skus_tracked,
+            SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
+            SUM(CASE WHEN status IN ('low_stock', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
+            SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
+        ")->first();
+
+        $unitsOnHand    = (float) ($statRow->units_on_hand ?? 0);
+        $unitsCommitted = $this->calcUnitsCommitted();
 
         return response()->json([
-            'skus_tracked' => Product::where('is_active', true)->count(),
-            'units_on_hand' => $unitsOnHand,
+            'skus_tracked'    => (int) ($statRow->skus_tracked ?? 0),
+            'units_on_hand'   => $unitsOnHand,
             'units_committed' => $unitsCommitted,
             'units_available' => max(0, $unitsOnHand - $unitsCommitted),
-            'low_stock_alerts' => Product::whereIn('status', ['low_stock', 'critical'])->count(),
-            'critical_count' => Product::where('status', 'critical')->count(),
-            'pending_orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
+            'low_stock_alerts' => (int) ($statRow->low_stock_alerts ?? 0),
+            'critical_count'  => (int) ($statRow->critical_count ?? 0),
+            'pending_orders'  => Order::whereIn('status', ['pending', 'processing'])->count(),
         ]);
     }
 }
