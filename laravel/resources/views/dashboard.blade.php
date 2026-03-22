@@ -1923,162 +1923,179 @@
 
       document.getElementById('productEditForm').innerHTML = `
         <form id="editProductFormElement">
-          <!-- Basic Info -->
-          <h5 class="mb-3"><i class="ti ti-info-circle me-2"></i>Basic Information</h5>
-          <div class="row mb-3">
-            <div class="col-lg-4">
-              <label class="form-label">Part Number</label>
-              <input type="text" class="form-control" name="part_number" value="${product.part_number || ''}" placeholder="e.g., ABC-123">
-            </div>
-            <div class="col-lg-4">
-              <label class="form-label">Finish</label>
-              <select class="form-select" name="finish" id="editProductFinish">
-                <option value="">None</option>
-                ${finishes.map(f => `<option value="${f.code}" ${product.finish === f.code ? 'selected' : ''}>${f.code} - ${f.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-lg-4">
-              <label class="form-label required">SKU</label>
-              <input type="text" class="form-control" name="sku" value="${product.sku}" required readonly>
-            </div>
-          </div>
-          <div class="row mb-3">
-            <div class="col-lg-6">
-              <label class="form-label required">Description</label>
-              <input type="text" class="form-control" name="description" value="${product.description}" required>
-            </div>
-            <div class="col-lg-3">
-              <label class="form-label">Categories/Systems</label>
-              <select class="form-select" name="category_ids" multiple size="4">
-                ${cats.map(c => {
-                  const isSelected = product.categories && product.categories.some(cat => cat.id === c.id);
-                  return `<option value="${c.id}" ${isSelected ? 'selected' : ''}>${c.name}</option>`;
-                }).join('')}
-              </select>
-              <small class="form-hint">Hold Ctrl/Cmd to select multiple</small>
-            </div>
-            <div class="col-lg-3">
-              <label class="form-label">Status</label>
-              <select class="form-select" name="is_active">
-                <option value="1" ${product.is_active ? 'selected' : ''}>Active</option>
-                <option value="0" ${!product.is_active ? 'selected' : ''}>Inactive</option>
-              </select>
-            </div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Long Description</label>
-            <textarea class="form-control" name="long_description" rows="2">${product.long_description || ''}</textarea>
-          </div>
-
-          <hr>
-          <h5 class="mb-3"><i class="ti ti-currency-dollar me-2"></i>Pricing</h5>
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Unit Cost</label>
-              <input type="number" step="0.01" class="form-control" name="unit_cost" value="${product.unit_cost || '0.00'}">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Net Cost</label>
-              <input type="number" step="0.01" class="form-control" name="net_cost" value="${product.net_cost || ''}">
-              <small class="form-hint">Calculated from EZ Estimate or manually entered</small>
-            </div>
-          </div>
-
-          <hr>
-          <h5 class="mb-3"><i class="ti ti-package me-2"></i>Stock Management</h5>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label">Reorder Point</label>
-              <input type="number" step="0.01" class="form-control" name="reorder_point" value="${product.reorder_point || ''}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Safety Stock</label>
-              <input type="number" step="0.01" class="form-control" name="safety_stock" value="${product.safety_stock || ''}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Avg Daily Use</label>
-              <input type="number" step="0.01" class="form-control" name="average_daily_use" value="${product.average_daily_use || ''}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Lead Time (days)</label>
-              <input type="number" class="form-control" name="lead_time_days" value="${product.lead_time_days || ''}">
-            </div>
-          </div>
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Minimum Quantity</label>
-              <input type="number" step="0.01" class="form-control" name="minimum_quantity" value="${product.minimum_quantity || '0'}">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Maximum Quantity</label>
-              <input type="number" step="0.01" class="form-control" name="maximum_quantity" value="${product.maximum_quantity || ''}">
-            </div>
-          </div>
-
-          <hr>
-          <h5 class="mb-3"><i class="ti ti-ruler me-2"></i>Unit of Measure</h5>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label">Stock UOM</label>
-              <select class="form-select" name="unit_of_measure">
-                ${uoms.map(u => `<option value="${u.code}" ${product.unit_of_measure === u.code ? 'selected' : ''}>${u.code} - ${u.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Pack Size</label>
-              <input type="number" step="0.01" class="form-control" name="pack_size" value="${product.pack_size || '1'}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Min Order Qty</label>
-              <input type="number" step="0.01" class="form-control" name="min_order_qty" value="${product.min_order_qty || ''}">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Order Multiple</label>
-              <input type="number" step="0.01" class="form-control" name="order_multiple" value="${product.order_multiple || ''}">
-            </div>
-          </div>
-
-          <hr>
-          <h5 class="mb-3"><i class="ti ti-truck me-2"></i>Supplier</h5>
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Supplier</label>
-              <select class="form-select" name="supplier_id">
-                <option value="">Select supplier...</option>
-                ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Supplier SKU</label>
-              <input type="text" class="form-control" name="supplier_sku" value="${product.supplier_sku || ''}">
-            </div>
-          </div>
-
-          <hr>
-          <h5 class="mb-3"><i class="ti ti-photo me-2"></i>Product Photo</h5>
-          <div class="row mb-3">
-            <div class="col-md-12">
+          <!-- Identity header — mirrors view layout -->
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="flex-shrink-0 text-center" style="width:80px;">
               <div id="editPhotoPreview">
                 ${product.photo_url ? `
-                  <img src="${product.photo_url}" alt="Product photo" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px; display: block;">
+                  <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
                 ` : `
-                  <div class="border rounded p-3 text-center text-muted mb-2" style="background: #f8f9fa;" id="editPhotoPlaceholder">
-                    <i class="ti ti-photo" style="font-size: 1.5rem;"></i>
-                    <p class="mb-0 mt-1 small">No photo uploaded</p>
+                  <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                    <i class="ti ti-photo" style="font-size:1.5rem;"></i>
                   </div>
                 `}
               </div>
-              <div class="d-flex gap-2 align-items-center flex-wrap">
-                <label class="btn btn-sm btn-outline-primary mb-0" style="cursor:pointer;">
-                  <i class="ti ti-upload me-1"></i>${product.photo_url ? 'Change Photo' : 'Upload Photo'}
-                  <input type="file" id="editPhotoFileInput" accept="image/*" style="display:none" onchange="handleEditPhotoSelect(${product.id}, this)">
-                </label>
-                ${product.photo_url ? `
-                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteProductPhoto(${product.id})">
-                    <i class="ti ti-trash me-1"></i>Remove Photo
-                  </button>
-                ` : ''}
-                <small class="text-muted">Accepted: JPG, PNG, GIF, WebP. Max 10MB.</small>
+              <label class="text-muted small mt-1" style="cursor:pointer;">
+                <i class="ti ti-upload"></i> ${product.photo_url ? 'Change' : 'Upload'}
+                <input type="file" id="editPhotoFileInput" accept="image/*" style="display:none" onchange="handleEditPhotoSelect(${product.id}, this)">
+              </label>
+              ${product.photo_url ? `
+                <div><a href="#" class="text-danger small" onclick="event.preventDefault();deleteProductPhoto(${product.id})"><i class="ti ti-trash"></i> Remove</a></div>
+              ` : ''}
+            </div>
+            <div class="flex-grow-1">
+              <div class="row g-2 mb-2">
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">SKU</label>
+                  <input type="text" class="form-control form-control-sm" name="sku" value="${product.sku}" readonly>
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Part Number</label>
+                  <input type="text" class="form-control form-control-sm" name="part_number" value="${product.part_number || ''}" placeholder="e.g., ABC-123">
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Finish</label>
+                  <select class="form-select form-select-sm" name="finish">
+                    <option value="">None</option>
+                    ${finishes.map(f => `<option value="${f.code}" ${product.finish === f.code ? 'selected' : ''}>${f.code} – ${f.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Active</label>
+                  <select class="form-select form-select-sm" name="is_active">
+                    <option value="1" ${product.is_active ? 'selected' : ''}>Active</option>
+                    <option value="0" ${!product.is_active ? 'selected' : ''}>Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Description <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" name="description" value="${product.description}" required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Long Description</label>
+                <textarea class="form-control form-control-sm" name="long_description" rows="2">${product.long_description || ''}</textarea>
+              </div>
+              <div>
+                <label class="form-label small text-muted mb-1">Categories</label>
+                <select class="form-select form-select-sm" name="category_ids" multiple size="3">
+                  ${cats.map(c => {
+                    const isSelected = product.categories && product.categories.some(cat => cat.id === c.id);
+                    return `<option value="${c.id}" ${isSelected ? 'selected' : ''}>${c.name}</option>`;
+                  }).join('')}
+                </select>
+                <small class="form-hint">Hold Ctrl/Cmd to select multiple</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Details grid — mirrors view layout -->
+          <div class="row g-3">
+            <!-- Pricing -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Pricing</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small text-muted mb-1">Unit Cost</label>
+                      <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" name="unit_cost" value="${product.unit_cost || ''}" step="0.01" min="0" placeholder="0.00">
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small text-muted mb-1">Net Cost</label>
+                      <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" name="net_cost" value="${product.net_cost || ''}" step="0.01" min="0" placeholder="0.00">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Supplier -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Supplier</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-5">
+                      <label class="form-label small text-muted mb-1">Supplier</label>
+                      <select class="form-select form-select-sm" name="supplier_id">
+                        <option value="">None</option>
+                        ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+                      </select>
+                    </div>
+                    <div class="col-4">
+                      <label class="form-label small text-muted mb-1">Supplier SKU</label>
+                      <input type="text" class="form-control form-control-sm" name="supplier_sku" value="${product.supplier_sku || ''}">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Lead Time (d)</label>
+                      <input type="number" class="form-control form-control-sm" name="lead_time_days" value="${product.lead_time_days || ''}" min="0">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Stock Management -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Stock Management</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Min</label>
+                      <input type="number" class="form-control form-control-sm" name="minimum_quantity" value="${product.minimum_quantity ?? ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Max</label>
+                      <input type="number" class="form-control form-control-sm" name="maximum_quantity" value="${product.maximum_quantity || ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Reorder Pt.</label>
+                      <input type="number" class="form-control form-control-sm" name="reorder_point" value="${product.reorder_point || ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Safety Stock</label>
+                      <input type="number" class="form-control form-control-sm" name="safety_stock" value="${product.safety_stock || ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-6 mt-2">
+                      <label class="form-label small text-muted mb-1">Avg Daily Use</label>
+                      <input type="number" class="form-control form-control-sm" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Unit of Measure -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Unit of Measure</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small text-muted mb-1">Stock UOM</label>
+                      <select class="form-select form-select-sm" name="unit_of_measure">
+                        ${uoms.map(u => `<option value="${u.code}" ${product.unit_of_measure === u.code ? 'selected' : ''}>${u.code} – ${u.name}</option>`).join('')}
+                      </select>
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Pack Size</label>
+                      <input type="number" class="form-control form-control-sm" name="pack_size" value="${product.pack_size || 1}" min="1" step="1">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Min Order</label>
+                      <input type="number" class="form-control form-control-sm" name="min_order_qty" value="${product.min_order_qty || ''}" min="1">
+                    </div>
+                    <div class="col-6 mt-2">
+                      <label class="form-label small text-muted mb-1">Order Multiple</label>
+                      <input type="number" class="form-control form-control-sm" name="order_multiple" value="${product.order_multiple || ''}" min="1">
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
