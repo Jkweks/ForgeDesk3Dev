@@ -92,6 +92,8 @@
                 <option value="critical">Critical Only</option>
                 <option value="very_low">Very Low Only</option>
                 <option value="low">Low Only</option>
+                <option disabled>──────────</option>
+                <option value="in_stock">In Stock</option>
               </select>
             </div>
             <div class="col-md-3">
@@ -205,7 +207,8 @@
 
 @push('scripts')
 <script>
-let allItems = [];         // All replenishment products from API
+let allItems = [];         // Urgent replenishment products (critical/very_low/low/out_of_stock)
+let allInStockItems = [];  // In-stock products — loaded lazily on demand
 let filteredItems = [];    // After filters applied
 let pendingPOSupplier = null;  // Supplier being confirmed
 let searchTimeout = null;
@@ -241,9 +244,8 @@ async function loadReplenishmentItems() {
       return true;
     });
 
-    // Build vendor filter options
+    allInStockItems = []; // Reset so in-stock list is re-fetched on next request
     buildVendorFilter(allItems);
-
     applyFilters();
   } catch (err) {
     console.error('Error loading replenishment items:', err);
@@ -273,12 +275,39 @@ function buildVendorFilter(items) {
 
 // ─── Filtering & Rendering ───────────────────────────────────────────────────
 
-function applyFilters() {
+async function loadInStockItems() {
+  showLoading(true);
+  try {
+    const data = await authenticatedFetch('/products?status=in_stock&per_page=500&with_supplier=1');
+    allInStockItems = (data.data || data).filter(p => p.supplier_id);
+  } catch (err) {
+    console.error('Error loading in-stock items:', err);
+    showNotification('Failed to load in-stock items', 'danger');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function applyFilters() {
   const status = document.getElementById('filterStatus').value;
   const vendor = document.getElementById('filterVendor').value;
   const search = document.getElementById('filterSearch').value.toLowerCase().trim();
 
-  filteredItems = allItems.filter(p => {
+  // Determine the source array; lazy-load in-stock items on first request
+  let sourceItems;
+  if (status === 'in_stock') {
+    if (allInStockItems.length === 0) {
+      await loadInStockItems();
+    }
+    sourceItems = allInStockItems;
+  } else {
+    sourceItems = allItems;
+  }
+
+  // Rebuild vendor dropdown for the active source so vendors match what's visible
+  buildVendorFilter(sourceItems);
+
+  filteredItems = sourceItems.filter(p => {
     if (status && p.status !== status) return false;
     if (vendor && String(p.supplier_id) !== vendor) return false;
     if (search) {
@@ -459,8 +488,9 @@ function renderVendorCard(container, group) {
     }
   });
 
-  // Auto-select items that have a suggested qty > 0 or are out_of_stock with a qty set
+  // Auto-select urgent items that have a suggested qty > 0; never pre-check in_stock items
   items.forEach(p => {
+    if (p.status === 'in_stock') return;
     const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
     const displayQty = packSize > 1
       ? Math.ceil((p.suggested_order_qty || 0) / packSize)
