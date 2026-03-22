@@ -89,14 +89,13 @@
                     <table class="table table-vcenter card-table table-striped">
                       <thead>
                         <tr>
-                          <th>SKU</th>
-                          <th>Description</th>
-                          <th class="text-end">Available</th>
-                          <th class="text-end">Reorder Point</th>
-                          <th class="text-end">Suggested Order</th>
-                          <th>Days to Stockout</th>
-                          <th>Status</th>
-                          <th class="w-1"></th>
+                          <th class="sortable-ls" data-col="sku" style="cursor:pointer;">SKU <span class="ls-sort-icon" data-col="sku"></span></th>
+                          <th class="sortable-ls" data-col="description" style="cursor:pointer;">Description <span class="ls-sort-icon" data-col="description"></span></th>
+                          <th class="text-end sortable-ls" data-col="quantity_available" style="cursor:pointer;">Available <span class="ls-sort-icon" data-col="quantity_available"></span></th>
+                          <th class="text-end sortable-ls" data-col="reorder_point" style="cursor:pointer;">Reorder Point <span class="ls-sort-icon" data-col="reorder_point"></span></th>
+                          <th class="text-end sortable-ls" data-col="suggested_order_qty" style="cursor:pointer;">Suggested Order <span class="ls-sort-icon" data-col="suggested_order_qty"></span></th>
+                          <th class="sortable-ls" data-col="days_until_stockout" style="cursor:pointer;">Days to Stockout <span class="ls-sort-icon" data-col="days_until_stockout"></span></th>
+                          <th class="sortable-ls" data-col="status" style="cursor:pointer;">Status <span class="ls-sort-icon" data-col="status"></span></th>
                         </tr>
                       </thead>
                       <tbody id="inventoryTableBody"></tbody>
@@ -111,46 +110,84 @@
     </div>
   </div>
 
+  @include('partials.product-modal')
+
 @endsection
 
 @push('scripts')
   <script>
+    let lsProducts = [];
+    let lsSortCol = 'sku';
+    let lsSortDir = 'asc';
+
+    function refreshTable() { loadLowStockItems(); }
+
     document.addEventListener('DOMContentLoaded', () => {
       loadLowStockItems();
       loadCategories();
 
-      // Search functionality
       document.getElementById('searchInput').addEventListener('input', debounce(loadLowStockItems, 300));
       document.getElementById('categoryFilter').addEventListener('change', loadLowStockItems);
+
+      document.querySelectorAll('.sortable-ls').forEach(th => {
+        th.addEventListener('click', function() {
+          const col = this.dataset.col;
+          if (lsSortCol === col) {
+            lsSortDir = lsSortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            lsSortCol = col;
+            lsSortDir = 'asc';
+          }
+          renderInventoryTable(lsProducts);
+          updateLsSortIcons();
+        });
+      });
     });
+
+    function updateLsSortIcons() {
+      document.querySelectorAll('.ls-sort-icon').forEach(icon => {
+        const col = icon.dataset.col;
+        if (col === lsSortCol) {
+          icon.textContent = lsSortDir === 'asc' ? ' ↑' : ' ↓';
+        } else {
+          icon.textContent = '';
+        }
+      });
+    }
 
     async function loadLowStockItems() {
       try {
         const search = document.getElementById('searchInput').value;
         const category = document.getElementById('categoryFilter').value;
 
-        const params = new URLSearchParams({
-          status: 'low_stock',
-          per_page: 100
-        });
-
+        const params = new URLSearchParams({ status: 'low,very_low', per_page: 100 });
         if (search) params.append('search', search);
         if (category) params.append('category_id', category);
 
         const data = await authenticatedFetch(`/products?${params}`);
 
-        // Calculate stats
-        const lowStockCount = data.data.length;
-        const totalValue = data.data.reduce((sum, p) => sum + (p.quantity_available * p.unit_cost), 0);
-        const avgDays = data.data.reduce((sum, p) => sum + (p.days_until_stockout || 0), 0) / lowStockCount;
-        const suggestedPO = data.data.reduce((sum, p) => sum + ((p.suggested_order_qty || 0) * p.unit_cost), 0);
+        lsProducts = data.data || [];
 
-        document.getElementById('statLowStockCount').textContent = lowStockCount.toLocaleString();
+        // Calculate stats — use pack-based quantities for pack products (unit_cost is per pack)
+        const totalValue = lsProducts.reduce((sum, p) => {
+          const qty = (p.pack_size > 1) ? (p.quantity_available_packs || 0) : (p.quantity_available || 0);
+          return sum + qty * (p.unit_cost || 0);
+        }, 0);
+        const daysValues = lsProducts.filter(p => p.days_until_stockout > 0).map(p => p.days_until_stockout);
+        const avgDays = daysValues.length > 0 ? daysValues.reduce((a, b) => a + b, 0) / daysValues.length : 0;
+        const suggestedPO = lsProducts.reduce((sum, p) => {
+          const sqty = p.suggested_order_qty || 0;
+          const packs = (p.pack_size > 1) ? Math.ceil(sqty / p.pack_size) : sqty;
+          return sum + packs * (p.unit_cost || 0);
+        }, 0);
+
+        document.getElementById('statLowStockCount').textContent = lsProducts.length.toLocaleString();
         document.getElementById('statTotalValue').textContent = `$${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('statAvgDays').textContent = avgDays > 0 ? Math.round(avgDays) : '-';
         document.getElementById('statSuggestedPO').textContent = `$${suggestedPO.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
-        renderInventoryTable(data.data);
+        renderInventoryTable(lsProducts);
+        updateLsSortIcons();
 
         document.getElementById('loadingIndicator').style.display = 'none';
         document.getElementById('inventoryTableContainer').style.display = 'block';
@@ -162,59 +199,57 @@
 
     function renderInventoryTable(products) {
       const tbody = document.getElementById('inventoryTableBody');
-      tbody.innerHTML = '';
 
       if (products.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5">No low stock items found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5">No low stock items found</td></tr>';
         return;
       }
 
-      tbody.innerHTML = products.map(product => {
-        const statusBadge = getStatusBadge(product.status);
+      // Sort
+      const sorted = [...products].sort((a, b) => {
+        let valA = a[lsSortCol] ?? '';
+        let valB = b[lsSortCol] ?? '';
+        if (typeof valA === 'string') { valA = valA.toLowerCase(); valB = (valB + '').toLowerCase(); }
+        if (valA < valB) return lsSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return lsSortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      tbody.innerHTML = sorted.map(product => {
         const daysDisplay = product.days_until_stockout
           ? `<span class="badge ${product.days_until_stockout <= 7 ? 'bg-danger' : 'bg-warning'}">${product.days_until_stockout} days</span>`
           : '<span class="text-muted">-</span>';
 
         return `
-          <tr>
+          <tr onclick="viewProduct(${product.id})" style="cursor:pointer;">
             <td><span class="text-muted">${product.sku}</span></td>
             <td>${product.description}</td>
-            <td class="text-end text-warning fw-bold">${product.quantity_available.toLocaleString()}</td>
+            <td class="text-end text-warning fw-bold">${(product.quantity_available ?? 0).toLocaleString()}</td>
             <td class="text-end">${product.reorder_point ? product.reorder_point.toLocaleString() : '-'}</td>
             <td class="text-end text-info">${product.suggested_order_qty ? product.suggested_order_qty.toLocaleString() : '-'}</td>
             <td>${daysDisplay}</td>
-            <td>${statusBadge}</td>
-            <td class="table-actions">
-              <a href="/?product=${product.id}" class="btn btn-sm btn-icon btn-ghost-primary" title="View">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
-              </a>
-            </td>
+            <td>${getStatusBadge(product.status, product.on_order_qty)}</td>
           </tr>
         `;
       }).join('');
     }
 
-    function getStatusBadge(status) {
-      const badges = {
-        'in_stock': '<span class="badge text-bg-success">In Stock</span>',
-        'low_stock': '<span class="badge text-bg-warning">Low Stock</span>',
-        'critical': '<span class="badge text-bg-danger">Critical</span>',
-        'out_of_stock': '<span class="badge text-bg-dark">Out of Stock</span>'
-      };
-      return badges[status] || '<span class="badge text-bg-secondary">Unknown</span>';
-    }
-
     async function loadCategories() {
       try {
-        const categories = await authenticatedFetch(`/categories`);
-
+        const response = await apiCall('/categories-tree');
+        const tree = await response.json();
         const select = document.getElementById('categoryFilter');
-        categories.forEach(category => {
-          const option = document.createElement('option');
-          option.value = category.id;
-          option.textContent = category.name;
-          select.appendChild(option);
-        });
+
+        function addOptions(nodes, level) {
+          nodes.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = '\u00A0'.repeat(level * 3) + cat.name;
+            select.appendChild(option);
+            if (cat.children && cat.children.length > 0) addOptions(cat.children, level + 1);
+          });
+        }
+        addOptions(Array.isArray(tree) ? tree : [], 0);
       } catch (error) {
         console.error('Error loading categories:', error);
       }
@@ -226,24 +261,15 @@
         const search = document.getElementById('searchInput').value;
         const category = document.getElementById('categoryFilter').value;
 
-        const params = new URLSearchParams({
-          status: 'low_stock',
-          export: 'csv'
-        });
-
+        const params = new URLSearchParams({ status: 'low,very_low', export: 'csv' });
         if (search) params.append('search', search);
         if (category) params.append('category_id', category);
 
         const response = await fetch(`${API_BASE}/products?${params}`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Accept': 'text/csv'
-          }
+          headers: { 'Authorization': `Bearer ${authToken}`, 'Accept': 'text/csv' }
         });
 
-        if (!response.ok) {
-          throw new Error('Export failed');
-        }
+        if (!response.ok) throw new Error('Export failed');
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -265,10 +291,7 @@
     function debounce(func, wait) {
       let timeout;
       return function executedFunction(...args) {
-        const later = () => {
-          clearTimeout(timeout);
-          func(...args);
-        };
+        const later = () => { clearTimeout(timeout); func(...args); };
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
       };

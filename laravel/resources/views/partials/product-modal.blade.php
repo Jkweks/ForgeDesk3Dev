@@ -1,0 +1,2672 @@
+{{-- Shared product view/edit modal and all supporting JavaScript --}}
+{{-- Include this partial on any page that needs the product details modal --}}
+
+  <div class="modal modal-blur fade" id="viewProductModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="viewProductModalTitle">Product Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Tabs -->
+          <ul class="nav nav-tabs mb-3" id="productTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab">
+                <i class="ti ti-info-circle me-1"></i>Details
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="locations-tab" data-bs-toggle="tab" data-bs-target="#locations" type="button" role="tab">
+                <i class="ti ti-map-pin me-1"></i>Locations <span class="badge text-bg-primary ms-1" id="locationsCount">0</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="reservations-tab" data-bs-toggle="tab" data-bs-target="#reservations" type="button" role="tab">
+                <i class="ti ti-clipboard-check me-1"></i>Reservations <span class="badge text-bg-warning ms-1" id="reservationsCount">0</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab">
+                <i class="ti ti-history me-1"></i>Activity
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="configurator-tab" data-bs-toggle="tab" data-bs-target="#configurator" type="button" role="tab">
+                <i class="ti ti-box-model me-1"></i>Configurator <span class="badge text-bg-info ms-1" id="bomCount">0</span>
+              </button>
+            </li>
+          </ul>
+
+          <!-- Tab Content -->
+          <div class="tab-content" id="productTabContent">
+            <!-- Details Tab -->
+            <div class="tab-pane fade show active" id="details" role="tabpanel">
+              <div class="mb-3">
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-primary" id="editProductBtn" onclick="toggleEditMode()" data-permission="inventory.edit">
+                    <i class="ti ti-edit me-1"></i>Edit Product
+                  </button>
+                </div>
+              </div>
+              <div id="productDetailsView"></div>
+              <div id="productEditForm" style="display: none;"></div>
+            </div>
+
+            <!-- Locations Tab -->
+            <div class="tab-pane fade" id="locations" role="tabpanel">
+              <div class="mb-3">
+                <div class="row g-2 align-items-center mb-3">
+                  <div class="col">
+                    <h3 class="mb-0">Inventory Locations</h3>
+                    <p class="text-muted mb-0">Manage stock distribution across multiple locations</p>
+                  </div>
+                  <div class="col-auto">
+                    <button class="btn btn-warning ms-2" onclick="showIssueToJobForm()" data-permission="inventory.adjust">
+                      <i class="ti ti-package-export me-1"></i>Issue to Job
+                    </button>
+                    <button class="btn btn-primary" onclick="showAddLocationForm()" data-permission="inventory.edit">
+                      <i class="ti ti-plus me-1"></i>Add Location
+                    </button>
+                    <button class="btn btn-outline-primary ms-2" onclick="showTransferForm()" data-permission="inventory.adjust">
+                      <i class="ti ti-arrows-transfer-down me-1"></i>Transfer
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Location Statistics -->
+                <div class="row row-cards mb-3" id="locationStatsCards">
+                  <div class="col-md-3">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Total Locations</div>
+                        <div class="h2 mb-0" id="statTotalLocations">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Total Quantity</div>
+                        <div class="h2 mb-0" id="statTotalQuantity">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Committed</div>
+                        <div class="h2 mb-0" id="statTotalCommitted">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Available</div>
+                        <div class="h2 mb-0 text-success" id="statTotalAvailable">-</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Add/Edit Location Form (Hidden by default) -->
+                <div class="card mb-3" id="locationFormCard" style="display: none;">
+                  <div class="card-header">
+                    <h4 class="card-title mb-0" id="locationFormTitle">Add Location</h4>
+                  </div>
+                  <div class="card-body">
+                    <form id="locationForm">
+                      <input type="hidden" id="locationId" name="location_id">
+                      <input type="hidden" id="storageLocationId" name="storage_location_id">
+                      <div class="row mb-3">
+                        <div class="col-md-6">
+                          <label class="form-label required">Storage Location</label>
+                          <select class="form-select" id="storageLocationSelect" onchange="handleStorageLocationSelect()">
+                            <option value="">Select a storage location...</option>
+                          </select>
+                          <small class="form-hint">Select from configured storage locations</small>
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label required">Quantity</label>
+                          <input type="number" class="form-control" id="locationQuantity" name="quantity" min="0" required>
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Committed</label>
+                          <input type="number" class="form-control" id="locationCommitted" name="quantity_committed" min="0" value="0">
+                        </div>
+                      </div>
+                      <div class="row mb-3">
+                        <div class="col-md-6">
+                          <label class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="locationPrimary" name="is_primary">
+                            <span class="form-check-label">Set as Primary Location</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="locationNotes" name="notes" rows="2" placeholder="Optional notes about this location"></textarea>
+                      </div>
+                      <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="saveLocationBtn">
+                          <i class="ti ti-check me-1"></i>Save Location
+                        </button>
+                        <button type="button" class="btn btn-link" onclick="hideLocationForm()">Cancel</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Locations List -->
+                <div class="card">
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>Location</th>
+                          <th class="text-end">Quantity</th>
+                          <th class="text-end">Committed</th>
+                          <th class="text-end">Available</th>
+                          <th>Distribution</th>
+                          <th>Status</th>
+                          <th class="w-1"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="locationsTableBody">
+                        <tr>
+                          <td colspan="7" class="text-center text-muted py-5">
+                            <i class="ti ti-map-pin" style="font-size: 2rem;"></i>
+                            <p class="mb-0">No locations added yet</p>
+                            <button class="btn btn-sm btn-primary mt-2" onclick="showAddLocationForm()">Add First Location</button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Transfer Modal -->
+                <div class="card mt-3" id="transferCard" style="display: none;">
+                  <div class="card-header">
+                    <h4 class="card-title mb-0">Transfer Inventory</h4>
+                  </div>
+                  <div class="card-body">
+                    <form id="transferForm">
+                      <div class="row mb-3">
+                        <div class="col-md-5">
+                          <label class="form-label required">From Location</label>
+                          <select class="form-select" id="transferFrom" name="from_location_id" required>
+                            <option value="">Select source...</option>
+                          </select>
+                          <small class="text-muted" id="transferFromAvailable"></small>
+                        </div>
+                        <div class="col-md-2 text-center d-flex align-items-center justify-content-center">
+                          <i class="ti ti-arrow-right" style="font-size: 2rem;"></i>
+                        </div>
+                        <div class="col-md-5">
+                          <label class="form-label required">To Location</label>
+                          <select class="form-select" id="transferTo" name="to_location_id" required>
+                            <option value="">Select destination...</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="row mb-3">
+                        <div class="col-md-4">
+                          <label class="form-label required">Quantity to Transfer</label>
+                          <input type="number" class="form-control" id="transferQuantity" name="quantity" min="1" required>
+                        </div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <input type="text" class="form-control" id="transferNotes" name="notes" placeholder="Optional transfer notes">
+                      </div>
+                      <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                          <i class="ti ti-arrows-transfer-down me-1"></i>Transfer
+                        </button>
+                        <button type="button" class="btn btn-link" onclick="hideTransferForm()">Cancel</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reservations Tab -->
+            <div class="tab-pane fade" id="reservations" role="tabpanel">
+              <div class="mb-3">
+                <div class="row g-2 align-items-center mb-3">
+                  <div class="col">
+                    <h3 class="mb-0">Job Reservations</h3>
+                    <p class="text-muted mb-0">Reserve inventory for jobs and track commitments</p>
+                  </div>
+                  <div class="col-auto">
+                    <button class="btn btn-primary" onclick="showAddReservationForm()" data-permission="orders.create">
+                      <i class="ti ti-plus me-1"></i>Reserve Inventory
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Reservation Statistics -->
+                <div class="row row-cards mb-3">
+                  <div class="col-md-2">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Active</div>
+                        <div class="h2 mb-0" id="statActiveReservations">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-2">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Committed</div>
+                        <div class="h2 mb-0" id="statQuantityCommitted">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">ATP (Available)</div>
+                        <div class="h2 mb-0 text-success" id="statATP">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-2">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Overdue</div>
+                        <div class="h2 mb-0 text-danger" id="statOverdueReservations">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="card card-sm">
+                      <div class="card-body">
+                        <div class="subheader">Due This Week</div>
+                        <div class="h2 mb-0 text-warning" id="statUpcomingReservations">-</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Add/Edit Reservation Form (Hidden by default) -->
+                <div class="card mb-3" id="reservationFormCard" style="display: none;">
+                  <div class="card-header">
+                    <h4 class="card-title mb-0" id="reservationFormTitle">Reserve Inventory</h4>
+                  </div>
+                  <div class="card-body">
+                    <form id="reservationForm">
+                      <input type="hidden" id="reservationId" name="reservation_id">
+                      <div class="row mb-3">
+                        <div class="col-md-6">
+                          <label class="form-label required">Job Number</label>
+                          <input type="text" class="form-control" id="reservationJobNumber" name="job_number" placeholder="e.g., JOB-2024-001" required list="existingJobs">
+                          <datalist id="existingJobs"></datalist>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">Job Name</label>
+                          <input type="text" class="form-control" id="reservationJobName" name="job_name" placeholder="Optional job description">
+                        </div>
+                      </div>
+                      <div class="row mb-3">
+                        <div class="col-md-4">
+                          <label class="form-label required">Quantity to Reserve</label>
+                          <input type="number" class="form-control" id="reservationQuantity" name="quantity_reserved" min="1" required>
+                          <small class="text-muted" id="availableForReservation"></small>
+                        </div>
+                        <div class="col-md-4">
+                          <label class="form-label required">Reserved Date</label>
+                          <input type="date" class="form-control" id="reservationDate" name="reserved_date" required>
+                        </div>
+                        <div class="col-md-4">
+                          <label class="form-label">Required Date</label>
+                          <input type="date" class="form-control" id="reservationRequiredDate" name="required_date">
+                        </div>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="reservationNotes" name="notes" rows="2" placeholder="Optional notes about this reservation"></textarea>
+                      </div>
+                      <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="saveReservationBtn">
+                          <i class="ti ti-check me-1"></i>Reserve
+                        </button>
+                        <button type="button" class="btn btn-link" onclick="hideReservationForm()">Cancel</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Reservations List -->
+                <div class="card">
+                  <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" id="reservationFilterTabs">
+                      <li class="nav-item">
+                        <a class="nav-link active" href="#" data-filter="all" onclick="filterReservations('all'); return false;">All</a>
+                      </li>
+                      <li class="nav-item">
+                        <a class="nav-link" href="#" data-filter="active" onclick="filterReservations('active'); return false;">Active</a>
+                      </li>
+                      <li class="nav-item">
+                        <a class="nav-link" href="#" data-filter="fulfilled" onclick="filterReservations('fulfilled'); return false;">Fulfilled</a>
+                      </li>
+                      <li class="nav-item">
+                        <a class="nav-link" href="#" data-filter="cancelled" onclick="filterReservations('cancelled'); return false;">Cancelled</a>
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>Job #</th>
+                          <th>Reserved</th>
+                          <th>Required</th>
+                          <th class="text-end">Qty</th>
+                          <th class="text-end">Fulfilled</th>
+                          <th class="text-end">Remaining</th>
+                          <th>Status</th>
+                          <th class="w-1"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="reservationsTableBody">
+                        <tr>
+                          <td colspan="8" class="text-center text-muted py-5">
+                            <i class="ti ti-clipboard-check" style="font-size: 2rem;"></i>
+                            <p class="mb-0">No reservations yet</p>
+                            <button class="btn btn-sm btn-primary mt-2" onclick="showAddReservationForm()">Reserve First Item</button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Activity Tab -->
+            <div class="tab-pane fade" id="activity" role="tabpanel">
+              <div class="mb-3">
+                <div class="row g-2 align-items-center">
+                  <div class="col">
+                    <h3 class="mb-0">Activity History</h3>
+                    <p class="text-muted mb-0">All inventory transactions for this product</p>
+                  </div>
+                  <div class="col-auto">
+                    <select class="form-select form-select-sm" id="activityTypeFilter" onchange="loadProductActivity(currentProductId)">
+                      <option value="">All Types</option>
+                      <option value="receipt">Receipts</option>
+                      <option value="shipment">Shipments</option>
+                      <option value="adjustment">Adjustments</option>
+                      <option value="transfer">Transfers</option>
+                      <option value="return">Returns</option>
+                      <option value="cycle_count">Cycle Counts</option>
+                    </select>
+                  </div>
+                  <div class="col-auto">
+                    <button class="btn btn-sm btn-primary" onclick="exportProductTransactions(currentProductId)">
+                      <i class="ti ti-download me-1"></i>Export
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="loading" id="activityLoading" style="display: none;">
+                <div class="text-muted">Loading activity...</div>
+              </div>
+
+              <div id="activityContent">
+                <div class="table-responsive">
+                  <table class="table table-sm table-vcenter">
+                    <thead>
+                      <tr>
+                        <th class="sortable-activity" data-col="transaction_date" style="cursor:pointer;">Date <span class="activity-sort-icon" data-col="transaction_date"></span></th>
+                        <th class="sortable-activity" data-col="type" style="cursor:pointer;">Type <span class="activity-sort-icon" data-col="type"></span></th>
+                        <th class="text-end sortable-activity" data-col="quantity" style="cursor:pointer;">Quantity <span class="activity-sort-icon" data-col="quantity"></span></th>
+                        <th class="text-end sortable-activity" data-col="quantity_before" style="cursor:pointer;">Before <span class="activity-sort-icon" data-col="quantity_before"></span></th>
+                        <th class="text-end sortable-activity" data-col="quantity_after" style="cursor:pointer;">After <span class="activity-sort-icon" data-col="quantity_after"></span></th>
+                        <th class="sortable-activity" data-col="reference_number" style="cursor:pointer;">Reference <span class="activity-sort-icon" data-col="reference_number"></span></th>
+                        <th>User</th>
+                        <th>Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody id="activityTableBody">
+                      <tr>
+                        <td colspan="8" class="text-center text-muted">No activity records</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+            <!-- Configurator Tab -->
+            <div class="tab-pane fade" id="configurator" role="tabpanel">
+              <!-- Configurator Settings -->
+              <div class="mb-4">
+                <h4 class="mb-3"><i class="ti ti-settings me-2"></i>Configurator Settings</h4>
+                <div class="row">
+                  <div class="col-md-3">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="configuratorAvailable" disabled>
+                      <label class="form-check-label" for="configuratorAvailable">
+                        <strong>Configurator Available</strong>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label"><strong>Type</strong></label>
+                    <div id="configuratorType" class="text-muted">-</div>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label"><strong>Use Path</strong></label>
+                    <div id="configuratorUsePath" class="text-muted">-</div>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label"><strong>Dimensions</strong></label>
+                    <div id="configuratorDimensions" class="text-muted">-</div>
+                  </div>
+                </div>
+              </div>
+
+              <hr>
+
+              <!-- BOM (Required Parts) -->
+              <div class="mb-3">
+                <div class="row g-2 align-items-center">
+                  <div class="col">
+                    <h4 class="mb-0"><i class="ti ti-list-details me-2"></i>Bill of Materials (BOM)</h4>
+                    <p class="text-muted mb-0">Parts required to build this product</p>
+                  </div>
+                  <div class="col-auto">
+                    <button class="btn btn-sm btn-primary" onclick="showAddRequiredPartForm()" data-permission="inventory.edit">
+                      <i class="ti ti-plus me-1"></i>Add Part
+                    </button>
+                    <button class="btn btn-sm btn-info" onclick="checkBOMAvailability(currentProductId)" data-permission="inventory.view">
+                      <i class="ti ti-check me-1"></i>Check Availability
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="explodeBOM(currentProductId)" data-permission="inventory.view">
+                      <i class="ti ti-sitemap me-1"></i>Explode BOM
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Add Required Part Form (Hidden by default) -->
+              <div class="card mb-3" id="addRequiredPartForm" style="display: none;">
+                <div class="card-header">
+                  <h5 class="card-title mb-0">Add Required Part</h5>
+                </div>
+                <div class="card-body">
+                  <form id="requiredPartForm">
+                    <input type="hidden" id="requiredPartId">
+                    <div class="row mb-3">
+                      <div class="col-md-6">
+                        <label class="form-label required">Part/Product</label>
+                        <select class="form-select" id="requiredProductId" required>
+                          <option value="">Search and select...</option>
+                        </select>
+                        <small class="form-hint">Select the part needed</small>
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label required">Quantity</label>
+                        <input type="number" class="form-control" id="requiredQuantity" step="0.01" min="0" required>
+                        <small class="form-hint">Quantity per unit</small>
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label">Sort Order</label>
+                        <input type="number" class="form-control" id="requiredSortOrder" value="0">
+                      </div>
+                    </div>
+                    <div class="row mb-3">
+                      <div class="col-md-4">
+                        <label class="form-label required">Finish Policy</label>
+                        <select class="form-select" id="requiredFinishPolicy" required>
+                          <option value="same_as_parent">Same as Parent</option>
+                          <option value="specific">Specific Finish</option>
+                          <option value="any">Any Finish</option>
+                        </select>
+                      </div>
+                      <div class="col-md-4" id="specificFinishGroup" style="display: none;">
+                        <label class="form-label">Specific Finish</label>
+                        <select class="form-select" id="requiredSpecificFinish">
+                          <option value="">Select...</option>
+                        </select>
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label">Optional Part</label>
+                        <div class="form-check form-switch mt-2">
+                          <input class="form-check-input" type="checkbox" id="requiredIsOptional">
+                          <label class="form-check-label" for="requiredIsOptional">Is Optional</label>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="row mb-3">
+                      <div class="col-md-12">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="requiredNotes" rows="2"></textarea>
+                      </div>
+                    </div>
+                    <div class="row">
+                      <div class="col-md-12">
+                        <button type="button" class="btn" onclick="hideRequiredPartForm()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Part</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <!-- BOM List -->
+              <div class="loading" id="bomLoading" style="display: none;">
+                <div class="text-muted">Loading BOM...</div>
+              </div>
+
+              <div id="bomContent">
+                <div class="table-responsive">
+                  <table class="table table-vcenter">
+                    <thead>
+                      <tr>
+                        <th>Part SKU</th>
+                        <th>Description</th>
+                        <th class="text-end">Qty/Unit</th>
+                        <th>Finish Policy</th>
+                        <th>Optional</th>
+                        <th>Notes</th>
+                        <th class="w-1">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="bomTableBody">
+                      <tr>
+                        <td colspan="7" class="text-center text-muted">No parts in BOM</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Where Used -->
+              <div class="mt-4">
+                <h5 class="mb-3"><i class="ti ti-arrow-up me-2"></i>Where Used</h5>
+                <div id="whereUsedContent">
+                  <p class="text-muted">Loading where-used information...</p>
+                </div>
+              </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-link" data-bs-dismiss="modal">Close</button>
+          <div id="editProductFooterActions" style="display: none;" class="ms-auto d-flex gap-2">
+            <button type="button" class="btn btn-link" onclick="cancelEditMode()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveProductChanges()" data-permission="inventory.edit">
+              <i class="ti ti-check me-1"></i>Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Issue Material to Job Modal -->
+  <div class="modal modal-blur fade" id="issueToJobModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Issue Material to Job</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="issueToJobForm">
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Product</label>
+              <p id="issueJobProductInfo" class="mb-0">-</p>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Available Quantity</label>
+              <p id="issueJobAvailable" class="text-success h3 mb-0">0</p>
+            </div>
+            <div class="mb-3">
+              <label class="form-label required">Job Name</label>
+              <input type="text" class="form-control" name="job_name" id="issueJobName" placeholder="Enter job name or number" required>
+              <small class="form-hint">Enter the job name or number this material is being issued to</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label required">Quantity to Issue</label>
+              <input type="number" class="form-control" name="quantity" id="issueJobQuantity" placeholder="0" min="1" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes (Optional)</label>
+              <textarea class="form-control" name="notes" id="issueJobNotes" rows="2" placeholder="Additional notes..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-warning" id="issueJobBtn">
+              <i class="ti ti-package-export me-1"></i>
+              Issue Material
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+@push('scripts')
+  <script>
+    // Config data — populated by loadConfigurations() on pages that call it,
+    // or lazy-loaded inside renderEditForm on pages that don't.
+    let categories = [];
+    let finishCodes = [];
+    let unitOfMeasures = [];
+    let suppliers = [];
+
+    function formatCommittedDisplay(product, linkable = true) {
+      const committedEaches = product.quantity_committed || 0;
+      const committedPacks = product.quantity_committed_packs || committedEaches;
+      const packSize = product.pack_size || 1;
+      const hasPackSize = packSize > 1;
+      const countingUnit = product.counting_unit || 'EA';
+
+      if (committedEaches === 0) {
+        return hasPackSize ? '0 packs' : '0';
+      }
+
+      let display;
+      let title;
+
+      if (hasPackSize) {
+        // Show packs with eaches in tooltip
+        const packLabel = committedPacks === 1 ? 'pack' : 'packs';
+        display = `${committedPacks.toLocaleString()} ${packLabel}`;
+        title = `${committedEaches.toLocaleString()} eaches total (${packSize} per pack)`;
+      } else {
+        display = committedEaches.toLocaleString();
+        title = `${committedEaches.toLocaleString()} ${countingUnit}`;
+      }
+
+      if (linkable && committedEaches > 0) {
+        return `<a href="#" class="text-decoration-none" onclick="viewProductReservations(${product.id}); return false;" title="${title}">${display}</a>`;
+      }
+
+      return `<span title="${title}">${display}</span>`;
+    }
+
+    /**
+     * Format on-hand quantity display
+     * Shows full packs if product has pack_size > 1, with eaches in tooltip
+     */
+    function formatOnHandDisplay(product) {
+      const onHandEaches = product.quantity_on_hand || 0;
+      const onHandPacks = product.quantity_on_hand_packs || onHandEaches;
+      const packSize = product.pack_size || 1;
+      const hasPackSize = packSize > 1;
+
+      if (hasPackSize) {
+        const packLabel = onHandPacks === 1 ? 'pack' : 'packs';
+        const title = `${onHandEaches.toLocaleString()} eaches total (${packSize} per pack)`;
+        return `<span title="${title}">${onHandPacks.toLocaleString()} ${packLabel}</span>`;
+      }
+
+      return onHandEaches.toLocaleString();
+    }
+
+    /**
+     * Format available quantity display
+     * Shows available packs if product has pack_size > 1
+     * Available packs = on-hand packs - committed packs (can be 0 or negative)
+     */
+    function formatAvailableDisplay(product) {
+      const availableEaches = product.quantity_available || 0;
+      const packSize = product.pack_size || 1;
+      const hasPackSize = packSize > 1;
+
+      if (hasPackSize) {
+        // Calculate available packs: on-hand full packs minus committed packs needed
+        // Use nullish coalescing (??) to properly handle 0 values
+        const onHandPacks = product.quantity_on_hand_packs ?? Math.floor((product.quantity_on_hand || 0) / packSize);
+        const committedPacks = product.quantity_committed_packs ?? Math.ceil((product.quantity_committed || 0) / packSize);
+        const availablePacks = product.quantity_available_packs ?? Math.max(0, onHandPacks - committedPacks);
+        const packLabel = availablePacks === 1 ? 'pack' : 'packs';
+        const title = `${availableEaches.toLocaleString()} eaches available (${onHandPacks} on hand - ${committedPacks} committed)`;
+        return `<span title="${title}">${availablePacks.toLocaleString()} ${packLabel}</span>`;
+      }
+
+      return availableEaches.toLocaleString();
+    }
+
+    function getStatusBadge(status, onOrderQty = 0) {
+      const badges = {
+        'in_stock':     '<span class="badge text-bg-success status-badge">In Stock</span>',
+        'low':          '<span class="badge text-bg-warning status-badge">Low Stock</span>',
+        'very_low':     '<span class="badge status-badge" style="background-color:#fd7e14;color:#fff;">Very Low</span>',
+        'critical':     '<span class="badge text-bg-danger status-badge">Critical</span>',
+        'out_of_stock': '<span class="badge text-bg-dark status-badge">Out of Stock</span>'
+      };
+      let badge = badges[status] || badges['in_stock'];
+
+      // Add "On Order" indicator if there's pending order quantity
+      if (onOrderQty && onOrderQty > 0) {
+        badge += ` <span class="badge text-bg-info status-badge" title="${onOrderQty} on order">On Order</span>`;
+      }
+
+      return badge;
+    }
+    let currentProductId = null;
+    let currentProductLocations = [];
+
+    // View product and open reservations tab directly
+    async function viewProductReservations(id) {
+      await viewProduct(id);
+      // Switch to reservations tab after modal opens
+      setTimeout(() => {
+        const reservationsTab = document.getElementById('reservations-tab');
+        if (reservationsTab) {
+          reservationsTab.click();
+        }
+      }, 100);
+    }
+
+    async function viewProduct(id) {
+      resetProductModal();
+      try {
+        currentProductId = id;
+        const response = await apiCall(`/products/${id}`);
+        const product = await response.json();
+
+        // Set modal title
+        document.getElementById('viewProductModalTitle').textContent = `${product.sku} - ${product.description}`;
+
+        // Populate details tab
+        const onOrderQty = product.on_order_qty || 0;
+        // Mirror model's needsReorder(): trigger when available + on_order <= reorder_point
+        const needsReorder = product.reorder_point && (product.quantity_available + onOrderQty) <= product.reorder_point;
+        const daysUntilStockout = product.days_until_stockout;
+        const suggestedOrderQty = product.suggested_order_qty || 0;
+
+        document.getElementById('productDetailsView').innerHTML = `
+          <!-- Header: identity + status -->
+          <div class="d-flex align-items-start gap-3 mb-3">
+            ${product.photo_url ? `
+              <div class="flex-shrink-0">
+                <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                <div class="text-center mt-1">
+                  <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-photo-edit"></i> Change</a>
+                </div>
+                <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
+              </div>
+            ` : `
+              <div class="flex-shrink-0 text-center" style="width:80px;">
+                <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                  <i class="ti ti-photo" style="font-size:1.5rem;"></i>
+                </div>
+                <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-upload"></i> Upload</a>
+                <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
+              </div>
+            `}
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                <span class="fw-bold fs-5">${product.sku}</span>
+                ${getStatusBadge(product.status, product.on_order_qty)}
+                ${product.categories && product.categories.length > 0
+                  ? product.categories.map(c => `<span class="badge text-bg-info">${c.name}</span>`).join('')
+                  : ''}
+              </div>
+              <div class="text-body-secondary mb-1">${product.description}</div>
+              ${product.long_description ? `<div class="text-muted small">${product.long_description}</div>` : ''}
+              <div class="mt-1 small text-muted">
+                ${product.part_number ? `Part #: <strong class="text-body">${product.part_number}</strong>` : ''}
+                ${product.part_number && product.finish ? ' &nbsp;·&nbsp; ' : ''}
+                ${product.finish ? `Finish: <strong class="text-body">${product.finish}${product.finish_name ? ' – ' + product.finish_name : ''}</strong>` : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- Inventory quantities -->
+          <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">On Hand${product.pack_size > 1 ? ' (packs)' : ''}</div>
+                  <div class="h3 mb-0">${formatOnHandDisplay(product)}</div>
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_on_hand ?? 0).toLocaleString()} ea</div>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">Committed</div>
+                  <div class="h3 mb-0">${formatCommittedDisplay(product, false)}</div>
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_committed ?? 0).toLocaleString()} ea</div>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">Available</div>
+                  <div class="h3 mb-0 text-success">${formatAvailableDisplay(product)}</div>
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_available ?? 0).toLocaleString()} ea</div>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">On Order</div>
+                  <div class="h3 mb-0">${(product.on_order_qty ?? 0).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          ${needsReorder ? `
+            <div class="alert alert-warning mb-3">
+              <h4 class="alert-title"><i class="ti ti-alert-triangle me-2"></i>Reorder Alert</h4>
+              <p class="mb-0">
+                Available <strong>${product.quantity_available}</strong>${onOrderQty > 0 ? ` + ${onOrderQty} on order` : ''} is at or below reorder point of <strong>${product.reorder_point}</strong>.
+                ${suggestedOrderQty > 0 ? `<strong>Suggested order: ${suggestedOrderQty} ${product.pack_size > 1 ? 'eaches' : 'units'}.</strong>` : ''}
+              </p>
+            </div>
+          ` : ''}
+          ${daysUntilStockout && daysUntilStockout <= 30 ? `
+            <div class="alert alert-${daysUntilStockout <= 7 ? 'danger' : 'info'} mb-3">
+              <h4 class="alert-title"><i class="ti ti-clock-exclamation me-2"></i>Stockout Warning</h4>
+              <p class="mb-0">Estimated stockout in <strong>${daysUntilStockout} days</strong> at current usage rate.</p>
+            </div>
+          ` : ''}
+
+          <!-- Details grid -->
+          <div class="row g-3">
+            <!-- Pricing -->
+            <div class="col-md-6">
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Pricing</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <div class="text-muted small">Unit Cost</div>
+                      <div><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.unit_cost ? `data-actual-value="${product.unit_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${formatPrice(product.unit_cost)}</span></div>
+                    </div>
+                    <div class="col-6">
+                      <div class="text-muted small">Net Cost</div>
+                      <div><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.net_cost ? `data-actual-value="${product.net_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${product.net_cost ? formatPrice(product.net_cost) : (canViewPricing() ? 'Not set' : formatPrice(null))}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Supplier -->
+            <div class="col-md-6">
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Supplier</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-5">
+                      <div class="text-muted small">Supplier</div>
+                      <div>${product.supplier ? product.supplier.name : '-'}</div>
+                    </div>
+                    <div class="col-4">
+                      <div class="text-muted small">Supplier SKU</div>
+                      <div>${product.supplier_sku || '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Lead Time</div>
+                      <div>${product.lead_time_days ? product.lead_time_days + 'd' : '-'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Stock management -->
+            <div class="col-md-6">
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Stock Management</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-3">
+                      <div class="text-muted small">Min</div>
+                      <div>${product.minimum_quantity ?? '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Max</div>
+                      <div>${product.maximum_quantity || '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Reorder Pt.</div>
+                      <div>${product.reorder_point || '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Safety Stock</div>
+                      <div>${product.safety_stock || '-'}</div>
+                    </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Avg Daily Use</div>
+                      <div>${product.average_daily_use || '-'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- UOM -->
+            <div class="col-md-6">
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Unit of Measure</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <div class="text-muted small">Stock UOM</div>
+                      <div>${product.unit_of_measure}${product.uom_name ? ' – ' + product.uom_name : ''}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Pack Size</div>
+                      <div>${product.pack_size || 1}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Min Order</div>
+                      <div>${product.min_order_qty || '-'}</div>
+                    </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Order Multiple</div>
+                      <div>${product.order_multiple || '-'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // Load locations and reservations
+        await loadProductLocations(id);
+        await loadProductReservations(id);
+        await loadProductActivity(id);
+        await loadProductBOM(id);
+
+        // Populate configurator settings
+        document.getElementById('configuratorAvailable').checked = product.configurator_available || false;
+        document.getElementById('configuratorType').textContent = product.configurator_type || '-';
+        document.getElementById('configuratorUsePath').textContent = product.configurator_use_path || '-';
+        const dimensions = [];
+        if (product.dimension_height) dimensions.push(`H: ${product.dimension_height}`);
+        if (product.dimension_depth) dimensions.push(`D: ${product.dimension_depth}`);
+        document.getElementById('configuratorDimensions').textContent = dimensions.length > 0 ? dimensions.join(', ') : '-';
+
+        // Show modal
+        showModal(document.getElementById('viewProductModal'));
+      } catch (error) {
+        console.error('Error loading product:', error);
+        showNotification('Failed to load product details', 'danger');
+      }
+    }
+
+    let currentProductData = null;
+    let isEditMode = false;
+
+    // Reset modal content completely — called on close and before each open
+    function resetProductModal() {
+      // Clear all content panes
+      document.getElementById('productDetailsView').innerHTML = '';
+      document.getElementById('productEditForm').innerHTML = '';
+
+      // Reset edit mode state and buttons
+      isEditMode = false;
+      document.getElementById('editProductBtn').style.display = 'block';
+      document.getElementById('editProductFooterActions').style.display = 'none';
+      document.getElementById('productDetailsView').style.display = 'block';
+      document.getElementById('productEditForm').style.display = 'none';
+
+      // Reset tab back to Details
+      const detailsTab = document.getElementById('details-tab');
+      if (detailsTab && window.bootstrap) {
+        window.bootstrap.Tab.getOrCreateInstance(detailsTab).show();
+      }
+
+      // Reset badge counts
+      document.getElementById('locationsCount').textContent = '0';
+      document.getElementById('reservationsCount').textContent = '0';
+      document.getElementById('bomCount').textContent = '0';
+
+      // Reset modal title
+      document.getElementById('viewProductModalTitle').textContent = 'Product Details';
+    }
+
+    // Always reset on close — guards against dismissed-without-saving and stale data
+    document.getElementById('viewProductModal').addEventListener('hidden.bs.modal', function () {
+      resetProductModal();
+    });
+
+    async function toggleEditMode() {
+      isEditMode = true;
+      document.getElementById('editProductBtn').style.display = 'none';
+      document.getElementById('editProductFooterActions').style.display = 'flex';
+      document.getElementById('productDetailsView').style.display = 'none';
+      document.getElementById('productEditForm').style.display = 'block';
+
+      // Load fresh product data
+      try {
+        const response = await apiCall(`/products/${currentProductId}`);
+        currentProductData = await response.json();
+        renderEditForm(currentProductData);
+      } catch (error) {
+        console.error('Error loading product for edit:', error);
+        showNotification('Failed to load product for editing', 'danger');
+        cancelEditMode();
+      }
+    }
+
+    function cancelEditMode() {
+      isEditMode = false;
+      document.getElementById('editProductBtn').style.display = 'block';
+      document.getElementById('editProductFooterActions').style.display = 'none';
+      document.getElementById('productDetailsView').style.display = 'block';
+      document.getElementById('productEditForm').style.display = 'none';
+    }
+
+    async function renderEditForm(product) {
+      // Store references to global config data before destructuring to avoid temporal dead zone
+      const globalFinishes = finishCodes;
+      const globalCategories = categories;
+      const globalSuppliers = suppliers;
+      const globalUoms = unitOfMeasures;
+
+      // Load options for dropdowns - use cached data if available
+      const [finishes, cats, sups, uoms] = await Promise.all([
+        globalFinishes.length > 0 ? Promise.resolve(globalFinishes) :
+          apiCall('/finish-codes').then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => []),
+        globalCategories.length > 0 ? Promise.resolve(globalCategories) :
+          apiCall('/categories-tree').then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => []),
+        globalSuppliers.length > 0 ? Promise.resolve(globalSuppliers) :
+          apiCall('/suppliers?per_page=all').then(r => r.json()).then(data => Array.isArray(data) ? data : (data.data || [])).catch(() => []),
+        globalUoms.length > 0 ? Promise.resolve(globalUoms) :
+          apiCall('/unit-of-measures').then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => [])
+      ]);
+
+      // Build hierarchical category options (tree format with indentation)
+      const selectedCatIds = product.categories ? product.categories.map(c => c.id) : [];
+      function buildCategoryOptions(nodes, level = 0) {
+        return nodes.map(c => {
+          const indent = '\u00A0'.repeat(level * 4);
+          const selected = selectedCatIds.includes(c.id) ? 'selected' : '';
+          const childOpts = c.children && c.children.length > 0 ? buildCategoryOptions(c.children, level + 1) : '';
+          return `<option value="${c.id}" ${selected}>${indent}${c.name}</option>${childOpts}`;
+        }).join('');
+      }
+      const categoryOptions = buildCategoryOptions(cats);
+
+      document.getElementById('productEditForm').innerHTML = `
+        <form id="editProductFormElement">
+          <!-- Identity header — mirrors view layout -->
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="flex-shrink-0 text-center" style="width:80px;">
+              <div id="editPhotoPreview">
+                ${product.photo_url ? `
+                  <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                ` : `
+                  <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                    <i class="ti ti-photo" style="font-size:1.5rem;"></i>
+                  </div>
+                `}
+              </div>
+              <label class="text-muted small mt-1" style="cursor:pointer;">
+                <i class="ti ti-upload"></i> ${product.photo_url ? 'Change' : 'Upload'}
+                <input type="file" id="editPhotoFileInput" accept="image/*" style="display:none" onchange="handleEditPhotoSelect(${product.id}, this)">
+              </label>
+              ${product.photo_url ? `
+                <div><a href="#" class="text-danger small" onclick="event.preventDefault();deleteProductPhoto(${product.id})"><i class="ti ti-trash"></i> Remove</a></div>
+              ` : ''}
+            </div>
+            <div class="flex-grow-1">
+              <div class="row g-2 mb-2">
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">SKU</label>
+                  <input type="text" class="form-control form-control-sm" name="sku" value="${product.sku}" readonly>
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Part Number</label>
+                  <input type="text" class="form-control form-control-sm" name="part_number" value="${product.part_number || ''}" placeholder="e.g., ABC-123">
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Finish</label>
+                  <select class="form-select form-select-sm" name="finish">
+                    <option value="">None</option>
+                    ${finishes.map(f => `<option value="${f.code}" ${product.finish === f.code ? 'selected' : ''}>${f.code} – ${f.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Active</label>
+                  <select class="form-select form-select-sm" name="is_active">
+                    <option value="1" ${product.is_active ? 'selected' : ''}>Active</option>
+                    <option value="0" ${!product.is_active ? 'selected' : ''}>Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Description <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" name="description" value="${product.description}" required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Long Description</label>
+                <textarea class="form-control form-control-sm" name="long_description" rows="2">${product.long_description || ''}</textarea>
+              </div>
+              <div>
+                <label class="form-label small text-muted mb-1">Categories</label>
+                <select class="form-select form-select-sm" name="category_ids" multiple size="4">
+                  ${categoryOptions}
+                </select>
+                <small class="form-hint">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Details grid — mirrors view layout -->
+          <div class="row g-3">
+            <!-- Pricing -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Pricing</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small text-muted mb-1">Unit Cost</label>
+                      <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" name="unit_cost" value="${product.unit_cost || ''}" step="0.01" min="0" placeholder="0.00">
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small text-muted mb-1">Net Cost</label>
+                      <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" name="net_cost" value="${product.net_cost || ''}" step="0.01" min="0" placeholder="0.00">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Supplier -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Supplier</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-5">
+                      <label class="form-label small text-muted mb-1">Supplier</label>
+                      <select class="form-select form-select-sm" name="supplier_id">
+                        <option value="">None</option>
+                        ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+                      </select>
+                    </div>
+                    <div class="col-4">
+                      <label class="form-label small text-muted mb-1">Supplier SKU</label>
+                      <input type="text" class="form-control form-control-sm" name="supplier_sku" value="${product.supplier_sku || ''}">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Lead Time (d)</label>
+                      <input type="number" class="form-control form-control-sm" name="lead_time_days" value="${product.lead_time_days || ''}" min="0">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Stock Management -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Stock Management</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Min</label>
+                      <input type="number" class="form-control form-control-sm" name="minimum_quantity" value="${product.minimum_quantity ?? ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Max</label>
+                      <input type="number" class="form-control form-control-sm" name="maximum_quantity" value="${product.maximum_quantity || ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Reorder Pt.</label>
+                      <input type="number" class="form-control form-control-sm" name="reorder_point" value="${product.reorder_point || ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Safety Stock</label>
+                      <input type="number" class="form-control form-control-sm" name="safety_stock" value="${product.safety_stock || ''}" min="0" step="0.01">
+                    </div>
+                    <div class="col-6 mt-2">
+                      <label class="form-label small text-muted mb-1">Avg Daily Use</label>
+                      <input type="number" class="form-control form-control-sm" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Unit of Measure -->
+            <div class="col-md-6">
+              <div class="card card-sm">
+                <div class="card-header py-2"><strong>Unit of Measure</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small text-muted mb-1">Stock UOM</label>
+                      <select class="form-select form-select-sm" name="unit_of_measure">
+                        ${uoms.map(u => `<option value="${u.code}" ${product.unit_of_measure === u.code ? 'selected' : ''}>${u.code} – ${u.name}</option>`).join('')}
+                      </select>
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Pack Size</label>
+                      <input type="number" class="form-control form-control-sm" name="pack_size" value="${product.pack_size || 1}" min="1" step="1">
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small text-muted mb-1">Min Order</label>
+                      <input type="number" class="form-control form-control-sm" name="min_order_qty" value="${product.min_order_qty || ''}" min="1">
+                    </div>
+                    <div class="col-6 mt-2">
+                      <label class="form-label small text-muted mb-1">Order Multiple</label>
+                      <input type="number" class="form-control form-control-sm" name="order_multiple" value="${product.order_multiple || ''}" min="1">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      `;
+    }
+
+    function triggerProductPhotoUpload(productId) {
+      const input = document.getElementById(`productPhotoInput_${productId}`);
+      if (input) input.click();
+    }
+
+    async function uploadProductPhoto(productId, input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('photo', file);
+
+      try {
+        const authToken = localStorage.getItem('authToken');
+        const response = await fetch(`${API_BASE}/products/${productId}/photo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+          },
+          body: formData,
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        showNotification('Photo uploaded successfully', 'success');
+        await viewProduct(productId);
+      } catch (err) {
+        showNotification('Failed to upload photo: ' + err.message, 'danger');
+      }
+    }
+
+    async function handleEditPhotoSelect(productId, input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      // Show local preview immediately
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const preview = document.getElementById('editPhotoPreview');
+        if (preview) {
+          preview.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px; display: block;">`;
+        }
+      };
+      reader.readAsDataURL(file);
+
+      // Upload immediately
+      const formData = new FormData();
+      formData.append('photo', file);
+      try {
+        const authToken = localStorage.getItem('authToken');
+        const response = await fetch(`${API_BASE}/products/${productId}/photo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+          },
+          body: formData,
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        showNotification('Photo uploaded successfully', 'success');
+      } catch (err) {
+        showNotification('Failed to upload photo: ' + err.message, 'danger');
+      }
+    }
+
+    async function deleteProductPhoto(productId) {
+      if (!confirm('Remove product photo?')) return;
+      try {
+        const response = await apiCall(`/products/${productId}/photo`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Delete failed');
+        showNotification('Photo removed', 'success');
+        await viewProduct(productId);
+      } catch (err) {
+        showNotification('Failed to remove photo: ' + err.message, 'danger');
+      }
+    }
+
+    async function saveProductChanges() {
+      try {
+        const form = document.getElementById('editProductFormElement');
+        const formData = new FormData(form);
+        const data = {};
+
+        formData.forEach((value, key) => {
+          if (key === 'is_active') {
+            data[key] = value === '1';
+          } else if (key !== 'category_ids' && value !== '') {
+            data[key] = value;
+          }
+        });
+
+        // Handle multiple category selection
+        const categorySelect = form.querySelector('[name="category_ids"]');
+        if (categorySelect) {
+          const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => parseInt(option.value));
+          if (selectedCategories.length > 0) {
+            data.category_ids = selectedCategories;
+            // Keep first selected as primary, or use the first category from current product
+            data.primary_category_id = selectedCategories[0];
+          } else {
+            data.category_ids = [];
+          }
+        }
+        // Remove old single category_id if present
+        delete data.category_id;
+
+        const response = await apiCall(`/products/${currentProductId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          const updatedProduct = await response.json();
+          showNotification('Product updated successfully', 'success');
+          cancelEditMode();
+
+          // Reload the product view with updated data
+          await viewProduct(currentProductId);
+
+          // Refresh the dashboard table
+          if (typeof refreshTable === 'function') refreshTable();
+        } else {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to update product');
+        }
+      } catch (error) {
+        console.error('Error saving product:', error);
+        showNotification('Failed to save changes: ' + error.message, 'danger');
+      }
+    }
+
+    async function loadProductLocations(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/locations`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Ensure we have an array
+        currentProductLocations = Array.isArray(data) ? data : [];
+
+        // Update locations count badge
+        document.getElementById('locationsCount').textContent = currentProductLocations.length;
+
+        // Load location statistics
+        await loadLocationStatistics(productId);
+
+        // Render locations table
+        renderLocationsTable();
+
+        // Load all existing locations for autocomplete
+        await loadAllLocations();
+      } catch (error) {
+        console.error('Error loading locations:', error);
+        currentProductLocations = [];
+        document.getElementById('locationsCount').textContent = '0';
+        renderLocationsTable();
+        showNotification('Failed to load locations', 'danger');
+      }
+    }
+
+    async function loadLocationStatistics(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/locations/statistics`);
+        const stats = await response.json();
+
+        document.getElementById('statTotalLocations').textContent = stats.total_locations;
+        document.getElementById('statTotalQuantity').textContent = stats.total_quantity.toLocaleString();
+        document.getElementById('statTotalCommitted').textContent = stats.total_committed.toLocaleString();
+        document.getElementById('statTotalAvailable').textContent = stats.total_available.toLocaleString();
+      } catch (error) {
+        console.error('Error loading statistics:', error);
+      }
+    }
+
+    async function loadAllLocations() {
+      try {
+        // Load hierarchical storage locations
+        const response = await apiCall('/storage-locations-tree');
+        const locations = await response.json();
+
+        const select = document.getElementById('storageLocationSelect');
+        // Keep only the first option (Select...)
+        while (select.options.length > 1) {
+          select.remove(1);
+        }
+
+        // Recursive function to add options with indentation
+        function addLocationOptions(locations, level = 0) {
+          locations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location.id;
+            const indent = '\u00A0'.repeat(level * 4); // Non-breaking spaces for indentation
+            option.textContent = indent + location.name;
+            select.appendChild(option);
+
+            if (location.children && location.children.length > 0) {
+              addLocationOptions(location.children, level + 1);
+            }
+          });
+        }
+
+        addLocationOptions(locations);
+      } catch (error) {
+        console.error('Error loading all locations:', error);
+      }
+    }
+
+    function renderLocationsTable() {
+      const tbody = document.getElementById('locationsTableBody');
+
+      if (currentProductLocations.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center text-muted py-5">
+              <i class="ti ti-map-pin" style="font-size: 2rem;"></i>
+              <p class="mb-0">No locations added yet</p>
+              <button class="btn btn-sm btn-primary mt-2" onclick="showAddLocationForm()">Add First Location</button>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = currentProductLocations.map(location => {
+        const primaryBadge = location.is_primary
+          ? '<span class="badge text-bg-primary ms-1">Primary</span>'
+          : '';
+
+        const availableClass = location.quantity_available <= 0 ? 'text-danger' : 'text-success';
+
+        const locationDisplay = location.storage_location
+          ? location.storage_location.full_path || location.storage_location.name
+          : '<span class="text-muted fst-italic">Unknown location</span>';
+
+        return `
+          <tr>
+            <td>
+              <strong>${locationDisplay}</strong>${primaryBadge}
+              ${location.notes ? `<br><small class="text-muted">${location.notes}</small>` : ''}
+            </td>
+            <td class="text-end">${location.quantity.toLocaleString()}</td>
+            <td class="text-end">${location.quantity_committed.toLocaleString()}</td>
+            <td class="text-end ${availableClass}"><strong>${location.quantity_available.toLocaleString()}</strong></td>
+            <td>
+              <div class="progress" style="height: 20px;">
+                <div class="progress-bar" role="progressbar" style="width: ${location.percentage || 0}%;"
+                     aria-valuenow="${location.percentage || 0}" aria-valuemin="0" aria-valuemax="100">
+                  ${location.percentage || 0}%
+                </div>
+              </div>
+            </td>
+            <td>
+              ${location.quantity > 0 ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-secondary">Empty</span>'}
+            </td>
+            <td class="table-actions">
+              <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="editLocation(${location.id})" title="Edit" data-permission="inventory.edit">
+                <i class="ti ti-edit"></i>
+              </button>
+              <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteLocation(${location.id})" title="Delete" data-permission="inventory.delete">
+                <i class="ti ti-trash"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Update transfer dropdowns
+      updateTransferDropdowns();
+
+      // Apply action permissions to dynamically created buttons
+      if (typeof applyActionPermissions === 'function') {
+        applyActionPermissions();
+      }
+    }
+
+    function handleStorageLocationSelect() {
+      const select = document.getElementById('storageLocationSelect');
+      const storageLocationId = document.getElementById('storageLocationId');
+
+      if (select.value) {
+        storageLocationId.value = select.value;
+      } else {
+        storageLocationId.value = '';
+      }
+    }
+
+    function showAddLocationForm() {
+      document.getElementById('locationFormTitle').textContent = 'Add Location';
+      document.getElementById('locationForm').reset();
+      document.getElementById('locationId').value = '';
+      document.getElementById('storageLocationId').value = '';
+      document.getElementById('storageLocationSelect').value = '';
+      document.getElementById('locationFormCard').style.display = 'block';
+      document.getElementById('storageLocationSelect').focus();
+    }
+
+    function hideLocationForm() {
+      document.getElementById('locationFormCard').style.display = 'none';
+      document.getElementById('locationForm').reset();
+    }
+
+    function editLocation(locationId) {
+      const location = currentProductLocations.find(l => l.id === locationId);
+      if (!location) return;
+
+      document.getElementById('locationFormTitle').textContent = 'Edit Location';
+      document.getElementById('locationId').value = location.id;
+      document.getElementById('storageLocationId').value = location.storage_location_id || '';
+
+      document.getElementById('storageLocationSelect').value = location.storage_location_id || '';
+
+      document.getElementById('locationQuantity').value = location.quantity;
+      document.getElementById('locationCommitted').value = location.quantity_committed;
+      document.getElementById('locationPrimary').checked = location.is_primary;
+      document.getElementById('locationNotes').value = location.notes || '';
+      document.getElementById('locationFormCard').style.display = 'block';
+      document.getElementById('storageLocationSelect').focus();
+    }
+
+    async function deleteLocation(locationId) {
+      const location = currentProductLocations.find(l => l.id === locationId);
+      if (!location) return;
+
+      if (location.quantity > 0) {
+        showNotification('Cannot delete location with inventory. Please transfer or adjust quantity to zero first.', 'warning');
+        return;
+      }
+
+      const locationName = location.storage_location
+        ? (location.storage_location.full_path || location.storage_location.name)
+        : 'this location';
+      if (!confirm(`Are you sure you want to delete "${locationName}"?`)) {
+        return;
+      }
+
+      try {
+        const response = await apiCall(`/products/${currentProductId}/locations/${locationId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          showNotification('Location deleted successfully', 'success');
+          await loadProductLocations(currentProductId);
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to delete location', 'danger');
+        }
+      } catch (error) {
+        console.error('Error deleting location:', error);
+        showNotification('Failed to delete location', 'danger');
+      }
+    }
+
+    // Location Form Submit
+    document.getElementById('locationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const locationId = document.getElementById('locationId').value;
+      const storageLocationId = document.getElementById('storageLocationId').value;
+
+      if (!storageLocationId) {
+        showNotification('Please select a storage location', 'warning');
+        return;
+      }
+
+      const formData = {
+        storage_location_id: storageLocationId,
+        quantity: parseInt(document.getElementById('locationQuantity').value),
+        quantity_committed: parseInt(document.getElementById('locationCommitted').value),
+        is_primary: document.getElementById('locationPrimary').checked,
+        notes: document.getElementById('locationNotes').value
+      };
+
+      try {
+        const saveBtn = document.getElementById('saveLocationBtn');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+        let response;
+        if (locationId) {
+          // Update existing location
+          response = await apiCall(`/products/${currentProductId}/locations/${locationId}`, {
+            method: 'PUT',
+            body: JSON.stringify(formData)
+          });
+        } else {
+          // Create new location
+          response = await apiCall(`/products/${currentProductId}/locations`, {
+            method: 'POST',
+            body: JSON.stringify(formData)
+          });
+        }
+
+        if (response.ok) {
+          showNotification(locationId ? 'Location updated successfully' : 'Location added successfully', 'success');
+          hideLocationForm();
+          await loadProductLocations(currentProductId);
+          if (typeof refreshTable === 'function') refreshTable(); // Refresh page table
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to save location', 'danger');
+        }
+      } catch (error) {
+        console.error('Error saving location:', error);
+        showNotification('Failed to save location', 'danger');
+      } finally {
+        const saveBtn = document.getElementById('saveLocationBtn');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="ti ti-check me-1"></i>Save Location';
+      }
+    });
+
+    function updateTransferDropdowns() {
+      const fromSelect = document.getElementById('transferFrom');
+      const toSelect = document.getElementById('transferTo');
+
+      fromSelect.innerHTML = '<option value="">Select source...</option>';
+      toSelect.innerHTML = '<option value="">Select destination...</option>';
+
+      currentProductLocations.forEach(location => {
+        const locationName = location.storage_location
+          ? (location.storage_location.full_path || location.storage_location.name)
+          : 'Unknown location';
+
+        if (location.quantity_available > 0) {
+          const option = document.createElement('option');
+          option.value = location.id;
+          option.textContent = `${locationName} (Available: ${location.quantity_available})`;
+          fromSelect.appendChild(option);
+        }
+
+        const toOption = document.createElement('option');
+        toOption.value = location.id;
+        toOption.textContent = locationName;
+        toSelect.appendChild(toOption);
+      });
+    }
+
+    function showTransferForm() {
+      updateTransferDropdowns();
+      document.getElementById('transferCard').style.display = 'block';
+    }
+
+    function hideTransferForm() {
+      document.getElementById('transferCard').style.display = 'none';
+      document.getElementById('transferForm').reset();
+    }
+
+    // Update available quantity when source location changes
+    document.getElementById('transferFrom').addEventListener('change', function() {
+      const locationId = parseInt(this.value);
+      if (!locationId) {
+        document.getElementById('transferFromAvailable').textContent = '';
+        return;
+      }
+
+      const location = currentProductLocations.find(l => l.id === locationId);
+      if (location) {
+        document.getElementById('transferFromAvailable').textContent =
+          `Available: ${location.quantity_available}`;
+        document.getElementById('transferQuantity').max = location.quantity_available;
+      }
+    });
+
+    // Transfer Form Submit
+    document.getElementById('transferForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = {
+        from_location_id: parseInt(document.getElementById('transferFrom').value),
+        to_location_id: parseInt(document.getElementById('transferTo').value),
+        quantity: parseInt(document.getElementById('transferQuantity').value),
+        notes: document.getElementById('transferNotes').value
+      };
+
+      if (formData.from_location_id === formData.to_location_id) {
+        showNotification('Source and destination must be different', 'warning');
+        return;
+      }
+
+      try {
+        const response = await apiCall(`/products/${currentProductId}/locations/transfer`, {
+          method: 'POST',
+          body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+          showNotification('Inventory transferred successfully', 'success');
+          hideTransferForm();
+          await loadProductLocations(currentProductId);
+          if (typeof refreshTable === 'function') refreshTable(); // Refresh page table
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to transfer inventory', 'danger');
+        }
+      } catch (error) {
+        console.error('Error transferring inventory:', error);
+        showNotification('Failed to transfer inventory', 'danger');
+      }
+    });
+
+    // ========== ISSUE TO JOB ==========
+    function showIssueToJobForm() {
+      if (!currentProductId) {
+        showNotification('No product selected', 'danger');
+        return;
+      }
+
+      const product = currentProductData;
+      if (!product) {
+        showNotification('Product data not loaded', 'danger');
+        return;
+      }
+
+      // Populate modal with product info
+      document.getElementById('issueJobProductInfo').innerHTML =
+        `<strong>${product.sku}</strong> - ${product.description}`;
+      document.getElementById('issueJobAvailable').textContent = product.quantity_available || 0;
+
+      // Reset form
+      document.getElementById('issueToJobForm').reset();
+
+      // Show modal
+      showModal(document.getElementById('issueToJobModal'));
+    }
+
+    document.getElementById('issueToJobForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const formData = new FormData(e.target);
+      const data = {
+        job_name: formData.get('job_name'),
+        quantity: parseInt(formData.get('quantity')),
+        notes: formData.get('notes') || null,
+      };
+
+      // Validate quantity doesn't exceed available
+      const product = currentProductData;
+      if (data.quantity > product.quantity_available) {
+        showNotification(`Cannot issue ${data.quantity}. Only ${product.quantity_available} available.`, 'danger');
+        return;
+      }
+
+      const btn = document.getElementById('issueJobBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Issuing...';
+
+      try {
+        const response = await apiCall(`/products/${currentProductId}/issue-to-job`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          showNotification('Material issued to job successfully', 'success');
+          hideModal(document.getElementById('issueToJobModal'));
+
+          // Reload product data
+          await viewProduct(currentProductId);
+          if (typeof refreshTable === 'function') refreshTable(); // Refresh page table
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to issue material', 'danger');
+        }
+      } catch (error) {
+        console.error('Error issuing material:', error);
+        showNotification('Failed to issue material', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-package-export me-1"></i>Issue Material';
+      }
+    });
+
+    // ========== RESERVATION MANAGEMENT ==========
+    let currentProductReservations = [];
+    let currentReservationFilter = 'all';
+
+    async function loadProductReservations(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/reservations`);
+        currentProductReservations = await response.json();
+
+        // Update reservations count badge
+        const activeCount = currentProductReservations.filter(r => r.status === 'active' || r.status === 'partially_fulfilled').length;
+        document.getElementById('reservationsCount').textContent = activeCount;
+
+        // Load reservation statistics
+        await loadReservationStatistics(productId);
+
+        // Render reservations table
+        renderReservationsTable();
+
+        // Load all existing jobs for autocomplete
+        await loadAllJobs();
+
+        // Set today's date as default
+        document.getElementById('reservationDate').valueAsDate = new Date();
+      } catch (error) {
+        console.error('Error loading reservations:', error);
+        showNotification('Failed to load reservations', 'danger');
+      }
+    }
+
+    // ========== ACTIVITY/TRANSACTIONS ==========
+    let currentProductTransactions = [];
+    let activitySortCol = 'transaction_date';
+    let activitySortDir = 'desc';
+
+    function sortActivityTable(col) {
+      if (activitySortCol === col) {
+        activitySortDir = activitySortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        activitySortCol = col;
+        activitySortDir = col === 'transaction_date' ? 'desc' : 'asc';
+      }
+      renderProductActivity();
+      updateActivitySortIcons();
+    }
+
+    function updateActivitySortIcons() {
+      document.querySelectorAll('.activity-sort-icon').forEach(icon => {
+        const col = icon.dataset.col;
+        if (col === activitySortCol) {
+          icon.textContent = activitySortDir === 'asc' ? ' ↑' : ' ↓';
+        } else {
+          icon.textContent = '';
+        }
+      });
+    }
+
+    async function loadProductActivity(productId) {
+      try {
+        document.getElementById('activityLoading').style.display = 'block';
+        document.getElementById('activityContent').style.display = 'none';
+
+        const typeFilter = document.getElementById('activityTypeFilter').value;
+        let url = `/products/${productId}/transactions?per_page=all`;
+
+        if (typeFilter) {
+          url += `&type=${typeFilter}`;
+        }
+
+        const response = await apiCall(url);
+        const data = await response.json();
+        currentProductTransactions = Array.isArray(data) ? data : (data.data || []);
+        renderProductActivity();
+        updateActivitySortIcons();
+
+        document.getElementById('activityLoading').style.display = 'none';
+        document.getElementById('activityContent').style.display = 'block';
+      } catch (error) {
+        console.error('Error loading product activity:', error);
+        document.getElementById('activityLoading').style.display = 'none';
+        document.getElementById('activityContent').innerHTML = '<div class="alert alert-danger">Error loading activity</div>';
+      }
+    }
+
+    function renderProductActivity() {
+      const tbody = document.getElementById('activityTableBody');
+
+      if (currentProductTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No activity records</td></tr>';
+        return;
+      }
+
+      const sorted = [...currentProductTransactions].sort((a, b) => {
+        let valA = a[activitySortCol] ?? '';
+        let valB = b[activitySortCol] ?? '';
+        if (activitySortCol === 'transaction_date') {
+          valA = new Date(valA).getTime();
+          valB = new Date(valB).getTime();
+        } else if (typeof valA === 'string') {
+          valA = valA.toLowerCase();
+          valB = (valB + '').toLowerCase();
+        }
+        if (valA < valB) return activitySortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return activitySortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      tbody.innerHTML = sorted.map(transaction => {
+        const date = new Date(transaction.transaction_date);
+        const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
+
+        const typeBadge = getTransactionTypeBadge(transaction.type);
+        const quantityClass = transaction.quantity >= 0 ? 'text-success' : 'text-danger';
+        const quantitySign = transaction.quantity >= 0 ? '+' : '';
+
+        return `
+          <tr>
+            <td><small>${formattedDate}</small></td>
+            <td>${typeBadge}</td>
+            <td class="text-end ${quantityClass}"><strong>${quantitySign}${transaction.quantity}</strong></td>
+            <td class="text-end">${transaction.quantity_before}</td>
+            <td class="text-end">${transaction.quantity_after}</td>
+            <td>${transaction.reference_number ? escapeHtml(transaction.reference_number) : '-'}</td>
+            <td><small>${transaction.user ? escapeHtml(transaction.user.name) : '-'}</small></td>
+            <td><small>${transaction.notes ? escapeHtml(transaction.notes) : '-'}</small></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function getTransactionTypeBadge(type) {
+      const badges = {
+        'receipt': '<span class="badge text-bg-success">Receipt</span>',
+        'shipment': '<span class="badge text-bg-info">Shipment</span>',
+        'adjustment': '<span class="badge text-bg-warning">Adjustment</span>',
+        'transfer': '<span class="badge text-bg-primary">Transfer</span>',
+        'return': '<span class="badge text-bg-secondary">Return</span>',
+        'cycle_count': '<span class="badge text-bg-purple">Cycle Count</span>',
+        'job_issue': '<span class="badge text-bg-orange">Job Issue</span>',
+      };
+      return badges[type] || '<span class="badge">' + type + '</span>';
+    }
+
+    async function exportProductTransactions(productId) {
+      try {
+        const typeFilter = document.getElementById('activityTypeFilter').value;
+        let url = `/transactions-export?product_id=${productId}`;
+
+        if (typeFilter) {
+          url += `&type=${typeFilter}`;
+        }
+
+        const response = await fetch(`${API_BASE}${url}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'text/csv'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Export failed');
+        }
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `transactions_export_${productId}_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+
+        showNotification('Transactions exported successfully', 'success');
+      } catch (error) {
+        console.error('Error exporting transactions:', error);
+        showNotification('Error exporting transactions: ' + error.message, 'danger');
+      }
+    }
+
+    // ========== CONFIGURATOR & BOM ==========
+    let currentBOM = [];
+    let allProducts = []; // For part selector
+
+    async function loadProductBOM(productId) {
+      try {
+        document.getElementById('bomLoading').style.display = 'block';
+        document.getElementById('bomContent').style.display = 'none';
+
+        const response = await apiCall(`/products/${productId}/required-parts`);
+        const data = await response.json();
+        currentBOM = Array.isArray(data) ? data : (data.data || []);
+        renderBOM();
+
+        document.getElementById('bomCount').textContent = currentBOM.length;
+        document.getElementById('bomLoading').style.display = 'none';
+        document.getElementById('bomContent').style.display = 'block';
+
+        // Load where-used
+        loadWhereUsed(productId);
+      } catch (error) {
+        console.error('Error loading BOM:', error);
+        document.getElementById('bomLoading').style.display = 'none';
+        document.getElementById('bomContent').innerHTML = '<div class="alert alert-danger">Error loading BOM</div>';
+      }
+    }
+
+    function renderBOM() {
+      const tbody = document.getElementById('bomTableBody');
+
+      if (currentBOM.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No parts in BOM</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = currentBOM.map(part => {
+        const finishPolicyBadge = getFinishPolicyBadge(part.finish_policy, part.specific_finish);
+        const optionalBadge = part.is_optional
+          ? '<span class="badge text-bg-secondary">Optional</span>'
+          : '<span class="badge text-bg-success">Required</span>';
+
+        return `
+          <tr>
+            <td><strong>${escapeHtml(part.required_product.sku)}</strong></td>
+            <td>${escapeHtml(part.required_product.description)}</td>
+            <td class="text-end">${part.quantity}</td>
+            <td>${finishPolicyBadge}</td>
+            <td>${optionalBadge}</td>
+            <td><small>${part.notes ? escapeHtml(part.notes) : '-'}</small></td>
+            <td>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-ghost-primary" onclick="editRequiredPart(${part.id})" data-permission="inventory.edit">
+                  <i class="ti ti-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-ghost-danger" onclick="deleteRequiredPart(${part.id})" data-permission="inventory.delete">
+                  <i class="ti ti-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Apply action permissions to dynamically created buttons
+      if (typeof applyActionPermissions === 'function') {
+        applyActionPermissions();
+      }
+    }
+
+    function getFinishPolicyBadge(policy, specificFinish) {
+      const badges = {
+        'same_as_parent': '<span class="badge text-bg-primary">Same as Parent</span>',
+        'specific': `<span class="badge text-bg-info">Specific: ${specificFinish || '?'}</span>`,
+        'any': '<span class="badge text-bg-secondary">Any</span>',
+      };
+      return badges[policy] || policy;
+    }
+
+    async function loadWhereUsed(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/where-used`);
+        const data = await response.json();
+        const whereUsed = Array.isArray(data) ? data : (data.data || []);
+
+        const container = document.getElementById('whereUsedContent');
+
+        if (whereUsed.length === 0) {
+          container.innerHTML = '<p class="text-muted">This part is not used in any other products</p>';
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Product SKU</th>
+                  <th>Description</th>
+                  <th class="text-end">Quantity</th>
+                  <th>Finish Policy</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${whereUsed.map(item => `
+                  <tr>
+                    <td>${escapeHtml(item.sku)}</td>
+                    <td>${escapeHtml(item.description)}</td>
+                    <td class="text-end">${item.quantity}</td>
+                    <td>${getFinishPolicyBadge(item.finish_policy)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (error) {
+        console.error('Error loading where-used:', error);
+        document.getElementById('whereUsedContent').innerHTML = '<p class="text-danger">Error loading where-used information</p>';
+      }
+    }
+
+    function showAddRequiredPartForm() {
+      document.getElementById('requiredPartId').value = '';
+      document.getElementById('requiredPartForm').reset();
+      document.getElementById('addRequiredPartForm').style.display = 'block';
+      document.getElementById('specificFinishGroup').style.display = 'none';
+
+      // Load product list for selector
+      loadProductsForSelector();
+    }
+
+    function hideRequiredPartForm() {
+      document.getElementById('addRequiredPartForm').style.display = 'none';
+    }
+
+    async function loadProductsForSelector() {
+      try {
+        const response = await apiCall('/products?per_page=all&is_active=1');
+        allProducts = response.data || response;
+
+        const select = document.getElementById('requiredProductId');
+        select.innerHTML = '<option value="">Search and select...</option>';
+
+        allProducts.forEach(product => {
+          const option = document.createElement('option');
+          option.value = product.id;
+          option.textContent = `${product.sku} - ${product.description}`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading products:', error);
+      }
+    }
+
+    // Handle finish policy change
+    document.addEventListener('DOMContentLoaded', () => {
+      const finishPolicySelect = document.getElementById('requiredFinishPolicy');
+      if (finishPolicySelect) {
+        finishPolicySelect.addEventListener('change', function() {
+          const specificGroup = document.getElementById('specificFinishGroup');
+          if (this.value === 'specific') {
+            specificGroup.style.display = 'block';
+            // Populate finish codes
+            const finishSelect = document.getElementById('requiredSpecificFinish');
+            finishSelect.innerHTML = '<option value="">Select...</option>';
+            Object.entries(finishCodes).forEach(([code, name]) => {
+              const option = document.createElement('option');
+              option.value = code;
+              option.textContent = `${code} - ${name}`;
+              finishSelect.appendChild(option);
+            });
+          } else {
+            specificGroup.style.display = 'none';
+          }
+        });
+      }
+
+      // Handle form submission
+      const requiredPartForm = document.getElementById('requiredPartForm');
+      if (requiredPartForm) {
+        requiredPartForm.addEventListener('submit', handleRequiredPartSubmit);
+      }
+    });
+
+    async function handleRequiredPartSubmit(e) {
+      e.preventDefault();
+
+      const formData = {
+        required_product_id: parseInt(document.getElementById('requiredProductId').value),
+        quantity: parseFloat(document.getElementById('requiredQuantity').value),
+        finish_policy: document.getElementById('requiredFinishPolicy').value,
+        specific_finish: document.getElementById('requiredSpecificFinish').value || null,
+        is_optional: document.getElementById('requiredIsOptional').checked,
+        notes: document.getElementById('requiredNotes').value || null,
+        sort_order: parseInt(document.getElementById('requiredSortOrder').value) || 0,
+      };
+
+      try {
+        const partId = document.getElementById('requiredPartId').value;
+
+        if (partId) {
+          // Update existing part
+          await apiCall(`/products/${currentProductId}/required-parts/${partId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          });
+          showNotification('Required part updated successfully', 'success');
+        } else {
+          // Add new part
+          await apiCall(`/products/${currentProductId}/required-parts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          });
+          showNotification('Required part added successfully', 'success');
+        }
+
+        hideRequiredPartForm();
+        loadProductBOM(currentProductId);
+      } catch (error) {
+        console.error('Error saving required part:', error);
+        showNotification(error.message || 'Error saving required part', 'danger');
+      }
+    }
+
+    async function editRequiredPart(partId) {
+      const part = currentBOM.find(p => p.id === partId);
+      if (!part) return;
+
+      document.getElementById('requiredPartId').value = part.id;
+      document.getElementById('requiredProductId').value = part.required_product_id;
+      document.getElementById('requiredQuantity').value = part.quantity;
+      document.getElementById('requiredFinishPolicy').value = part.finish_policy;
+      document.getElementById('requiredSpecificFinish').value = part.specific_finish || '';
+      document.getElementById('requiredIsOptional').checked = part.is_optional;
+      document.getElementById('requiredNotes').value = part.notes || '';
+      document.getElementById('requiredSortOrder').value = part.sort_order || 0;
+
+      if (part.finish_policy === 'specific') {
+        document.getElementById('specificFinishGroup').style.display = 'block';
+      }
+
+      document.getElementById('addRequiredPartForm').style.display = 'block';
+      await loadProductsForSelector();
+    }
+
+    async function deleteRequiredPart(partId) {
+      if (!confirm('Are you sure you want to remove this part from the BOM?')) {
+        return;
+      }
+
+      try {
+        await apiCall(`/products/${currentProductId}/required-parts/${partId}`, {
+          method: 'DELETE',
+        });
+        showNotification('Required part removed successfully', 'success');
+        loadProductBOM(currentProductId);
+      } catch (error) {
+        console.error('Error deleting required part:', error);
+        showNotification(error.message || 'Error deleting required part', 'danger');
+      }
+    }
+
+    async function explodeBOM(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/bom-explosion?quantity=1`);
+
+        // Display explosion results in a modal or alert
+        let message = `BOM Explosion for ${response.product.sku}\n\n`;
+        message += `Total unique parts: ${response.total_parts}\n\n`;
+        message += 'Summary:\n';
+        response.summary.forEach(part => {
+          message += `- ${part.sku}: ${part.total_quantity} ${part.finish ? '(' + part.finish + ')' : ''}\n`;
+        });
+
+        alert(message);
+      } catch (error) {
+        console.error('Error exploding BOM:', error);
+        showNotification('Error exploding BOM', 'danger');
+      }
+    }
+
+    async function checkBOMAvailability(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/bom-availability?quantity=1`);
+
+        let message = `BOM Availability Check\n\n`;
+        message += response.all_available ? '✓ All parts available!\n\n' : '⚠ Some parts not available\n\n';
+
+        response.parts.forEach(part => {
+          const icon = part.is_available ? '✓' : '✗';
+          message += `${icon} ${part.sku}: Need ${part.required}, Have ${part.available}`;
+          if (part.shortage > 0) {
+            message += ` (Short: ${part.shortage})`;
+          }
+          message += '\n';
+        });
+
+        alert(message);
+      } catch (error) {
+        console.error('Error checking availability:', error);
+        showNotification('Error checking BOM availability', 'danger');
+      }
+    }
+
+    async function loadReservationStatistics(productId) {
+      try {
+        const response = await apiCall(`/products/${productId}/reservations/statistics`);
+        const stats = await response.json();
+
+        document.getElementById('statActiveReservations').textContent = stats.active_reservations_count;
+        document.getElementById('statQuantityCommitted').textContent = stats.quantity_committed.toLocaleString();
+        document.getElementById('statATP').textContent = stats.atp.toLocaleString();
+        document.getElementById('statOverdueReservations').textContent = stats.overdue_reservations;
+        document.getElementById('statUpcomingReservations').textContent = stats.upcoming_reservations;
+
+        // Update available for reservation message
+        document.getElementById('availableForReservation').textContent =
+          `${stats.atp} units available to reserve`;
+      } catch (error) {
+        console.error('Error loading reservation statistics:', error);
+      }
+    }
+
+    async function loadAllJobs() {
+      try {
+        const response = await apiCall('/jobs');
+        const jobs = await response.json();
+
+        const datalist = document.getElementById('existingJobs');
+        datalist.innerHTML = '';
+        jobs.forEach(job => {
+          const option = document.createElement('option');
+          option.value = job.job_number;
+          option.setAttribute('data-name', job.job_name || '');
+          datalist.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading jobs:', error);
+      }
+    }
+
+    function renderReservationsTable() {
+      const tbody = document.getElementById('reservationsTableBody');
+
+      // Filter reservations based on current filter
+      let filteredReservations = currentProductReservations;
+      if (currentReservationFilter !== 'all') {
+        filteredReservations = currentProductReservations.filter(r => r.status === currentReservationFilter);
+      }
+
+      if (filteredReservations.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center text-muted py-5">
+              <i class="ti ti-clipboard-check" style="font-size: 2rem;"></i>
+              <p class="mb-0">No ${currentReservationFilter !== 'all' ? currentReservationFilter : ''} reservations</p>
+              ${currentReservationFilter === 'all' ? '<button class="btn btn-sm btn-primary mt-2" onclick="showAddReservationForm()">Reserve First Item</button>' : ''}
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filteredReservations.map(reservation => {
+        const statusBadge = getReservationStatusBadge(reservation.status);
+        const remaining = reservation.quantity_reserved - reservation.quantity_fulfilled;
+        const reservedBy = reservation.reserved_by ? `by ${reservation.reserved_by.name}` : '';
+        const requiredDate = reservation.required_date ? new Date(reservation.required_date).toLocaleDateString() : '-';
+        const isOverdue = reservation.required_date && new Date(reservation.required_date) < new Date() && (reservation.status === 'active' || reservation.status === 'partially_fulfilled');
+
+        return `
+          <tr ${isOverdue ? 'class="table-danger"' : ''}>
+            <td>
+              <strong>${reservation.job_number}</strong>
+              ${reservation.job_name ? `<br><small class="text-muted">${reservation.job_name}</small>` : ''}
+              ${reservedBy ? `<br><small class="text-muted">${reservedBy}</small>` : ''}
+            </td>
+            <td>${new Date(reservation.reserved_date).toLocaleDateString()}</td>
+            <td>${requiredDate}${isOverdue ? ' <span class="badge text-bg-danger">OVERDUE</span>' : ''}</td>
+            <td class="text-end">${reservation.quantity_reserved}</td>
+            <td class="text-end">${reservation.quantity_fulfilled}</td>
+            <td class="text-end"><strong>${remaining}</strong></td>
+            <td>${statusBadge}</td>
+            <td class="table-actions">
+              <div class="btn-group">
+                ${(reservation.status === 'active' || reservation.status === 'partially_fulfilled') ? `
+                  <button class="btn btn-sm btn-icon btn-ghost-success" onclick="showFulfillModal(${reservation.id})" title="Fulfill" data-permission="orders.edit">
+                    <i class="ti ti-check"></i>
+                  </button>
+                  <button class="btn btn-sm btn-icon btn-ghost-warning" onclick="releaseReservation(${reservation.id})" title="Release/Cancel" data-permission="orders.edit">
+                    <i class="ti ti-x"></i>
+                  </button>
+                  <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="editReservation(${reservation.id})" title="Edit" data-permission="orders.edit">
+                    <i class="ti ti-edit"></i>
+                  </button>
+                ` : ''}
+                ${(reservation.status === 'fulfilled' || reservation.status === 'cancelled') ? `
+                  <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteReservation(${reservation.id})" title="Delete" data-permission="orders.delete">
+                    <i class="ti ti-trash"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Apply action permissions to dynamically created buttons
+      if (typeof applyActionPermissions === 'function') {
+        applyActionPermissions();
+      }
+    }
+
+    function getReservationStatusBadge(status) {
+      const badges = {
+        'active': '<span class="badge text-bg-warning">Active</span>',
+        'partially_fulfilled': '<span class="badge text-bg-info">Partially Fulfilled</span>',
+        'fulfilled': '<span class="badge text-bg-success">Fulfilled</span>',
+        'cancelled': '<span class="badge text-bg-secondary">Cancelled</span>'
+      };
+      return badges[status] || badges['active'];
+    }
+
+    function filterReservations(filter) {
+      currentReservationFilter = filter;
+
+      // Update active tab
+      document.querySelectorAll('#reservationFilterTabs .nav-link').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('data-filter') === filter) {
+          link.classList.add('active');
+        }
+      });
+
+      renderReservationsTable();
+    }
+
+    function showAddReservationForm() {
+      document.getElementById('reservationFormTitle').textContent = 'Reserve Inventory';
+      document.getElementById('reservationForm').reset();
+      document.getElementById('reservationId').value = '';
+      document.getElementById('reservationDate').valueAsDate = new Date();
+      document.getElementById('reservationFormCard').style.display = 'block';
+      document.getElementById('reservationJobNumber').focus();
+    }
+
+    function hideReservationForm() {
+      document.getElementById('reservationFormCard').style.display = 'none';
+      document.getElementById('reservationForm').reset();
+    }
+
+    function editReservation(reservationId) {
+      const reservation = currentProductReservations.find(r => r.id === reservationId);
+      if (!reservation) return;
+
+      document.getElementById('reservationFormTitle').textContent = 'Edit Reservation';
+      document.getElementById('reservationId').value = reservation.id;
+      document.getElementById('reservationJobNumber').value = reservation.job_number;
+      document.getElementById('reservationJobName').value = reservation.job_name || '';
+      document.getElementById('reservationQuantity').value = reservation.quantity_reserved;
+      document.getElementById('reservationDate').value = reservation.reserved_date;
+      document.getElementById('reservationRequiredDate').value = reservation.required_date || '';
+      document.getElementById('reservationNotes').value = reservation.notes || '';
+      document.getElementById('reservationFormCard').style.display = 'block';
+      document.getElementById('reservationJobNumber').focus();
+    }
+
+    async function releaseReservation(reservationId) {
+      const reservation = currentProductReservations.find(r => r.id === reservationId);
+      if (!reservation) return;
+
+      const notes = prompt(`Release reservation for ${reservation.job_number}?\n\nEnter notes (optional):`);
+      if (notes === null) return; // User cancelled
+
+      try {
+        const response = await apiCall(`/products/${currentProductId}/reservations/${reservationId}/release`, {
+          method: 'POST',
+          body: JSON.stringify({ notes: notes || '' })
+        });
+
+        if (response.ok) {
+          showNotification('Reservation released successfully', 'success');
+          await loadProductReservations(currentProductId);
+          if (typeof refreshTable === 'function') refreshTable(); // Refresh page table
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to release reservation', 'danger');
+        }
+      } catch (error) {
+        console.error('Error releasing reservation:', error);
+        showNotification('Failed to release reservation', 'danger');
+      }
+    }
+
+    function showFulfillModal(reservationId) {
+      const reservation = currentProductReservations.find(r => r.id === reservationId);
+      if (!reservation) return;
+
+      const remaining = reservation.quantity_reserved - reservation.quantity_fulfilled;
+      const quantity = prompt(`Fulfill reservation for ${reservation.job_number}\n\nRemaining: ${remaining} units\nEnter quantity to fulfill:`);
+
+      if (quantity === null) return; // User cancelled
+
+      const qtyNum = parseInt(quantity);
+      if (isNaN(qtyNum) || qtyNum <= 0) {
+        showNotification('Please enter a valid quantity', 'warning');
+        return;
+      }
+
+      fulfillReservation(reservationId, qtyNum);
+    }
+
+    async function fulfillReservation(reservationId, quantity) {
+      try {
+        const response = await apiCall(`/products/${currentProductId}/reservations/${reservationId}/fulfill`, {
+          method: 'POST',
+          body: JSON.stringify({
+            quantity_fulfilled: quantity,
+            notes: `Fulfilled ${quantity} units`
+          })
+        });
+
+        if (response.ok) {
+          showNotification('Reservation fulfilled successfully', 'success');
+          await loadProductReservations(currentProductId);
+          if (typeof refreshTable === 'function') refreshTable(); // Refresh page table
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to fulfill reservation', 'danger');
+        }
+      } catch (error) {
+        console.error('Error fulfilling reservation:', error);
+        showNotification('Failed to fulfill reservation', 'danger');
+      }
+    }
+
+    async function deleteReservation(reservationId) {
+      const reservation = currentProductReservations.find(r => r.id === reservationId);
+      if (!reservation) return;
+
+      if (!confirm(`Delete reservation for ${reservation.job_number}?\n\nThis action cannot be undone.`)) {
+        return;
+      }
+
+      try {
+        const response = await apiCall(`/products/${currentProductId}/reservations/${reservationId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          showNotification('Reservation deleted successfully', 'success');
+          await loadProductReservations(currentProductId);
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to delete reservation', 'danger');
+        }
+      } catch (error) {
+        console.error('Error deleting reservation:', error);
+        showNotification('Failed to delete reservation', 'danger');
+      }
+    }
+
+    // Reservation Form Submit
+    document.getElementById('reservationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const reservationId = document.getElementById('reservationId').value;
+      const formData = {
+        job_number: document.getElementById('reservationJobNumber').value,
+        job_name: document.getElementById('reservationJobName').value,
+        quantity_reserved: parseInt(document.getElementById('reservationQuantity').value),
+        reserved_date: document.getElementById('reservationDate').value,
+        required_date: document.getElementById('reservationRequiredDate').value || null,
+        notes: document.getElementById('reservationNotes').value
+      };
+
+      try {
+        const saveBtn = document.getElementById('saveReservationBtn');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+        let response;
+        if (reservationId) {
+          // Update existing reservation
+          response = await apiCall(`/products/${currentProductId}/reservations/${reservationId}`, {
+            method: 'PUT',
+            body: JSON.stringify(formData)
+          });
+        } else {
+          // Create new reservation
+          response = await apiCall(`/products/${currentProductId}/reservations`, {
+            method: 'POST',
+            body: JSON.stringify(formData)
+          });
+        }
+
+        if (response.ok) {
+          showNotification(reservationId ? 'Reservation updated successfully' : 'Inventory reserved successfully', 'success');
+          hideReservationForm();
+          await loadProductReservations(currentProductId);
+          if (typeof refreshTable === 'function') refreshTable(); // Refresh page table
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to save reservation', 'danger');
+        }
+      } catch (error) {
+        console.error('Error saving reservation:', error);
+        showNotification('Failed to save reservation', 'danger');
+      } finally {
+        const saveBtn = document.getElementById('saveReservationBtn');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="ti ti-check me-1"></i>Reserve';
+      }
+    });
+
+    // Activity table sort click handlers
+    document.querySelectorAll('.sortable-activity').forEach(th => {
+      th.addEventListener('click', function() {
+        const col = this.dataset.col;
+        if (col) sortActivityTable(col);
+      });
+    });
+  </script>
+@endpush

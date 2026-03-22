@@ -25,7 +25,12 @@ class ProductController extends Controller
         }
 
         if ($request->has('status')) {
-            $query->where('status', $request->status);
+            $statuses = array_filter(array_map('trim', explode(',', $request->status)));
+            if (count($statuses) > 1) {
+                $query->whereIn('status', $statuses);
+            } else {
+                $query->where('status', $statuses[0]);
+            }
         }
 
         if ($request->has('category_id')) {
@@ -40,7 +45,8 @@ class ProductController extends Controller
             $query->where('location', $request->location);
         }
 
-        return response()->json($query->paginate(50));
+        $perPage = min((int) $request->get('per_page', 50), 500);
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -60,7 +66,6 @@ class ProductController extends Controller
 
             // Pricing
             'unit_cost' => 'required|numeric|min:0',
-            'unit_price' => 'required|numeric|min:0',
 
             // Quantities
             'quantity_on_hand' => 'required|integer|min:0',
@@ -181,7 +186,6 @@ class ProductController extends Controller
 
             // Pricing
             'unit_cost' => 'required|numeric|min:0',
-            'unit_price' => 'required|numeric|min:0',
 
             // Quantities
             'minimum_quantity' => 'required|integer|min:0',

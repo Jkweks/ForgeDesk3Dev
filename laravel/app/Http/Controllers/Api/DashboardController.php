@@ -81,7 +81,8 @@ class DashboardController extends Controller
             $statsQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
+                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                  ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
@@ -89,7 +90,7 @@ class DashboardController extends Controller
         $statRow = (clone $statsQuery)->selectRaw("
             COUNT(*) as skus_tracked,
             SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
-            SUM(CASE WHEN status IN ('low_stock', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
+            SUM(CASE WHEN status IN ('low', 'very_low', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
             SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
         ")->first();
 
@@ -120,7 +121,8 @@ class DashboardController extends Controller
             $inventoryQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
+                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                  ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
@@ -184,7 +186,9 @@ class DashboardController extends Controller
 
         $committedByProduct = $this->getCommittedByProduct();
 
-        $query = Product::where('status', $status)
+        // 'low_stock' is the dashboard tab identifier covering both 'low' and 'very_low'
+        $statusFilter = $status === 'low_stock' ? ['low', 'very_low'] : [$status];
+        $query = Product::whereIn('status', $statusFilter)
             ->where('is_active', true)
             ->when($categoryId, function ($q) use ($categoryId) {
                 return $q->whereHas('categories', function ($sq) use ($categoryId) {
@@ -196,7 +200,8 @@ class DashboardController extends Controller
                 return $q->where(function ($sq) use ($searchLower) {
                     $sq->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                       ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
+                       ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                       ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
                 });
             })
             ->with('categories');
@@ -245,7 +250,7 @@ class DashboardController extends Controller
         $statRow = Product::where('is_active', true)->selectRaw("
             COUNT(*) as skus_tracked,
             SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
-            SUM(CASE WHEN status IN ('low_stock', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
+            SUM(CASE WHEN status IN ('low', 'very_low', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
             SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
         ")->first();
 

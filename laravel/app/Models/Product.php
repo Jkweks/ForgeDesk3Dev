@@ -14,7 +14,7 @@ class Product extends Model
         'sku', 'part_number', 'finish', 'description', 'long_description',
         'photo_path',
         'category_id',
-        'unit_cost', 'unit_price', 'net_cost', 'pricing_category',
+        'unit_cost', 'net_cost', 'pricing_category',
         'finish_multiplier', 'category_multiplier', 'price_per_length', 'price_per_package',
         'quantity_on_hand', 'quantity_committed',
         'minimum_quantity', 'reorder_point', 'safety_stock', 'average_daily_use',
@@ -31,7 +31,6 @@ class Product extends Model
 
     protected $casts = [
         'unit_cost' => 'decimal:2',
-        'unit_price' => 'decimal:2',
         'net_cost' => 'decimal:2',
         'finish_multiplier' => 'decimal:4',
         'category_multiplier' => 'decimal:4',
@@ -56,7 +55,6 @@ class Product extends Model
         'quantity_available_packs',
         'counting_unit',
         'pack_cost',
-        'pack_price',
         'photo_url',
     ];
 
@@ -280,18 +278,23 @@ class Product extends Model
 
     public function updateStatus()
     {
-        $available = $this->quantity_available;
-        
-        if ($available <= 0) {
+        $available    = $this->quantity_available;
+        $reorderPoint = $this->reorder_point ?? 0;
+        $safetyStock  = $this->safety_stock ?? 0;
+
+        if ($available < 0) {
+            // Overcommitted — critical, unless reorder_point is 0 (treat as out_of_stock)
+            $this->status = ($reorderPoint == 0) ? 'out_of_stock' : 'critical';
+        } elseif ($available == 0) {
             $this->status = 'out_of_stock';
-        } elseif ($available <= ($this->minimum_quantity * 0.5)) {
-            $this->status = 'critical';
-        } elseif ($available <= $this->minimum_quantity) {
-            $this->status = 'low_stock';
-        } else {
+        } elseif ($available > $reorderPoint) {
             $this->status = 'in_stock';
+        } elseif ($available > $safetyStock) {
+            $this->status = 'low';
+        } else {
+            $this->status = 'very_low';
         }
-        
+
         $this->save();
     }
 
@@ -342,17 +345,23 @@ class Product extends Model
      */
     public function getSuggestedOrderQtyAttribute()
     {
-        // If below reorder point, suggest ordering up to maximum quantity (or 2x reorder point if no max)
-        if ($this->reorder_point && $this->quantity_available <= $this->reorder_point) {
+        if (!$this->reorder_point) return 0;
+
+        $onOrder = $this->on_order_qty ?? 0;
+
+        // Trigger condition matches needsReorder(): available + on_order vs reorder_point
+        if (($this->quantity_available + $onOrder) <= $this->reorder_point) {
             $targetQty = $this->maximum_quantity ?: ($this->reorder_point * 2);
-            $suggestedQty = $targetQty - $this->quantity_on_hand - $this->on_order_qty;
+
+            // Order enough to bring available + on_order up to target (not on_hand up to target)
+            $suggestedQty = $targetQty - $this->quantity_available - $onOrder;
 
             // Round up to order multiple if specified
             if ($this->order_multiple && $this->order_multiple > 1) {
                 $suggestedQty = ceil($suggestedQty / $this->order_multiple) * $this->order_multiple;
             }
 
-            // Ensure at least minimum order quantity
+            // Enforce minimum order quantity
             if ($this->min_order_qty && $suggestedQty < $this->min_order_qty) {
                 $suggestedQty = $this->min_order_qty;
             }
@@ -531,15 +540,6 @@ class Product extends Model
     public function getPackCostAttribute()
     {
         return $this->unit_cost;
-    }
-
-    /**
-     * Get price per pack
-     * Note: unit_price already represents pack price for pack products
-     */
-    public function getPackPriceAttribute()
-    {
-        return $this->unit_price;
     }
 
     /**

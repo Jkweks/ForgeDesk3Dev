@@ -115,7 +115,7 @@ class SupplierController extends Controller
             'total_inventory_value' => $supplier->products()
                 ->sum(DB::raw('quantity_on_hand * unit_cost')),
             'low_stock_items' => $supplier->products()
-                ->whereIn('status', ['low_stock', 'critical'])
+                ->whereIn('status', ['low', 'very_low', 'critical'])
                 ->count(),
         ];
 
@@ -314,7 +314,7 @@ class SupplierController extends Controller
     public function lowStockReport(Supplier $supplier)
     {
         $products = $supplier->products()
-            ->whereIn('status', ['low_stock', 'critical'])
+            ->whereIn('status', ['low', 'very_low', 'critical'])
             ->with(['category', 'inventoryLocations'])
             ->orderBy('status')
             ->orderBy('sku')
