@@ -493,7 +493,7 @@ function renderVendorCard(container, group) {
     if (p.status === 'in_stock') return;
     const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
     const displayQty = packSize > 1
-      ? Math.ceil((p.suggested_order_qty || 0) / packSize)
+      ? Math.ceil((p.suggested_order_qty || 0) / packSize)  // ceiling: always order whole packs
       : (p.suggested_order_qty || 0);
     if (displayQty > 0) {
       const cb = document.getElementById(`check-${p.id}`);
@@ -506,7 +506,8 @@ function renderItemRow(p, sid) {
   const packSize     = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
   const isPack       = packSize > 1;
   const suggestedEaches = p.suggested_order_qty || 0;
-  // For pack products show suggested qty in packs (ceiling); for eaches show as-is
+  // suggested_order_qty is already rounded to pack boundaries server-side;
+  // Math.ceil here guards against any floating-point edge cases
   const suggestedQty = isPack ? Math.ceil(suggestedEaches / packSize) : suggestedEaches;
   const available    = p.quantity_available ?? 0;
   const onOrder      = p.on_order_qty ?? 0;
