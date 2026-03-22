@@ -16,11 +16,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // PostgreSQL enums are implemented as CHECK constraints by Laravel.
-        // Drop the old constraint and add a new one with the expanded value set.
+        // 1. Drop the old CHECK constraint
         DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+
+        // 2. Remap any existing 'low_stock' rows to 'low' so no rows violate the new constraint
+        DB::statement("UPDATE products SET status = 'low' WHERE status = 'low_stock'");
+
+        // 3. Add the new CHECK constraint with the expanded value set
         DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low', 'very_low', 'critical', 'out_of_stock'))");
 
+        // 4. Recalculate all statuses using the full new logic
         DB::statement("
             UPDATE products
             SET status = CASE
@@ -88,8 +93,7 @@ return new class extends Migration
     public function down(): void
     {
         DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
-        DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low_stock', 'critical', 'out_of_stock'))");
-        // Remap new statuses back to closest old equivalents
         DB::statement("UPDATE products SET status = 'low_stock' WHERE status IN ('low', 'very_low')");
+        DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low_stock', 'critical', 'out_of_stock'))");
     }
 };
