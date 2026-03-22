@@ -60,7 +60,6 @@ class ProductController extends Controller
 
             // Pricing
             'unit_cost' => 'required|numeric|min:0',
-            'unit_price' => 'required|numeric|min:0',
 
             // Quantities
             'quantity_on_hand' => 'required|integer|min:0',
@@ -181,7 +180,6 @@ class ProductController extends Controller
 
             // Pricing
             'unit_cost' => 'required|numeric|min:0',
-            'unit_price' => 'required|numeric|min:0',
 
             // Quantities
             'minimum_quantity' => 'required|integer|min:0',

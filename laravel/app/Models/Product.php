@@ -14,7 +14,7 @@ class Product extends Model
         'sku', 'part_number', 'finish', 'description', 'long_description',
         'photo_path',
         'category_id',
-        'unit_cost', 'unit_price', 'net_cost', 'pricing_category',
+        'unit_cost', 'net_cost', 'pricing_category',
         'finish_multiplier', 'category_multiplier', 'price_per_length', 'price_per_package',
         'quantity_on_hand', 'quantity_committed',
         'minimum_quantity', 'reorder_point', 'safety_stock', 'average_daily_use',
@@ -31,7 +31,6 @@ class Product extends Model
 
     protected $casts = [
         'unit_cost' => 'decimal:2',
-        'unit_price' => 'decimal:2',
         'net_cost' => 'decimal:2',
         'finish_multiplier' => 'decimal:4',
         'category_multiplier' => 'decimal:4',
@@ -56,7 +55,6 @@ class Product extends Model
         'quantity_available_packs',
         'counting_unit',
         'pack_cost',
-        'pack_price',
         'photo_url',
     ];
 
@@ -537,15 +535,6 @@ class Product extends Model
     public function getPackCostAttribute()
     {
         return $this->unit_cost;
-    }
-
-    /**
-     * Get price per pack
-     * Note: unit_price already represents pack price for pack products
-     */
-    public function getPackPriceAttribute()
-    {
-        return $this->unit_price;
     }
 
     /**

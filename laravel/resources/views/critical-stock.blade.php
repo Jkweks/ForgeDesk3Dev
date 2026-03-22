@@ -173,7 +173,7 @@
         // Calculate stats
         const criticalCount = data.data.filter(p => p.status === 'critical').length;
         const outOfStockCount = data.data.filter(p => p.status === 'out_of_stock').length;
-        const totalValue = data.data.reduce((sum, p) => sum + (p.quantity_available * p.unit_price), 0);
+        const totalValue = data.data.reduce((sum, p) => sum + (p.quantity_available * p.unit_cost), 0);
         const emergencyPO = data.data.reduce((sum, p) => sum + ((p.suggested_order_qty || 0) * p.unit_cost), 0);
 
         document.getElementById('statCriticalCount').textContent = criticalCount.toLocaleString();

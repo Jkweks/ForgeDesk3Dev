@@ -633,7 +633,6 @@ class ReportsController extends Controller
         // Use pack-based pricing and quantities when available
         $displayQuantity = $product->hasPackSize() ? $product->quantity_on_hand_packs : $product->quantity_on_hand;
         $displayCost = $product->hasPackSize() ? $product->pack_cost : $product->unit_cost;
-        $displayPrice = $product->hasPackSize() ? $product->pack_price : $product->unit_price;
 
         // Convert reorder_point and minimum to packs if applicable
         $reorderPointDisplay = $product->hasPackSize() ? $product->eachesToPacksNeeded($product->reorder_point) : $product->reorder_point;
@@ -659,11 +658,8 @@ class ReportsController extends Controller
             'reorder_point' => $product->reorder_point,
             'reorder_point_display' => $reorderPointDisplay,
             'unit_cost' => $product->unit_cost,
-            'unit_price' => $product->unit_price,
             'pack_cost' => $product->pack_cost,
-            'pack_price' => $product->pack_price,
             'display_cost' => $displayCost,
-            'display_price' => $displayPrice,
             'total_value' => $displayQuantity * $displayCost,
             'status' => $product->status,
             'lead_time_days' => $product->lead_time_days,
