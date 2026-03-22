@@ -33,7 +33,16 @@
 
       <!-- Stats -->
       <div class="row row-deck row-cards mb-3">
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
+          <div class="card">
+            <div class="card-body">
+              <div class="subheader">Out of Stock</div>
+              <div class="h1 mb-1 text-dark" id="statOutOfStock">-</div>
+              <div class="text-muted small">Zero available, max qty set</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg">
           <div class="card">
             <div class="card-body">
               <div class="subheader">Critical</div>
@@ -42,7 +51,7 @@
             </div>
           </div>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
           <div class="card">
             <div class="card-body">
               <div class="subheader">Very Low</div>
@@ -51,7 +60,7 @@
             </div>
           </div>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
           <div class="card">
             <div class="card-body">
               <div class="subheader">Low</div>
@@ -60,7 +69,7 @@
             </div>
           </div>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
           <div class="card">
             <div class="card-body">
               <div class="subheader">Estimated PO Total</div>
@@ -79,6 +88,7 @@
               <label class="form-label mb-1">Status Filter</label>
               <select class="form-select form-select-sm" id="filterStatus" onchange="applyFilters()">
                 <option value="">All Urgent Statuses</option>
+                <option value="out_of_stock">Out of Stock Only</option>
                 <option value="critical">Critical Only</option>
                 <option value="very_low">Very Low Only</option>
                 <option value="low">Low Only</option>
@@ -116,7 +126,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
           </div>
           <h3 class="text-muted">All stocked up!</h3>
-          <p class="text-muted">No items are currently critical, very low, or low in stock.</p>
+          <p class="text-muted">No items are currently out of stock, critical, very low, or low in stock.</p>
         </div>
       </div>
 
@@ -199,8 +209,10 @@ let allItems = [];         // All replenishment products from API
 let filteredItems = [];    // After filters applied
 let pendingPOSupplier = null;  // Supplier being confirmed
 let searchTimeout = null;
+let currentSortBy  = 'status';  // Default sort: urgency
+let currentSortDir = 'asc';
 
-const URGENCY_ORDER = { critical: 0, very_low: 1, low: 2 };
+const URGENCY_ORDER = { out_of_stock: 0, critical: 1, very_low: 2, low: 3 };
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 
@@ -221,8 +233,13 @@ async function loadReplenishmentItems() {
   document.getElementById('emptyState').style.display = 'none';
 
   try {
-    const data = await authenticatedFetch('/products?status=critical,very_low,low&per_page=500&with_supplier=1');
-    allItems = (data.data || data).filter(p => p.supplier_id);
+    const data = await authenticatedFetch('/products?status=critical,very_low,low,out_of_stock&per_page=500&with_supplier=1');
+    allItems = (data.data || data).filter(p => {
+      if (!p.supplier_id) return false;
+      // Only include out_of_stock items that have a maximum_quantity set
+      if (p.status === 'out_of_stock' && !(p.maximum_quantity > 0)) return false;
+      return true;
+    });
 
     // Build vendor filter options
     buildVendorFilter(allItems);
@@ -289,9 +306,10 @@ function clearFilters() {
 }
 
 function updateStats(items) {
-  document.getElementById('statCritical').textContent = items.filter(p => p.status === 'critical').length;
-  document.getElementById('statVeryLow').textContent  = items.filter(p => p.status === 'very_low').length;
-  document.getElementById('statLow').textContent      = items.filter(p => p.status === 'low').length;
+  document.getElementById('statOutOfStock').textContent = items.filter(p => p.status === 'out_of_stock').length;
+  document.getElementById('statCritical').textContent   = items.filter(p => p.status === 'critical').length;
+  document.getElementById('statVeryLow').textContent    = items.filter(p => p.status === 'very_low').length;
+  document.getElementById('statLow').textContent        = items.filter(p => p.status === 'low').length;
 }
 
 // ─── Vendor Section Rendering ─────────────────────────────────────────────────
@@ -322,18 +340,65 @@ function renderVendorSections(items) {
   sorted.forEach(group => renderVendorCard(container, group));
 }
 
+function sortHeaderHtml(label, col, extraClass = '') {
+  const isActive = currentSortBy === col;
+  let icon = '';
+  if (isActive) {
+    icon = currentSortDir === 'asc'
+      ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ms-1"><path d="M12 5l0 14"/><path d="M18 11l-6 -6"/><path d="M6 11l6 -6"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ms-1"><path d="M12 5l0 14"/><path d="M18 13l-6 6"/><path d="M6 13l6 6"/></svg>';
+  } else {
+    icon = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ms-1 text-muted opacity-50"><path d="M8 9l4 -4 4 4"/><path d="M16 15l-4 4 -4 -4"/></svg>';
+  }
+  const activeStyle = isActive ? 'color:inherit;' : 'color:inherit;';
+  return `<th class="${extraClass}" style="cursor:pointer;user-select:none;" onclick="sortColumn('${col}')">${label}${icon}</th>`;
+}
+
+function compareItems(a, b) {
+  let aVal, bVal, cmp;
+  switch (currentSortBy) {
+    case 'sku':
+      aVal = (a.sku || '').toLowerCase(); bVal = (b.sku || '').toLowerCase();
+      cmp = aVal.localeCompare(bVal);
+      return currentSortDir === 'asc' ? cmp : -cmp;
+    case 'description':
+      aVal = (a.description || '').toLowerCase(); bVal = (b.description || '').toLowerCase();
+      cmp = aVal.localeCompare(bVal);
+      return currentSortDir === 'asc' ? cmp : -cmp;
+    case 'quantity_available':
+      aVal = a.quantity_available ?? 0; bVal = b.quantity_available ?? 0;
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    case 'reorder_point':
+      aVal = a.reorder_point ?? 0; bVal = b.reorder_point ?? 0;
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    case 'days_until_stockout':
+      aVal = a.days_until_stockout ?? 9999; bVal = b.days_until_stockout ?? 9999;
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    case 'unit_cost':
+      aVal = a.unit_cost ?? 0; bVal = b.unit_cost ?? 0;
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    default: // 'status' — urgency order, then days
+      const urgencyDiff = (URGENCY_ORDER[a.status] ?? 99) - (URGENCY_ORDER[b.status] ?? 99);
+      if (urgencyDiff !== 0) return urgencyDiff;
+      return (a.days_until_stockout ?? 9999) - (b.days_until_stockout ?? 9999);
+  }
+}
+
+function sortColumn(col) {
+  if (currentSortBy === col) {
+    currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSortBy = col;
+    currentSortDir = 'asc';
+  }
+  renderVendorSections(filteredItems);
+}
+
 function renderVendorCard(container, group) {
   const supplier = group.supplier;
   const sid = supplier.id;
 
-  // Sort items by urgency then days-to-stockout asc
-  const items = [...group.items].sort((a, b) => {
-    const urgencyDiff = (URGENCY_ORDER[a.status] ?? 99) - (URGENCY_ORDER[b.status] ?? 99);
-    if (urgencyDiff !== 0) return urgencyDiff;
-    const daysA = a.days_until_stockout ?? 9999;
-    const daysB = b.days_until_stockout ?? 9999;
-    return daysA - daysB;
-  });
+  const items = [...group.items].sort(compareItems);
 
   const card = document.createElement('div');
   card.className = 'card mb-3';
@@ -361,16 +426,16 @@ function renderVendorCard(container, group) {
         <thead>
           <tr>
             <th style="width:36px"></th>
-            <th>SKU</th>
-            <th>Description</th>
-            <th class="text-end">Available</th>
-            <th class="text-end">Reorder Pt</th>
+            ${sortHeaderHtml('SKU', 'sku')}
+            ${sortHeaderHtml('Description', 'description')}
+            ${sortHeaderHtml('Available', 'quantity_available', 'text-end')}
+            ${sortHeaderHtml('Reorder Pt', 'reorder_point', 'text-end')}
             <th class="text-end">On Order</th>
-            <th class="text-end">Days Left</th>
-            <th class="text-end" style="width:120px">Order Qty</th>
-            <th class="text-end">Unit Cost</th>
+            ${sortHeaderHtml('Days Left', 'days_until_stockout', 'text-end')}
+            <th class="text-end" style="width:140px">Order Qty</th>
+            ${sortHeaderHtml('Pack Cost', 'unit_cost', 'text-end')}
             <th class="text-end">Line Total</th>
-            <th style="width:90px">Status</th>
+            ${sortHeaderHtml('Status', 'status', '')}
           </tr>
         </thead>
         <tbody id="vendorBody-${sid}">
@@ -394,9 +459,13 @@ function renderVendorCard(container, group) {
     }
   });
 
-  // Auto-select items that have a suggested qty > 0
+  // Auto-select items that have a suggested qty > 0 or are out_of_stock with a qty set
   items.forEach(p => {
-    if ((p.suggested_order_qty || 0) > 0) {
+    const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
+    const displayQty = packSize > 1
+      ? Math.ceil((p.suggested_order_qty || 0) / packSize)
+      : (p.suggested_order_qty || 0);
+    if (displayQty > 0) {
       const cb = document.getElementById(`check-${p.id}`);
       if (cb) { cb.checked = true; onCheckChange(p.id, sid); }
     }
@@ -404,23 +473,35 @@ function renderVendorCard(container, group) {
 }
 
 function renderItemRow(p, sid) {
-  const suggestedQty = p.suggested_order_qty || 0;
+  const packSize     = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
+  const isPack       = packSize > 1;
+  const suggestedEaches = p.suggested_order_qty || 0;
+  // For pack products show suggested qty in packs (ceiling); for eaches show as-is
+  const suggestedQty = isPack ? Math.ceil(suggestedEaches / packSize) : suggestedEaches;
   const available    = p.quantity_available ?? 0;
   const onOrder      = p.on_order_qty ?? 0;
   const reorderPt    = p.reorder_point ?? '-';
-  const unitCost     = p.unit_cost ?? 0;
+  const unitCost     = p.unit_cost ?? 0;  // unit_cost = pack cost for pack products
+  const packLabel    = isPack ? (p.purchase_uom || 'packs') : (p.stock_uom || 'EA');
 
-  const daysDisplay = p.days_until_stockout > 0
+  const daysDisplay = p.days_until_stockout != null && p.days_until_stockout > 0
     ? `<span class="badge ${p.days_until_stockout <= 3 ? 'bg-danger-lt text-danger' : p.days_until_stockout <= 7 ? 'bg-warning-lt text-warning' : 'bg-secondary-lt'}">${p.days_until_stockout}d</span>`
     : '<span class="text-muted">—</span>';
 
   const statusBadge = statusBadgeHtml(p.status);
 
-  const availColor = p.status === 'critical' ? 'text-danger fw-bold' :
+  const availColor = (p.status === 'critical' || p.status === 'out_of_stock') ? 'text-danger fw-bold' :
                      p.status === 'very_low' ? 'text-warning fw-bold' : 'text-info';
 
+  const rowClass = (p.status === 'critical' || p.status === 'out_of_stock') ? 'table-danger-lt' :
+                   p.status === 'very_low' ? 'table-warning-lt' : '';
+
+  const packCostLabel = isPack
+    ? `<br><small class="text-muted">/ ${packLabel} (${packSize} EA)</small>`
+    : '';
+
   return `
-    <tr id="row-${p.id}" class="${p.status === 'critical' ? 'table-danger-lt' : p.status === 'very_low' ? 'table-warning-lt' : ''}">
+    <tr id="row-${p.id}" class="${rowClass}">
       <td class="text-center">
         <input type="checkbox" class="form-check-input" id="check-${p.id}" data-product-id="${p.id}" data-supplier-id="${sid}">
       </td>
@@ -435,13 +516,16 @@ function renderItemRow(p, sid) {
       <td class="text-end text-muted">${onOrder > 0 ? `<span class="text-primary">${onOrder.toLocaleString()}</span>` : '—'}</td>
       <td class="text-end">${daysDisplay}</td>
       <td class="text-end">
-        <input type="number" class="form-control form-control-sm text-end" id="qty-${p.id}"
-          min="1" step="1" value="${suggestedQty || ''}"
-          placeholder="Qty"
-          data-product-id="${p.id}" data-supplier-id="${sid}" data-unit-cost="${unitCost}"
-          style="width:90px;display:inline-block;">
+        <div class="d-flex align-items-center justify-content-end gap-1">
+          <input type="number" class="form-control form-control-sm text-end" id="qty-${p.id}"
+            min="1" step="1" value="${suggestedQty || ''}"
+            placeholder="Qty"
+            data-product-id="${p.id}" data-supplier-id="${sid}" data-unit-cost="${unitCost}" data-pack-size="${packSize}"
+            style="width:80px;display:inline-block;">
+          <small class="text-muted text-nowrap">${escapeHtml(packLabel)}</small>
+        </div>
       </td>
-      <td class="text-end text-muted">${formatCurrency(unitCost)}</td>
+      <td class="text-end text-muted">${formatCurrency(unitCost)}${packCostLabel}</td>
       <td class="text-end fw-bold" id="lineTotal-${p.id}">—</td>
       <td>${statusBadge}</td>
     </tr>
