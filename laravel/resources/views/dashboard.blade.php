@@ -127,7 +127,6 @@
                           <th class="sortable" data-sort="status" style="cursor: pointer;">
                             Status <span class="sort-icon"></span>
                           </th>
-                          <th class="w-1"></th>
                         </tr>
                       </thead>
                       <tbody id="inventoryTableBody"></tbody>
@@ -279,10 +278,8 @@
                           <label class="form-label required">Storage Location</label>
                           <select class="form-select" id="storageLocationSelect" onchange="handleStorageLocationSelect()">
                             <option value="">Select a storage location...</option>
-                            <option value="custom">Custom Location (enter manually)</option>
                           </select>
-                          <input type="text" class="form-control mt-2" id="locationName" name="location" placeholder="e.g., Warehouse A, Bin 23" style="display: none;">
-                          <small class="form-hint">Select hierarchical location or enter custom</small>
+                          <small class="form-hint">Select from configured storage locations</small>
                         </div>
                         <div class="col-md-3">
                           <label class="form-label required">Quantity</label>
@@ -580,12 +577,12 @@
                   <table class="table table-sm table-vcenter">
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th class="text-end">Quantity</th>
-                        <th class="text-end">Before</th>
-                        <th class="text-end">After</th>
-                        <th>Reference</th>
+                        <th class="sortable-activity" data-col="transaction_date" style="cursor:pointer;">Date <span class="activity-sort-icon" data-col="transaction_date"></span></th>
+                        <th class="sortable-activity" data-col="type" style="cursor:pointer;">Type <span class="activity-sort-icon" data-col="type"></span></th>
+                        <th class="text-end sortable-activity" data-col="quantity" style="cursor:pointer;">Quantity <span class="activity-sort-icon" data-col="quantity"></span></th>
+                        <th class="text-end sortable-activity" data-col="quantity_before" style="cursor:pointer;">Before <span class="activity-sort-icon" data-col="quantity_before"></span></th>
+                        <th class="text-end sortable-activity" data-col="quantity_after" style="cursor:pointer;">After <span class="activity-sort-icon" data-col="quantity_after"></span></th>
+                        <th class="sortable-activity" data-col="reference_number" style="cursor:pointer;">Reference <span class="activity-sort-icon" data-col="reference_number"></span></th>
                         <th>User</th>
                         <th>Notes</th>
                       </tr>
@@ -1341,7 +1338,7 @@
         const availableDisplay = formatAvailableDisplay(product);
 
         return `
-          <tr>
+          <tr onclick="viewProduct(${product.id})" style="cursor: pointer;">
             <td><span class="text-muted">${product.sku}</span></td>
             <td>${product.description}</td>
             <td>${locationsDisplay}</td>
@@ -1349,11 +1346,6 @@
             <td class="text-end">${committedDisplay}</td>
             <td class="text-end">${availableDisplay}</td>
             <td>${statusBadge}</td>
-            <td class="table-actions">
-              <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="viewProduct(${product.id})" title="View">
-                <i class="ti ti-eye"></i>
-              </button>
-            </td>
           </tr>
         `;
       }).join('');
@@ -1660,177 +1652,192 @@
         const suggestedOrderQty = product.suggested_order_qty || 0;
 
         document.getElementById('productDetailsView').innerHTML = `
-          ${product.photo_url ? `
-          <div class="row mb-3">
-            <div class="col-md-12 text-center">
-              <img src="${product.photo_url}" alt="Product photo" class="img-fluid rounded" style="max-height: 200px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px;">
-              <div class="mt-1">
-                <button class="btn btn-sm btn-outline-secondary" onclick="triggerProductPhotoUpload(${product.id})">
-                  <i class="ti ti-photo-edit me-1"></i>Change Photo
-                </button>
-                <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteProductPhoto(${product.id})">
-                  <i class="ti ti-trash me-1"></i>Remove
-                </button>
+          <!-- Header: identity + status -->
+          <div class="d-flex align-items-start gap-3 mb-3">
+            ${product.photo_url ? `
+              <div class="flex-shrink-0">
+                <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                <div class="text-center mt-1">
+                  <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-photo-edit"></i> Change</a>
+                </div>
+                <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
               </div>
-              <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
-            </div>
-          </div>
-          ` : `
-          <div class="row mb-3">
-            <div class="col-md-12 text-center">
-              <div class="border rounded p-3 text-muted" style="background: #f8f9fa;">
-                <i class="ti ti-photo" style="font-size: 2rem;"></i>
-                <p class="mb-1 mt-1">No product photo</p>
-                <button class="btn btn-sm btn-outline-primary" onclick="triggerProductPhotoUpload(${product.id})">
-                  <i class="ti ti-upload me-1"></i>Upload Photo
-                </button>
+            ` : `
+              <div class="flex-shrink-0 text-center" style="width:80px;">
+                <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                  <i class="ti ti-photo" style="font-size:1.5rem;"></i>
+                </div>
+                <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-upload"></i> Upload</a>
+                <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
               </div>
-              <input type="file" id="productPhotoInput_${product.id}" accept="image/*" style="display:none" onchange="uploadProductPhoto(${product.id}, this)">
-            </div>
-          </div>
-          `}
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <label class="form-label fw-bold">SKU</label>
-              <p>${product.sku}</p>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-bold">Part Number</label>
-              <p>${product.part_number || '-'}</p>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-bold">Finish</label>
-              <p>${product.finish ? `${product.finish} - ${product.finish_name || product.finish}` : '-'}</p>
-            </div>
-          </div>
-          <div class="row mb-3">
-            <div class="col-md-12">
-              <label class="form-label fw-bold">Description</label>
-              <p>${product.description}</p>
-              ${product.long_description ? `<p class="text-muted">${product.long_description}</p>` : ''}
+            `}
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                <span class="fw-bold fs-5">${product.sku}</span>
+                ${getStatusBadge(product.status, product.on_order_qty)}
+                ${product.categories && product.categories.length > 0
+                  ? product.categories.map(c => `<span class="badge text-bg-info">${c.name}</span>`).join('')
+                  : ''}
+              </div>
+              <div class="text-body-secondary mb-1">${product.description}</div>
+              ${product.long_description ? `<div class="text-muted small">${product.long_description}</div>` : ''}
+              <div class="mt-1 small text-muted">
+                ${product.part_number ? `Part #: <strong class="text-body">${product.part_number}</strong>` : ''}
+                ${product.part_number && product.finish ? ' &nbsp;·&nbsp; ' : ''}
+                ${product.finish ? `Finish: <strong class="text-body">${product.finish}${product.finish_name ? ' – ' + product.finish_name : ''}</strong>` : ''}
+              </div>
             </div>
           </div>
 
-          <hr>
-          <h5 class="mb-3">Pricing</h5>
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-bold">Unit Cost</label>
-              <p><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.unit_cost ? `data-actual-value="${product.unit_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${formatPrice(product.unit_cost)}</span></p>
+          <!-- Inventory quantities -->
+          <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">On Hand${product.pack_size > 1 ? ' (packs)' : ''}</div>
+                  <div class="h3 mb-0">${formatOnHandDisplay(product)}</div>
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_on_hand ?? 0).toLocaleString()} ea</div>` : ''}
+                </div>
+              </div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label fw-bold">Net Cost</label>
-              <p><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.net_cost ? `data-actual-value="${product.net_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${product.net_cost ? formatPrice(product.net_cost) : (canViewPricing() ? 'Not set' : formatPrice(null))}</span></p>
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">Committed</div>
+                  <div class="h3 mb-0">${formatCommittedDisplay(product, false)}</div>
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_committed ?? 0).toLocaleString()} ea</div>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">Available</div>
+                  <div class="h3 mb-0 text-success">${formatAvailableDisplay(product)}</div>
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_available ?? 0).toLocaleString()} ea</div>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card card-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="subheader">On Order</div>
+                  <div class="h3 mb-0">${(product.on_order_qty ?? 0).toLocaleString()}</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <hr>
-          <h5 class="mb-3">Inventory Status ${product.pack_size > 1 ? '<small class="text-muted">(showing packs)</small>' : ''}</h5>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label fw-bold">On Hand</label>
-              <p>${formatOnHandDisplay(product)}</p>
-              ${product.pack_size > 1 ? `<small class="text-muted">${(product.quantity_on_hand ?? 0).toLocaleString()} eaches</small>` : ''}
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Committed</label>
-              <p>${formatCommittedDisplay(product, false)}</p>
-              ${product.pack_size > 1 ? `<small class="text-muted">${(product.quantity_committed ?? 0).toLocaleString()} eaches</small>` : ''}
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Available</label>
-              <p class="text-success fw-bold">${formatAvailableDisplay(product)}</p>
-              ${product.pack_size > 1 ? `<small class="text-muted">${(product.quantity_available ?? 0).toLocaleString()} eaches</small>` : ''}
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">On Order</label>
-              <p>${(product.on_order_qty ?? 0).toLocaleString()}</p>
-            </div>
-          </div>
           ${needsReorder ? `
             <div class="alert alert-warning mb-3">
               <h4 class="alert-title"><i class="ti ti-alert-triangle me-2"></i>Reorder Alert</h4>
-              <p class="mb-2">Available quantity (${product.quantity_available}) is at or below reorder point (${product.reorder_point}).</p>
-              ${suggestedOrderQty > 0 ? `<p class="mb-0"><strong>Suggested Order:</strong> ${suggestedOrderQty} units</p>` : ''}
+              <p class="mb-0">Available (${product.quantity_available}) is at or below reorder point (${product.reorder_point}).${suggestedOrderQty > 0 ? ` <strong>Suggested order: ${suggestedOrderQty} units.</strong>` : ''}</p>
             </div>
           ` : ''}
           ${daysUntilStockout && daysUntilStockout <= 30 ? `
             <div class="alert alert-${daysUntilStockout <= 7 ? 'danger' : 'info'} mb-3">
               <h4 class="alert-title"><i class="ti ti-clock-exclamation me-2"></i>Stockout Warning</h4>
-              <p class="mb-0">At current usage rate, inventory will last approximately <strong>${daysUntilStockout} days</strong>.</p>
+              <p class="mb-0">Estimated stockout in <strong>${daysUntilStockout} days</strong> at current usage rate.</p>
             </div>
           ` : ''}
 
-          <hr>
-          <h5 class="mb-3">Stock Management</h5>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Reorder Point</label>
-              <p>${product.reorder_point || '-'}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Safety Stock</label>
-              <p>${product.safety_stock || '-'}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Avg Daily Use</label>
-              <p>${product.average_daily_use || '-'}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Min / Max</label>
-              <p>${product.minimum_quantity} / ${product.maximum_quantity || '-'}</p>
-            </div>
-          </div>
-
-          <hr>
-          <h5 class="mb-3">Unit of Measure</h5>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Stock UOM</label>
-              <p>${product.unit_of_measure} ${product.uom_name ? '- ' + product.uom_name : ''}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Pack Size</label>
-              <p>${product.pack_size || 1}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Min Order Qty</label>
-              <p>${product.min_order_qty || '-'}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Order Multiple</label>
-              <p>${product.order_multiple || '-'}</p>
-            </div>
-          </div>
-
-          <hr>
-          <h5 class="mb-3">Supplier</h5>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <label class="form-label fw-bold">Supplier</label>
-              <p>${product.supplier ? product.supplier.name : '-'}</p>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-bold">Supplier SKU</label>
-              <p>${product.supplier_sku || '-'}</p>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-bold">Lead Time</label>
-              <p>${product.lead_time_days ? product.lead_time_days + ' days' : '-'}</p>
-            </div>
-          </div>
-
-          <hr>
-          <div class="row">
+          <!-- Details grid -->
+          <div class="row g-3">
+            <!-- Pricing -->
             <div class="col-md-6">
-              <label class="form-label fw-bold">Categories</label>
-              <p>${product.categories && product.categories.length > 0
-                ? product.categories.map(c => `<span class="badge text-bg-info me-1">${c.name}</span>`).join('')
-                : '-'}</p>
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Pricing</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <div class="text-muted small">Unit Cost</div>
+                      <div><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.unit_cost ? `data-actual-value="${product.unit_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${formatPrice(product.unit_cost)}</span></div>
+                    </div>
+                    <div class="col-6">
+                      <div class="text-muted small">Net Cost</div>
+                      <div><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.net_cost ? `data-actual-value="${product.net_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${product.net_cost ? formatPrice(product.net_cost) : (canViewPricing() ? 'Not set' : formatPrice(null))}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+            <!-- Supplier -->
             <div class="col-md-6">
-              <label class="form-label fw-bold">Status</label>
-              <p>${getStatusBadge(product.status, product.on_order_qty)}</p>
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Supplier</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-5">
+                      <div class="text-muted small">Supplier</div>
+                      <div>${product.supplier ? product.supplier.name : '-'}</div>
+                    </div>
+                    <div class="col-4">
+                      <div class="text-muted small">Supplier SKU</div>
+                      <div>${product.supplier_sku || '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Lead Time</div>
+                      <div>${product.lead_time_days ? product.lead_time_days + 'd' : '-'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Stock management -->
+            <div class="col-md-6">
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Stock Management</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-3">
+                      <div class="text-muted small">Min</div>
+                      <div>${product.minimum_quantity ?? '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Max</div>
+                      <div>${product.maximum_quantity || '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Reorder Pt.</div>
+                      <div>${product.reorder_point || '-'}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Safety Stock</div>
+                      <div>${product.safety_stock || '-'}</div>
+                    </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Avg Daily Use</div>
+                      <div>${product.average_daily_use || '-'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- UOM -->
+            <div class="col-md-6">
+              <div class="card card-sm h-100">
+                <div class="card-header py-2"><strong>Unit of Measure</strong></div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <div class="text-muted small">Stock UOM</div>
+                      <div>${product.unit_of_measure}${product.uom_name ? ' – ' + product.uom_name : ''}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Pack Size</div>
+                      <div>${product.pack_size || 1}</div>
+                    </div>
+                    <div class="col-3">
+                      <div class="text-muted small">Min Order</div>
+                      <div>${product.min_order_qty || '-'}</div>
+                    </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Order Multiple</div>
+                      <div>${product.order_multiple || '-'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         `;
@@ -2315,8 +2322,9 @@
 
         const availableClass = location.quantity_available <= 0 ? 'text-danger' : 'text-success';
 
-        // Display storage location name if available, otherwise fall back to location string
-        const locationDisplay = location.storage_location ? location.storage_location.name : location.location;
+        const locationDisplay = location.storage_location
+          ? location.storage_location.full_path || location.storage_location.name
+          : '<span class="text-muted fst-italic">Unknown location</span>';
 
         return `
           <tr>
@@ -2361,27 +2369,11 @@
 
     function handleStorageLocationSelect() {
       const select = document.getElementById('storageLocationSelect');
-      const locationName = document.getElementById('locationName');
       const storageLocationId = document.getElementById('storageLocationId');
 
-      if (select.value === 'custom') {
-        // Show custom location input
-        locationName.style.display = 'block';
-        locationName.required = true;
-        locationName.value = '';
-        storageLocationId.value = '';
-        locationName.focus();
-      } else if (select.value) {
-        // Hide custom input and use selected storage location
-        locationName.style.display = 'none';
-        locationName.required = false;
-        locationName.value = select.options[select.selectedIndex].text.trim();
+      if (select.value) {
         storageLocationId.value = select.value;
       } else {
-        // Nothing selected
-        locationName.style.display = 'none';
-        locationName.required = false;
-        locationName.value = '';
         storageLocationId.value = '';
       }
     }
@@ -2392,7 +2384,6 @@
       document.getElementById('locationId').value = '';
       document.getElementById('storageLocationId').value = '';
       document.getElementById('storageLocationSelect').value = '';
-      document.getElementById('locationName').style.display = 'none';
       document.getElementById('locationFormCard').style.display = 'block';
       document.getElementById('storageLocationSelect').focus();
     }
@@ -2410,18 +2401,7 @@
       document.getElementById('locationId').value = location.id;
       document.getElementById('storageLocationId').value = location.storage_location_id || '';
 
-      // If location has a storage_location_id, select it in dropdown
-      if (location.storage_location_id) {
-        document.getElementById('storageLocationSelect').value = location.storage_location_id;
-        document.getElementById('locationName').style.display = 'none';
-        document.getElementById('locationName').value = location.location;
-      } else {
-        // Custom location
-        document.getElementById('storageLocationSelect').value = 'custom';
-        document.getElementById('locationName').value = location.location;
-        document.getElementById('locationName').style.display = 'block';
-        document.getElementById('locationName').required = true;
-      }
+      document.getElementById('storageLocationSelect').value = location.storage_location_id || '';
 
       document.getElementById('locationQuantity').value = location.quantity;
       document.getElementById('locationCommitted').value = location.quantity_committed;
@@ -2440,7 +2420,10 @@
         return;
       }
 
-      if (!confirm(`Are you sure you want to delete the location "${location.location}"?`)) {
+      const locationName = location.storage_location
+        ? (location.storage_location.full_path || location.storage_location.name)
+        : 'this location';
+      if (!confirm(`Are you sure you want to delete "${locationName}"?`)) {
         return;
       }
 
@@ -2468,9 +2451,14 @@
 
       const locationId = document.getElementById('locationId').value;
       const storageLocationId = document.getElementById('storageLocationId').value;
+
+      if (!storageLocationId) {
+        showNotification('Please select a storage location', 'warning');
+        return;
+      }
+
       const formData = {
-        storage_location_id: storageLocationId || null,
-        location: document.getElementById('locationName').value,
+        storage_location_id: storageLocationId,
         quantity: parseInt(document.getElementById('locationQuantity').value),
         quantity_committed: parseInt(document.getElementById('locationCommitted').value),
         is_primary: document.getElementById('locationPrimary').checked,
@@ -2524,16 +2512,20 @@
       toSelect.innerHTML = '<option value="">Select destination...</option>';
 
       currentProductLocations.forEach(location => {
+        const locationName = location.storage_location
+          ? (location.storage_location.full_path || location.storage_location.name)
+          : 'Unknown location';
+
         if (location.quantity_available > 0) {
           const option = document.createElement('option');
           option.value = location.id;
-          option.textContent = `${location.location} (Available: ${location.quantity_available})`;
+          option.textContent = `${locationName} (Available: ${location.quantity_available})`;
           fromSelect.appendChild(option);
         }
 
         const toOption = document.createElement('option');
         toOption.value = location.id;
-        toOption.textContent = location.location;
+        toOption.textContent = locationName;
         toSelect.appendChild(toOption);
       });
     }
@@ -2708,6 +2700,30 @@
 
     // ========== ACTIVITY/TRANSACTIONS ==========
     let currentProductTransactions = [];
+    let activitySortCol = 'transaction_date';
+    let activitySortDir = 'desc';
+
+    function sortActivityTable(col) {
+      if (activitySortCol === col) {
+        activitySortDir = activitySortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        activitySortCol = col;
+        activitySortDir = col === 'transaction_date' ? 'desc' : 'asc';
+      }
+      renderProductActivity();
+      updateActivitySortIcons();
+    }
+
+    function updateActivitySortIcons() {
+      document.querySelectorAll('.activity-sort-icon').forEach(icon => {
+        const col = icon.dataset.col;
+        if (col === activitySortCol) {
+          icon.textContent = activitySortDir === 'asc' ? ' ↑' : ' ↓';
+        } else {
+          icon.textContent = '';
+        }
+      });
+    }
 
     async function loadProductActivity(productId) {
       try {
@@ -2725,6 +2741,7 @@
         const data = await response.json();
         currentProductTransactions = Array.isArray(data) ? data : (data.data || []);
         renderProductActivity();
+        updateActivitySortIcons();
 
         document.getElementById('activityLoading').style.display = 'none';
         document.getElementById('activityContent').style.display = 'block';
@@ -2743,7 +2760,22 @@
         return;
       }
 
-      tbody.innerHTML = currentProductTransactions.map(transaction => {
+      const sorted = [...currentProductTransactions].sort((a, b) => {
+        let valA = a[activitySortCol] ?? '';
+        let valB = b[activitySortCol] ?? '';
+        if (activitySortCol === 'transaction_date') {
+          valA = new Date(valA).getTime();
+          valB = new Date(valB).getTime();
+        } else if (typeof valA === 'string') {
+          valA = valA.toLowerCase();
+          valB = (valB + '').toLowerCase();
+        }
+        if (valA < valB) return activitySortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return activitySortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      tbody.innerHTML = sorted.map(transaction => {
         const date = new Date(transaction.transaction_date);
         const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
 
@@ -3788,13 +3820,21 @@
     // Search input event listener
     document.getElementById('searchInput').addEventListener('input', handleSearch);
 
-    // Sort column click handlers
+    // Sort column click handlers (main inventory table)
     document.querySelectorAll('.sortable').forEach(th => {
       th.addEventListener('click', function() {
         const column = this.dataset.sort;
         if (column) {
           sortByColumn(column);
         }
+      });
+    });
+
+    // Activity table sort handlers
+    document.querySelectorAll('.sortable-activity').forEach(th => {
+      th.addEventListener('click', function() {
+        const col = this.dataset.col;
+        if (col) sortActivityTable(col);
       });
     });
     function htmlEscape(text) {

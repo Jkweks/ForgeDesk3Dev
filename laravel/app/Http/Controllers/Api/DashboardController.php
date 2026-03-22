@@ -81,7 +81,8 @@ class DashboardController extends Controller
             $statsQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
+                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                  ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
@@ -120,7 +121,8 @@ class DashboardController extends Controller
             $inventoryQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                   ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
+                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                  ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
@@ -196,7 +198,8 @@ class DashboardController extends Controller
                 return $q->where(function ($sq) use ($searchLower) {
                     $sq->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                       ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"]);
+                       ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                       ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
                 });
             })
             ->with('categories');
