@@ -197,11 +197,18 @@
         const data = await authenticatedFetch(`/products?${params}`);
         csProducts = data.data || [];
 
-        // Calculate stats
+        // Calculate stats — use pack-based quantities for pack products (unit_cost is per pack)
         const criticalCount = csProducts.filter(p => p.status === 'critical').length;
         const outOfStockCount = csProducts.filter(p => p.status === 'out_of_stock').length;
-        const totalValue = csProducts.reduce((sum, p) => sum + (p.quantity_available * (p.unit_cost || 0)), 0);
-        const emergencyPO = csProducts.reduce((sum, p) => sum + ((p.suggested_order_qty || 0) * (p.unit_cost || 0)), 0);
+        const totalValue = csProducts.reduce((sum, p) => {
+          const qty = (p.pack_size > 1) ? (p.quantity_available_packs || 0) : (p.quantity_available || 0);
+          return sum + qty * (p.unit_cost || 0);
+        }, 0);
+        const emergencyPO = csProducts.reduce((sum, p) => {
+          const sqty = p.suggested_order_qty || 0;
+          const packs = (p.pack_size > 1) ? Math.ceil(sqty / p.pack_size) : sqty;
+          return sum + packs * (p.unit_cost || 0);
+        }, 0);
 
         document.getElementById('statCriticalCount').textContent = criticalCount.toLocaleString();
         document.getElementById('statOutOfStock').textContent = outOfStockCount.toLocaleString();

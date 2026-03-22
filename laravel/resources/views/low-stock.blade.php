@@ -168,11 +168,18 @@
 
         lsProducts = data.data || [];
 
-        // Calculate stats
-        const totalValue = lsProducts.reduce((sum, p) => sum + (p.quantity_available * (p.unit_cost || 0)), 0);
+        // Calculate stats — use pack-based quantities for pack products (unit_cost is per pack)
+        const totalValue = lsProducts.reduce((sum, p) => {
+          const qty = (p.pack_size > 1) ? (p.quantity_available_packs || 0) : (p.quantity_available || 0);
+          return sum + qty * (p.unit_cost || 0);
+        }, 0);
         const daysValues = lsProducts.filter(p => p.days_until_stockout > 0).map(p => p.days_until_stockout);
         const avgDays = daysValues.length > 0 ? daysValues.reduce((a, b) => a + b, 0) / daysValues.length : 0;
-        const suggestedPO = lsProducts.reduce((sum, p) => sum + ((p.suggested_order_qty || 0) * (p.unit_cost || 0)), 0);
+        const suggestedPO = lsProducts.reduce((sum, p) => {
+          const sqty = p.suggested_order_qty || 0;
+          const packs = (p.pack_size > 1) ? Math.ceil(sqty / p.pack_size) : sqty;
+          return sum + packs * (p.unit_cost || 0);
+        }, 0);
 
         document.getElementById('statLowStockCount').textContent = lsProducts.length.toLocaleString();
         document.getElementById('statTotalValue').textContent = `$${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
