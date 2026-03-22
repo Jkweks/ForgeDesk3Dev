@@ -342,17 +342,23 @@ class Product extends Model
      */
     public function getSuggestedOrderQtyAttribute()
     {
-        // If below reorder point, suggest ordering up to maximum quantity (or 2x reorder point if no max)
-        if ($this->reorder_point && $this->quantity_available <= $this->reorder_point) {
+        if (!$this->reorder_point) return 0;
+
+        $onOrder = $this->on_order_qty ?? 0;
+
+        // Trigger condition matches needsReorder(): available + on_order vs reorder_point
+        if (($this->quantity_available + $onOrder) <= $this->reorder_point) {
             $targetQty = $this->maximum_quantity ?: ($this->reorder_point * 2);
-            $suggestedQty = $targetQty - $this->quantity_on_hand - $this->on_order_qty;
+
+            // Order enough to bring available + on_order up to target (not on_hand up to target)
+            $suggestedQty = $targetQty - $this->quantity_available - $onOrder;
 
             // Round up to order multiple if specified
             if ($this->order_multiple && $this->order_multiple > 1) {
                 $suggestedQty = ceil($suggestedQty / $this->order_multiple) * $this->order_multiple;
             }
 
-            // Ensure at least minimum order quantity
+            // Enforce minimum order quantity
             if ($this->min_order_qty && $suggestedQty < $this->min_order_qty) {
                 $suggestedQty = $this->min_order_qty;
             }

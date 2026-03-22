@@ -195,12 +195,6 @@
                   <button class="btn btn-primary" id="editProductBtn" onclick="toggleEditMode()" data-permission="inventory.edit">
                     <i class="ti ti-edit me-1"></i>Edit Product
                   </button>
-                  <div id="editProductActions" style="display: none;">
-                    <button class="btn btn-primary me-2" onclick="saveProductChanges()" data-permission="inventory.edit">
-                      <i class="ti ti-check me-1"></i>Save Changes
-                    </button>
-                    <button class="btn btn-link" onclick="cancelEditMode()">Cancel</button>
-                  </div>
                 </div>
               </div>
               <div id="productDetailsView"></div>
@@ -754,6 +748,12 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-link" data-bs-dismiss="modal">Close</button>
+          <div id="editProductFooterActions" style="display: none;" class="ms-auto d-flex gap-2">
+            <button type="button" class="btn btn-link" onclick="cancelEditMode()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveProductChanges()" data-permission="inventory.edit">
+              <i class="ti ti-check me-1"></i>Save Changes
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1647,7 +1647,9 @@
         document.getElementById('viewProductModalTitle').textContent = `${product.sku} - ${product.description}`;
 
         // Populate details tab
-        const needsReorder = product.reorder_point && product.quantity_available <= product.reorder_point;
+        const onOrderQty = product.on_order_qty || 0;
+        // Mirror model's needsReorder(): trigger when available + on_order <= reorder_point
+        const needsReorder = product.reorder_point && (product.quantity_available + onOrderQty) <= product.reorder_point;
         const daysUntilStockout = product.days_until_stockout;
         const suggestedOrderQty = product.suggested_order_qty || 0;
 
@@ -1731,7 +1733,10 @@
           ${needsReorder ? `
             <div class="alert alert-warning mb-3">
               <h4 class="alert-title"><i class="ti ti-alert-triangle me-2"></i>Reorder Alert</h4>
-              <p class="mb-0">Available (${product.quantity_available}) is at or below reorder point (${product.reorder_point}).${suggestedOrderQty > 0 ? ` <strong>Suggested order: ${suggestedOrderQty} units.</strong>` : ''}</p>
+              <p class="mb-0">
+                Available <strong>${product.quantity_available}</strong>${onOrderQty > 0 ? ` + ${onOrderQty} on order` : ''} is at or below reorder point of <strong>${product.reorder_point}</strong>.
+                ${suggestedOrderQty > 0 ? `<strong>Suggested order: ${suggestedOrderQty} ${product.pack_size > 1 ? 'eaches' : 'units'}.</strong>` : ''}
+              </p>
             </div>
           ` : ''}
           ${daysUntilStockout && daysUntilStockout <= 30 ? `
@@ -1878,7 +1883,7 @@
     async function toggleEditMode() {
       isEditMode = true;
       document.getElementById('editProductBtn').style.display = 'none';
-      document.getElementById('editProductActions').style.display = 'block';
+      document.getElementById('editProductFooterActions').style.display = 'flex';
       document.getElementById('productDetailsView').style.display = 'none';
       document.getElementById('productEditForm').style.display = 'block';
 
@@ -1897,7 +1902,7 @@
     function cancelEditMode() {
       isEditMode = false;
       document.getElementById('editProductBtn').style.display = 'block';
-      document.getElementById('editProductActions').style.display = 'none';
+      document.getElementById('editProductFooterActions').style.display = 'none';
       document.getElementById('productDetailsView').style.display = 'block';
       document.getElementById('productEditForm').style.display = 'none';
     }
@@ -1914,12 +1919,24 @@
         globalFinishes.length > 0 ? Promise.resolve(globalFinishes) :
           apiCall('/finish-codes').then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => []),
         globalCategories.length > 0 ? Promise.resolve(globalCategories) :
-          apiCall('/categories?per_page=all').then(r => r.json()).then(data => Array.isArray(data) ? data : (data.data || [])).catch(() => []),
+          apiCall('/categories-tree').then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => []),
         globalSuppliers.length > 0 ? Promise.resolve(globalSuppliers) :
           apiCall('/suppliers?per_page=all').then(r => r.json()).then(data => Array.isArray(data) ? data : (data.data || [])).catch(() => []),
         globalUoms.length > 0 ? Promise.resolve(globalUoms) :
           apiCall('/unit-of-measures').then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => [])
       ]);
+
+      // Build hierarchical category options (tree format with indentation)
+      const selectedCatIds = product.categories ? product.categories.map(c => c.id) : [];
+      function buildCategoryOptions(nodes, level = 0) {
+        return nodes.map(c => {
+          const indent = '\u00A0'.repeat(level * 4);
+          const selected = selectedCatIds.includes(c.id) ? 'selected' : '';
+          const childOpts = c.children && c.children.length > 0 ? buildCategoryOptions(c.children, level + 1) : '';
+          return `<option value="${c.id}" ${selected}>${indent}${c.name}</option>${childOpts}`;
+        }).join('');
+      }
+      const categoryOptions = buildCategoryOptions(cats);
 
       document.getElementById('productEditForm').innerHTML = `
         <form id="editProductFormElement">
@@ -1978,13 +1995,10 @@
               </div>
               <div>
                 <label class="form-label small text-muted mb-1">Categories</label>
-                <select class="form-select form-select-sm" name="category_ids" multiple size="3">
-                  ${cats.map(c => {
-                    const isSelected = product.categories && product.categories.some(cat => cat.id === c.id);
-                    return `<option value="${c.id}" ${isSelected ? 'selected' : ''}>${c.name}</option>`;
-                  }).join('')}
+                <select class="form-select form-select-sm" name="category_ids" multiple size="4">
+                  ${categoryOptions}
                 </select>
-                <small class="form-hint">Hold Ctrl/Cmd to select multiple</small>
+                <small class="form-hint">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
               </div>
             </div>
           </div>
@@ -3507,8 +3521,8 @@
         const uomData = await uomResponse.json();
         unitOfMeasures = Array.isArray(uomData) ? uomData : [];
 
-        // Load categories
-        const categoriesResponse = await apiCall('/categories?per_page=all&with_parent=true');
+        // Load categories as tree (preserves hierarchy for the edit form)
+        const categoriesResponse = await apiCall('/categories-tree');
         const categoriesData = await categoriesResponse.json();
         categories = Array.isArray(categoriesData) ? categoriesData : [];
 
