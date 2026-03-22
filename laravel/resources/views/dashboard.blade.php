@@ -1638,6 +1638,7 @@
     }
 
     async function viewProduct(id) {
+      resetProductModal();
       try {
         currentProductId = id;
         const response = await apiCall(`/products/${id}`);
@@ -1873,11 +1874,38 @@
     let currentProductData = null;
     let isEditMode = false;
 
-    // Reset edit mode when the product modal is closed
-    document.getElementById('viewProductModal').addEventListener('hidden.bs.modal', function () {
-      if (isEditMode) {
-        cancelEditMode();
+    // Reset modal content completely — called on close and before each open
+    function resetProductModal() {
+      // Clear all content panes
+      document.getElementById('productDetailsView').innerHTML = '';
+      document.getElementById('productEditForm').innerHTML = '';
+
+      // Reset edit mode state and buttons
+      isEditMode = false;
+      document.getElementById('editProductBtn').style.display = 'block';
+      document.getElementById('editProductFooterActions').style.display = 'none';
+      document.getElementById('productDetailsView').style.display = 'block';
+      document.getElementById('productEditForm').style.display = 'none';
+
+      // Reset tab back to Details
+      const detailsTab = document.getElementById('details-tab');
+      if (detailsTab) {
+        const tabInstance = bootstrap.Tab.getOrCreateInstance(detailsTab);
+        tabInstance.show();
       }
+
+      // Reset badge counts
+      document.getElementById('locationsCount').textContent = '0';
+      document.getElementById('reservationsCount').textContent = '0';
+      document.getElementById('bomCount').textContent = '0';
+
+      // Reset modal title
+      document.getElementById('viewProductModalTitle').textContent = 'Product Details';
+    }
+
+    // Always reset on close — guards against dismissed-without-saving and stale data
+    document.getElementById('viewProductModal').addEventListener('hidden.bs.modal', function () {
+      resetProductModal();
     });
 
     async function toggleEditMode() {
