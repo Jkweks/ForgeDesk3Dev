@@ -1019,9 +1019,8 @@
 
       // Reset tab back to Details
       const detailsTab = document.getElementById('details-tab');
-      if (detailsTab) {
-        const tabInstance = bootstrap.Tab.getOrCreateInstance(detailsTab);
-        tabInstance.show();
+      if (detailsTab && window.bootstrap) {
+        window.bootstrap.Tab.getOrCreateInstance(detailsTab).show();
       }
 
       // Reset badge counts
