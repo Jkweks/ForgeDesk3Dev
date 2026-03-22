@@ -1,5 +1,5 @@
-{-- Shared product view/edit modal and all supporting JavaScript --}
-{-- Include this partial on any page that needs the product details modal --}
+{{-- Shared product view/edit modal and all supporting JavaScript --}}
+{{-- Include this partial on any page that needs the product details modal --}}
 
   <div class="modal modal-blur fade" id="viewProductModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
