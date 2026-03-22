@@ -366,6 +366,11 @@ class Product extends Model
                 $suggestedQty = $this->min_order_qty;
             }
 
+            // For pack products, always round up to a whole number of packs (ceiling)
+            if ($this->pack_size && $this->pack_size > 1) {
+                $suggestedQty = (int) ceil($suggestedQty / $this->pack_size) * $this->pack_size;
+            }
+
             return max(0, $suggestedQty);
         }
 

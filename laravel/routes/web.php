@@ -37,6 +37,10 @@ Route::get('/purchase-orders', function () {
     return view('purchase-orders');
 });
 
+Route::get('/operations/replenishment', function () {
+    return view('operations.replenishment');
+});
+
 Route::get('/cycle-counting', function () {
     return view('cycle-counting');
 });
