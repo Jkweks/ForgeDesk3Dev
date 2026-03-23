@@ -43,7 +43,7 @@ class FabricationDocument extends Model
         if (!$this->file_path) {
             return null;
         }
-        return Storage::disk('public')->url($this->file_path);
+        return '/storage/' . $this->file_path;
     }
 
     /**
