@@ -107,6 +107,11 @@
       return;
     }
 
+    // Admins always have full access - skip permission filtering
+    if (currentUser.role === 'admin') {
+      return;
+    }
+
     // Use a Set for O(1) permission lookups instead of Array.includes()
     const permSet = new Set(currentUser.permissions);
 
