@@ -69,6 +69,11 @@
       return;
     }
 
+    // Admins always have full navigation access
+    if (currentUser.role === 'admin') {
+      return;
+    }
+
     // Check if navigation permissions exist in the system
     // If no nav.* permissions exist at all, assume migration hasn't run yet - show all navigation
     const hasAnyNavPermissions = currentUser.permissions.some(p => p.startsWith('nav.'));
