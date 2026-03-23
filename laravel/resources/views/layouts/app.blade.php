@@ -33,6 +33,9 @@
 
     #app { display: none; }
     #app.active { display: flex; flex-direction: column; }
+
+    /* Prevent layout shift when scrollbar appears (fixes top-left gap on data load) */
+    html { scrollbar-gutter: stable; }
     #loginPage { display: none; }
     #loginPage.active { display: flex; }
     .loading { text-align: center; padding: 2rem; }
