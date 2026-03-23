@@ -1,7 +1,7 @@
 <div class="navbar-expand-md">
   <div class="collapse navbar-collapse" id="navbar-menu">
     <div class="navbar">
-      <div class="container-fluid">
+      <div class="container-xl">
         <div class="row flex-column flex-md-row flex-fill align-items-center">
           <div class="col">
             <nav aria-label="Primary">
@@ -59,7 +59,6 @@
                     <a class="dropdown-item" href="/jobs">Jobs Dashboard</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
-                    <a class="dropdown-item" href="/fulfillment/job-reservations">Job Reservations</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Door Configurator <span class="badge bg-secondary ms-auto">Soon</span></a>
                   </div>
