@@ -32,7 +32,7 @@
     }
 
     #app { display: none; }
-    #app.active { display: block; }
+    #app.active { display: flex; flex-direction: column; }
     #loginPage { display: none; }
     #loginPage.active { display: flex; }
     .loading { text-align: center; padding: 2rem; }
