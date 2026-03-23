@@ -59,7 +59,6 @@
                     <a class="dropdown-item" href="/jobs">Jobs Dashboard</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
-                    <a class="dropdown-item" href="/fulfillment/job-reservations">Job Reservations</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Door Configurator <span class="badge bg-secondary ms-auto">Soon</span></a>
                   </div>
