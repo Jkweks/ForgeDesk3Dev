@@ -591,7 +591,11 @@ function buildProductOptions(products) {
   if (products.length === 0) {
     return '<option value="" disabled>No products for this supplier</option>';
   }
-  return products.map(p => `<option value="${p.id}" data-cost="${p.unit_cost}">${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
+  return products.map(p => `<option value="${p.id}"
+    data-cost="${p.net_cost ?? p.unit_cost ?? 0}"
+    data-pack="${p.pack_size || 1}"
+    data-pack-uom="${escapeHtml(p.purchase_uom || 'EA')}"
+  >${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
 }
 
 // Called when supplier selection changes — clear line items and reset the table
@@ -671,19 +675,29 @@ function updateLineItemCost(itemId) {
   const unitCostInput = document.getElementById(`unitCost${itemId}`);
   const lineTotalInput = document.getElementById(`lineTotal${itemId}`);
 
-  // Auto-fill unit cost from product
-  if (productSelect.value && !unitCostInput.value) {
+  // Auto-fill net cost and show pack context when a product is selected
+  if (productSelect.value) {
     const selectedOption = productSelect.options[productSelect.selectedIndex];
-    const cost = selectedOption.getAttribute('data-cost');
-    unitCostInput.value = cost;
+    if (!unitCostInput.value || unitCostInput.dataset.autoFilled) {
+      unitCostInput.value = parseFloat(selectedOption.dataset.cost || 0).toFixed(2);
+      unitCostInput.dataset.autoFilled = '1';
+    }
+    const packSize = parseInt(selectedOption.dataset.pack || 1);
+    const packUom  = selectedOption.dataset.packUom || 'EA';
+    let packHint   = document.getElementById(`packHint${itemId}`);
+    if (!packHint) {
+      packHint = document.createElement('small');
+      packHint.id = `packHint${itemId}`;
+      packHint.className = 'text-muted d-block mt-1';
+      quantityInput.parentNode.appendChild(packHint);
+    }
+    packHint.textContent = packSize > 1 ? `packs of ${packSize} ${packUom}` : '';
   }
 
   // Calculate line total
   const quantity = parseFloat(quantityInput.value) || 0;
   const unitCost = parseFloat(unitCostInput.value) || 0;
-  const lineTotal = quantity * unitCost;
-
-  lineTotalInput.value = formatCurrency(lineTotal);
+  lineTotalInput.value = formatCurrency(quantity * unitCost);
 
   updatePOTotal();
 }
@@ -802,10 +816,16 @@ async function viewPODetails(poId) {
             <strong>${escapeHtml(item.product.sku)}</strong><br>
             <small class="text-muted">${escapeHtml(item.product.description)}</small>
           </td>
-          <td class="text-end">${item.quantity_ordered}</td>
+          <td class="text-end">
+            ${item.quantity_ordered}
+            ${item.product.pack_size > 1 ? `<br><small class="text-muted">packs of ${item.product.pack_size} ${item.product.purchase_uom || 'EA'}</small>` : ''}
+          </td>
           <td class="text-end text-success">${item.quantity_received}</td>
           <td class="text-end ${remaining > 0 ? 'text-warning' : ''}">${remaining}</td>
-          <td class="text-end">${formatCurrency(item.unit_cost)}</td>
+          <td class="text-end">
+            ${formatCurrency(item.unit_cost)}
+            ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}
+          </td>
           <td class="text-end">${formatCurrency(item.total_cost)}</td>
           <td>
             <div class="progress" style="height: 20px;">
@@ -988,16 +1008,32 @@ function initDraftProductSearch() {
           return;
         }
 
-        results.innerHTML = products.map(p => `
-          <a href="#" class="list-group-item list-group-item-action py-2 px-3"
-             data-id="${p.id}"
-             data-sku="${escapeHtml(p.sku)}"
-             data-desc="${escapeHtml(p.description)}"
-             data-cost="${p.cost_price || 0}">
-            <strong class="small">${escapeHtml(p.sku)}</strong>
-            <span class="text-muted small"> — ${escapeHtml(p.description)}</span>
-          </a>
-        `).join('');
+        results.innerHTML = products.map(p => {
+            const netCost = p.net_cost ?? p.unit_cost ?? 0;
+            const packSize = p.pack_size || 1;
+            const packUom  = p.purchase_uom || 'EA';
+            const packLabel = packSize > 1
+              ? `<span class="badge bg-blue-lt ms-1">pack of ${packSize} ${packUom}</span>`
+              : '';
+            return `
+              <a href="#" class="list-group-item list-group-item-action py-2 px-3"
+                 data-id="${p.id}"
+                 data-sku="${escapeHtml(p.sku)}"
+                 data-desc="${escapeHtml(p.description)}"
+                 data-cost="${netCost}"
+                 data-pack="${packSize}"
+                 data-pack-uom="${escapeHtml(packUom)}">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong class="small">${escapeHtml(p.sku)}</strong>
+                    <span class="text-muted small"> — ${escapeHtml(p.description)}</span>
+                    ${packLabel}
+                  </div>
+                  <span class="text-muted small ms-2">${formatCurrency(netCost)}${packSize > 1 ? '/pack' : ''}</span>
+                </div>
+              </a>
+            `;
+          }).join('');
         results.style.display = 'block';
 
         results.querySelectorAll('a').forEach(a => {
@@ -1007,6 +1043,18 @@ function initDraftProductSearch() {
             input.value = `${this.dataset.sku} — ${this.dataset.desc}`;
             document.getElementById('newItemCost').value = parseFloat(this.dataset.cost).toFixed(2);
             results.style.display = 'none';
+
+            // Show pack hint below qty input
+            const packSize = parseInt(this.dataset.pack || 1);
+            const packUom  = this.dataset.packUom || 'EA';
+            let hint = document.getElementById('newItemPackHint');
+            if (!hint) {
+              hint = document.createElement('small');
+              hint.id = 'newItemPackHint';
+              hint.className = 'text-muted d-block mt-1';
+              document.getElementById('newItemQty').parentNode.appendChild(hint);
+            }
+            hint.textContent = packSize > 1 ? `packs of ${packSize} ${packUom}` : '';
           });
         });
       } catch (err) {
