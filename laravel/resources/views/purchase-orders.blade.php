@@ -821,29 +821,37 @@ async function viewPODetails(poId) {
 
     // Add-item row for draft POs
     if (isDraft) {
-      const productOptions = allProducts
-        .map(p => `<option value="${p.id}" data-cost="${p.cost_price || 0}">${escapeHtml(p.sku)} — ${escapeHtml(p.description)}</option>`)
-        .join('');
       itemRows.push(`
         <tr id="addLineItemRow">
-          <td>
-            <select class="form-select form-select-sm" id="newItemProduct" onchange="prefillDraftItemCost()">
-              <option value="">— select product —</option>
-              ${productOptions}
-            </select>
+          <td style="min-width:260px; position:relative;">
+            <input type="text" class="form-control form-control-sm" id="newItemProductInput"
+                   placeholder="Search by SKU or description…" autocomplete="off">
+            <div id="newItemProductResults" class="list-group shadow-sm mt-1"
+                 style="display:none; position:absolute; z-index:1050; width:100%; max-height:220px; overflow-y:auto;"></div>
+            <input type="hidden" id="newItemProduct">
           </td>
-          <td class="text-end"><input type="number" class="form-control form-control-sm text-end" id="newItemQty" min="1" value="1" style="width:80px"></td>
-          <td class="text-end">—</td>
-          <td class="text-end">—</td>
-          <td class="text-end"><input type="number" class="form-control form-control-sm text-end" id="newItemCost" min="0" step="0.01" value="0.00" style="width:100px"></td>
-          <td class="text-end">—</td>
+          <td class="text-end" style="vertical-align:top; padding-top:8px;">
+            <input type="number" class="form-control form-control-sm text-end" id="newItemQty" min="1" value="1" style="width:80px">
+          </td>
+          <td class="text-end text-muted align-middle">—</td>
+          <td class="text-end text-muted align-middle">—</td>
+          <td class="text-end" style="vertical-align:top; padding-top:8px;">
+            <input type="number" class="form-control form-control-sm text-end" id="newItemCost" min="0" step="0.01" value="0.00" style="width:100px">
+          </td>
+          <td class="text-end text-muted align-middle">—</td>
           <td></td>
-          <td><button class="btn btn-sm btn-primary" onclick="addDraftLineItem(${po.id})"><i class="ti ti-plus me-1"></i>Add</button></td>
+          <td style="vertical-align:top; padding-top:6px;">
+            <button class="btn btn-sm btn-primary" onclick="addDraftLineItem(${po.id})">
+              <i class="ti ti-plus me-1"></i>Add
+            </button>
+          </td>
         </tr>
       `);
     }
 
     itemsBody.innerHTML = itemRows.join('');
+
+    if (isDraft) initDraftProductSearch();
 
     // Action buttons
     const actionsDiv = document.getElementById('poActionButtons');
@@ -949,13 +957,70 @@ async function deletePO(poId) {
   }
 }
 
-// Pre-fill unit cost when a product is selected in the add-item row
-function prefillDraftItemCost() {
-  const sel = document.getElementById('newItemProduct');
-  const opt = sel.options[sel.selectedIndex];
-  if (opt && opt.dataset.cost) {
-    document.getElementById('newItemCost').value = parseFloat(opt.dataset.cost).toFixed(2);
-  }
+// Initialise the live-search product picker in the draft add-item row
+function initDraftProductSearch() {
+  const input   = document.getElementById('newItemProductInput');
+  const results = document.getElementById('newItemProductResults');
+  if (!input) return;
+
+  let searchTimeout = null;
+
+  input.addEventListener('input', function () {
+    const term = this.value.trim();
+    // Clear any previous selection when the user starts typing again
+    document.getElementById('newItemProduct').value = '';
+
+    clearTimeout(searchTimeout);
+
+    if (term.length < 2) {
+      results.style.display = 'none';
+      return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+      try {
+        const response = await authenticatedFetch(`/products?search=${encodeURIComponent(term)}&is_active=1&per_page=15`);
+        const products = Array.isArray(response) ? response : (response.data || []);
+
+        if (products.length === 0) {
+          results.innerHTML = '<div class="list-group-item text-muted small py-2">No products found</div>';
+          results.style.display = 'block';
+          return;
+        }
+
+        results.innerHTML = products.map(p => `
+          <a href="#" class="list-group-item list-group-item-action py-2 px-3"
+             data-id="${p.id}"
+             data-sku="${escapeHtml(p.sku)}"
+             data-desc="${escapeHtml(p.description)}"
+             data-cost="${p.cost_price || 0}">
+            <strong class="small">${escapeHtml(p.sku)}</strong>
+            <span class="text-muted small"> — ${escapeHtml(p.description)}</span>
+          </a>
+        `).join('');
+        results.style.display = 'block';
+
+        results.querySelectorAll('a').forEach(a => {
+          a.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.getElementById('newItemProduct').value = this.dataset.id;
+            input.value = `${this.dataset.sku} — ${this.dataset.desc}`;
+            document.getElementById('newItemCost').value = parseFloat(this.dataset.cost).toFixed(2);
+            results.style.display = 'none';
+          });
+        });
+      } catch (err) {
+        console.error('Product search error:', err);
+      }
+    }, 300);
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener('click', function (e) {
+    if (!input.contains(e.target) && !results.contains(e.target)) {
+      results.style.display = 'none';
+    }
+  });
 }
 
 // Add a line item to a draft PO
@@ -964,17 +1029,16 @@ async function addDraftLineItem(poId) {
   const qty       = parseInt(document.getElementById('newItemQty').value, 10);
   const cost      = parseFloat(document.getElementById('newItemCost').value);
 
-  if (!productId) { showNotification('Please select a product', 'warning'); return; }
+  if (!productId) { showNotification('Please search and select a product', 'warning'); return; }
   if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
   if (isNaN(cost) || cost < 0) { showNotification('Invalid unit cost', 'warning'); return; }
 
   try {
-    const result = await authenticatedFetch(`/purchase-orders/${poId}/items`, {
+    await authenticatedFetch(`/purchase-orders/${poId}/items`, {
       method: 'POST',
       body: JSON.stringify({ product_id: productId, quantity: qty, unit_cost: cost }),
     });
     showNotification('Line item added', 'success');
-    // Refresh the detail view in-place
     viewPODetails(poId);
     loadPurchaseOrders();
     loadStatistics();
