@@ -1041,15 +1041,18 @@
     async function toggleEditMode() {
       isEditMode = true;
       document.getElementById('editProductBtn').style.display = 'none';
-      document.getElementById('editProductFooterActions').style.display = 'flex';
       document.getElementById('productDetailsView').style.display = 'none';
+      // Show form area with a spinner while data loads; Save button stays hidden until ready
       document.getElementById('productEditForm').style.display = 'block';
+      document.getElementById('productEditForm').innerHTML =
+        '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
 
-      // Load fresh product data
       try {
         const response = await apiCall(`/products/${currentProductId}`);
         currentProductData = await response.json();
-        renderEditForm(currentProductData);
+        await renderEditForm(currentProductData);
+        // Only reveal Save/Cancel after the form is fully in the DOM
+        document.getElementById('editProductFooterActions').style.display = 'flex';
       } catch (error) {
         console.error('Error loading product for edit:', error);
         showNotification('Failed to load product for editing', 'danger');
@@ -1354,6 +1357,10 @@
     async function saveProductChanges() {
       try {
         const form = document.getElementById('editProductFormElement');
+        if (!form) {
+          showNotification('Edit form not ready — please try again', 'warning');
+          return;
+        }
         const formData = new FormData(form);
         const data = {};
 
