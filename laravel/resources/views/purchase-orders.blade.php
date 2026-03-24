@@ -1084,7 +1084,7 @@ async function addDraftLineItem(poId) {
   try {
     await authenticatedFetch(`/purchase-orders/${poId}/items`, {
       method: 'POST',
-      body: JSON.stringify({ product_id: productId, quantity: qty, unit_cost: cost }),
+      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: qty, unit_cost: cost }),
     });
     showNotification('Line item added', 'success');
     viewPODetails(poId);
