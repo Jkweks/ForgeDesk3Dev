@@ -486,4 +486,94 @@ class PurchaseOrderController extends Controller
 
         return response()->json($stats);
     }
+
+    /**
+     * Add a line item to a draft purchase order
+     */
+    public function addItem(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        if ($purchaseOrder->status !== 'draft') {
+            return response()->json(['message' => 'Line items can only be added to draft purchase orders'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'product_id'           => 'required|exists:products,id',
+            'quantity'             => 'required|integer|min:1',
+            'unit_cost'            => 'required|numeric|min:0',
+            'destination_location' => 'nullable|string',
+            'notes'                => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $item = $purchaseOrder->items()->create([
+                'product_id'           => $request->product_id,
+                'quantity_ordered'     => $request->quantity,
+                'quantity_received'    => 0,
+                'unit_cost'            => $request->unit_cost,
+                'total_cost'           => $request->quantity * $request->unit_cost,
+                'destination_location' => $request->destination_location,
+                'notes'                => $request->notes,
+            ]);
+
+            $product = Product::find($request->product_id);
+            $product->on_order_qty = ($product->on_order_qty ?? 0) + $request->quantity;
+            $product->save();
+
+            $purchaseOrder->total_amount = $purchaseOrder->items()->sum('total_cost');
+            $purchaseOrder->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message'        => 'Line item added successfully',
+                'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver']),
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to add line item'], 500);
+        }
+    }
+
+    /**
+     * Remove a line item from a draft purchase order
+     */
+    public function removeItem(PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
+    {
+        if ($purchaseOrder->status !== 'draft') {
+            return response()->json(['message' => 'Line items can only be removed from draft purchase orders'], 422);
+        }
+
+        if ($item->purchase_order_id !== $purchaseOrder->id) {
+            return response()->json(['message' => 'Item does not belong to this purchase order'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $product = Product::find($item->product_id);
+            if ($product) {
+                $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) - $item->quantity_ordered);
+                $product->save();
+            }
+
+            $item->delete();
+
+            $purchaseOrder->total_amount = $purchaseOrder->items()->sum('total_cost');
+            $purchaseOrder->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message'        => 'Line item removed successfully',
+                'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver']),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to remove line item'], 500);
+        }
+    }
 }

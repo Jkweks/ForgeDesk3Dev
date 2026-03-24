@@ -329,6 +329,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/purchase-orders/{purchaseOrder}/approve', [PurchaseOrderController::class, 'approve']);
         Route::post('/purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive']);
         Route::post('/purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
+        Route::post('/purchase-orders/{purchaseOrder}/items', [PurchaseOrderController::class, 'addItem']);
+        Route::delete('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'removeItem']);
         Route::get('/purchase-orders-open', [PurchaseOrderController::class, 'open']);
         Route::get('/purchase-orders-statistics', [PurchaseOrderController::class, 'statistics']);
 

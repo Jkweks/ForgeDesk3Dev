@@ -286,7 +286,7 @@
 
         <h4>Line Items</h4>
         <div class="table-responsive">
-          <table class="table table-vcenter">
+          <table class="table table-vcenter" id="viewPOItemsTable">
             <thead>
               <tr>
                 <th>Product</th>
@@ -296,6 +296,7 @@
                 <th class="text-end">Unit Cost</th>
                 <th class="text-end">Total</th>
                 <th>Progress</th>
+                <th id="viewPOItemsActionCol" style="display:none"></th>
               </tr>
             </thead>
             <tbody id="viewPOItems"></tbody>
@@ -785,8 +786,11 @@ async function viewPODetails(poId) {
     }
 
     // Items
+    const isDraft = po.status === 'draft';
+    document.getElementById('viewPOItemsActionCol').style.display = isDraft ? '' : 'none';
+
     const itemsBody = document.getElementById('viewPOItems');
-    itemsBody.innerHTML = po.items.map(item => {
+    const itemRows = po.items.map(item => {
       const remaining = item.quantity_ordered - item.quantity_received;
       const progress = item.quantity_ordered > 0
         ? Math.round((item.quantity_received / item.quantity_ordered) * 100)
@@ -810,9 +814,36 @@ async function viewPODetails(poId) {
               </div>
             </div>
           </td>
+          ${isDraft ? `<td><button class="btn btn-sm btn-ghost-danger" onclick="removeDraftLineItem(${po.id}, ${item.id})" title="Remove"><i class="ti ti-trash"></i></button></td>` : '<td></td>'}
         </tr>
       `;
-    }).join('');
+    });
+
+    // Add-item row for draft POs
+    if (isDraft) {
+      const productOptions = allProducts
+        .map(p => `<option value="${p.id}" data-cost="${p.cost_price || 0}">${escapeHtml(p.sku)} — ${escapeHtml(p.description)}</option>`)
+        .join('');
+      itemRows.push(`
+        <tr id="addLineItemRow">
+          <td>
+            <select class="form-select form-select-sm" id="newItemProduct" onchange="prefillDraftItemCost()">
+              <option value="">— select product —</option>
+              ${productOptions}
+            </select>
+          </td>
+          <td class="text-end"><input type="number" class="form-control form-control-sm text-end" id="newItemQty" min="1" value="1" style="width:80px"></td>
+          <td class="text-end">—</td>
+          <td class="text-end">—</td>
+          <td class="text-end"><input type="number" class="form-control form-control-sm text-end" id="newItemCost" min="0" step="0.01" value="0.00" style="width:100px"></td>
+          <td class="text-end">—</td>
+          <td></td>
+          <td><button class="btn btn-sm btn-primary" onclick="addDraftLineItem(${po.id})"><i class="ti ti-plus me-1"></i>Add</button></td>
+        </tr>
+      `);
+    }
+
+    itemsBody.innerHTML = itemRows.join('');
 
     // Action buttons
     const actionsDiv = document.getElementById('poActionButtons');
@@ -915,6 +946,55 @@ async function deletePO(poId) {
   } catch (error) {
     console.error('Error deleting PO:', error);
     showNotification(error.message || 'Error deleting PO', 'danger');
+  }
+}
+
+// Pre-fill unit cost when a product is selected in the add-item row
+function prefillDraftItemCost() {
+  const sel = document.getElementById('newItemProduct');
+  const opt = sel.options[sel.selectedIndex];
+  if (opt && opt.dataset.cost) {
+    document.getElementById('newItemCost').value = parseFloat(opt.dataset.cost).toFixed(2);
+  }
+}
+
+// Add a line item to a draft PO
+async function addDraftLineItem(poId) {
+  const productId = document.getElementById('newItemProduct').value;
+  const qty       = parseInt(document.getElementById('newItemQty').value, 10);
+  const cost      = parseFloat(document.getElementById('newItemCost').value);
+
+  if (!productId) { showNotification('Please select a product', 'warning'); return; }
+  if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
+  if (isNaN(cost) || cost < 0) { showNotification('Invalid unit cost', 'warning'); return; }
+
+  try {
+    const result = await authenticatedFetch(`/purchase-orders/${poId}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ product_id: productId, quantity: qty, unit_cost: cost }),
+    });
+    showNotification('Line item added', 'success');
+    // Refresh the detail view in-place
+    viewPODetails(poId);
+    loadPurchaseOrders();
+    loadStatistics();
+  } catch (error) {
+    showNotification(error.message || 'Error adding line item', 'danger');
+  }
+}
+
+// Remove a line item from a draft PO
+async function removeDraftLineItem(poId, itemId) {
+  if (!confirm('Remove this line item?')) return;
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${poId}/items/${itemId}`, { method: 'DELETE' });
+    showNotification('Line item removed', 'success');
+    viewPODetails(poId);
+    loadPurchaseOrders();
+    loadStatistics();
+  } catch (error) {
+    showNotification(error.message || 'Error removing line item', 'danger');
   }
 }
 
