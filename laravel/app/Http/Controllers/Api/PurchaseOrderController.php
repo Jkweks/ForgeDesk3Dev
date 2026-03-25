@@ -322,8 +322,10 @@ class PurchaseOrderController extends Controller
                     'transaction_date' => $receivedDate,
                 ]);
 
-                // Update storage location quantity if specified
-                if (isset($itemData['storage_location_id'])) {
+                // Update storage location quantity — always keep locations in sync
+                // so that fulfillment's recalculateQuantitiesFromLocations() produces
+                // the correct quantity_on_hand.
+                if (!empty($itemData['storage_location_id'])) {
                     $location = $product->inventoryLocations()
                         ->where('storage_location_id', $itemData['storage_location_id'])
                         ->first();
@@ -338,6 +340,21 @@ class PurchaseOrderController extends Controller
                             'is_primary' => false,
                         ]);
                     }
+                } else {
+                    // No specific location provided — add to the primary location so the
+                    // location table remains the source of truth for quantity_on_hand.
+                    $primaryLocation = $product->inventoryLocations()
+                        ->orderBy('is_primary', 'desc')
+                        ->orderBy('id', 'asc')
+                        ->first();
+
+                    if ($primaryLocation) {
+                        $primaryLocation->quantity += $quantityToReceive;
+                        $primaryLocation->save();
+                    }
+                    // If there are no locations at all, quantity_on_hand was updated
+                    // directly above and there is nothing to sync — fulfillment will
+                    // deduct from locations if/when they are created later.
                 }
             }
 
