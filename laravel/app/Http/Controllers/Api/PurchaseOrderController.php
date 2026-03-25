@@ -77,6 +77,7 @@ class PurchaseOrderController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            'po_number'   => 'nullable|string|max:50|unique:purchase_orders,po_number',
             'supplier_id' => 'required|exists:suppliers,id',
             'order_date' => 'required|date',
             'expected_date' => 'nullable|date|after_or_equal:order_date',
@@ -99,8 +100,10 @@ class PurchaseOrderController extends Controller
 
         DB::beginTransaction();
         try {
-            // Generate PO number
-            $poNumber = PurchaseOrder::generatePoNumber();
+            // Use provided PO number or auto-generate one
+            $poNumber = $request->filled('po_number')
+                ? trim($request->po_number)
+                : PurchaseOrder::generatePoNumber();
 
             // Create purchase order
             $po = PurchaseOrder::create([
