@@ -39,9 +39,7 @@
                     <span class="nav-link-title">Operations</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item {{ Request::is('operations/replenishment') ? 'active' : '' }}" href="/operations/replenishment">
-                      <i class="ti ti-refresh-alert me-2 text-warning"></i>Vendor Replenishment
-                    </a>
+                    <a class="dropdown-item {{ Request::is('operations/replenishment') ? 'active' : '' }}" href="/operations/replenishment">Replenishment</a>
                     <a class="dropdown-item" href="/purchase-orders">Purchase Orders</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/cycle-counting">Cycle Counting</a>

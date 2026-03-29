@@ -69,6 +69,11 @@
       return;
     }
 
+    // Admins always have full navigation access
+    if (currentUser.role === 'admin') {
+      return;
+    }
+
     // Check if navigation permissions exist in the system
     // If no nav.* permissions exist at all, assume migration hasn't run yet - show all navigation
     const hasAnyNavPermissions = currentUser.permissions.some(p => p.startsWith('nav.'));
@@ -99,6 +104,11 @@
   // Apply action permissions - hide buttons/actions user doesn't have permission for
   function applyActionPermissions() {
     if (!currentUser || !currentUser.permissions) {
+      return;
+    }
+
+    // Admins always have full access - skip permission filtering
+    if (currentUser.role === 'admin') {
       return;
     }
 

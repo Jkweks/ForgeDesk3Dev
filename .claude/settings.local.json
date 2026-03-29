@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -d /mnt/titan/ForgeDesk3-dev/*/)"
+    ]
+  }
+}

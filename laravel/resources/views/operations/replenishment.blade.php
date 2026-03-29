@@ -151,15 +151,21 @@
       </div>
       <div class="modal-body">
         <div class="row mb-3">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label">Vendor</label>
-            <div class="fw-bold" id="confirmVendorName">-</div>
+            <div class="fw-bold pt-1" id="confirmVendorName">-</div>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
+            <label class="form-label fw-bold">PO Number <span class="text-danger">*</span></label>
+            <input type="text" class="form-control form-control-sm" id="confirmPONumber"
+                   placeholder="e.g. PO-2024-1234" maxlength="50" autocomplete="off">
+            <div class="form-hint">Enter your external PO reference number</div>
+          </div>
+          <div class="col-md-2">
             <label class="form-label">Order Date</label>
             <input type="date" class="form-control form-control-sm" id="confirmOrderDate">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Expected Date</label>
             <input type="date" class="form-control form-control-sm" id="confirmExpectedDate">
           </div>
@@ -712,6 +718,7 @@ function showConfirmPO(supplierId) {
   }
 
   document.getElementById('confirmVendorName').textContent = supplier?.name || `Vendor #${supplierId}`;
+  document.getElementById('confirmPONumber').value = '';
   document.getElementById('confirmOrderDate').value = todayDate();
   document.getElementById('confirmExpectedDate').value = '';
   document.getElementById('confirmNotes').value = '';
@@ -749,7 +756,17 @@ async function submitPO() {
       return;
     }
 
+    const poNumber = document.getElementById('confirmPONumber').value.trim();
+    if (!poNumber) {
+      showNotification('Please enter a PO number before creating the order', 'warning');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-check me-1"></i>Create Purchase Order';
+      document.getElementById('confirmPONumber').focus();
+      return;
+    }
+
     const payload = {
+      po_number: poNumber,
       supplier_id: pendingPOSupplier,
       order_date: document.getElementById('confirmOrderDate').value,
       expected_date: document.getElementById('confirmExpectedDate').value || null,

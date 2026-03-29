@@ -286,7 +286,7 @@
 
         <h4>Line Items</h4>
         <div class="table-responsive">
-          <table class="table table-vcenter">
+          <table class="table table-vcenter" id="viewPOItemsTable">
             <thead>
               <tr>
                 <th>Product</th>
@@ -296,6 +296,7 @@
                 <th class="text-end">Unit Cost</th>
                 <th class="text-end">Total</th>
                 <th>Progress</th>
+                <th id="viewPOItemsActionCol" style="display:none"></th>
               </tr>
             </thead>
             <tbody id="viewPOItems"></tbody>
@@ -590,7 +591,11 @@ function buildProductOptions(products) {
   if (products.length === 0) {
     return '<option value="" disabled>No products for this supplier</option>';
   }
-  return products.map(p => `<option value="${p.id}" data-cost="${p.unit_cost}">${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
+  return products.map(p => `<option value="${p.id}"
+    data-cost="${p.net_cost ?? p.unit_cost ?? 0}"
+    data-pack="${p.pack_size || 1}"
+    data-pack-uom="${escapeHtml(p.purchase_uom || 'EA')}"
+  >${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
 }
 
 // Called when supplier selection changes — clear line items and reset the table
@@ -670,19 +675,29 @@ function updateLineItemCost(itemId) {
   const unitCostInput = document.getElementById(`unitCost${itemId}`);
   const lineTotalInput = document.getElementById(`lineTotal${itemId}`);
 
-  // Auto-fill unit cost from product
-  if (productSelect.value && !unitCostInput.value) {
+  // Auto-fill net cost and show pack context when a product is selected
+  if (productSelect.value) {
     const selectedOption = productSelect.options[productSelect.selectedIndex];
-    const cost = selectedOption.getAttribute('data-cost');
-    unitCostInput.value = cost;
+    if (!unitCostInput.value || unitCostInput.dataset.autoFilled) {
+      unitCostInput.value = parseFloat(selectedOption.dataset.cost || 0).toFixed(2);
+      unitCostInput.dataset.autoFilled = '1';
+    }
+    const packSize = parseInt(selectedOption.dataset.pack || 1);
+    const packUom  = selectedOption.dataset.packUom || 'EA';
+    let packHint   = document.getElementById(`packHint${itemId}`);
+    if (!packHint) {
+      packHint = document.createElement('small');
+      packHint.id = `packHint${itemId}`;
+      packHint.className = 'text-muted d-block mt-1';
+      quantityInput.parentNode.appendChild(packHint);
+    }
+    packHint.textContent = packSize > 1 ? `packs of ${packSize} ${packUom}` : '';
   }
 
   // Calculate line total
   const quantity = parseFloat(quantityInput.value) || 0;
   const unitCost = parseFloat(unitCostInput.value) || 0;
-  const lineTotal = quantity * unitCost;
-
-  lineTotalInput.value = formatCurrency(lineTotal);
+  lineTotalInput.value = formatCurrency(quantity * unitCost);
 
   updatePOTotal();
 }
@@ -785,8 +800,11 @@ async function viewPODetails(poId) {
     }
 
     // Items
+    const isDraft = po.status === 'draft';
+    document.getElementById('viewPOItemsActionCol').style.display = isDraft ? '' : 'none';
+
     const itemsBody = document.getElementById('viewPOItems');
-    itemsBody.innerHTML = po.items.map(item => {
+    const itemRows = po.items.map(item => {
       const remaining = item.quantity_ordered - item.quantity_received;
       const progress = item.quantity_ordered > 0
         ? Math.round((item.quantity_received / item.quantity_ordered) * 100)
@@ -798,10 +816,16 @@ async function viewPODetails(poId) {
             <strong>${escapeHtml(item.product.sku)}</strong><br>
             <small class="text-muted">${escapeHtml(item.product.description)}</small>
           </td>
-          <td class="text-end">${item.quantity_ordered}</td>
+          <td class="text-end">
+            ${item.quantity_ordered}
+            ${item.product.pack_size > 1 ? `<br><small class="text-muted">packs of ${item.product.pack_size} ${item.product.purchase_uom || 'EA'}</small>` : ''}
+          </td>
           <td class="text-end text-success">${item.quantity_received}</td>
           <td class="text-end ${remaining > 0 ? 'text-warning' : ''}">${remaining}</td>
-          <td class="text-end">${formatCurrency(item.unit_cost)}</td>
+          <td class="text-end">
+            ${formatCurrency(item.unit_cost)}
+            ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}
+          </td>
           <td class="text-end">${formatCurrency(item.total_cost)}</td>
           <td>
             <div class="progress" style="height: 20px;">
@@ -810,9 +834,44 @@ async function viewPODetails(poId) {
               </div>
             </div>
           </td>
+          ${isDraft ? `<td><button class="btn btn-sm btn-ghost-danger" onclick="removeDraftLineItem(${po.id}, ${item.id})" title="Remove"><i class="ti ti-trash"></i></button></td>` : '<td></td>'}
         </tr>
       `;
-    }).join('');
+    });
+
+    // Add-item row for draft POs
+    if (isDraft) {
+      itemRows.push(`
+        <tr id="addLineItemRow">
+          <td style="min-width:260px; position:relative;">
+            <input type="text" class="form-control form-control-sm" id="newItemProductInput"
+                   placeholder="Search by SKU or description…" autocomplete="off">
+            <div id="newItemProductResults" class="list-group shadow-sm mt-1"
+                 style="display:none; position:absolute; z-index:1050; width:100%; max-height:220px; overflow-y:auto;"></div>
+            <input type="hidden" id="newItemProduct">
+          </td>
+          <td class="text-end" style="vertical-align:top; padding-top:8px;">
+            <input type="number" class="form-control form-control-sm text-end" id="newItemQty" min="1" value="1" style="width:80px">
+          </td>
+          <td class="text-end text-muted align-middle">—</td>
+          <td class="text-end text-muted align-middle">—</td>
+          <td class="text-end" style="vertical-align:top; padding-top:8px;">
+            <input type="number" class="form-control form-control-sm text-end" id="newItemCost" min="0" step="0.01" value="0.00" style="width:100px">
+          </td>
+          <td class="text-end text-muted align-middle">—</td>
+          <td></td>
+          <td style="vertical-align:top; padding-top:6px;">
+            <button class="btn btn-sm btn-primary" onclick="addDraftLineItem(${po.id})">
+              <i class="ti ti-plus me-1"></i>Add
+            </button>
+          </td>
+        </tr>
+      `);
+    }
+
+    itemsBody.innerHTML = itemRows.join('');
+
+    if (isDraft) initDraftProductSearch();
 
     // Action buttons
     const actionsDiv = document.getElementById('poActionButtons');
@@ -915,6 +974,139 @@ async function deletePO(poId) {
   } catch (error) {
     console.error('Error deleting PO:', error);
     showNotification(error.message || 'Error deleting PO', 'danger');
+  }
+}
+
+// Initialise the live-search product picker in the draft add-item row
+function initDraftProductSearch() {
+  const input   = document.getElementById('newItemProductInput');
+  const results = document.getElementById('newItemProductResults');
+  if (!input) return;
+
+  let searchTimeout = null;
+
+  input.addEventListener('input', function () {
+    const term = this.value.trim();
+    // Clear any previous selection when the user starts typing again
+    document.getElementById('newItemProduct').value = '';
+
+    clearTimeout(searchTimeout);
+
+    if (term.length < 2) {
+      results.style.display = 'none';
+      return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+      try {
+        const response = await authenticatedFetch(`/products?search=${encodeURIComponent(term)}&is_active=1&per_page=15`);
+        const products = Array.isArray(response) ? response : (response.data || []);
+
+        if (products.length === 0) {
+          results.innerHTML = '<div class="list-group-item text-muted small py-2">No products found</div>';
+          results.style.display = 'block';
+          return;
+        }
+
+        results.innerHTML = products.map(p => {
+            const netCost = p.net_cost ?? p.unit_cost ?? 0;
+            const packSize = p.pack_size || 1;
+            const packUom  = p.purchase_uom || 'EA';
+            const packLabel = packSize > 1
+              ? `<span class="badge bg-blue-lt ms-1">pack of ${packSize} ${packUom}</span>`
+              : '';
+            return `
+              <a href="#" class="list-group-item list-group-item-action py-2 px-3"
+                 data-id="${p.id}"
+                 data-sku="${escapeHtml(p.sku)}"
+                 data-desc="${escapeHtml(p.description)}"
+                 data-cost="${netCost}"
+                 data-pack="${packSize}"
+                 data-pack-uom="${escapeHtml(packUom)}">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong class="small">${escapeHtml(p.sku)}</strong>
+                    <span class="text-muted small"> — ${escapeHtml(p.description)}</span>
+                    ${packLabel}
+                  </div>
+                  <span class="text-muted small ms-2">${formatCurrency(netCost)}${packSize > 1 ? '/pack' : ''}</span>
+                </div>
+              </a>
+            `;
+          }).join('');
+        results.style.display = 'block';
+
+        results.querySelectorAll('a').forEach(a => {
+          a.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.getElementById('newItemProduct').value = this.dataset.id;
+            input.value = `${this.dataset.sku} — ${this.dataset.desc}`;
+            document.getElementById('newItemCost').value = parseFloat(this.dataset.cost).toFixed(2);
+            results.style.display = 'none';
+
+            // Show pack hint below qty input
+            const packSize = parseInt(this.dataset.pack || 1);
+            const packUom  = this.dataset.packUom || 'EA';
+            let hint = document.getElementById('newItemPackHint');
+            if (!hint) {
+              hint = document.createElement('small');
+              hint.id = 'newItemPackHint';
+              hint.className = 'text-muted d-block mt-1';
+              document.getElementById('newItemQty').parentNode.appendChild(hint);
+            }
+            hint.textContent = packSize > 1 ? `packs of ${packSize} ${packUom}` : '';
+          });
+        });
+      } catch (err) {
+        console.error('Product search error:', err);
+      }
+    }, 300);
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener('click', function (e) {
+    if (!input.contains(e.target) && !results.contains(e.target)) {
+      results.style.display = 'none';
+    }
+  });
+}
+
+// Add a line item to a draft PO
+async function addDraftLineItem(poId) {
+  const productId = document.getElementById('newItemProduct').value;
+  const qty       = parseInt(document.getElementById('newItemQty').value, 10);
+  const cost      = parseFloat(document.getElementById('newItemCost').value);
+
+  if (!productId) { showNotification('Please search and select a product', 'warning'); return; }
+  if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
+  if (isNaN(cost) || cost < 0) { showNotification('Invalid unit cost', 'warning'); return; }
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${poId}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: qty, unit_cost: cost }),
+    });
+    showNotification('Line item added', 'success');
+    viewPODetails(poId);
+    loadPurchaseOrders();
+    loadStatistics();
+  } catch (error) {
+    showNotification(error.message || 'Error adding line item', 'danger');
+  }
+}
+
+// Remove a line item from a draft PO
+async function removeDraftLineItem(poId, itemId) {
+  if (!confirm('Remove this line item?')) return;
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${poId}/items/${itemId}`, { method: 'DELETE' });
+    showNotification('Line item removed', 'success');
+    viewPODetails(poId);
+    loadPurchaseOrders();
+    loadStatistics();
+  } catch (error) {
+    showNotification(error.message || 'Error removing line item', 'danger');
   }
 }
 

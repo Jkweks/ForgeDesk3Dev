@@ -555,7 +555,7 @@ class Product extends Model
         if (!$this->photo_path) {
             return null;
         }
-        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo_path);
+        return url('storage/' . $this->photo_path);
     }
 
     /**

@@ -207,10 +207,9 @@ class FabricationDocumentController extends Controller
 
     private function storeFile(\Illuminate\Http\UploadedFile $file): array
     {
-        $slug    = Str::uuid()->toString();
-        $safeName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME))
-                    . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs("fabrication-documents/{$slug}", $safeName, 'public');
+        $slug      = Str::uuid()->toString();
+        $shortName = Str::random(8) . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs("fabrication-documents/{$slug}", $shortName, 'public');
 
         return [
             'file_name' => $file->getClientOriginalName(),

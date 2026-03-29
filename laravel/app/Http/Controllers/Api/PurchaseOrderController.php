@@ -77,6 +77,7 @@ class PurchaseOrderController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            'po_number'   => 'nullable|string|max:50|unique:purchase_orders,po_number',
             'supplier_id' => 'required|exists:suppliers,id',
             'order_date' => 'required|date',
             'expected_date' => 'nullable|date|after_or_equal:order_date',
@@ -99,8 +100,10 @@ class PurchaseOrderController extends Controller
 
         DB::beginTransaction();
         try {
-            // Generate PO number
-            $poNumber = PurchaseOrder::generatePoNumber();
+            // Use provided PO number or auto-generate one
+            $poNumber = $request->filled('po_number')
+                ? trim($request->po_number)
+                : PurchaseOrder::generatePoNumber();
 
             // Create purchase order
             $po = PurchaseOrder::create([
@@ -319,8 +322,10 @@ class PurchaseOrderController extends Controller
                     'transaction_date' => $receivedDate,
                 ]);
 
-                // Update storage location quantity if specified
-                if (isset($itemData['storage_location_id'])) {
+                // Update storage location quantity — always keep locations in sync
+                // so that fulfillment's recalculateQuantitiesFromLocations() produces
+                // the correct quantity_on_hand.
+                if (!empty($itemData['storage_location_id'])) {
                     $location = $product->inventoryLocations()
                         ->where('storage_location_id', $itemData['storage_location_id'])
                         ->first();
@@ -335,6 +340,21 @@ class PurchaseOrderController extends Controller
                             'is_primary' => false,
                         ]);
                     }
+                } else {
+                    // No specific location provided — add to the primary location so the
+                    // location table remains the source of truth for quantity_on_hand.
+                    $primaryLocation = $product->inventoryLocations()
+                        ->orderBy('is_primary', 'desc')
+                        ->orderBy('id', 'asc')
+                        ->first();
+
+                    if ($primaryLocation) {
+                        $primaryLocation->quantity += $quantityToReceive;
+                        $primaryLocation->save();
+                    }
+                    // If there are no locations at all, quantity_on_hand was updated
+                    // directly above and there is nothing to sync — fulfillment will
+                    // deduct from locations if/when they are created later.
                 }
             }
 
@@ -485,5 +505,95 @@ class PurchaseOrderController extends Controller
         ];
 
         return response()->json($stats);
+    }
+
+    /**
+     * Add a line item to a draft purchase order
+     */
+    public function addItem(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        if ($purchaseOrder->status !== 'draft') {
+            return response()->json(['message' => 'Line items can only be added to draft purchase orders'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'product_id'           => 'required|exists:products,id',
+            'quantity'             => 'required|integer|min:1',
+            'unit_cost'            => 'required|numeric|min:0',
+            'destination_location' => 'nullable|string',
+            'notes'                => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $item = $purchaseOrder->items()->create([
+                'product_id'           => $request->product_id,
+                'quantity_ordered'     => $request->quantity,
+                'quantity_received'    => 0,
+                'unit_cost'            => $request->unit_cost,
+                'total_cost'           => $request->quantity * $request->unit_cost,
+                'destination_location' => $request->destination_location,
+                'notes'                => $request->notes,
+            ]);
+
+            $product = Product::find($request->product_id);
+            $product->on_order_qty = ($product->on_order_qty ?? 0) + $request->quantity;
+            $product->save();
+
+            $purchaseOrder->total_amount = $purchaseOrder->items()->sum('total_cost');
+            $purchaseOrder->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message'        => 'Line item added successfully',
+                'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver']),
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to add line item'], 500);
+        }
+    }
+
+    /**
+     * Remove a line item from a draft purchase order
+     */
+    public function removeItem(PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
+    {
+        if ($purchaseOrder->status !== 'draft') {
+            return response()->json(['message' => 'Line items can only be removed from draft purchase orders'], 422);
+        }
+
+        if ($item->purchase_order_id !== $purchaseOrder->id) {
+            return response()->json(['message' => 'Item does not belong to this purchase order'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $product = Product::find($item->product_id);
+            if ($product) {
+                $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) - $item->quantity_ordered);
+                $product->save();
+            }
+
+            $item->delete();
+
+            $purchaseOrder->total_amount = $purchaseOrder->items()->sum('total_cost');
+            $purchaseOrder->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message'        => 'Line item removed successfully',
+                'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver']),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to remove line item'], 500);
+        }
     }
 }
