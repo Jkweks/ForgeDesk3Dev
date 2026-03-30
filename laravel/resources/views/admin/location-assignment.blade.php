@@ -95,6 +95,59 @@
       </div>
     </div>
 
+    <!-- Unassigned products section -->
+    <div class="card mt-3" id="unassignedCard" style="display:none">
+      <div class="card-header">
+        <h3 class="card-title">
+          <i class="ti ti-alert-triangle text-yellow me-2"></i>Parts With No Storage Location
+        </h3>
+        <div class="ms-auto d-flex gap-2 align-items-center">
+          <span id="unassignedProgressText" class="text-muted small"></span>
+          <button class="btn btn-sm btn-success" id="saveAllUnassignedBtn" onclick="saveAllUnassigned()">
+            <i class="ti ti-device-floppy me-1"></i>Save All
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick-set bar for unassigned -->
+      <div class="card-body border-bottom py-2">
+        <div class="row g-2 align-items-center">
+          <div class="col-auto text-muted small">Quick-set all rows:</div>
+          <div class="col-md-3">
+            <select class="form-select form-select-sm" id="unassignedQuickPrimary">
+              <option value="">Primary location…</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <select class="form-select form-select-sm" id="unassignedQuickSecondary">
+              <option value="">(no secondary)</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-sm btn-outline-primary" onclick="applyUnassignedQuickSet()">Apply to unsaved rows</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-vcenter table-sm mb-0">
+          <thead>
+            <tr>
+              <th style="width:10%">SKU</th>
+              <th style="width:22%">Description</th>
+              <th style="width:6%" class="text-end">On Hand</th>
+              <th style="width:6%" class="text-end">Committed</th>
+              <th style="width:22%">Primary Location <span class="text-danger">*</span></th>
+              <th style="width:22%">Secondary Location <span class="text-muted">(optional)</span></th>
+              <th style="width:7%">Status</th>
+              <th style="width:5%"></th>
+            </tr>
+          </thead>
+          <tbody id="unassignedBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -106,6 +159,7 @@ let rowStates = {};        // rowStates[inv_location_id] = { primaryId, secondar
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadStorageLocations();
+  loadUnassignedProducts();
 });
 
 async function loadStorageLocations() {
@@ -130,8 +184,9 @@ function populateSourceDropdown() {
 }
 
 function populateTargetDropdowns() {
-  ['quickPrimary', 'quickSecondary'].forEach(id => {
+  ['quickPrimary', 'quickSecondary', 'unassignedQuickPrimary', 'unassignedQuickSecondary'].forEach(id => {
     const sel = document.getElementById(id);
+    if (!sel) return;
     // keep first placeholder option
     while (sel.options.length > 1) sel.remove(1);
     allStorageLocations.forEach(loc => {
@@ -342,6 +397,162 @@ function updateProgress() {
   const saved  = rows.filter(r => rowStates[r.inv_location_id].status === 'saved').length;
   const errors = rows.filter(r => rowStates[r.inv_location_id].status === 'error').length;
   document.getElementById('progressText').textContent =
+    total > 0 ? `${saved}/${total} saved${errors ? `, ${errors} error(s)` : ''}` : '';
+}
+
+// ─── Unassigned products ─────────────────────────────────────────────────────
+let unassignedRows  = [];
+let unassignedStates = {};  // keyed by product_id
+
+async function loadUnassignedProducts() {
+  try {
+    const data = await apiFetch('/locations/products-without-storage');
+    unassignedRows = data.items;
+    unassignedStates = {};
+    unassignedRows.forEach(r => {
+      unassignedStates[r.product_id] = { primaryId: '', secondaryId: '', status: 'pending' };
+    });
+
+    if (unassignedRows.length === 0) return; // hide section if nothing to show
+
+    document.getElementById('unassignedCard').style.display = '';
+    renderUnassignedTable();
+    updateUnassignedProgress();
+  } catch(e) {
+    console.error('Error loading unassigned products:', e.message);
+  }
+}
+
+function renderUnassignedTable() {
+  const tbody = document.getElementById('unassignedBody');
+  if (unassignedRows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No unassigned parts found.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = unassignedRows.map(row => {
+    const state    = unassignedStates[row.product_id];
+    const disabled = state.status === 'saved' ? 'disabled' : '';
+
+    return `
+      <tr id="urow-${row.product_id}" class="${state.status === 'saved' ? 'table-success' : state.status === 'error' ? 'table-danger' : ''}">
+        <td><code>${escHtml(row.sku)}</code></td>
+        <td class="small">${escHtml(row.description || '')}</td>
+        <td class="text-end">${(row.quantity_on_hand || 0).toLocaleString()}</td>
+        <td class="text-end">${(row.quantity_committed || 0).toLocaleString()}</td>
+        <td>
+          <select class="form-select form-select-sm" id="uprimary-${row.product_id}" ${disabled}
+                  onchange="unassignedStates[${row.product_id}].primaryId = this.value">
+            ${makeLocationOptions(state.primaryId)}
+          </select>
+        </td>
+        <td>
+          <select class="form-select form-select-sm" id="usecondary-${row.product_id}" ${disabled}
+                  onchange="unassignedStates[${row.product_id}].secondaryId = this.value">
+            <option value="">(none)</option>
+            ${makeLocationOptions(state.secondaryId)}
+          </select>
+        </td>
+        <td>${statusBadge(state.status)}</td>
+        <td>
+          ${state.status !== 'saved'
+            ? `<button class="btn btn-sm btn-primary" onclick="saveUnassignedRow(${row.product_id})">
+                 <i class="ti ti-check"></i>
+               </button>`
+            : ''}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function applyUnassignedQuickSet() {
+  const primId = document.getElementById('unassignedQuickPrimary').value;
+  const secId  = document.getElementById('unassignedQuickSecondary').value;
+  unassignedRows.forEach(row => {
+    const state = unassignedStates[row.product_id];
+    if (state.status === 'saved') return;
+    if (primId) state.primaryId  = primId;
+    state.secondaryId = secId;
+  });
+  renderUnassignedTable();
+}
+
+async function saveUnassignedRow(productId) {
+  const state = unassignedStates[productId];
+  if (!state.primaryId) { alert('Please select a primary location for this row.'); return; }
+
+  const row = unassignedRows.find(r => r.product_id === productId);
+  setUnassignedRowStatus(productId, 'saving');
+
+  try {
+    // Create a new primary inventory_location record for this product
+    await apiFetch(`/products/${productId}/locations`, 'POST', {
+      storage_location_id: parseInt(state.primaryId),
+      quantity:            row.quantity_on_hand || 0,
+      quantity_committed:  row.quantity_committed || 0,
+      is_primary:          true,
+    });
+
+    // Optional secondary location (qty 0)
+    if (state.secondaryId) {
+      try {
+        await apiFetch(`/products/${productId}/locations`, 'POST', {
+          storage_location_id: parseInt(state.secondaryId),
+          quantity:            0,
+          quantity_committed:  0,
+          is_primary:          false,
+        });
+      } catch(secErr) {
+        console.warn('Secondary location note:', secErr.message);
+      }
+    }
+
+    setUnassignedRowStatus(productId, 'saved');
+  } catch(e) {
+    setUnassignedRowStatus(productId, 'error');
+    alert(`Error saving ${row.sku}: ${e.message}`);
+  }
+
+  updateUnassignedProgress();
+}
+
+async function saveAllUnassigned() {
+  const pending = unassignedRows.filter(r => unassignedStates[r.product_id].status !== 'saved');
+  const missing = pending.filter(r => !unassignedStates[r.product_id].primaryId);
+  if (missing.length > 0) {
+    alert(`${missing.length} row(s) have no primary location selected.`);
+    return;
+  }
+
+  document.getElementById('saveAllUnassignedBtn').disabled = true;
+  for (const row of pending) {
+    await saveUnassignedRow(row.product_id);
+  }
+  document.getElementById('saveAllUnassignedBtn').disabled = false;
+}
+
+function setUnassignedRowStatus(productId, status) {
+  unassignedStates[productId].status = status;
+  const tr = document.getElementById(`urow-${productId}`);
+  if (!tr) return;
+
+  tr.className = status === 'saved' ? 'table-success' : status === 'error' ? 'table-danger' : '';
+  tr.cells[6].innerHTML = statusBadge(status);
+  tr.cells[7].innerHTML = status !== 'saved'
+    ? `<button class="btn btn-sm btn-primary" onclick="saveUnassignedRow(${productId})"><i class="ti ti-check"></i></button>`
+    : '';
+
+  if (status === 'saved') {
+    tr.querySelector(`#uprimary-${productId}`)?.setAttribute('disabled', '');
+    tr.querySelector(`#usecondary-${productId}`)?.setAttribute('disabled', '');
+  }
+}
+
+function updateUnassignedProgress() {
+  const total  = unassignedRows.length;
+  const saved  = unassignedRows.filter(r => unassignedStates[r.product_id].status === 'saved').length;
+  const errors = unassignedRows.filter(r => unassignedStates[r.product_id].status === 'error').length;
+  document.getElementById('unassignedProgressText').textContent =
     total > 0 ? `${saved}/${total} saved${errors ? `, ${errors} error(s)` : ''}` : '';
 }
 
