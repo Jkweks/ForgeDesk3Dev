@@ -322,6 +322,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
         Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
         Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
+        Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
+        Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
 
         // Purchase Orders
         Route::apiResource('purchase-orders', PurchaseOrderController::class);

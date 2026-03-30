@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\InventoryTransaction;
+use App\Models\StorageLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -1372,5 +1373,75 @@ class ReportsController extends Controller
 
         $pdf->setPaper('letter', 'landscape');
         return $pdf->stream('inventory-report-' . date('Y-m-d') . '.pdf');
+    }
+
+    /**
+     * Storage location contents report
+     * Returns each active storage location with its inventory items and quantities
+     */
+    public function storageLocationReport(Request $request)
+    {
+        $locations = StorageLocation::active()
+            ->ordered()
+            ->with([
+                'inventoryLocations' => function ($q) {
+                    $q->whereNull('deleted_at')->where('quantity', '>', 0);
+                },
+                'inventoryLocations.product',
+            ])
+            ->get()
+            ->map(function (StorageLocation $loc) {
+                $items = $loc->inventoryLocations->map(fn($il) => [
+                    'sku'         => $il->product->sku,
+                    'part_number' => $il->product->part_number,
+                    'description' => $il->product->description,
+                    'quantity'    => $il->quantity,
+                    'uom'         => $il->product->stock_uom ?? $il->product->unit_of_measure,
+                    'is_primary'  => (bool) $il->is_primary,
+                ]);
+
+                return [
+                    'id'            => $loc->id,
+                    'name'          => $loc->name,
+                    'code'          => $loc->code,
+                    'type'          => $loc->type,
+                    'full_path'     => $loc->full_path,
+                    'aisle'         => $loc->aisle,
+                    'bay'           => $loc->bay,
+                    'level'         => $loc->level,
+                    'position'      => $loc->position,
+                    'item_count'    => $items->count(),
+                    'total_qty'     => $items->sum('quantity'),
+                    'items'         => $items->sortBy('sku')->values(),
+                ];
+            })
+            ->filter(fn($loc) => $loc['item_count'] > 0)
+            ->values();
+
+        return response()->json([
+            'locations' => $locations,
+            'summary'   => [
+                'total_locations'   => $locations->count(),
+                'total_line_items'  => $locations->sum('item_count'),
+                'total_qty'         => $locations->sum('total_qty'),
+            ],
+        ]);
+    }
+
+    /**
+     * Generate PDF for Storage Location Contents report
+     */
+    public function storageLocationPdf(Request $request)
+    {
+        $data       = $this->storageLocationReport($request);
+        $reportData = $data->original;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.storage-location-report', [
+            'locations' => $reportData['locations'],
+            'summary'   => $reportData['summary'],
+        ]);
+
+        $pdf->setPaper('letter', 'portrait');
+        return $pdf->stream('storage-location-report-' . date('Y-m-d') . '.pdf');
     }
 }
