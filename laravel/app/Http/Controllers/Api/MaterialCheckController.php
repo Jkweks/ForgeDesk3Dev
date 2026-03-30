@@ -40,7 +40,7 @@ class MaterialCheckController extends Controller
             // Validate request
             $validator = Validator::make($request->all(), [
                 'job_number' => 'required|string|max:100',
-                'release_number' => 'required|integer|min:1',
+                'release_number' => 'nullable|integer|min:1',
                 'job_name' => 'required|string|max:255',
                 'requested_by' => 'required|string|max:255',
                 'needed_by' => 'nullable|date',
@@ -61,26 +61,14 @@ class MaterialCheckController extends Controller
                 ], 422);
             }
 
-            // Check for duplicate job_number + release_number
-            $exists = JobReservation::where('job_number', $request->job_number)
-                ->where('release_number', $request->release_number)
-                ->exists();
-
-            if ($exists) {
-                return response()->json([
-                    'error' => 'Duplicate job reservation',
-                    'message' => "Job {$request->job_number} Release {$request->release_number} already exists",
-                ], 422);
-            }
-
             // Start transaction
             DB::beginTransaction();
 
             try {
-                // Create job reservation
+                // Create job reservation — release_number auto-assigned by model if not provided
                 $reservation = JobReservation::create([
                     'job_number' => $request->job_number,
-                    'release_number' => $request->release_number,
+                    'release_number' => $request->release_number ?: null,
                     'job_name' => $request->job_name,
                     'requested_by' => $request->requested_by,
                     'needed_by' => $request->needed_by,
