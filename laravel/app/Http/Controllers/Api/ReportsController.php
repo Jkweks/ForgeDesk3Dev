@@ -1415,7 +1415,6 @@ class ReportsController extends Controller
                     'items'         => $items->sortBy('sku')->values(),
                 ];
             })
-            ->filter(fn($loc) => $loc['item_count'] > 0)
             ->values();
 
         return response()->json([

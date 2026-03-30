@@ -815,7 +815,7 @@
               <div class="col-md-4">
                 <div class="card card-sm">
                   <div class="card-body">
-                    <div class="text-muted">Locations with Stock</div>
+                    <div class="text-muted">Total Locations</div>
                     <div class="h2 mb-0" id="storageLocationCount">-</div>
                   </div>
                 </div>
@@ -1685,15 +1685,27 @@ function renderStorageLocationAccordion(locations) {
       loc.position ? 'Pos '   + loc.position : null,
     ].filter(Boolean).join(' ');
 
-    const rows = loc.items.map(item => `
-      <tr>
-        <td class="text-muted" style="width:12%">${escapeHtml(item.part_number || '—')}</td>
-        <td>${escapeHtml(item.description)}</td>
-        <td style="width:12%">${escapeHtml(item.sku)}</td>
-        <td class="text-end" style="width:8%">${item.quantity.toLocaleString()}</td>
-        <td class="text-center" style="width:6%">${escapeHtml(item.uom)}</td>
-        <td class="text-center" style="width:8%">${item.is_primary ? '<span class="badge bg-blue-lt">Primary</span>' : ''}</td>
-      </tr>`).join('');
+    const rows = loc.items.length > 0
+      ? loc.items.map(item => `
+          <tr>
+            <td class="text-muted" style="width:12%">${escapeHtml(item.part_number || '—')}</td>
+            <td>${escapeHtml(item.description)}</td>
+            <td style="width:12%">${escapeHtml(item.sku)}</td>
+            <td class="text-end" style="width:8%">${item.quantity.toLocaleString()}</td>
+            <td class="text-center" style="width:6%">${escapeHtml(item.uom)}</td>
+            <td class="text-center" style="width:8%">${item.is_primary ? '<span class="badge bg-blue-lt">Primary</span>' : ''}</td>
+          </tr>`).join('')
+      : `<tr><td colspan="6" class="text-center text-muted py-3">No inventory at this location</td></tr>`;
+
+    const totalRow = loc.items.length > 0
+      ? `<tfoot class="table-secondary">
+           <tr>
+             <td colspan="3" class="text-end fw-bold">Location Total</td>
+             <td class="text-end fw-bold">${loc.total_qty.toLocaleString()}</td>
+             <td colspan="2"></td>
+           </tr>
+         </tfoot>`
+      : '';
 
     return `
       <div class="accordion-item">
@@ -1705,7 +1717,8 @@ function renderStorageLocationAccordion(locations) {
             ${meta ? `<span class="text-muted small me-2">${escapeHtml(meta)}</span>` : ''}
             ${address ? `<span class="text-muted small me-2">— ${escapeHtml(address)}</span>` : ''}
             <span class="ms-auto me-3 badge bg-secondary">${loc.item_count} item${loc.item_count !== 1 ? 's' : ''}</span>
-            <span class="badge bg-teal-lt text-teal">Qty: ${loc.total_qty.toLocaleString()}</span>
+            <span class="badge bg-teal-lt text-teal me-2">Qty: ${loc.total_qty.toLocaleString()}</span>
+            <span class="badge bg-azure-lt text-azure">ID: ${loc.id}</span>
           </button>
         </h2>
         <div id="${collapseId}" class="accordion-collapse collapse ${idx === 0 ? 'show' : ''}"
@@ -1719,13 +1732,7 @@ function renderStorageLocationAccordion(locations) {
                 </tr>
               </thead>
               <tbody>${rows}</tbody>
-              <tfoot class="table-secondary">
-                <tr>
-                  <td colspan="3" class="text-end fw-bold">Location Total</td>
-                  <td class="text-end fw-bold">${loc.total_qty.toLocaleString()}</td>
-                  <td colspan="2"></td>
-                </tr>
-              </tfoot>
+              ${totalRow}
             </table>
           </div>
         </div>

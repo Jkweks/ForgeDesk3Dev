@@ -118,7 +118,7 @@
         <table>
             <tr>
                 <td>
-                    <div class="stat-label">LOCATIONS WITH STOCK</div>
+                    <div class="stat-label">TOTAL LOCATIONS</div>
                     <div class="stat-value">{{ $summary['total_locations'] }}</div>
                 </td>
                 <td>
@@ -154,6 +154,7 @@
                 @if($address)
                     <span class="location-meta">— {{ $address }}</span>
                 @endif
+                <span style="float:right; font-weight:normal; font-size:8px; color:#bbb;">ID: {{ $location['id'] }}</span>
             </div>
 
             <table class="items-table">
@@ -168,7 +169,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($location['items'] as $item)
+                    @forelse($location['items'] as $item)
                         <tr>
                             <td>{{ $item['part_number'] ?? '—' }}</td>
                             <td>{{ $item['description'] }}</td>
@@ -177,12 +178,18 @@
                             <td class="text-center">{{ $item['uom'] }}</td>
                             <td class="text-center">{{ $item['is_primary'] ? 'Yes' : '' }}</td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr>
+                            <td colspan="6" class="text-center" style="color:#999; padding: 8px;">No inventory at this location</td>
+                        </tr>
+                    @endforelse
+                    @if(count($location['items']) > 0)
                     <tr class="location-total">
                         <td colspan="3" class="text-right">Location Total</td>
                         <td class="text-right">{{ number_format($location['total_qty']) }}</td>
                         <td colspan="2"></td>
                     </tr>
+                    @endif
                 </tbody>
             </table>
         </div>
