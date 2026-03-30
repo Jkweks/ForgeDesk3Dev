@@ -97,6 +97,14 @@
             background: #eaeaea;
             font-weight: bold;
         }
+        .unassigned-header {
+            background: #7c3800;
+            color: white;
+            padding: 5px 8px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
         .footer {
             margin-top: 20px;
             padding-top: 10px;
@@ -128,6 +136,10 @@
                 <td>
                     <div class="stat-label">TOTAL QUANTITY</div>
                     <div class="stat-value">{{ number_format($summary['total_qty']) }}</div>
+                </td>
+                <td>
+                    <div class="stat-label">UNASSIGNED PARTS</div>
+                    <div class="stat-value" style="color:{{ $summary['unassigned_count'] > 0 ? '#c0392b' : '#27ae60' }};">{{ $summary['unassigned_count'] }}</div>
                 </td>
             </tr>
         </table>
@@ -196,6 +208,39 @@
     @empty
         <p style="text-align:center; color:#999; margin-top:40px;">No storage locations with inventory found.</p>
     @endforelse
+
+    @if(count($unassigned_products) > 0)
+        <div class="location-block" style="margin-top:20px;">
+            <div class="unassigned-header">
+                &#9888; PARTS WITH NO STORAGE LOCATION
+                <span style="float:right; font-weight:normal; font-size:8px; color:#ffb38a;">{{ count($unassigned_products) }} part{{ count($unassigned_products) !== 1 ? 's' : '' }}</span>
+            </div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width:12%;">Part #</th>
+                        <th style="width:38%;">Description</th>
+                        <th style="width:10%;">SKU</th>
+                        <th style="width:8%;" class="text-right">On Hand</th>
+                        <th style="width:8%;" class="text-right">Committed</th>
+                        <th style="width:5%;" class="text-center">UOM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($unassigned_products as $p)
+                        <tr>
+                            <td>{{ $p['part_number'] ?? '—' }}</td>
+                            <td>{{ $p['description'] }}</td>
+                            <td>{{ $p['sku'] }}</td>
+                            <td class="text-right">{{ number_format($p['quantity_on_hand']) }}</td>
+                            <td class="text-right">{{ number_format($p['quantity_committed']) }}</td>
+                            <td class="text-center">{{ $p['uom'] }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 
     <div class="footer">
         <p>ForgeDesk Inventory Management System | Storage Location Contents Report | Generated {{ now()->format('M d, Y H:i:s') }}</p>

@@ -1417,12 +1417,30 @@ class ReportsController extends Controller
             })
             ->values();
 
+        $unassigned = \App\Models\Product::whereNull('deleted_at')
+            ->whereDoesntHave('inventoryLocations', fn($q) =>
+                $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
+            )
+            ->orderBy('sku')
+            ->get()
+            ->map(fn($p) => [
+                'sku'                => $p->sku,
+                'part_number'        => $p->part_number,
+                'description'        => $p->description,
+                'quantity_on_hand'   => $p->quantity_on_hand,
+                'quantity_committed' => $p->quantity_committed,
+                'uom'                => $p->stock_uom ?? $p->unit_of_measure,
+            ])
+            ->values();
+
         return response()->json([
-            'locations' => $locations,
-            'summary'   => [
-                'total_locations'   => $locations->count(),
-                'total_line_items'  => $locations->sum('item_count'),
-                'total_qty'         => $locations->sum('total_qty'),
+            'locations'           => $locations,
+            'unassigned_products' => $unassigned,
+            'summary'             => [
+                'total_locations'    => $locations->count(),
+                'total_line_items'   => $locations->sum('item_count'),
+                'total_qty'          => $locations->sum('total_qty'),
+                'unassigned_count'   => $unassigned->count(),
             ],
         ]);
     }
@@ -1436,8 +1454,9 @@ class ReportsController extends Controller
         $reportData = $data->original;
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.storage-location-report', [
-            'locations' => $reportData['locations'],
-            'summary'   => $reportData['summary'],
+            'locations'           => $reportData['locations'],
+            'summary'             => $reportData['summary'],
+            'unassigned_products' => $reportData['unassigned_products'],
         ]);
 
         $pdf->setPaper('letter', 'portrait');

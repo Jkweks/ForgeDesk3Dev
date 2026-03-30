@@ -812,7 +812,7 @@
           </div>
           <div class="card-body">
             <div class="row mb-3">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <div class="card card-sm">
                   <div class="card-body">
                     <div class="text-muted">Total Locations</div>
@@ -820,7 +820,7 @@
                   </div>
                 </div>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <div class="card card-sm">
                   <div class="card-body">
                     <div class="text-muted">Total Line Items</div>
@@ -828,11 +828,19 @@
                   </div>
                 </div>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <div class="card card-sm">
                   <div class="card-body">
                     <div class="text-muted">Total Quantity</div>
                     <div class="h2 mb-0 text-success" id="storageLocationTotalQty">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Unassigned Parts</div>
+                    <div class="h2 mb-0" id="storageLocationUnassignedCount">-</div>
                   </div>
                 </div>
               </div>
@@ -845,6 +853,32 @@
 
             <div id="storageLocationContent" style="display: none;">
               <div class="accordion" id="storageLocationAccordion"></div>
+
+              <div id="storageLocationUnassigned" style="display:none; margin-top:20px;">
+                <div class="card border-warning">
+                  <div class="card-header bg-warning-lt">
+                    <h4 class="card-title text-warning mb-0">
+                      <i class="ti ti-alert-triangle me-2"></i>Parts With No Storage Location
+                    </h4>
+                    <span class="ms-auto badge bg-warning text-white" id="storageLocationUnassignedBadge"></span>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-vcenter mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Part #</th>
+                          <th>Description</th>
+                          <th>SKU</th>
+                          <th class="text-end">On Hand</th>
+                          <th class="text-end">Committed</th>
+                          <th class="text-center">UOM</th>
+                        </tr>
+                      </thead>
+                      <tbody id="storageLocationUnassignedBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1654,8 +1688,14 @@ async function loadStorageLocationReport() {
     document.getElementById('storageLocationLineItems').textContent = response.summary.total_line_items.toLocaleString();
     document.getElementById('storageLocationTotalQty').textContent = response.summary.total_qty.toLocaleString();
 
+    const unassignedCount = response.summary.unassigned_count || 0;
+    const unassignedEl = document.getElementById('storageLocationUnassignedCount');
+    unassignedEl.textContent = unassignedCount.toLocaleString();
+    unassignedEl.className = 'h2 mb-0 ' + (unassignedCount > 0 ? 'text-danger' : 'text-success');
+
     storageLocationData = response.locations;
     renderStorageLocationAccordion(storageLocationData);
+    renderStorageLocationUnassigned(response.unassigned_products || []);
 
     document.getElementById('storageLocationLoading').style.display = 'none';
     document.getElementById('storageLocationContent').style.display = 'block';
@@ -1762,6 +1802,30 @@ function filterStorageLocationReport(searchTerm) {
     })
     .filter(Boolean);
   renderStorageLocationAccordion(filtered);
+}
+
+function renderStorageLocationUnassigned(products) {
+  const section = document.getElementById('storageLocationUnassigned');
+  const badge   = document.getElementById('storageLocationUnassignedBadge');
+  const tbody   = document.getElementById('storageLocationUnassignedBody');
+
+  if (!products || products.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  badge.textContent = `${products.length} part${products.length !== 1 ? 's' : ''}`;
+  tbody.innerHTML = products.map(p => `
+    <tr>
+      <td class="text-muted">${escapeHtml(p.part_number || '—')}</td>
+      <td>${escapeHtml(p.description || '')}</td>
+      <td><code>${escapeHtml(p.sku)}</code></td>
+      <td class="text-end">${(p.quantity_on_hand || 0).toLocaleString()}</td>
+      <td class="text-end">${(p.quantity_committed || 0).toLocaleString()}</td>
+      <td class="text-center">${escapeHtml(p.uom || '')}</td>
+    </tr>`).join('');
+
+  section.style.display = '';
 }
 
 async function exportStorageLocationPdf() {
