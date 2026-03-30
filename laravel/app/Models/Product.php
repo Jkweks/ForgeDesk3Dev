@@ -298,6 +298,12 @@ class Product extends Model
         $this->save();
     }
 
+    /**
+     * @deprecated Use InventoryLocationController::adjust() instead, which keeps
+     *             inventory_locations in sync before recalculating the product totals.
+     *             This method edits quantity_on_hand directly without touching any
+     *             storage location, leaving the two out of sync.
+     */
     public function adjustQuantity($quantity, $type, $reference = null, $notes = null)
     {
         $quantityBefore = $this->quantity_on_hand;
