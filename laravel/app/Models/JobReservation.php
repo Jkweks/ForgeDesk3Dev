@@ -42,6 +42,13 @@ class JobReservation extends Model
                     ->max('reservation_id') ?? 0;
                 $reservation->reservation_id = $maxReservationId + 1;
             }
+
+            // Auto-generate sequential release_number per job_number when not explicitly provided
+            if (!$reservation->release_number) {
+                $maxRelease = static::where('job_number', $reservation->job_number)
+                    ->max('release_number') ?? 0;
+                $reservation->release_number = $maxRelease + 1;
+            }
         });
 
         // When reservation status changes, recalculate committed quantities for all products

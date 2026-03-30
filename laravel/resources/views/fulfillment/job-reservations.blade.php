@@ -424,8 +424,9 @@
                   </div>
                   <div class="col-md-4">
                     <div class="mb-3">
-                      <label class="form-label">Release Number <span class="text-danger">*</span></label>
-                      <input type="number" class="form-control" id="manualReleaseNumber" min="1" value="1" required>
+                      <label class="form-label">Release Number</label>
+                      <input type="number" class="form-control" id="manualReleaseNumber" min="1" placeholder="Auto-assigned">
+                      <small class="text-muted" id="manualReleaseNumberHint"></small>
                     </div>
                   </div>
                   <div class="col-md-4">
@@ -1555,7 +1556,8 @@
         function openManualReservationModal() {
             // Reset form
             document.getElementById('manualJobNumber').value = '';
-            document.getElementById('manualReleaseNumber').value = '1';
+            document.getElementById('manualReleaseNumber').value = '';
+            document.getElementById('manualReleaseNumberHint').textContent = '';
             document.getElementById('manualJobName').value = '';
             document.getElementById('manualRequestedBy').value = '';
             document.getElementById('manualNeededBy').value = '';
@@ -1578,6 +1580,38 @@
             backdrop.setAttribute('data-modal-id', 'manualReservationModal');
             document.body.appendChild(backdrop);
         }
+
+        // Auto-suggest next release number when job number is entered
+        document.getElementById('manualJobNumber').addEventListener('blur', async function () {
+            const jobNumber = this.value.trim();
+            const hint = document.getElementById('manualReleaseNumberHint');
+            const releaseInput = document.getElementById('manualReleaseNumber');
+            if (!jobNumber) {
+                hint.textContent = '';
+                return;
+            }
+            try {
+                const token = localStorage.getItem('authToken');
+                const res = await fetch(`/api/v1/job-reservations?job_number=${encodeURIComponent(jobNumber)}`, {
+                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const existing = (data.reservations || []).filter(r => r.job_number == jobNumber);
+                    const maxRelease = existing.reduce((max, r) => Math.max(max, r.release_number || 0), 0);
+                    const nextRelease = maxRelease + 1;
+                    if (!releaseInput.value) {
+                        releaseInput.value = nextRelease;
+                    }
+                    hint.textContent = existing.length > 0
+                        ? `Job has ${existing.length} existing release(s). Next: R${nextRelease}`
+                        : 'New job — will be Release 1';
+                    hint.className = 'text-muted small';
+                }
+            } catch (e) {
+                hint.textContent = '';
+            }
+        });
 
         function showManualAddItemForm() {
             document.getElementById('manualAddItemForm').style.display = 'block';
@@ -1726,7 +1760,8 @@
         async function createManualReservation() {
             // Validate form
             const jobNumber = document.getElementById('manualJobNumber').value.trim();
-            const releaseNumber = parseInt(document.getElementById('manualReleaseNumber').value);
+            const releaseNumberRaw = document.getElementById('manualReleaseNumber').value.trim();
+            const releaseNumber = releaseNumberRaw ? parseInt(releaseNumberRaw) : null;
             const jobName = document.getElementById('manualJobName').value.trim();
             const requestedBy = document.getElementById('manualRequestedBy').value.trim();
             const neededBy = document.getElementById('manualNeededBy').value;
@@ -1762,7 +1797,7 @@
                     },
                     body: JSON.stringify({
                         job_number: jobNumber,
-                        release_number: releaseNumber,
+                        ...(releaseNumber ? { release_number: releaseNumber } : {}),
                         job_name: jobName,
                         requested_by: requestedBy,
                         needed_by: neededBy || null,
