@@ -1760,7 +1760,6 @@ function filterStorageLocationReport(searchTerm) {
 async function exportStorageLocationPdf() {
   try {
     showNotification('Generating PDF report...', 'info');
-    const authToken = localStorage.getItem('auth_token');
     const response = await fetch(`${API_BASE}/reports/storage-locations/pdf`, {
       headers: { 'Authorization': `Bearer ${authToken}`, 'Accept': 'application/pdf' }
     });
