@@ -1761,7 +1761,7 @@ async function exportStorageLocationPdf() {
   try {
     showNotification('Generating PDF report...', 'info');
     const authToken = localStorage.getItem('auth_token');
-    const response = await fetch('/api/v1/reports/storage-locations/pdf', {
+    const response = await fetch(`${API_BASE}/reports/storage-locations/pdf`, {
       headers: { 'Authorization': `Bearer ${authToken}`, 'Accept': 'application/pdf' }
     });
     if (!response.ok) throw new Error('Failed to generate PDF');
