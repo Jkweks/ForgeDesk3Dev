@@ -85,3 +85,7 @@ Route::get('/status', function () {
 Route::get('/admin', function () {
     return view('admin');
 });
+
+Route::get('/admin/location-assignment', function () {
+    return view('admin.location-assignment');
+});

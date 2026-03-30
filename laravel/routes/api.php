@@ -262,6 +262,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products/{product}/locations/{location}/adjust', [InventoryLocationController::class, 'adjust']);
         Route::get('/products/{product}/locations/statistics', [InventoryLocationController::class, 'statistics']);
         Route::get('/locations', [InventoryLocationController::class, 'getAllLocations']);
+        Route::get('/locations/by-storage/{storageLocation}', [InventoryLocationController::class, 'itemsAtLocation']);
 
         // Storage Locations (Master Location Management)
         Route::get('/storage-locations-tree', [App\Http\Controllers\Api\StorageLocationController::class, 'tree']);
