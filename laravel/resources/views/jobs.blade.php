@@ -28,7 +28,7 @@
           <!-- Stats Cards -->
           <div class="row row-deck row-cards mb-3">
             <div class="col-sm-6 col-lg-3">
-              <div class="card">
+              <div class="card stat-card" id="statCardAll" style="cursor:pointer;" onclick="filterByStatCard('')" title="Show all jobs">
                 <div class="card-body">
                   <div class="subheader">Total Jobs</div>
                   <div class="h1 mb-3" id="statTotalJobs">-</div>
@@ -37,7 +37,7 @@
               </div>
             </div>
             <div class="col-sm-6 col-lg-3">
-              <div class="card">
+              <div class="card stat-card" id="statCardActive" style="cursor:pointer;" onclick="filterByStatCard('active')" title="Filter by Active">
                 <div class="card-body">
                   <div class="subheader">Active Jobs</div>
                   <div class="h1 mb-3 text-success" id="statActiveJobs">-</div>
@@ -46,7 +46,7 @@
               </div>
             </div>
             <div class="col-sm-6 col-lg-3">
-              <div class="card">
+              <div class="card stat-card" id="statCardOnHold" style="cursor:pointer;" onclick="filterByStatCard('on_hold')" title="Filter by On Hold">
                 <div class="card-body">
                   <div class="subheader">On Hold</div>
                   <div class="h1 mb-3 text-warning" id="statOnHoldJobs">-</div>
@@ -55,7 +55,7 @@
               </div>
             </div>
             <div class="col-sm-6 col-lg-3">
-              <div class="card">
+              <div class="card stat-card" id="statCardCompleted" style="cursor:pointer;" onclick="filterByStatCard('completed')" title="Filter by Completed">
                 <div class="card-body">
                   <div class="subheader">Completed</div>
                   <div class="h1 mb-3 text-info" id="statCompletedJobs">-</div>
@@ -92,14 +92,14 @@
                       <table class="table table-vcenter card-table table-striped">
                         <thead>
                           <tr>
-                            <th>Job Number</th>
+                            <th style="cursor:pointer;" onclick="sortJobs('job_number')">Job Number <span id="sort_job_number"></span></th>
                             <th>Job Name</th>
-                            <th>Customer</th>
-                            <th>Status</th>
+                            <th style="cursor:pointer;" onclick="sortJobs('customer_name')">Customer <span id="sort_customer_name"></span></th>
+                            <th style="cursor:pointer;" onclick="sortJobs('status')">Status <span id="sort_status"></span></th>
                             <th>Reservations</th>
-                            <th>Start Date</th>
-                            <th>Target Completion</th>
-                            <th>Days Remaining</th>
+                            <th style="cursor:pointer;" onclick="sortJobs('start_date')">Start Date <span id="sort_start_date"></span></th>
+                            <th style="cursor:pointer;" onclick="sortJobs('target_completion_date')">Target Completion <span id="sort_target_completion_date"></span></th>
+                            <th style="cursor:pointer;" onclick="sortJobs('days_until_completion')">Days Remaining <span id="sort_days_until_completion"></span></th>
                             <th class="w-1">Actions</th>
                           </tr>
                         </thead>
@@ -234,6 +234,7 @@
               </div>
             </form>
           </div>
+          <div id="jobModalError" class="alert alert-danger mx-3 mb-0" style="display:none;"></div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn btn-primary" onclick="saveJob()">Save Job</button>
@@ -280,16 +281,6 @@
               <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="reservations-tab" data-bs-toggle="tab" data-bs-target="#reservations" type="button" role="tab">
                   <i class="ti ti-clipboard-check me-1"></i>Reservations <span class="badge bg-info ms-1" id="reservationsCount">0</span>
-                </button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="door-configs-tab" data-bs-toggle="tab" data-bs-target="#door-configs" type="button" role="tab">
-                  <i class="ti ti-door me-1"></i>Door Configurations <span class="badge bg-secondary ms-1" id="doorConfigsCount">0</span>
-                </button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="work-orders-tab" data-bs-toggle="tab" data-bs-target="#work-orders" type="button" role="tab">
-                  <i class="ti ti-tool me-1"></i>Work Orders <span class="badge bg-secondary ms-1" id="workOrdersCount">0</span>
                 </button>
               </li>
             </ul>
@@ -359,33 +350,6 @@
                 </div>
               </div>
 
-              <!-- Door Configurations Tab (Placeholder) -->
-              <div class="tab-pane fade" id="door-configs" role="tabpanel">
-                <div class="empty">
-                  <div class="empty-icon">
-                    <i class="ti ti-door" style="font-size: 3rem; opacity: 0.5;"></i>
-                  </div>
-                  <p class="empty-title">Door Configurations</p>
-                  <p class="empty-subtitle text-muted">
-                    Door configuration system will be integrated here.<br>
-                    This will connect with the new configurator tool.
-                  </p>
-                </div>
-              </div>
-
-              <!-- Work Orders Tab (Placeholder) -->
-              <div class="tab-pane fade" id="work-orders" role="tabpanel">
-                <div class="empty">
-                  <div class="empty-icon">
-                    <i class="ti ti-tool" style="font-size: 3rem; opacity: 0.5;"></i>
-                  </div>
-                  <p class="empty-title">Work Orders</p>
-                  <p class="empty-subtitle text-muted">
-                    Work order tracking system will be integrated here.<br>
-                    Manage production tasks and track progress.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
           <div class="modal-footer">
@@ -773,9 +737,13 @@
                       <h4 class="card-title">Add New Item</h4>
                       <div class="row">
                         <div class="col-md-6">
-                          <label class="form-label">Product SKU</label>
-                          <input type="text" class="form-control" id="editResNewItemSKU" placeholder="Enter SKU...">
+                          <label class="form-label">Product (Search by SKU, Part #, or Description)</label>
+                          <input type="text" class="form-control" id="editResNewItemSearch" placeholder="Type to search...">
                           <input type="hidden" id="editResNewItemProductId">
+                          <div id="editResNewItemSearchResults" class="list-group mt-1" style="max-height: 200px; overflow-y: auto; display: none;"></div>
+                          <div id="editResNewItemSelected" style="display: none;" class="alert alert-success mt-2 mb-0 py-2">
+                            <strong>Selected:</strong> <span id="editResNewItemInfo"></span>
+                          </div>
                         </div>
                         <div class="col-md-3">
                           <label class="form-label">Requested Qty</label>
@@ -784,6 +752,7 @@
                         <div class="col-md-3">
                           <label class="form-label">Committed Qty</label>
                           <input type="number" class="form-control" id="editResNewItemCommittedQty" min="0" value="0">
+                          <small class="form-hint">0 = auto</small>
                         </div>
                       </div>
                       <div class="d-flex gap-2 mt-2">
@@ -911,7 +880,7 @@
                 }
             } catch (error) {
                 console.error('Error loading jobs:', error);
-                alert('Failed to load jobs');
+                showToast('Failed to load jobs', 'danger');
                 document.getElementById('loadingIndicator').style.display = 'none';
             }
         }
@@ -991,7 +960,58 @@
                 filtered = filtered.filter(job => job.status === statusFilter);
             }
 
-            displayJobs(filtered);
+            displayJobs(applySortToJobs(filtered));
+        }
+
+        let sortField = null;
+        let sortDir = 'asc';
+
+        function sortJobs(field) {
+            if (sortField === field) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortField = field;
+                sortDir = 'asc';
+            }
+
+            // Update sort indicators
+            document.querySelectorAll('thead span[id^="sort_"]').forEach(el => el.textContent = '');
+            const indicator = document.getElementById('sort_' + field);
+            if (indicator) indicator.textContent = sortDir === 'asc' ? ' ↑' : ' ↓';
+
+            filterJobs();
+        }
+
+        function applySortToJobs(jobs) {
+            if (!sortField) return jobs;
+            return [...jobs].sort((a, b) => {
+                let va = a[sortField];
+                let vb = b[sortField];
+
+                // Nulls last
+                if (va === null || va === undefined) return 1;
+                if (vb === null || vb === undefined) return -1;
+
+                if (typeof va === 'string') va = va.toLowerCase();
+                if (typeof vb === 'string') vb = vb.toLowerCase();
+
+                if (va < vb) return sortDir === 'asc' ? -1 : 1;
+                if (va > vb) return sortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function filterByStatCard(status) {
+            const filterSelect = document.getElementById('filterStatus');
+            filterSelect.value = status;
+
+            // Highlight the active card
+            const cardMap = { '': 'statCardAll', 'active': 'statCardActive', 'on_hold': 'statCardOnHold', 'completed': 'statCardCompleted' };
+            document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('border-primary', 'border-2'));
+            const activeCard = document.getElementById(cardMap[status]);
+            if (activeCard) activeCard.classList.add('border-primary', 'border-2');
+
+            filterJobs();
         }
 
         function showAddJobModal() {
@@ -1036,11 +1056,14 @@
                 showModal(document.getElementById('jobModal'));
             } catch (error) {
                 console.error('Error loading job:', error);
-                alert('Failed to load job details');
+                showToast('Failed to load job details', 'danger');
             }
         }
 
         async function saveJob() {
+            const jobModalError = document.getElementById('jobModalError');
+            jobModalError.style.display = 'none';
+
             const jobId = document.getElementById('jobId').value;
             const isEdit = jobId !== '';
 
@@ -1073,23 +1096,27 @@
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.message || 'Failed to save job');
+                    const msg = error.message || 'Failed to save job';
+                    jobModalError.textContent = msg;
+                    jobModalError.style.display = 'block';
+                    return;
                 }
 
                 hideModal(document.getElementById('jobModal'));
-
                 await loadJobs();
-                alert(isEdit ? 'Job updated successfully' : 'Job created successfully');
+                showToast(isEdit ? 'Job updated successfully' : 'Job created successfully', 'success');
             } catch (error) {
                 console.error('Error saving job:', error);
-                alert(error.message);
+                showToast(error.message, 'danger');
             }
         }
 
         async function deleteJob(id) {
-            if (!confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
-                return;
-            }
+            const confirmed = await showConfirm(
+                'Are you sure you want to delete this job? This action cannot be undone.',
+                'Delete Job', 'Delete', 'btn-danger'
+            );
+            if (!confirmed) return;
 
             try {
                 const response = await fetch(`/api/v1/business-jobs/${id}`, {
@@ -1105,10 +1132,10 @@
                 }
 
                 await loadJobs();
-                alert('Job deleted successfully');
+                showToast('Job deleted successfully', 'success');
             } catch (error) {
                 console.error('Error deleting job:', error);
-                alert(error.message);
+                showToast(error.message, 'danger');
             }
         }
 
@@ -1212,7 +1239,7 @@
                 displayJobReservations();
             } catch (error) {
                 console.error('Error loading reservations:', error);
-                alert('Failed to load reservations');
+                showToast('Failed to load reservations', 'danger');
                 document.getElementById('reservationsLoading').style.display = 'none';
             }
         }
@@ -1233,7 +1260,7 @@
                     <td><strong>#${res.reservation_id}</strong></td>
                     <td><span class="badge bg-${getReservationStatusColor(res.status)}">${res.status_label}</span></td>
                     <td>${escapeHtml(res.requested_by)}</td>
-                    <td>${res.needed_by || '-'}</td>
+                    <td>${formatNeededBy(res.needed_by, res.status)}</td>
                     <td>${res.items_count}</td>
                     <td>${res.total_committed}</td>
                     <td>${res.total_consumed}</td>
@@ -1274,6 +1301,18 @@
                 'cancelled': 'dark',
             };
             return colors[status] || 'secondary';
+        }
+
+        function formatNeededBy(neededBy, status) {
+            if (!neededBy) return '-';
+            if (['fulfilled', 'cancelled'].includes(status)) return neededBy;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const due = new Date(neededBy + 'T00:00:00');
+            if (due < today) {
+                return `<span class="text-danger fw-bold"><i class="ti ti-alert-triangle me-1"></i>${neededBy}</span>`;
+            }
+            return neededBy;
         }
 
         function showAddReservationModal() {
@@ -1368,10 +1407,10 @@
             const requestedQty = parseInt(document.getElementById('newResItemRequestedQty').value);
             const committedQty = parseInt(document.getElementById('newResItemCommittedQty').value);
 
-            if (!productId) { alert('Please select a product'); return; }
-            if (requestedQty < 1) { alert('Requested quantity must be at least 1'); return; }
+            if (!productId) { showToast('Please select a product', 'warning'); return; }
+            if (requestedQty < 1) { showToast('Requested quantity must be at least 1', 'warning'); return; }
             if (reservationItems.some(item => item.product_id == productId)) {
-                alert('This product is already in the reservation');
+                showToast('This product is already in the reservation', 'warning');
                 return;
             }
 
@@ -1445,12 +1484,12 @@
             const notes = document.getElementById('reservationNotes').value;
 
             if (!requestedBy) {
-                alert('Please enter who requested this reservation');
+                showToast('Please enter who requested this reservation', 'warning');
                 return;
             }
 
             if (reservationItems.length === 0) {
-                alert('Please add at least one item to the reservation');
+                showToast('Please add at least one item to the reservation', 'warning');
                 return;
             }
 
@@ -1484,10 +1523,13 @@
                 await loadJobReservations(jobId);
                 await loadJobs();
 
-                alert(`Reservation #${data.reservation.reservation_id} created successfully!`);
+                if (data.job_reopened) {
+                    showToast('Job was reopened to Active because a new reservation was added.', 'info');
+                }
+                showToast(`Reservation #${data.reservation.reservation_id} created successfully`, 'success');
             } catch (error) {
                 console.error('Error creating reservation:', error);
-                alert(error.message);
+                showToast(error.message, 'danger');
             }
         }
 
@@ -1508,7 +1550,7 @@
                 showReservationDetailModal(data);
             } catch (error) {
                 console.error('Error loading reservation details:', error);
-                alert('Failed to load reservation details');
+                showToast('Failed to load reservation details', 'danger');
             }
         }
 
@@ -1546,7 +1588,7 @@
                             <dt class="col-5">Requested By:</dt>
                             <dd class="col-7">${escapeHtml(res.requested_by || '-')}</dd>
                             <dt class="col-5">Needed By:</dt>
-                            <dd class="col-7">${res.needed_by || '-'}</dd>
+                            <dd class="col-7">${formatNeededBy(res.needed_by, res.status)}</dd>
                         </dl>
                     </div>
                     <div class="col-md-6">
@@ -1601,9 +1643,11 @@
         async function deleteReservation(reservationId) {
             if (!currentJobForReservations) return;
 
-            if (!confirm(`Are you sure you want to delete Reservation #${reservationId}? This action cannot be undone.`)) {
-                return;
-            }
+            const confirmed = await showConfirm(
+                `Are you sure you want to delete Reservation #${reservationId}? This action cannot be undone.`,
+                'Delete Reservation', 'Delete', 'btn-danger'
+            );
+            if (!confirmed) return;
 
             try {
                 const response = await fetch(`/api/v1/business-jobs/${currentJobForReservations.id}/reservations/${reservationId}`, {
@@ -1618,14 +1662,13 @@
                     throw new Error(error.message || 'Failed to delete reservation');
                 }
 
-                // Refresh reservations list
                 await loadJobReservations(currentJobForReservations.id);
-                await loadJobs(); // Refresh main jobs list to update counts
+                await loadJobs();
 
-                alert('Reservation deleted successfully');
+                showToast('Reservation deleted successfully', 'success');
             } catch (error) {
                 console.error('Error deleting reservation:', error);
-                alert(error.message);
+                showToast(error.message, 'danger');
             }
         }
 
@@ -1633,8 +1676,22 @@
 
         function showReservationStatusModal(id, currentStatus) {
             document.getElementById('resStatusChangeId').value = id;
-            document.getElementById('resNewStatus').value = currentStatus;
             document.getElementById('resStatusWarnings').style.display = 'none';
+
+            // Rebuild options excluding the current status
+            const select = document.getElementById('resNewStatus');
+            const allStatuses = [
+                { value: 'active', label: 'Active' },
+                { value: 'in_progress', label: 'In Progress' },
+                { value: 'fulfilled', label: 'Fulfilled' },
+                { value: 'on_hold', label: 'On Hold' },
+                { value: 'cancelled', label: 'Cancelled' },
+            ];
+            select.innerHTML = allStatuses
+                .filter(s => s.value !== currentStatus)
+                .map(s => `<option value="${s.value}">${s.label}</option>`)
+                .join('');
+
             showModal(document.getElementById('reservationStatusModal'));
         }
 
@@ -1668,22 +1725,25 @@
                             warningsDiv.innerHTML += `<br><strong>Insufficient items:</strong> ${items}`;
                         }
 
-                        if (!confirm('There are warnings. Do you want to proceed anyway?')) {
-                            return;
-                        }
+                        const proceed = await showConfirm(
+                            'There are stock warnings. Do you want to proceed anyway?',
+                            'Stock Warning', 'Proceed', 'btn-warning'
+                        );
+                        if (!proceed) return;
                     }
 
                     hideModal(document.getElementById('reservationStatusModal'));
                     await loadJobReservations(currentJobForReservations.id);
                     await loadJobs();
-                    alert(`Status updated to: ${data.reservation.new_status}`);
+                    showToast(`Status updated to: ${data.reservation.new_status}`, 'success');
+                    await checkAllReservationsFulfilled();
                 } else {
                     const error = await response.json();
-                    alert('Error updating status: ' + (error.message || error.error));
+                    showToast('Error updating status: ' + (error.message || error.error), 'danger');
                 }
             } catch (error) {
                 console.error('Error updating status:', error);
-                alert('Error updating status: ' + error.message);
+                showToast('Error updating status: ' + error.message, 'danger');
             }
         }
 
@@ -1699,7 +1759,7 @@
                     }
                 });
 
-                if (!response.ok) { alert('Error loading reservation details'); return; }
+                if (!response.ok) { showToast('Error loading reservation details', 'danger'); return; }
 
                 const data = await response.json();
                 const items = data.items;
@@ -1737,7 +1797,7 @@
                 showModal(document.getElementById('reservationCompleteModal'));
             } catch (error) {
                 console.error('Error loading reservation:', error);
-                alert('Error loading reservation details');
+                showToast('Error loading reservation details', 'danger');
             }
         }
 
@@ -1748,7 +1808,7 @@
             const alreadyConsumed = parseInt(input.dataset.alreadyConsumed);
 
             if (consumed < alreadyConsumed) {
-                alert(`Cannot reduce consumed quantity below already consumed (${alreadyConsumed})`);
+                showToast(`Cannot reduce consumed quantity below already consumed (${alreadyConsumed})`, 'warning');
                 input.value = alreadyConsumed;
                 return;
             }
@@ -1789,17 +1849,15 @@
                     await loadJobReservations(currentJobForReservations.id);
                     await loadJobs();
 
-                    const summary = data.items.map(item =>
-                        `${item.part_number}-${item.finish}: Consumed ${item.consumed}, Released ${item.released}`
-                    ).join('\n');
-                    alert(`✅ Reservation completed!\n\nTotal Consumed: ${data.reservation.total_consumed}\nTotal Released: ${data.reservation.total_released}\n\n${summary}`);
+                    showToast(`Reservation completed — Consumed: ${data.reservation.total_consumed}, Released: ${data.reservation.total_released}`, 'success');
+                    await checkAllReservationsFulfilled();
                 } else {
                     const error = await response.json();
-                    alert('Error completing reservation: ' + (error.message || error.error));
+                    showToast('Error completing reservation: ' + (error.message || error.error), 'danger');
                 }
             } catch (error) {
                 console.error('Error completing reservation:', error);
-                alert('Error completing reservation: ' + error.message);
+                showToast('Error completing reservation: ' + error.message, 'danger');
             }
         }
 
@@ -1816,7 +1874,7 @@
                     }
                 });
 
-                if (!response.ok) { alert('Error loading reservation for editing'); return; }
+                if (!response.ok) { showToast('Error loading reservation for editing', 'danger'); return; }
 
                 const data = await response.json();
                 editingResReservation = data.reservation;
@@ -1835,7 +1893,7 @@
                 showModal(document.getElementById('editReservationModal'));
             } catch (error) {
                 console.error('Error loading reservation:', error);
-                alert('Error loading reservation for editing');
+                showToast('Error loading reservation for editing', 'danger');
             }
         }
 
@@ -1888,7 +1946,7 @@
             const numValue = parseInt(value);
 
             if (field === 'committed_qty' && numValue < item.consumed_qty) {
-                alert(`Cannot reduce committed quantity below already consumed (${item.consumed_qty})`);
+                showToast(`Cannot reduce committed quantity below already consumed (${item.consumed_qty})`, 'warning');
                 renderEditResItems();
                 return;
             }
@@ -1896,7 +1954,7 @@
             if (field === 'committed_qty' && numValue > item.committed_qty) {
                 const increase = numValue - item.committed_qty;
                 if (increase > item.product.quantity_available) {
-                    alert(`Only ${item.product.quantity_available} available. Cannot increase by ${increase}.`);
+                    showToast(`Only ${item.product.quantity_available} available. Cannot increase by ${increase}.`, 'warning');
                     renderEditResItems();
                     return;
                 }
@@ -1905,13 +1963,63 @@
             item[field] = numValue;
         }
 
+        let editResNewItemSearchTimeout;
+
         function showEditResAddItemForm() {
             document.getElementById('editResAddItemFormContainer').style.display = 'block';
             document.getElementById('editResAddItemBtn').style.display = 'none';
-            document.getElementById('editResNewItemSKU').value = '';
+            document.getElementById('editResNewItemSearch').value = '';
             document.getElementById('editResNewItemProductId').value = '';
             document.getElementById('editResNewItemRequestedQty').value = 1;
             document.getElementById('editResNewItemCommittedQty').value = 0;
+            document.getElementById('editResNewItemSearchResults').style.display = 'none';
+            document.getElementById('editResNewItemSelected').style.display = 'none';
+
+            document.getElementById('editResNewItemSearch').oninput = function() {
+                clearTimeout(editResNewItemSearchTimeout);
+                editResNewItemSearchTimeout = setTimeout(() => searchEditResNewProduct(this.value), 300);
+            };
+        }
+
+        async function searchEditResNewProduct(query) {
+            if (query.length < 2) {
+                document.getElementById('editResNewItemSearchResults').style.display = 'none';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=10`, {
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const resultsDiv = document.getElementById('editResNewItemSearchResults');
+                    if (data.data && data.data.length > 0) {
+                        resultsDiv.innerHTML = data.data.map(p => `
+                            <button type="button" class="list-group-item list-group-item-action"
+                                    onclick="selectEditResNewProduct(${p.id}, '${escapeHtml(p.sku)}', '${escapeHtml(p.part_number || '')}', '${escapeHtml(p.finish || '')}', '${p.description.replace(/'/g, "\\'")}', ${p.quantity_available})">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <strong>${escapeHtml(p.sku)}</strong>
+                                    <span class="badge bg-${p.quantity_available > 0 ? 'success' : 'warning'}">${p.quantity_available} avail</span>
+                                </div>
+                                <small>${escapeHtml(p.part_number || '')} ${escapeHtml(p.finish || '')} — ${escapeHtml(p.description)}</small>
+                            </button>
+                        `).join('');
+                        resultsDiv.style.display = 'block';
+                    } else {
+                        resultsDiv.innerHTML = '<div class="list-group-item">No products found</div>';
+                        resultsDiv.style.display = 'block';
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function selectEditResNewProduct(productId, sku, partNumber, finish, description, available) {
+            document.getElementById('editResNewItemProductId').value = productId;
+            document.getElementById('editResNewItemSearch').value = sku;
+            document.getElementById('editResNewItemSearchResults').style.display = 'none';
+            document.getElementById('editResNewItemInfo').textContent = `${sku} — ${partNumber} ${finish} (${available} available)`;
+            document.getElementById('editResNewItemSelected').style.display = 'block';
+            window._tempEditResNewProduct = { productId, sku, partNumber, finish, description, available };
         }
 
         function hideEditResAddItemForm() {
@@ -1919,68 +2027,49 @@
             document.getElementById('editResAddItemBtn').style.display = 'block';
         }
 
-        async function addItemToEditReservation() {
-            const sku = document.getElementById('editResNewItemSKU').value.trim();
+        function addItemToEditReservation() {
+            const productId = parseInt(document.getElementById('editResNewItemProductId').value);
             const requestedQty = parseInt(document.getElementById('editResNewItemRequestedQty').value);
             const committedQty = parseInt(document.getElementById('editResNewItemCommittedQty').value);
+            const product = window._tempEditResNewProduct;
 
-            if (!sku) { alert('Please enter a product SKU'); return; }
-
-            try {
-                const response = await fetch(`/api/v1/job-reservations/search-product?sku=${encodeURIComponent(sku)}`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
-
-                if (!response.ok) { alert('Product not found'); return; }
-
-                const data = await response.json();
-                const product = data.product;
-
-                if (!product) { alert('Product not found with SKU: ' + sku); return; }
-
-                if (editingResItems.some(item => item.product_id === product.id)) {
-                    alert('This product is already in the reservation');
-                    return;
-                }
-
-                if (committedQty > product.quantity_available) {
-                    alert(`Only ${product.quantity_available} available. Cannot commit ${committedQty}.`);
-                    return;
-                }
-
-                editingResItems.push({
-                    id: null,
-                    product_id: product.id,
-                    requested_qty: requestedQty,
-                    committed_qty: committedQty,
-                    consumed_qty: 0,
-                    product: {
-                        id: product.id,
-                        sku: product.sku,
-                        part_number: product.part_number,
-                        finish: product.finish,
-                        description: product.description,
-                        quantity_on_hand: product.quantity_on_hand,
-                        quantity_available: product.quantity_available
-                    }
-                });
-
-                renderEditResItems();
-                hideEditResAddItemForm();
-            } catch (error) {
-                console.error('Error finding product:', error);
-                alert('Error finding product');
+            if (!productId || !product) { showToast('Please select a product', 'warning'); return; }
+            if (requestedQty < 1) { showToast('Requested quantity must be at least 1', 'warning'); return; }
+            if (editingResItems.some(item => item.product_id === productId)) {
+                showToast('This product is already in the reservation', 'warning');
+                return;
             }
+            if (committedQty > product.available) {
+                showToast(`Only ${product.available} available. Cannot commit ${committedQty}.`, 'warning');
+                return;
+            }
+
+            editingResItems.push({
+                id: null,
+                product_id: productId,
+                requested_qty: requestedQty,
+                committed_qty: committedQty,
+                consumed_qty: 0,
+                product: {
+                    id: productId,
+                    sku: product.sku,
+                    part_number: product.partNumber,
+                    finish: product.finish,
+                    description: product.description,
+                    quantity_on_hand: product.available,
+                    quantity_available: product.available
+                }
+            });
+
+            renderEditResItems();
+            hideEditResAddItemForm();
         }
 
-        function removeEditResItem(index) {
-            if (confirm('Are you sure you want to remove this item?')) {
-                editingResItems.splice(index, 1);
-                renderEditResItems();
-            }
+        async function removeEditResItem(index) {
+            const confirmed = await showConfirm('Remove this item from the reservation?', 'Remove Item', 'Remove', 'btn-danger');
+            if (!confirmed) return;
+            editingResItems.splice(index, 1);
+            renderEditResItems();
         }
 
         async function saveEditedReservation() {
@@ -2002,7 +2091,7 @@
 
                 if (!headerResponse.ok) {
                     const error = await headerResponse.json();
-                    alert('Error updating reservation: ' + (error.message || error.error));
+                    showToast('Error updating reservation: ' + (error.message || error.error), 'danger');
                     return;
                 }
 
@@ -2023,7 +2112,7 @@
                         });
                         if (!addResponse.ok) {
                             const error = await addResponse.json();
-                            alert('Error adding item: ' + (error.message || error.error));
+                            showToast('Error adding item: ' + (error.message || error.error), 'danger');
                             return;
                         }
                     } else {
@@ -2041,7 +2130,7 @@
                         });
                         if (!updateResponse.ok) {
                             const error = await updateResponse.json();
-                            alert('Error updating item: ' + (error.message || error.error));
+                            showToast('Error updating item: ' + (error.message || error.error), 'danger');
                             return;
                         }
                     }
@@ -2050,10 +2139,11 @@
                 hideModal(document.getElementById('editReservationModal'));
                 await loadJobReservations(currentJobForReservations.id);
                 await loadJobs();
-                alert('Reservation updated successfully');
+                showToast('Reservation updated successfully', 'success');
+                viewReservationDetails(id);
             } catch (error) {
                 console.error('Error saving reservation:', error);
-                alert('Error saving reservation: ' + error.message);
+                showToast('Error saving reservation: ' + error.message, 'danger');
             }
         }
 
@@ -2149,7 +2239,7 @@
             const newProductId = document.getElementById('editReplaceNewProductId').value;
             const reason = document.getElementById('editReplaceReason').value;
 
-            if (!newProductId) { alert('Please select a replacement product'); return; }
+            if (!newProductId) { showToast('Please select a replacement product', 'warning'); return; }
 
             const item = editingResItems[itemIndex];
 
@@ -2171,14 +2261,55 @@
 
                     renderEditResItems();
                     hideModal(document.getElementById('editReplaceItemModal'));
-                    alert(`Item replaced successfully`);
+                    showToast('Item replaced successfully', 'success');
                 } else {
                     const error = await response.json();
-                    alert('Error: ' + (error.message || error.error));
+                    showToast('Error: ' + (error.message || error.error), 'danger');
                 }
             } catch (error) {
                 console.error('Error replacing item:', error);
-                alert('Error replacing item: ' + error.message);
+                showToast('Error replacing item: ' + error.message, 'danger');
+            }
+        }
+
+        // ===== ALL RESERVATIONS COMPLETE CHECK =====
+
+        async function checkAllReservationsFulfilled() {
+            if (!currentJobForReservations) return;
+            const job = allJobs.find(j => j.id === currentJobForReservations.id);
+            if (!job || job.status === 'completed' || job.status === 'cancelled') return;
+
+            const allDone = jobReservations.length > 0 &&
+                jobReservations.every(r => r.status === 'fulfilled' || r.status === 'cancelled');
+
+            if (!allDone) return;
+
+            const proceed = await showConfirm(
+                'All reservations are fulfilled or cancelled. Mark this job as Completed?',
+                'Complete Job?', 'Mark Completed', 'btn-success'
+            );
+            if (!proceed) return;
+
+            try {
+                const response = await fetch(`/api/v1/business-jobs/${currentJobForReservations.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+                    },
+                    body: JSON.stringify({ status: 'completed' }),
+                });
+
+                if (response.ok) {
+                    await loadJobs();
+                    showToast('Job marked as Completed', 'success');
+                } else {
+                    const err = await response.json();
+                    showToast(err.message || 'Could not update job status', 'danger');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Error updating job status', 'danger');
             }
         }
 
@@ -2201,7 +2332,7 @@
             const file = fileInput.files[0];
 
             if (!file) {
-                alert('Please select a file');
+                showToast('Please select a file', 'warning');
                 return;
             }
 
@@ -2230,7 +2361,7 @@
                 displayMaterialCheckResults(data.results, data.summary);
             } catch (error) {
                 console.error('Error checking materials:', error);
-                alert('Error checking materials: ' + error.message);
+                showToast('Error checking materials: ' + error.message, 'danger');
             }
         }
 
@@ -2356,7 +2487,7 @@
 
         function showCommitModal() {
             if (selectedMaterialItems.size === 0) {
-                alert('Please select items to commit');
+                showToast('Please select items to commit', 'warning');
                 return;
             }
 
@@ -2373,7 +2504,7 @@
 
         async function commitJobMaterials() {
             if (!currentJobForReservations) {
-                alert('No job selected');
+                showToast('No job selected', 'warning');
                 return;
             }
 
@@ -2382,7 +2513,7 @@
             const notes = document.getElementById('mcNotes').value;
 
             if (!requestedBy) {
-                alert('Please enter who requested this reservation');
+                showToast('Please enter who requested this reservation', 'warning');
                 return;
             }
 
@@ -2404,7 +2535,7 @@
             });
 
             if (items.length === 0) {
-                alert('No valid items to commit');
+                showToast('No valid items to commit', 'warning');
                 return;
             }
 
@@ -2430,18 +2561,19 @@
 
                 const data = await response.json();
 
-                // Close modals
                 hideModal(document.getElementById('commitMaterialsModal'));
                 hideModal(document.getElementById('materialCheckModal'));
 
-                // Refresh reservations list
                 await loadJobReservations(currentJobForReservations.id);
-                await loadJobs(); // Update counts
+                await loadJobs();
 
-                alert(`✅ Reservation #${data.reservation.reservation_id} created successfully from material check!\n\nTotal items: ${items.length}`);
+                if (data.job_reopened) {
+                    showToast('Job was reopened to Active because a new reservation was added.', 'info');
+                }
+                showToast(`Reservation #${data.reservation.reservation_id} created from material check (${items.length} items)`, 'success');
             } catch (error) {
                 console.error('Error creating reservation:', error);
-                alert('Error creating reservation: ' + error.message);
+                showToast('Error creating reservation: ' + error.message, 'danger');
             }
         }
     </script>

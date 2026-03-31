@@ -231,6 +231,20 @@ class BusinessJobController extends Controller
                 ], 422);
             }
 
+            // Guard: cannot mark a job completed while it has open reservations
+            if ($request->status === 'completed' && $job->status !== 'completed') {
+                $openCount = $job->jobReservations()
+                    ->whereIn('status', ['active', 'in_progress', 'on_hold'])
+                    ->count();
+
+                if ($openCount > 0) {
+                    return response()->json([
+                        'error' => 'Cannot complete job',
+                        'message' => "This job has {$openCount} open reservation(s). Complete or cancel them before marking the job complete.",
+                    ], 422);
+                }
+            }
+
             $job->update($request->only([
                 'job_number',
                 'job_name',
@@ -471,7 +485,7 @@ class BusinessJobController extends Controller
                 'requested_by' => $request->requested_by,
                 'needed_by' => $request->needed_by,
                 'notes' => $request->notes,
-                'status' => 'draft',
+                'status' => 'active',
                 // release_number auto-assigned by JobReservation::creating() boot hook
             ]);
 
@@ -502,6 +516,19 @@ class BusinessJobController extends Controller
                 ]);
             }
 
+            // Auto-reopen the job if it was completed or on_hold
+            $jobReopened = false;
+            if (in_array($job->status, ['completed', 'on_hold'])) {
+                $job->status = 'active';
+                $job->save();
+                $jobReopened = true;
+
+                Log::info('Job auto-reopened due to new reservation', [
+                    'job_id' => $job->id,
+                    'job_number' => $job->job_number,
+                ]);
+            }
+
             DB::commit();
 
             Log::info('Job reservation created', [
@@ -519,6 +546,7 @@ class BusinessJobController extends Controller
                     'status' => $reservation->status,
                 ],
                 'warnings' => $warnings,
+                'job_reopened' => $jobReopened,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -549,7 +577,7 @@ class BusinessJobController extends Controller
                 ->firstOrFail();
 
             $validator = Validator::make($request->all(), [
-                'status' => 'required|in:draft,active,in_progress,fulfilled,on_hold,cancelled',
+                'status' => 'required|in:active,in_progress,fulfilled,on_hold,cancelled',
             ]);
 
             if ($validator->fails()) {

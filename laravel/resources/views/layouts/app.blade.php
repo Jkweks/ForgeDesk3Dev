@@ -302,6 +302,116 @@
 
     <!-- Theme Settings (Available on all pages) -->
     @include('partials.theme-settings')
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 9999;"></div>
+
+    <!-- Global Confirm Modal -->
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="confirmModalTitle">Confirm</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p id="confirmModalMessage" class="mb-0"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="confirmModalCancelBtn">Cancel</button>
+            <button type="button" class="btn" id="confirmModalOkBtn">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * Show a toast notification.
+       * @param {string} message
+       * @param {'success'|'danger'|'warning'|'info'} type
+       */
+      function showToast(message, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const colorMap = {
+          success: 'bg-success text-white',
+          danger: 'bg-danger text-white',
+          warning: 'bg-warning text-dark',
+          info: 'bg-info text-white',
+        };
+        const iconMap = {
+          success: 'ti-circle-check',
+          danger: 'ti-circle-x',
+          warning: 'ti-alert-triangle',
+          info: 'ti-info-circle',
+        };
+
+        const id = 'toast_' + Date.now();
+        const div = document.createElement('div');
+        div.id = id;
+        div.className = 'toast align-items-center border-0 ' + (colorMap[type] || colorMap.info);
+        div.setAttribute('role', 'alert');
+        div.setAttribute('aria-live', 'assertive');
+        div.setAttribute('aria-atomic', 'true');
+        div.innerHTML = `
+          <div class="d-flex">
+            <div class="toast-body d-flex align-items-center gap-2">
+              <i class="ti ${iconMap[type] || iconMap.info}"></i>
+              ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        `;
+        container.appendChild(div);
+
+        const toast = new bootstrap.Toast(div, { delay: 4000 });
+        toast.show();
+        div.addEventListener('hidden.bs.toast', () => div.remove());
+      }
+
+      /**
+       * Show a styled confirmation modal instead of browser confirm().
+       * Returns a Promise that resolves true (OK) or false (Cancel).
+       * @param {string} message
+       * @param {string} [title]
+       * @param {string} [okLabel]
+       * @param {string} [okClass]  Bootstrap btn class for the OK button
+       */
+      function showConfirm(message, title = 'Confirm', okLabel = 'Confirm', okClass = 'btn-danger') {
+        return new Promise((resolve) => {
+          document.getElementById('confirmModalTitle').textContent = title;
+          document.getElementById('confirmModalMessage').textContent = message;
+
+          const okBtn = document.getElementById('confirmModalOkBtn');
+          okBtn.textContent = okLabel;
+          okBtn.className = 'btn ' + okClass;
+
+          const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('confirmModal'));
+
+          const onOk = () => {
+            cleanup();
+            modal.hide();
+            resolve(true);
+          };
+          const onHide = () => {
+            cleanup();
+            resolve(false);
+          };
+
+          function cleanup() {
+            okBtn.removeEventListener('click', onOk);
+            document.getElementById('confirmModal').removeEventListener('hide.bs.modal', onHide);
+          }
+
+          okBtn.addEventListener('click', onOk);
+          document.getElementById('confirmModal').addEventListener('hide.bs.modal', onHide, { once: true });
+
+          modal.show();
+        });
+      }
+    </script>
   </div>
 
   <!-- Scripts -->
