@@ -31,12 +31,17 @@ class CycleCountController extends Controller
             $query->where('location', $request->location);
         }
 
-        // Filter by date range
+        // Filter by date range (scheduled_date)
         if ($request->has('date_from')) {
             $query->where('scheduled_date', '>=', $request->date_from);
         }
         if ($request->has('date_to')) {
             $query->where('scheduled_date', '<=', $request->date_to);
+        }
+
+        // Filter by how recently the session was created
+        if ($request->filled('days_ago')) {
+            $query->where('created_at', '>=', now()->subDays((int) $request->days_ago));
         }
 
         // Search
