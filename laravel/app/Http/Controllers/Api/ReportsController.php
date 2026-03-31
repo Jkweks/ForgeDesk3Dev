@@ -1385,7 +1385,7 @@ class ReportsController extends Controller
             ->ordered()
             ->with([
                 'inventoryLocations' => function ($q) {
-                    $q->whereNull('deleted_at')->where('quantity', '>', 0);
+                    $q->whereNull('deleted_at');
                 },
                 'inventoryLocations.product',
             ])
