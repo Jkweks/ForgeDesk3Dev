@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\InventoryTransaction;
+use App\Models\StorageLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -1372,5 +1373,93 @@ class ReportsController extends Controller
 
         $pdf->setPaper('letter', 'landscape');
         return $pdf->stream('inventory-report-' . date('Y-m-d') . '.pdf');
+    }
+
+    /**
+     * Storage location contents report
+     * Returns each active storage location with its inventory items and quantities
+     */
+    public function storageLocationReport(Request $request)
+    {
+        $locations = StorageLocation::active()
+            ->ordered()
+            ->with([
+                'inventoryLocations' => function ($q) {
+                    $q->whereNull('deleted_at');
+                },
+                'inventoryLocations.product',
+            ])
+            ->get()
+            ->map(function (StorageLocation $loc) {
+                $items = $loc->inventoryLocations->map(fn($il) => [
+                    'sku'         => $il->product->sku,
+                    'part_number' => $il->product->part_number,
+                    'description' => $il->product->description,
+                    'quantity'    => $il->quantity,
+                    'uom'         => $il->product->stock_uom ?? $il->product->unit_of_measure,
+                    'is_primary'  => (bool) $il->is_primary,
+                ]);
+
+                return [
+                    'id'            => $loc->id,
+                    'name'          => $loc->name,
+                    'code'          => $loc->code,
+                    'type'          => $loc->type,
+                    'full_path'     => $loc->full_path,
+                    'aisle'         => $loc->aisle,
+                    'bay'           => $loc->bay,
+                    'level'         => $loc->level,
+                    'position'      => $loc->position,
+                    'item_count'    => $items->count(),
+                    'total_qty'     => $items->sum('quantity'),
+                    'items'         => $items->sortBy('sku')->values(),
+                ];
+            })
+            ->values();
+
+        $unassigned = \App\Models\Product::whereNull('deleted_at')
+            ->whereDoesntHave('inventoryLocations', fn($q) =>
+                $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
+            )
+            ->orderBy('sku')
+            ->get()
+            ->map(fn($p) => [
+                'sku'                => $p->sku,
+                'part_number'        => $p->part_number,
+                'description'        => $p->description,
+                'quantity_on_hand'   => $p->quantity_on_hand,
+                'quantity_committed' => $p->quantity_committed,
+                'uom'                => $p->stock_uom ?? $p->unit_of_measure,
+            ])
+            ->values();
+
+        return response()->json([
+            'locations'           => $locations,
+            'unassigned_products' => $unassigned,
+            'summary'             => [
+                'total_locations'    => $locations->count(),
+                'total_line_items'   => $locations->sum('item_count'),
+                'total_qty'          => $locations->sum('total_qty'),
+                'unassigned_count'   => $unassigned->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Generate PDF for Storage Location Contents report
+     */
+    public function storageLocationPdf(Request $request)
+    {
+        $data       = $this->storageLocationReport($request);
+        $reportData = $data->original;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.storage-location-report', [
+            'locations'           => $reportData['locations'],
+            'summary'             => $reportData['summary'],
+            'unassigned_products' => $reportData['unassigned_products'],
+        ]);
+
+        $pdf->setPaper('letter', 'portrait');
+        return $pdf->stream('storage-location-report-' . date('Y-m-d') . '.pdf');
     }
 }

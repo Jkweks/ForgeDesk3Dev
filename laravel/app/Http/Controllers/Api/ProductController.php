@@ -325,9 +325,41 @@ class ProductController extends Controller
         // Record quantity before adjustment
         $quantityBefore = $product->quantity_on_hand;
 
-        // Reduce inventory
-        $product->quantity_on_hand -= $validated['quantity'];
-        $product->save();
+        // Deduct from storage locations (primary first, then secondary by available qty)
+        $remainingToRemove = $validated['quantity'];
+
+        $locations = $product->inventoryLocations()
+            ->orderByRaw('is_primary DESC')
+            ->orderByRaw('(quantity - quantity_committed) DESC')
+            ->get();
+
+        foreach ($locations as $location) {
+            if ($remainingToRemove <= 0) break;
+            $available = $location->quantity - $location->quantity_committed;
+            $deduct = min($remainingToRemove, $available);
+            if ($deduct > 0) {
+                $location->quantity -= $deduct;
+                $location->save();
+                $remainingToRemove -= $deduct;
+            }
+        }
+
+        // Force-deduct any remainder from locations that still have stock
+        if ($remainingToRemove > 0) {
+            foreach ($locations as $location) {
+                if ($remainingToRemove <= 0) break;
+                if ($location->quantity > 0) {
+                    $deduct = min($remainingToRemove, $location->quantity);
+                    $location->quantity -= $deduct;
+                    $location->save();
+                    $remainingToRemove -= $deduct;
+                }
+            }
+        }
+
+        // Recalculate product totals from locations (source of truth)
+        $product->recalculateQuantitiesFromLocations();
+        $product->refresh();
 
         $quantityAfter = $product->quantity_on_hand;
 

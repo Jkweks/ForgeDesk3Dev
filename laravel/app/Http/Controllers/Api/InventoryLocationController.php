@@ -355,6 +355,66 @@ class InventoryLocationController extends Controller
     }
 
     /**
+     * Get all inventory items (with location record IDs) at a specific storage location.
+     * Used by the bulk location-assignment admin tool.
+     */
+    public function itemsAtLocation(\App\Models\StorageLocation $storageLocation)
+    {
+        $items = InventoryLocation::where('storage_location_id', $storageLocation->id)
+            ->whereNull('deleted_at')
+            ->with('product')
+            ->orderBy('is_primary', 'desc')
+            ->get()
+            ->map(fn($il) => [
+                'inv_location_id'    => $il->id,
+                'product_id'         => $il->product_id,
+                'sku'                => $il->product->sku,
+                'part_number'        => $il->product->part_number,
+                'description'        => $il->product->description,
+                'quantity'           => $il->quantity,
+                'quantity_committed' => $il->quantity_committed,
+                'is_primary'         => (bool) $il->is_primary,
+            ]);
+
+        return response()->json([
+            'storage_location' => [
+                'id'   => $storageLocation->id,
+                'name' => $storageLocation->name,
+                'code' => $storageLocation->code,
+            ],
+            'items' => $items,
+            'count' => $items->count(),
+        ]);
+    }
+
+    /**
+     * Get all active products that have no inventory_location record pointing to any storage location.
+     * These are products that are "unassigned" — no location data at all.
+     */
+    public function productsWithoutStorageLocation()
+    {
+        $products = Product::whereNull('deleted_at')
+            ->whereDoesntHave('inventoryLocations', fn($q) =>
+                $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
+            )
+            ->orderBy('sku')
+            ->get()
+            ->map(fn($p) => [
+                'product_id'         => $p->id,
+                'sku'                => $p->sku,
+                'part_number'        => $p->part_number,
+                'description'        => $p->description,
+                'quantity_on_hand'   => $p->quantity_on_hand,
+                'quantity_committed' => $p->quantity_committed,
+            ]);
+
+        return response()->json([
+            'items' => $products,
+            'count' => $products->count(),
+        ]);
+    }
+
+    /**
      * Get all storage locations being used in inventory
      * This returns the hierarchical storage locations that have inventory
      */

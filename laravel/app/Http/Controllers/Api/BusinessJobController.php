@@ -471,8 +471,8 @@ class BusinessJobController extends Controller
                 'requested_by' => $request->requested_by,
                 'needed_by' => $request->needed_by,
                 'notes' => $request->notes,
-                'status' => 'draft', // Start as draft
-                'release_number' => 1, // Keep for backward compatibility
+                'status' => 'draft',
+                // release_number auto-assigned by JobReservation::creating() boot hook
             ]);
 
             // Add items

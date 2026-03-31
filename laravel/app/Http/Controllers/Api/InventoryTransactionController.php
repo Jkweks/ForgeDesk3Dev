@@ -336,6 +336,7 @@ class InventoryTransactionController extends Controller
             'products' => 'required|array|min:1',
             'products.*.product_id' => 'required|exists:products,id',
             'products.*.quantity' => 'required|integer|min:1',
+            'products.*.storage_location_id' => 'nullable|integer|exists:storage_locations,id',
         ]);
 
         DB::beginTransaction();
@@ -358,26 +359,47 @@ class InventoryTransactionController extends Controller
 
                 // Update inventory locations (source of truth)
                 if ($quantityChange > 0) {
-                    // Adding inventory - add to primary location (or create if doesn't exist)
-                    $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();
+                    // For job_material_transfer, honour an explicit storage_location_id if provided
+                    $targetStorageLocationId = $productData['storage_location_id'] ?? null;
 
-                    if (!$primaryLocation) {
-                        // Get or create a default primary location
-                        $defaultLocation = \App\Models\StorageLocation::firstOrCreate(
-                            ['code' => 'DEFAULT'],
-                            ['name' => 'Default Storage', 'type' => 'warehouse', 'is_active' => true]
-                        );
+                    if ($validated['type'] === 'job_material_transfer' && $targetStorageLocationId) {
+                        // Find or create an InventoryLocation row for this product + storage location
+                        $targetLocation = $product->inventoryLocations()
+                            ->where('storage_location_id', $targetStorageLocationId)
+                            ->first();
 
-                        $primaryLocation = $product->inventoryLocations()->create([
-                            'storage_location_id' => $defaultLocation->id,
-                            'quantity' => 0,
-                            'quantity_committed' => 0,
-                            'is_primary' => true,
-                        ]);
+                        if (!$targetLocation) {
+                            $targetLocation = $product->inventoryLocations()->create([
+                                'storage_location_id' => $targetStorageLocationId,
+                                'quantity' => 0,
+                                'quantity_committed' => 0,
+                                'is_primary' => false,
+                            ]);
+                        }
+
+                        $targetLocation->quantity += $quantityChange;
+                        $targetLocation->save();
+                    } else {
+                        // All other adding types — use primary location (or create default)
+                        $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();
+
+                        if (!$primaryLocation) {
+                            $defaultLocation = \App\Models\StorageLocation::firstOrCreate(
+                                ['code' => 'DEFAULT'],
+                                ['name' => 'Default Storage', 'type' => 'warehouse', 'is_active' => true]
+                            );
+
+                            $primaryLocation = $product->inventoryLocations()->create([
+                                'storage_location_id' => $defaultLocation->id,
+                                'quantity' => 0,
+                                'quantity_committed' => 0,
+                                'is_primary' => true,
+                            ]);
+                        }
+
+                        $primaryLocation->quantity += $quantityChange;
+                        $primaryLocation->save();
                     }
-
-                    $primaryLocation->quantity += $quantityChange;
-                    $primaryLocation->save();
 
                 } elseif ($quantityChange < 0) {
                     // Removing inventory - remove from primary first, then secondary locations

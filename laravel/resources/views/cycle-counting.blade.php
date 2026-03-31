@@ -82,18 +82,27 @@
                   <option value="cancelled">Cancelled</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
+                <label class="form-label">Date Range</label>
+                <select class="form-select" id="filterDaysAgo" onchange="loadCycleCounts()">
+                  <option value="">All Time</option>
+                  <option value="30">Last 30 days</option>
+                  <option value="60">Last 60 days</option>
+                  <option value="90">Last 90 days</option>
+                </select>
+              </div>
+              <div class="col-md-2">
                 <label class="form-label">Location</label>
                 <input type="text" class="form-control" id="filterLocation" placeholder="Location..." onkeyup="debounceSearch()">
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label">Search</label>
                 <input type="text" class="form-control" id="filterSearch" placeholder="Session number..." onkeyup="debounceSearch()">
               </div>
-              <div class="col-md-3">
+              <div class="col-md-1">
                 <label class="form-label">&nbsp;</label>
                 <button class="btn btn-secondary w-100" onclick="clearFilters()">
-                  <i class="ti ti-x me-1"></i>Clear Filters
+                  <i class="ti ti-x me-1"></i>Clear
                 </button>
               </div>
             </div>
@@ -799,13 +808,15 @@ async function loadCycleCounts() {
     document.getElementById('sessionContent').style.display = 'none';
 
     const params = new URLSearchParams();
-    const status = document.getElementById('filterStatus').value;
+    const status   = document.getElementById('filterStatus').value;
+    const daysAgo  = document.getElementById('filterDaysAgo').value;
     const location = document.getElementById('filterLocation').value;
-    const search = document.getElementById('filterSearch').value;
+    const search   = document.getElementById('filterSearch').value;
 
-    if (status) params.append('status', status);
+    if (status)   params.append('status', status);
+    if (daysAgo)  params.append('days_ago', daysAgo);
     if (location) params.append('location', location);
-    if (search) params.append('search', search);
+    if (search)   params.append('search', search);
 
     const response = await authenticatedFetch(`/cycle-counts?${params.toString()}`);
     const sessions = response.data || response;
@@ -927,17 +938,23 @@ async function loadProducts() {
 // Load users
 async function loadUsers() {
   try {
-    const response = await authenticatedFetch('/user');
-    const currentUser = response;
+    const [currentUser, allUsersResp] = await Promise.all([
+      authenticatedFetch('/user'),
+      authenticatedFetch('/users?is_active=active&per_page=500'),
+    ]);
+
+    const users = Array.isArray(allUsersResp) ? allUsersResp : (allUsersResp.data || []);
 
     const select = document.getElementById('sessionAssignedTo');
     select.innerHTML = '<option value="">Select user...</option>';
 
-    const option = document.createElement('option');
-    option.value = currentUser.id;
-    option.textContent = currentUser.name;
-    option.selected = true;
-    select.appendChild(option);
+    users.forEach(u => {
+      const option = document.createElement('option');
+      option.value = u.id;
+      option.textContent = u.name;
+      if (u.id === currentUser.id) option.selected = true;
+      select.appendChild(option);
+    });
   } catch (error) {
     console.error('Error loading users:', error);
   }
@@ -1643,6 +1660,7 @@ async function viewSessionDetails(sessionId) {
 // Clear filters
 function clearFilters() {
   document.getElementById('filterStatus').value = '';
+  document.getElementById('filterDaysAgo').value = '';
   document.getElementById('filterLocation').value = '';
   document.getElementById('filterSearch').value = '';
   loadCycleCounts();

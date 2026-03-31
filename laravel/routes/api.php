@@ -262,6 +262,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products/{product}/locations/{location}/adjust', [InventoryLocationController::class, 'adjust']);
         Route::get('/products/{product}/locations/statistics', [InventoryLocationController::class, 'statistics']);
         Route::get('/locations', [InventoryLocationController::class, 'getAllLocations']);
+        Route::get('/locations/by-storage/{storageLocation}', [InventoryLocationController::class, 'itemsAtLocation']);
+        Route::get('/locations/products-without-storage', [InventoryLocationController::class, 'productsWithoutStorageLocation']);
 
         // Storage Locations (Master Location Management)
         Route::get('/storage-locations-tree', [App\Http\Controllers\Api\StorageLocationController::class, 'tree']);
@@ -322,6 +324,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
         Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
         Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
+        Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
+        Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
 
         // Purchase Orders
         Route::apiResource('purchase-orders', PurchaseOrderController::class);

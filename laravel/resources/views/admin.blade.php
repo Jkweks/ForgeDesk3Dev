@@ -83,6 +83,11 @@
                         <i class="ti ti-package me-2"></i>Inventory Management
                       </a>
                     </li>
+                    <li class="nav-item" role="presentation">
+                      <a href="#tab-location-assignment" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
+                        <i class="ti ti-building-warehouse me-2"></i>Location Assignment
+                      </a>
+                    </li>
                   </ul>
                 </div>
 
@@ -368,6 +373,140 @@
                         </div>
                       </div>
                     </div>
+
+                    <!-- Location Assignment Tab -->
+                    <div class="tab-pane" id="tab-location-assignment" role="tabpanel">
+                      <h3 class="mb-1">Bulk Location Assignment</h3>
+                      <p class="text-muted mb-4">Reassign items from a source location to proper primary &amp; secondary locations. Useful when reorganising shelves.</p>
+
+                      <!-- Step 1: pick source location -->
+                      <div class="card mb-3">
+                        <div class="card-header">
+                          <h4 class="card-title">1. Select Source Location</h4>
+                        </div>
+                        <div class="card-body">
+                          <div class="row g-3 align-items-end">
+                            <div class="col-md-5">
+                              <label class="form-label">Source Storage Location</label>
+                              <select class="form-select" id="locSourceLocation">
+                                <option value="">— choose a location to pull items from —</option>
+                              </select>
+                            </div>
+                            <div class="col-auto">
+                              <button class="btn btn-primary" onclick="locLoadItems()">
+                                <i class="ti ti-download me-1"></i>Load Items
+                              </button>
+                            </div>
+                            <div class="col-auto">
+                              <span id="locLoadCount" class="text-muted"></span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Step 2: assignment table -->
+                      <div class="card mb-3" id="locAssignmentCard" style="display:none">
+                        <div class="card-header">
+                          <h4 class="card-title">2. Assign Locations</h4>
+                          <div class="ms-auto d-flex gap-2 align-items-center">
+                            <span id="locProgressText" class="text-muted small"></span>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="locSetAllPrimary()">
+                              <i class="ti ti-copy me-1"></i>Apply primary to all
+                            </button>
+                            <button class="btn btn-sm btn-success" id="locSaveAllBtn" onclick="locSaveAll()">
+                              <i class="ti ti-device-floppy me-1"></i>Save All
+                            </button>
+                          </div>
+                        </div>
+                        <div class="card-body border-bottom py-2">
+                          <div class="row g-2 align-items-center">
+                            <div class="col-auto text-muted small">Quick-set all rows:</div>
+                            <div class="col-md-3">
+                              <select class="form-select form-select-sm" id="locQuickPrimary">
+                                <option value="">Primary location…</option>
+                              </select>
+                            </div>
+                            <div class="col-md-3">
+                              <select class="form-select form-select-sm" id="locQuickSecondary">
+                                <option value="">(no secondary)</option>
+                              </select>
+                            </div>
+                            <div class="col-auto">
+                              <button class="btn btn-sm btn-outline-primary" onclick="locApplyQuickSet()">Apply to unsaved rows</button>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-vcenter table-sm mb-0">
+                            <thead>
+                              <tr>
+                                <th style="width:10%">SKU</th>
+                                <th style="width:20%">Description</th>
+                                <th style="width:6%" class="text-end">Qty</th>
+                                <th style="width:5%" class="text-center">Primary?</th>
+                                <th style="width:22%">New Primary Location <span class="text-danger">*</span></th>
+                                <th style="width:22%">Secondary Location <span class="text-muted">(optional)</span></th>
+                                <th style="width:10%">Status</th>
+                                <th style="width:5%"></th>
+                              </tr>
+                            </thead>
+                            <tbody id="locAssignmentBody"></tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <!-- Unassigned products section -->
+                      <div class="card" id="locUnassignedCard" style="display:none">
+                        <div class="card-header">
+                          <h4 class="card-title">
+                            <i class="ti ti-alert-triangle text-yellow me-2"></i>Parts With No Storage Location
+                          </h4>
+                          <div class="ms-auto d-flex gap-2 align-items-center">
+                            <span id="locUnassignedProgressText" class="text-muted small"></span>
+                            <button class="btn btn-sm btn-success" id="locSaveAllUnassignedBtn" onclick="locSaveAllUnassigned()">
+                              <i class="ti ti-device-floppy me-1"></i>Save All
+                            </button>
+                          </div>
+                        </div>
+                        <div class="card-body border-bottom py-2">
+                          <div class="row g-2 align-items-center">
+                            <div class="col-auto text-muted small">Quick-set all rows:</div>
+                            <div class="col-md-3">
+                              <select class="form-select form-select-sm" id="locUnassignedQuickPrimary">
+                                <option value="">Primary location…</option>
+                              </select>
+                            </div>
+                            <div class="col-md-3">
+                              <select class="form-select form-select-sm" id="locUnassignedQuickSecondary">
+                                <option value="">(no secondary)</option>
+                              </select>
+                            </div>
+                            <div class="col-auto">
+                              <button class="btn btn-sm btn-outline-primary" onclick="locApplyUnassignedQuickSet()">Apply to unsaved rows</button>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-vcenter table-sm mb-0">
+                            <thead>
+                              <tr>
+                                <th style="width:10%">SKU</th>
+                                <th style="width:22%">Description</th>
+                                <th style="width:6%" class="text-end">On Hand</th>
+                                <th style="width:6%" class="text-end">Committed</th>
+                                <th style="width:22%">Primary Location <span class="text-danger">*</span></th>
+                                <th style="width:22%">Secondary Location <span class="text-muted">(optional)</span></th>
+                                <th style="width:7%">Status</th>
+                                <th style="width:5%"></th>
+                              </tr>
+                            </thead>
+                            <tbody id="locUnassignedBody"></tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                    </div><!-- /tab-location-assignment -->
+
                   </div>
                 </div>
               </div>
@@ -1292,6 +1431,362 @@
           `;
         });
       }
+
+      // ─── Location Assignment Tab ─────────────────────────────────────────────
+      let locAllStorageLocations = [];
+      let locRows       = [];
+      let locRowStates  = {};
+      let locUnassignedRows   = [];
+      let locUnassignedStates = {};
+      let locInitialized = false;
+
+      // Lazy-load when tab becomes active
+      document.querySelector('a[href="#tab-location-assignment"]')
+        .addEventListener('shown.bs.tab', function() {
+          if (!locInitialized) {
+            locInitialized = true;
+            locLoadStorageLocations().then(() => locLoadUnassignedProducts());
+          }
+        });
+
+      async function locLoadStorageLocations() {
+        try {
+          const data = await locApiFetch('/storage-locations?per_page=500');
+          locAllStorageLocations = (data.data || data).filter(l => l.is_active);
+          locPopulateSourceDropdown();
+          locPopulateTargetDropdowns();
+        } catch(e) {
+          alert('Error loading storage locations: ' + e.message);
+        }
+      }
+
+      function locPopulateSourceDropdown() {
+        const sel = document.getElementById('locSourceLocation');
+        while (sel.options.length > 1) sel.remove(1);
+        locAllStorageLocations.forEach(loc => {
+          const opt = document.createElement('option');
+          opt.value = loc.id;
+          opt.textContent = loc.name + (loc.code ? ` [${loc.code}]` : '');
+          sel.appendChild(opt);
+        });
+      }
+
+      function locPopulateTargetDropdowns() {
+        ['locQuickPrimary','locQuickSecondary','locUnassignedQuickPrimary','locUnassignedQuickSecondary'].forEach(id => {
+          const sel = document.getElementById(id);
+          if (!sel) return;
+          while (sel.options.length > 1) sel.remove(1);
+          locAllStorageLocations.forEach(loc => {
+            const opt = document.createElement('option');
+            opt.value = loc.id;
+            opt.textContent = loc.name + (loc.code ? ` [${loc.code}]` : '');
+            sel.appendChild(opt);
+          });
+        });
+      }
+
+      function locMakeLocationOptions(selectedId = '') {
+        let html = '<option value="">— select —</option>';
+        locAllStorageLocations.forEach(loc => {
+          const sel = String(loc.id) === String(selectedId) ? ' selected' : '';
+          const label = locEscHtml(loc.name + (loc.code ? ` [${loc.code}]` : ''));
+          html += `<option value="${loc.id}"${sel}>${label}</option>`;
+        });
+        return html;
+      }
+
+      async function locLoadItems() {
+        const srcId = document.getElementById('locSourceLocation').value;
+        if (!srcId) { alert('Please select a source location.'); return; }
+        document.getElementById('locLoadCount').textContent = 'Loading…';
+        try {
+          const data = await locApiFetch(`/locations/by-storage/${srcId}`);
+          locRows = data.items;
+          locRowStates = {};
+          locRows.forEach(r => {
+            locRowStates[r.inv_location_id] = { primaryId: '', secondaryId: '', status: 'pending' };
+          });
+          document.getElementById('locLoadCount').textContent =
+            `${locRows.length} item${locRows.length !== 1 ? 's' : ''} at this location`;
+          document.getElementById('locAssignmentCard').style.display = '';
+          locRenderTable();
+          locUpdateProgress();
+        } catch(e) {
+          document.getElementById('locLoadCount').textContent = '';
+          alert('Error loading items: ' + e.message);
+        }
+      }
+
+      function locRenderTable() {
+        const tbody = document.getElementById('locAssignmentBody');
+        if (locRows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No items at this location.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = locRows.map(row => {
+          const state    = locRowStates[row.inv_location_id];
+          const disabled = state.status === 'saved' ? 'disabled' : '';
+          return `
+            <tr id="loc-row-${row.inv_location_id}" class="${state.status === 'saved' ? 'table-success' : state.status === 'error' ? 'table-danger' : ''}">
+              <td><code>${locEscHtml(row.sku)}</code></td>
+              <td class="small">${locEscHtml(row.description || '')}</td>
+              <td class="text-end">${row.quantity.toLocaleString()}</td>
+              <td class="text-center">${row.is_primary ? '<span class="badge bg-blue-lt">Yes</span>' : ''}</td>
+              <td>
+                <select class="form-select form-select-sm" id="loc-primary-${row.inv_location_id}" ${disabled}
+                        onchange="locRowStates[${row.inv_location_id}].primaryId = this.value">
+                  ${locMakeLocationOptions(state.primaryId)}
+                </select>
+              </td>
+              <td>
+                <select class="form-select form-select-sm" id="loc-secondary-${row.inv_location_id}" ${disabled}
+                        onchange="locRowStates[${row.inv_location_id}].secondaryId = this.value">
+                  <option value="">(none)</option>
+                  ${locMakeLocationOptions(state.secondaryId)}
+                </select>
+              </td>
+              <td>${locStatusBadge(state.status)}</td>
+              <td>${state.status !== 'saved'
+                ? `<button class="btn btn-sm btn-primary" onclick="locSaveRow(${row.inv_location_id})"><i class="ti ti-check"></i></button>`
+                : ''}</td>
+            </tr>`;
+        }).join('');
+      }
+
+      function locApplyQuickSet() {
+        const primId = document.getElementById('locQuickPrimary').value;
+        const secId  = document.getElementById('locQuickSecondary').value;
+        locRows.forEach(row => {
+          const state = locRowStates[row.inv_location_id];
+          if (state.status === 'saved') return;
+          if (primId) state.primaryId = primId;
+          state.secondaryId = secId;
+        });
+        locRenderTable();
+      }
+
+      function locSetAllPrimary() {
+        const primId = document.getElementById('locQuickPrimary').value;
+        if (!primId) { alert('Set a primary location in the quick-set bar first.'); return; }
+        locRows.forEach(row => {
+          if (locRowStates[row.inv_location_id].status !== 'saved')
+            locRowStates[row.inv_location_id].primaryId = primId;
+        });
+        locRenderTable();
+      }
+
+      async function locSaveRow(invLocId) {
+        const state = locRowStates[invLocId];
+        if (!state.primaryId) { alert('Please select a primary location for this row.'); return; }
+        const row = locRows.find(r => r.inv_location_id === invLocId);
+        locSetRowStatus(invLocId, 'saving');
+        try {
+          await locApiFetch(`/products/${row.product_id}/locations/${invLocId}`, 'PUT', {
+            storage_location_id: parseInt(state.primaryId),
+            quantity:            row.quantity,
+            quantity_committed:  row.quantity_committed,
+            is_primary:          true,
+          });
+          if (state.secondaryId) {
+            try {
+              await locApiFetch(`/products/${row.product_id}/locations`, 'POST', {
+                storage_location_id: parseInt(state.secondaryId),
+                quantity: 0, quantity_committed: 0, is_primary: false,
+              });
+            } catch(e) { console.warn('Secondary location note:', e.message); }
+          }
+          locSetRowStatus(invLocId, 'saved');
+        } catch(e) {
+          locSetRowStatus(invLocId, 'error');
+          alert(`Error saving ${row.sku}: ${e.message}`);
+        }
+        locUpdateProgress();
+      }
+
+      async function locSaveAll() {
+        const pending = locRows.filter(r => locRowStates[r.inv_location_id].status !== 'saved');
+        const missing = pending.filter(r => !locRowStates[r.inv_location_id].primaryId);
+        if (missing.length) { alert(`${missing.length} row(s) have no primary location selected.`); return; }
+        document.getElementById('locSaveAllBtn').disabled = true;
+        for (const row of pending) await locSaveRow(row.inv_location_id);
+        document.getElementById('locSaveAllBtn').disabled = false;
+      }
+
+      function locSetRowStatus(invLocId, status) {
+        locRowStates[invLocId].status = status;
+        const tr = document.getElementById(`loc-row-${invLocId}`);
+        if (!tr) return;
+        tr.className = status === 'saved' ? 'table-success' : status === 'error' ? 'table-danger' : '';
+        tr.cells[6].innerHTML = locStatusBadge(status);
+        tr.cells[7].innerHTML = status !== 'saved'
+          ? `<button class="btn btn-sm btn-primary" onclick="locSaveRow(${invLocId})"><i class="ti ti-check"></i></button>` : '';
+        if (status === 'saved') {
+          tr.querySelector(`#loc-primary-${invLocId}`)?.setAttribute('disabled', '');
+          tr.querySelector(`#loc-secondary-${invLocId}`)?.setAttribute('disabled', '');
+        }
+      }
+
+      function locUpdateProgress() {
+        const total  = locRows.length;
+        const saved  = locRows.filter(r => locRowStates[r.inv_location_id].status === 'saved').length;
+        const errors = locRows.filter(r => locRowStates[r.inv_location_id].status === 'error').length;
+        document.getElementById('locProgressText').textContent =
+          total > 0 ? `${saved}/${total} saved${errors ? `, ${errors} error(s)` : ''}` : '';
+      }
+
+      // ── Unassigned products ──────────────────────────────────────────────────
+      async function locLoadUnassignedProducts() {
+        try {
+          const data = await locApiFetch('/locations/products-without-storage');
+          locUnassignedRows = data.items;
+          locUnassignedStates = {};
+          locUnassignedRows.forEach(r => {
+            locUnassignedStates[r.product_id] = { primaryId: '', secondaryId: '', status: 'pending' };
+          });
+          if (locUnassignedRows.length === 0) return;
+          document.getElementById('locUnassignedCard').style.display = '';
+          locRenderUnassignedTable();
+          locUpdateUnassignedProgress();
+        } catch(e) { console.error('Error loading unassigned products:', e.message); }
+      }
+
+      function locRenderUnassignedTable() {
+        const tbody = document.getElementById('locUnassignedBody');
+        if (locUnassignedRows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No unassigned parts found.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = locUnassignedRows.map(row => {
+          const state    = locUnassignedStates[row.product_id];
+          const disabled = state.status === 'saved' ? 'disabled' : '';
+          return `
+            <tr id="loc-urow-${row.product_id}" class="${state.status === 'saved' ? 'table-success' : state.status === 'error' ? 'table-danger' : ''}">
+              <td><code>${locEscHtml(row.sku)}</code></td>
+              <td class="small">${locEscHtml(row.description || '')}</td>
+              <td class="text-end">${(row.quantity_on_hand || 0).toLocaleString()}</td>
+              <td class="text-end">${(row.quantity_committed || 0).toLocaleString()}</td>
+              <td>
+                <select class="form-select form-select-sm" id="loc-uprimary-${row.product_id}" ${disabled}
+                        onchange="locUnassignedStates[${row.product_id}].primaryId = this.value">
+                  ${locMakeLocationOptions(state.primaryId)}
+                </select>
+              </td>
+              <td>
+                <select class="form-select form-select-sm" id="loc-usecondary-${row.product_id}" ${disabled}
+                        onchange="locUnassignedStates[${row.product_id}].secondaryId = this.value">
+                  <option value="">(none)</option>
+                  ${locMakeLocationOptions(state.secondaryId)}
+                </select>
+              </td>
+              <td>${locStatusBadge(state.status)}</td>
+              <td>${state.status !== 'saved'
+                ? `<button class="btn btn-sm btn-primary" onclick="locSaveUnassignedRow(${row.product_id})"><i class="ti ti-check"></i></button>`
+                : ''}</td>
+            </tr>`;
+        }).join('');
+      }
+
+      function locApplyUnassignedQuickSet() {
+        const primId = document.getElementById('locUnassignedQuickPrimary').value;
+        const secId  = document.getElementById('locUnassignedQuickSecondary').value;
+        locUnassignedRows.forEach(row => {
+          const state = locUnassignedStates[row.product_id];
+          if (state.status === 'saved') return;
+          if (primId) state.primaryId = primId;
+          state.secondaryId = secId;
+        });
+        locRenderUnassignedTable();
+      }
+
+      async function locSaveUnassignedRow(productId) {
+        const state = locUnassignedStates[productId];
+        if (!state.primaryId) { alert('Please select a primary location for this row.'); return; }
+        const row = locUnassignedRows.find(r => r.product_id === productId);
+        locSetUnassignedRowStatus(productId, 'saving');
+        try {
+          await locApiFetch(`/products/${productId}/locations`, 'POST', {
+            storage_location_id: parseInt(state.primaryId),
+            quantity:            row.quantity_on_hand || 0,
+            quantity_committed:  row.quantity_committed || 0,
+            is_primary:          true,
+          });
+          if (state.secondaryId) {
+            try {
+              await locApiFetch(`/products/${productId}/locations`, 'POST', {
+                storage_location_id: parseInt(state.secondaryId),
+                quantity: 0, quantity_committed: 0, is_primary: false,
+              });
+            } catch(e) { console.warn('Secondary location note:', e.message); }
+          }
+          locSetUnassignedRowStatus(productId, 'saved');
+        } catch(e) {
+          locSetUnassignedRowStatus(productId, 'error');
+          alert(`Error saving ${row.sku}: ${e.message}`);
+        }
+        locUpdateUnassignedProgress();
+      }
+
+      async function locSaveAllUnassigned() {
+        const pending = locUnassignedRows.filter(r => locUnassignedStates[r.product_id].status !== 'saved');
+        const missing = pending.filter(r => !locUnassignedStates[r.product_id].primaryId);
+        if (missing.length) { alert(`${missing.length} row(s) have no primary location selected.`); return; }
+        document.getElementById('locSaveAllUnassignedBtn').disabled = true;
+        for (const row of pending) await locSaveUnassignedRow(row.product_id);
+        document.getElementById('locSaveAllUnassignedBtn').disabled = false;
+      }
+
+      function locSetUnassignedRowStatus(productId, status) {
+        locUnassignedStates[productId].status = status;
+        const tr = document.getElementById(`loc-urow-${productId}`);
+        if (!tr) return;
+        tr.className = status === 'saved' ? 'table-success' : status === 'error' ? 'table-danger' : '';
+        tr.cells[6].innerHTML = locStatusBadge(status);
+        tr.cells[7].innerHTML = status !== 'saved'
+          ? `<button class="btn btn-sm btn-primary" onclick="locSaveUnassignedRow(${productId})"><i class="ti ti-check"></i></button>` : '';
+        if (status === 'saved') {
+          tr.querySelector(`#loc-uprimary-${productId}`)?.setAttribute('disabled', '');
+          tr.querySelector(`#loc-usecondary-${productId}`)?.setAttribute('disabled', '');
+        }
+      }
+
+      function locUpdateUnassignedProgress() {
+        const total  = locUnassignedRows.length;
+        const saved  = locUnassignedRows.filter(r => locUnassignedStates[r.product_id].status === 'saved').length;
+        const errors = locUnassignedRows.filter(r => locUnassignedStates[r.product_id].status === 'error').length;
+        document.getElementById('locUnassignedProgressText').textContent =
+          total > 0 ? `${saved}/${total} saved${errors ? `, ${errors} error(s)` : ''}` : '';
+      }
+
+      // ── Shared helpers ───────────────────────────────────────────────────────
+      function locStatusBadge(status) {
+        return { pending: '<span class="badge bg-secondary">Pending</span>',
+                 saving:  '<span class="badge bg-azure">Saving…</span>',
+                 saved:   '<span class="badge bg-success">Saved</span>',
+                 error:   '<span class="badge bg-danger">Error</span>' }[status] || status;
+      }
+
+      async function locApiFetch(path, method = 'GET', body = null) {
+        const opts = {
+          method,
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        };
+        if (body) opts.body = JSON.stringify(body);
+        const res  = await fetch(`${API_BASE}${path}`, opts);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`);
+        return json;
+      }
+
+      function locEscHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str ?? '';
+        return d.innerHTML;
+      }
+
     </script>
 
     <style>
