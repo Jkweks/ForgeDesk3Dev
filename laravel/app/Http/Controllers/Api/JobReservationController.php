@@ -162,7 +162,7 @@ class JobReservationController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'status' => 'required|in:draft,active,in_progress,fulfilled,on_hold,cancelled',
+                'status' => 'required|in:active,in_progress,fulfilled,on_hold,cancelled',
             ]);
 
             if ($validator->fails()) {

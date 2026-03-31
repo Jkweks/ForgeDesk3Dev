@@ -663,7 +663,6 @@
             <div class="mb-3">
               <label class="form-label">New Status</label>
               <select class="form-select" id="resNewStatus">
-                <option value="draft">Draft</option>
                 <option value="active">Active</option>
                 <option value="in_progress">In Progress</option>
                 <option value="fulfilled">Fulfilled</option>
@@ -1268,7 +1267,6 @@
 
         function getReservationStatusColor(status) {
             const colors = {
-                'draft': 'secondary',
                 'active': 'primary',
                 'in_progress': 'info',
                 'fulfilled': 'success',

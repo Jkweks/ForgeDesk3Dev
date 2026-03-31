@@ -76,7 +76,6 @@
                       <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="Search..." onkeyup="filterReservations()">
                       <select class="form-select form-select-sm" id="statusFilter" onchange="filterReservations()">
                         <option value="">All Status</option>
-                        <option value="draft">Draft</option>
                         <option value="active">Active</option>
                         <option value="in_progress">In Progress</option>
                         <option value="fulfilled">Fulfilled</option>
@@ -149,7 +148,6 @@
             <div class="mb-3">
               <label class="form-label">New Status</label>
               <select class="form-select" id="newStatus">
-                <option value="draft">Draft</option>
                 <option value="active">Active</option>
                 <option value="in_progress">In Progress</option>
                 <option value="fulfilled">Fulfilled</option>
@@ -657,7 +655,6 @@
 
         function getStatusBadge(status) {
             const badges = {
-                'draft': '<span class="badge bg-secondary">Draft</span>',
                 'active': '<span class="badge bg-primary">Active</span>',
                 'in_progress': '<span class="badge bg-info">In Progress</span>',
                 'fulfilled': '<span class="badge bg-success">Fulfilled</span>',
