@@ -927,17 +927,23 @@ async function loadProducts() {
 // Load users
 async function loadUsers() {
   try {
-    const response = await authenticatedFetch('/user');
-    const currentUser = response;
+    const [currentUser, allUsersResp] = await Promise.all([
+      authenticatedFetch('/user'),
+      authenticatedFetch('/users?is_active=active&per_page=500'),
+    ]);
+
+    const users = Array.isArray(allUsersResp) ? allUsersResp : (allUsersResp.data || []);
 
     const select = document.getElementById('sessionAssignedTo');
     select.innerHTML = '<option value="">Select user...</option>';
 
-    const option = document.createElement('option');
-    option.value = currentUser.id;
-    option.textContent = currentUser.name;
-    option.selected = true;
-    select.appendChild(option);
+    users.forEach(u => {
+      const option = document.createElement('option');
+      option.value = u.id;
+      option.textContent = u.name;
+      if (u.id === currentUser.id) option.selected = true;
+      select.appendChild(option);
+    });
   } catch (error) {
     console.error('Error loading users:', error);
   }
