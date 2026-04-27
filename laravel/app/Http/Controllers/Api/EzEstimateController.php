@@ -422,6 +422,7 @@ class EzEstimateController extends Controller
             // Update product
             $product->update([
                 'price_per_length' => $pricePerLength,
+                'unit_cost' => round($pricePerLength, 2),
                 'pricing_category' => $pricingCategory,
                 'finish_multiplier' => $finishMultiplier,
                 'category_multiplier' => $categoryMultiplier,
@@ -472,6 +473,7 @@ class EzEstimateController extends Controller
             // Update product
             $product->update([
                 'price_per_package' => $pricePerPackage,
+                'unit_cost' => round($pricePerPackage, 2),
                 'pricing_category' => $pricingCategory,
                 'category_multiplier' => $categoryMultiplier,
                 'net_cost' => round($netCost, 2),
