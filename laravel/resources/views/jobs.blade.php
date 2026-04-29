@@ -2267,6 +2267,7 @@
                 } else if (item.status === 'unavailable') {
                     statusBadge = '<span class="badge bg-danger">Out of Stock</span>';
                     statusClass = 'table-danger';
+                    canCommit = true;
                 } else if (item.status === 'not_found') {
                     statusBadge = '<span class="badge bg-secondary">Not Found</span>';
                     statusClass = 'table-secondary';
@@ -2400,7 +2401,7 @@
                     items.push({
                         product_id: item.product_id,
                         requested_qty: requiredEaches,
-                        committed_qty: Math.min(requiredEaches, availableEaches)
+                        committed_qty: requiredEaches
                     });
                 }
             });
