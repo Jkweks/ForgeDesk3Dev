@@ -80,8 +80,20 @@ class MaterialCheckController extends Controller
                 $totalRequested = 0;
                 $totalCommitted = 0;
 
-                // Create reservation items
+                // Merge duplicate product_ids by summing quantities (e.g. same product in multiple estimate rows)
+                $mergedItems = [];
                 foreach ($request->items as $item) {
+                    $pid = $item['product_id'];
+                    if (isset($mergedItems[$pid])) {
+                        $mergedItems[$pid]['requested_qty'] += $item['requested_qty'];
+                        $mergedItems[$pid]['committed_qty'] += $item['committed_qty'];
+                    } else {
+                        $mergedItems[$pid] = $item;
+                    }
+                }
+
+                // Create reservation items
+                foreach ($mergedItems as $item) {
                     // Get current availability before commitment
                     $product = Product::find($item['product_id']);
                     $availableBefore = $product->quantity_available;
