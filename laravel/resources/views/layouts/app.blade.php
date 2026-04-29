@@ -220,7 +220,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Password</label>
-            <input type="password" class="form-control" id="loginPassword" value="password" required>
+            <input type="password" class="form-control" id="loginPassword" value="password" autocomplete="current-password" required>
           </div>
           <div class="mb-3">
             <label class="form-check">
@@ -276,12 +276,12 @@
             <input type="hidden" id="resetEmail">
             <div class="mb-3">
               <label class="form-label">New Password</label>
-              <input type="password" class="form-control" id="newPassword" minlength="8" required>
+              <input type="password" class="form-control" id="newPassword" minlength="8" autocomplete="new-password" required>
               <small class="form-hint">Must be at least 8 characters long</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Confirm Password</label>
-              <input type="password" class="form-control" id="confirmPassword" minlength="8" required>
+              <input type="password" class="form-control" id="confirmPassword" minlength="8" autocomplete="new-password" required>
             </div>
             <div id="resetPasswordError" class="alert alert-danger" style="display: none;"></div>
             <div id="resetPasswordSuccess" class="alert alert-success" style="display: none;"></div>
