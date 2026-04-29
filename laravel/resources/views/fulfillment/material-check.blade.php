@@ -436,7 +436,7 @@
                         finish: item.finish,
                         sku: item.sku,
                         requested_qty: requiredEaches,
-                        committed_qty: Math.min(requiredEaches, availableEaches)
+                        committed_qty: requiredEaches
                     });
                 }
             });
