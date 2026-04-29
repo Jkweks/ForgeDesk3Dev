@@ -257,7 +257,7 @@
       min-height: 36px;
     }
     .tree-node-content:hover {
-      background: #f8f9fa;
+      background: var(--tblr-bg-surface-secondary);
     }
     .tree-node-toggle {
       width: 16px;
@@ -276,12 +276,12 @@
     }
     .tree-node-icon {
       margin-right: 6px;
-      color: #6c757d;
+      color: var(--tblr-secondary-color);
       font-size: 16px;
     }
     .tree-children {
       margin-left: 20px;
-      border-left: 1px dashed #dee2e6;
+      border-left: 1px dashed var(--tblr-border-color);
       padding-left: 6px;
     }
     .tree-children.collapsed {

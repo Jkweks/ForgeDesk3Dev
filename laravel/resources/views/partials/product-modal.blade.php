@@ -740,7 +740,7 @@
       const badges = {
         'in_stock':     '<span class="badge text-bg-success status-badge">In Stock</span>',
         'low':          '<span class="badge text-bg-warning status-badge">Low Stock</span>',
-        'very_low':     '<span class="badge status-badge" style="background-color:#fd7e14;color:#fff;">Very Low</span>',
+        'very_low':     '<span class="badge text-bg-orange status-badge">Very Low</span>',
         'critical':     '<span class="badge text-bg-danger status-badge">Critical</span>',
         'out_of_stock': '<span class="badge text-bg-dark status-badge">Out of Stock</span>'
       };
@@ -790,7 +790,7 @@
           <div class="d-flex align-items-start gap-3 mb-3">
             ${product.photo_url ? `
               <div class="flex-shrink-0">
-                <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--tblr-border-color);padding:3px;">
                 <div class="text-center mt-1">
                   <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-photo-edit"></i> Change</a>
                 </div>
@@ -798,7 +798,7 @@
               </div>
             ` : `
               <div class="flex-shrink-0 text-center" style="width:80px;">
-                <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed var(--tblr-border-color);background:var(--tblr-bg-surface-secondary);">
                   <i class="ti ti-photo" style="font-size:1.5rem;"></i>
                 </div>
                 <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-upload"></i> Upload</a>
@@ -1106,9 +1106,9 @@
             <div class="flex-shrink-0 text-center" style="width:80px;">
               <div id="editPhotoPreview">
                 ${product.photo_url ? `
-                  <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                  <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--tblr-border-color);padding:3px;">
                 ` : `
-                  <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                  <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed var(--tblr-border-color);background:var(--tblr-bg-surface-secondary);">
                     <i class="ti ti-photo" style="font-size:1.5rem;"></i>
                   </div>
                 `}
@@ -1316,7 +1316,7 @@
       reader.onload = (e) => {
         const preview = document.getElementById('editPhotoPreview');
         if (preview) {
-          preview.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px; display: block;">`;
+          preview.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid var(--tblr-border-color); padding: 4px; display: block;">`;
         }
       };
       reader.readAsDataURL(file);

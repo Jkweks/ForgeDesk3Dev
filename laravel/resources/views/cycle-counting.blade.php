@@ -876,7 +876,7 @@ function renderCycleCounts(sessions) {
               <button class="btn btn-sm btn-ghost-success" onclick="enterCounts(${session.id})" title="List Count">
                 <i class="ti ti-clipboard-check"></i>
               </button>
-              <button class="btn btn-sm btn-ghost-purple" onclick="enterGuidedCount(${session.id})" title="Guided Count" style="color: #6f42c1;">
+              <button class="btn btn-sm btn-ghost-purple" onclick="enterGuidedCount(${session.id})" title="Guided Count">
                 <i class="ti ti-hand-click"></i>
               </button>
             ` : ''}
@@ -1139,8 +1139,8 @@ function toggleSkip(itemId) {
     // Disable inputs when skipped
     countedInput.disabled = true;
     notesInput.disabled = true;
-    countedInput.style.backgroundColor = '#f8f9fa';
-    notesInput.style.backgroundColor = '#f8f9fa';
+    countedInput.style.backgroundColor = 'var(--tblr-bg-surface-secondary)';
+    notesInput.style.backgroundColor = 'var(--tblr-bg-surface-secondary)';
     row.classList.add('bg-light');
   } else {
     // Enable inputs when not skipped
@@ -1837,9 +1837,9 @@ function renderGuidedList() {
     const isCounted = item.counted_quantity !== null;
     return `
       <button type="button" class="list-group-item list-group-item-action py-2 px-3 ${isCurrent ? 'active' : ''}"
-              onclick="guidedJumpTo(${idx})" style="${isCurrent ? 'background:#6f42c1; border-color:#6f42c1;' : ''}">
+              onclick="guidedJumpTo(${idx})" style="${isCurrent ? 'background:var(--tblr-purple); border-color:var(--tblr-purple);' : ''}">
         <div class="d-flex align-items-center gap-2">
-          <i class="ti ${isCounted ? 'ti-circle-check text-success' : 'ti-circle'}" style="${isCurrent ? 'color:white!important' : ''}"></i>
+          <i class="ti ${isCounted ? 'ti-circle-check text-success' : 'ti-circle'}" style="${isCurrent ? 'color:#fff' : ''}"></i>
           <div class="flex-grow-1 text-start">
             <div class="small fw-bold">${escapeHtml(product.sku || '-')}</div>
             <div class="small opacity-75">${escapeHtml(locName)}</div>
