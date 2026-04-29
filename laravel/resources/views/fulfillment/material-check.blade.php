@@ -286,14 +286,14 @@
                 } else if (item.status === 'unavailable') {
                     statusBadge = '<span class="badge bg-danger">Out of Stock</span>';
                     statusClass = 'table-danger';
-                    canCommit = false;
+                    canCommit = true;
                 } else if (item.status === 'not_found') {
                     statusBadge = '<span class="badge bg-secondary">Not Found</span>';
                     statusClass = 'table-secondary';
                     canCommit = false;
                 }
 
-                // Only show checkbox for items found in inventory
+                // Show checkbox for any item matched in inventory (including out-of-stock)
                 const checkboxHtml = item.product_id && canCommit
                     ? `<input type="checkbox" class="item-checkbox" data-index="${index}" onchange="toggleItemSelection(${index})" ${selectedItems.has(index) ? 'checked' : ''}>`
                     : '';
