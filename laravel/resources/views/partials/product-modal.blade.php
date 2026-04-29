@@ -1125,11 +1125,11 @@
               <div class="row g-2 mb-2">
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">SKU</label>
-                  <input type="text" class="form-control form-control-sm" name="sku" value="${product.sku}" readonly>
+                  <input type="text" class="form-control form-control-sm" name="sku" value="" readonly>
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Part Number</label>
-                  <input type="text" class="form-control form-control-sm" name="part_number" value="${product.part_number || ''}" placeholder="e.g., ABC-123">
+                  <input type="text" class="form-control form-control-sm" name="part_number" value="" placeholder="e.g., ABC-123">
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
@@ -1148,11 +1148,11 @@
               </div>
               <div class="mb-2">
                 <label class="form-label small text-muted mb-1">Description <span class="text-danger">*</span></label>
-                <input type="text" class="form-control form-control-sm" name="description" value="${product.description}" required>
+                <input type="text" class="form-control form-control-sm" name="description" value="" required>
               </div>
               <div class="mb-2">
                 <label class="form-label small text-muted mb-1">Long Description</label>
-                <textarea class="form-control form-control-sm" name="long_description" rows="2">${product.long_description || ''}</textarea>
+                <textarea class="form-control form-control-sm" name="long_description" rows="2"></textarea>
               </div>
               <div>
                 <label class="form-label small text-muted mb-1">Categories</label>
@@ -1205,7 +1205,7 @@
                     </div>
                     <div class="col-4">
                       <label class="form-label small text-muted mb-1">Supplier SKU</label>
-                      <input type="text" class="form-control form-control-sm" name="supplier_sku" value="${product.supplier_sku || ''}">
+                      <input type="text" class="form-control form-control-sm" name="supplier_sku" value="">
                     </div>
                     <div class="col-3">
                       <label class="form-label small text-muted mb-1">Lead Time (d)</label>
@@ -1276,6 +1276,15 @@
           </div>
         </form>
       `;
+
+      // Set text field values programmatically so special characters like " (inch marks)
+      // in descriptions don't break the HTML attribute and corrupt the saved value.
+      const editForm = document.getElementById('editProductFormElement');
+      editForm.querySelector('[name="sku"]').value          = product.sku || '';
+      editForm.querySelector('[name="part_number"]').value  = product.part_number || '';
+      editForm.querySelector('[name="description"]').value  = product.description || '';
+      editForm.querySelector('[name="long_description"]').value = product.long_description || '';
+      editForm.querySelector('[name="supplier_sku"]').value = product.supplier_sku || '';
     }
 
     function triggerProductPhotoUpload(productId) {
