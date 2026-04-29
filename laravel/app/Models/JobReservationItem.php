@@ -66,6 +66,7 @@ class JobReservationItem extends Model
 
         $product->quantity_committed = $totalCommitted;
         $product->save();
+        $product->updateStatus();
     }
 
     /**
