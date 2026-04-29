@@ -1337,7 +1337,7 @@
                     if (data.data && data.data.length > 0) {
                         resultsDiv.innerHTML = data.data.map(product => `
                             <button type="button" class="list-group-item list-group-item-action"
-                                    onclick="selectNewResProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', '${product.description.replace(/'/g, "\\'")}', ${product.quantity_available})">
+                                    onclick="selectNewResProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', ${JSON.stringify(product.description || '').replace(/"/g, '&quot;')}, ${product.quantity_available})">
                                 <div class="d-flex w-100 justify-content-between">
                                     <strong>${escapeHtml(product.sku)}</strong>
                                     <span class="badge bg-${product.quantity_available > 0 ? 'success' : 'warning'}">${product.quantity_available} avail</span>
@@ -2105,7 +2105,7 @@
                     if (data.data && data.data.length > 0) {
                         resultsDiv.innerHTML = data.data.map(product => `
                             <button type="button" class="list-group-item list-group-item-action"
-                                    onclick="selectEditReplaceProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', '${product.description.replace(/'/g, "\\'")}', ${product.quantity_on_hand}, ${product.quantity_available})">
+                                    onclick="selectEditReplaceProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', ${JSON.stringify(product.description || '').replace(/"/g, '&quot;')}, ${product.quantity_on_hand}, ${product.quantity_available})">
                                 <div class="d-flex w-100 justify-content-between">
                                     <strong>${escapeHtml(product.sku)}</strong>
                                     <span class="badge bg-${product.quantity_available > 0 ? 'success' : 'danger'}">${product.quantity_available} avail</span>
