@@ -482,6 +482,12 @@ class InventoryTransactionController extends Controller
 
             DB::commit();
 
+            // Recalculate average_daily_use for products touched by outbound transactions
+            if (in_array($validated['type'], ['issue', 'shipment', 'job_issue'])) {
+                $affectedIds = collect($transactions)->pluck('product_id')->unique()->values()->all();
+                \App\Models\Product::recalculateDailyUse($affectedIds);
+            }
+
             // Load relationships on each transaction
             foreach ($transactions as $transaction) {
                 $transaction->load(['product', 'user']);

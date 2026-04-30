@@ -1238,8 +1238,8 @@
                       <input type="number" class="form-control form-control-sm" name="safety_stock" value="${product.safety_stock || ''}" min="0" step="0.01">
                     </div>
                     <div class="col-6 mt-2">
-                      <label class="form-label small text-muted mb-1">Avg Daily Use</label>
-                      <input type="number" class="form-control form-control-sm" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01">
+                      <label class="form-label small text-muted mb-1">Avg Daily Use <span class="text-muted" style="font-size:0.7em">(auto-calculated)</span></label>
+                      <input type="number" class="form-control form-control-sm bg-body-secondary" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01" readonly tabindex="-1">
                     </div>
                   </div>
                 </div>

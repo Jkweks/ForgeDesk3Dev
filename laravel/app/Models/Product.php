@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Product extends Model
 {
@@ -409,6 +410,50 @@ class Product extends Model
         }
 
         return $this->safety_stock ?: 0;
+    }
+
+    /**
+     * Recalculate average_daily_use from outbound transaction history.
+     *
+     * Outbound types: issue, shipment, job_issue.
+     * Quantities for these are stored as negative values in the DB.
+     *
+     * @param  int|array|null  $productIds  Specific product(s) to update, or null for all.
+     * @param  string          $startDate   Earliest transaction_date to include.
+     */
+    public static function recalculateDailyUse($productIds = null, string $startDate = '2026-01-01'): void
+    {
+        $start      = \Carbon\Carbon::parse($startDate)->startOfDay();
+        $today      = \Carbon\Carbon::today();
+        $daysElapsed = max(1, $start->diffInDays($today));
+
+        $outboundTypes = ['issue', 'shipment', 'job_issue'];
+
+        // Sum absolute outbound quantities per product since the start date
+        $query = DB::table('inventory_transactions')
+            ->whereIn('type', $outboundTypes)
+            ->where('transaction_date', '>=', $start)
+            ->select('product_id', DB::raw('SUM(ABS(quantity)) as total_consumed'))
+            ->groupBy('product_id');
+
+        if ($productIds !== null) {
+            $ids = is_array($productIds) ? $productIds : [$productIds];
+            $query->whereIn('product_id', $ids);
+        }
+
+        $rows = $query->pluck('total_consumed', 'product_id');
+
+        // Determine the full set of products to update
+        $allIds = $productIds !== null
+            ? (is_array($productIds) ? $productIds : [$productIds])
+            : self::pluck('id')->toArray();
+
+        foreach ($allIds as $id) {
+            $totalConsumed = $rows[$id] ?? 0;
+            self::where('id', $id)->update([
+                'average_daily_use' => round($totalConsumed / $daysElapsed, 2),
+            ]);
+        }
     }
 
     /**
