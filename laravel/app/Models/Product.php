@@ -282,11 +282,9 @@ class Product extends Model
         $reorderPoint = $this->reorder_point ?? 0;
         $safetyStock  = $this->safety_stock ?? 0;
 
-        if ($available < 0) {
-            // Overcommitted — critical, unless reorder_point is 0 (treat as out_of_stock)
-            $this->status = ($reorderPoint == 0) ? 'out_of_stock' : 'critical';
-        } elseif ($available == 0) {
-            $this->status = 'out_of_stock';
+        if ($available <= 0) {
+            // Zero or overcommitted — critical if a reorder point is set, otherwise out_of_stock
+            $this->status = ($reorderPoint > 0) ? 'critical' : 'out_of_stock';
         } elseif ($available > $reorderPoint) {
             $this->status = 'in_stock';
         } elseif ($available > $safetyStock) {
