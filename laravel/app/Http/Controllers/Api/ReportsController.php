@@ -1184,7 +1184,7 @@ class ReportsController extends Controller
                 'Unit of Measure',
                 'Available Value (List)',
                 'Available Value (Net)',
-                'NONSOF',
+                'Boneyard',
             ]);
 
             foreach ($products as $product) {
