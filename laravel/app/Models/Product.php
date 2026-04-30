@@ -427,7 +427,7 @@ class Product extends Model
         $today      = \Carbon\Carbon::today();
         $daysElapsed = max(1, $start->diffInDays($today));
 
-        $outboundTypes = ['issue', 'shipment', 'job_issue'];
+        $outboundTypes = ['issue', 'shipment', 'job_issue', 'fulfillment'];
 
         // Sum absolute outbound quantities per product since the start date
         $query = DB::table('inventory_transactions')

@@ -157,6 +157,7 @@ class InventoryTransactionController extends Controller
                 'cycle_count' => 'Cycle Count',
                 'job_issue' => 'Job Issue',
                 'issue' => 'Issue',
+                'fulfillment' => 'Fulfillment',
             ];
             $mostActiveType = [
                 'type' => $topType->type,
@@ -190,6 +191,7 @@ class InventoryTransactionController extends Controller
             'cycle_count' => 'Cycle Count',
             'job_issue' => 'Job Issue',
             'issue' => 'Issue',
+            'fulfillment' => 'Fulfillment',
             'job_material_transfer' => 'Job Material Transfer',
         ]);
     }
@@ -483,7 +485,7 @@ class InventoryTransactionController extends Controller
             DB::commit();
 
             // Recalculate average_daily_use for products touched by outbound transactions
-            if (in_array($validated['type'], ['issue', 'shipment', 'job_issue'])) {
+            if (in_array($validated['type'], ['issue', 'shipment', 'job_issue', 'fulfillment'])) {
                 $affectedIds = collect($transactions)->pluck('product_id')->unique()->values()->all();
                 \App\Models\Product::recalculateDailyUse($affectedIds);
             }

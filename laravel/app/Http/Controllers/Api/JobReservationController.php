@@ -444,6 +444,12 @@ class JobReservationController extends Controller
 
                 DB::commit();
 
+                // Recalculate average daily use for all consumed products
+                $consumedProductIds = collect($itemsData)->pluck('product_id')->unique()->values()->all();
+                if (!empty($consumedProductIds)) {
+                    \App\Models\Product::recalculateDailyUse($consumedProductIds);
+                }
+
                 Log::info('Job reservation completed', [
                     'reservation_id' => $id,
                     'job_number' => $reservation->job_number,
