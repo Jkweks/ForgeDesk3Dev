@@ -236,7 +236,7 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-link" data-bs-dismiss="modal">Close</button>
           <button type="button" class="btn btn-secondary ms-auto" id="printShelfTagBtn" onclick="printShelfLabel()">
-            <i class="ti ti-printer me-1"></i> Print Shelf Tag
+            <i class="ti ti-file-type-pdf me-1"></i> Download Shelf Label
           </button>
         </div>
       </div>
@@ -719,81 +719,41 @@
     async function printShelfLabel() {
       if (!currentViewLocationId) return;
 
-      const location = currentLocations.find(l => l.id === currentViewLocationId);
-      if (!location) return;
+      const btn = document.getElementById('printShelfTagBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating…';
 
-      let items = [];
       try {
-        const data = await authenticatedFetch(`/locations/by-storage/${currentViewLocationId}`);
-        items = (data?.items || []).filter(item => item.quantity > 0);
+        const response = await fetch(`${API_BASE}/storage-locations/${currentViewLocationId}/shelf-label-pdf`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/pdf',
+          }
+        });
+
+        if (!response.ok) {
+          showNotification('Failed to generate shelf label PDF', 'danger');
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const location = currentLocations.find(l => l.id === currentViewLocationId);
+        a.download = `shelf-label-${(location?.code || location?.name || currentViewLocationId).replace(/[^A-Za-z0-9\-_.]/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
       } catch (e) {
-        showNotification('Failed to load location products', 'danger');
-        return;
+        showNotification('Failed to generate shelf label PDF', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
       }
-
-      const count = Math.min(Math.max(items.length, 1), 6);
-      const shelfId = location.code || location.name;
-
-      // Build grid layout CSS class based on count
-      const countClass = `count-${count}`;
-
-      // Span rules for 5-item layout
-      const spanMap = { 5: [2, 2, 2, 3, 3] };
-
-      const itemsHtml = items.slice(0, 6).map((item, i) => {
-        const span = spanMap[count] ? ` style="grid-column: span ${spanMap[count][i]}"` : '';
-        const imgSrc = item.photo_url || '';
-        const imgTag = imgSrc
-          ? `<img src="${imgSrc}" alt="${item.sku}">`
-          : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.25in;color:#999;">No Image</div>`;
-        return `<div class="item"${span}>${imgTag}<div class="part-number">${item.sku}</div></div>`;
-      }).join('');
-
-      const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>Shelf Tag - ${shelfId}</title>
-<style>
-  @page { size: 8.5in 5.5in; margin: 0; }
-  html, body { width: 8.5in; height: 5.5in; overflow: hidden; }
-  body { margin: 0; font-family: Calibri, Arial, Helvetica, sans-serif; color: #000; background: #fff; }
-  .label { width: 8.5in; height: 5.5in; box-sizing: border-box; padding: 0.1in; border: 3px solid #000; display: flex; flex-direction: column; gap: 0.08in; }
-  .shelf-id { border: 3px solid #000; padding: 0.06in 0.12in; font-weight: 900; letter-spacing: 0.02em; font-size: 0.68in; line-height: 1; text-align: right; }
-  .items { flex: 1; display: grid; gap: 0.08in; min-height: 0; }
-  .item { border: 3px solid #000; padding: 0.08in; display: grid; grid-template-rows: 1fr auto; align-items: center; justify-items: center; min-height: 0; }
-  .item img { width: 100%; height: 100%; object-fit: contain; filter: grayscale(100%) contrast(130%); }
-  .part-number { width: 100%; border-top: 2px solid #000; margin-top: 0.06in; padding-top: 0.04in; text-align: center; font-weight: 900; font-size: 0.28in; line-height: 1.05; word-break: break-word; }
-  .items.count-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-  .items.count-2 { grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; }
-  .items.count-3 { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr; }
-  .items.count-4 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
-  .items.count-5 { grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(2, 1fr); }
-  .items.count-6 { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
-  .items.empty { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-</style>
-</head>
-<body>
-  <div class="label">
-    <div class="items ${items.length === 0 ? 'empty' : countClass}">
-      ${items.length === 0
-        ? '<div class="item" style="color:#999;font-size:0.3in;">No products at this location</div>'
-        : itemsHtml}
-    </div>
-    <div class="shelf-id">${shelfId}</div>
-  </div>
-  <script>window.onload = function() { window.print(); };<\/script>
-</body>
-</html>`;
-
-      const win = window.open('', '_blank');
-      if (!win) {
-        showNotification('Pop-up blocked — please allow pop-ups and try again', 'warning');
-        return;
-      }
-      win.document.write(html);
-      win.document.close();
     }
 
     function showAddLocationModal() {

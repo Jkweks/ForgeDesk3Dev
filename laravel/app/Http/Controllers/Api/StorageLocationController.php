@@ -362,6 +362,51 @@ class StorageLocationController extends Controller
     }
 
     /**
+     * Generate and stream a shelf label PDF for a storage location.
+     */
+    public function shelfLabelPdf(StorageLocation $storageLocation)
+    {
+        $items = \App\Models\InventoryLocation::where('storage_location_id', $storageLocation->id)
+            ->whereNull('deleted_at')
+            ->with('product')
+            ->orderBy('is_primary', 'desc')
+            ->get()
+            ->filter(fn($il) => $il->quantity > 0)
+            ->map(function ($il) {
+                $photoData = null;
+                if ($il->product->photo_path) {
+                    $path = storage_path('app/public/' . $il->product->photo_path);
+                    if (file_exists($path)) {
+                        $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                        $mime = match($ext) {
+                            'png'  => 'image/png',
+                            'gif'  => 'image/gif',
+                            'webp' => 'image/webp',
+                            default => 'image/jpeg',
+                        };
+                        $photoData = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+                    }
+                }
+                return ['sku' => $il->product->sku, 'photo_data' => $photoData];
+            })
+            ->values()
+            ->take(6)
+            ->toArray();
+
+        $shelfId = $storageLocation->code ?: $storageLocation->name;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.shelf-label', [
+            'items'    => $items,
+            'shelf_id' => $shelfId,
+        ]);
+
+        // 8.5 × 5.5 in expressed in points (1 in = 72 pt)
+        $pdf->setPaper([0, 0, 612, 396], 'portrait');
+
+        return $pdf->stream('shelf-label-' . preg_replace('/[^A-Za-z0-9\-_.]/', '_', $shelfId) . '.pdf');
+    }
+
+    /**
      * Generate a location code from name
      */
     private function generateLocationCode($name)
