@@ -4,7 +4,7 @@
     $cols = match(true) {
         $count <= 3 => max($count, 1),
         $count === 4 => 2,
-        default     => 3,          // 5 or 6 items
+        default     => 3,   // 5 or 6 items
     };
 @endphp
 <!DOCTYPE html>
@@ -14,39 +14,46 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
+  /*
+   * Page: letter landscape = 792 × 612 pt
+   * Label: 9 × 6 in = 648 × 432 pt
+   * Centering margins: left/right = (792-648)/2 = 72pt (1in)
+   *                   top/bottom  = (612-432)/2 = 90pt (1.25in)
+   */
   body {
-    width: 612pt;
-    height: 396pt;
+    width: 792pt;
+    height: 612pt;
     font-family: Arial, Helvetica, sans-serif;
     color: #000;
     background: #fff;
-    overflow: hidden;
+    margin: 0;
+    padding: 90pt 72pt;
   }
 
   .label {
-    width: 612pt;
-    height: 396pt;
+    width: 648pt;
+    height: 432pt;
     border: 3pt solid #000;
-    padding: 6pt;
+    padding: 7pt;
   }
 
   /* Outer two-row table: items on top, shelf-id strip on bottom */
   .outer {
     width: 100%;
-    height: 384pt;   /* 396 - 2×6 label padding */
+    height: 418pt;   /* 432 - 2×7 label padding */
     border-collapse: collapse;
   }
 
-  .outer .items-row { height: 303pt; vertical-align: top; }
-  .outer .gap-row   { height: 5pt; }
-  .outer .id-row    { height: 76pt; vertical-align: middle; }
+  .outer .items-row { height: 330pt; vertical-align: top; }
+  .outer .gap-row   { height: 6pt; }
+  .outer .id-row    { height: 82pt; vertical-align: middle; }
 
   /* Inner grid of item cells */
   .items-table {
     width: 100%;
     height: 100%;
     border-collapse: separate;
-    border-spacing: 4pt;
+    border-spacing: 5pt;
   }
 
   .item {
@@ -59,16 +66,16 @@
 
   .item img {
     width: 100%;
-    max-height: 220pt;
+    max-height: 255pt;
     object-fit: contain;
     filter: grayscale(100%) contrast(130%);
   }
 
   .no-image {
-    height: 200pt;
+    height: 240pt;
     color: #aaa;
     font-size: 10pt;
-    line-height: 200pt;
+    line-height: 240pt;
     text-align: center;
   }
 
@@ -77,7 +84,7 @@
     margin-top: 5pt;
     padding-top: 4pt;
     font-weight: bold;
-    font-size: 15pt;
+    font-size: 16pt;
     word-break: break-all;
     text-align: center;
   }
@@ -87,9 +94,9 @@
     border: 2pt solid #000;
     text-align: right;
     font-weight: 900;
-    font-size: 52pt;
+    font-size: 58pt;
     line-height: 1;
-    padding: 6pt 10pt;
+    padding: 8pt 12pt;
     vertical-align: middle;
     letter-spacing: 0.01em;
   }
@@ -101,10 +108,10 @@
     <tr class="items-row">
       <td>
         @if ($count === 0)
-          <div style="text-align:center;color:#aaa;padding-top:80pt;font-size:12pt;">No products at this location</div>
+          <div style="text-align:center;color:#aaa;padding-top:100pt;font-size:12pt;">No products at this location</div>
         @else
           <table class="items-table">
-            @foreach (array_chunk($items, $cols) as $rowIndex => $row)
+            @foreach (array_chunk($items, $cols) as $row)
               <tr>
                 @foreach ($row as $item)
                   <td class="item">

@@ -400,8 +400,7 @@ class StorageLocationController extends Controller
             'shelf_id' => $shelfId,
         ]);
 
-        // 8.5 × 5.5 in expressed in points (1 in = 72 pt)
-        $pdf->setPaper([0, 0, 612, 396], 'portrait');
+        $pdf->setPaper('letter', 'landscape');
 
         return $pdf->stream('shelf-label-' . preg_replace('/[^A-Za-z0-9\-_.]/', '_', $shelfId) . '.pdf');
     }
