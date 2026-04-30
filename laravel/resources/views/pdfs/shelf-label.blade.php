@@ -28,7 +28,7 @@
 
   body {
     width: 648pt;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: Calibri, Arial, Helvetica, sans-serif;
     color: #000;
     background: #fff;
   }

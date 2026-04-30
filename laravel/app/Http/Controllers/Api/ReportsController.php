@@ -1184,6 +1184,7 @@ class ReportsController extends Controller
                 'Unit of Measure',
                 'Available Value (List)',
                 'Available Value (Net)',
+                'NONSOF',
             ]);
 
             foreach ($products as $product) {
@@ -1217,6 +1218,7 @@ class ReportsController extends Controller
                     $product->unit_of_measure,
                     number_format($availableValueList, 2, '.', ''),
                     number_format($availableValueNet, 2, '.', ''),
+                    $product->nonsof ? 'Y' : 'N',
                 ]);
             }
 
@@ -1283,6 +1285,7 @@ class ReportsController extends Controller
                 'unit_of_measure' => $product->unit_of_measure,
                 'available_value_list' => $availableValueList,
                 'available_value_net' => $availableValueNet,
+                'nonsof' => (bool) $product->nonsof,
             ];
         });
 
