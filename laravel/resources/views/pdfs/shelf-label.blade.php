@@ -1,33 +1,36 @@
 @php
     $count = count($items);
-    // Choose column count to maximise image area
     $cols = match(true) {
         $count <= 3 => max($count, 1),
         $count === 4 => 2,
-        default     => 3,   // 5 or 6 items
+        default     => 3,
     };
+    // Fixed heights in pt (letter landscape = 792×612pt)
+    // @page margins centre the 9×6in (648×432pt) label
+    // Interior = 648-14 = 634pt wide, 432-14 = 418pt tall
+    $idRowHeight   = 82;
+    $gapHeight     = 6;
+    $itemsHeight   = 418 - $idRowHeight - $gapHeight;  // 330pt
+    $imageHeight   = $itemsHeight - 35;                 // ~295pt, leaves room for SKU row
 @endphp
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page {
+    size: 792pt 612pt;   /* letter landscape */
+    margin: 90pt 72pt;   /* centres 648×432pt label on page */
+  }
 
-  /*
-   * Page: letter landscape = 792 × 612 pt
-   * Label: 9 × 6 in = 648 × 432 pt
-   * Centering margins: left/right = (792-648)/2 = 72pt (1in)
-   *                   top/bottom  = (612-432)/2 = 90pt (1.25in)
-   */
+  * { margin: 0; padding: 0; box-sizing: border-box;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
   body {
-    width: 792pt;
-    height: 612pt;
+    width: 648pt;
     font-family: Arial, Helvetica, sans-serif;
     color: #000;
     background: #fff;
-    margin: 0;
-    padding: 90pt 72pt;
   }
 
   .label {
@@ -35,26 +38,30 @@
     height: 432pt;
     border: 3pt solid #000;
     padding: 7pt;
+    overflow: hidden;
+    page-break-inside: avoid;
   }
 
-  /* Outer two-row table: items on top, shelf-id strip on bottom */
   .outer {
-    width: 100%;
-    height: 418pt;   /* 432 - 2×7 label padding */
+    width: 634pt;   /* 648 - 2×7 */
+    height: 418pt;  /* 432 - 2×7 */
     border-collapse: collapse;
+    page-break-inside: avoid;
   }
 
-  .outer .items-row { height: 330pt; vertical-align: top; }
-  .outer .gap-row   { height: 6pt; }
-  .outer .id-row    { height: 82pt; vertical-align: middle; }
+  .items-row { height: {{ $itemsHeight }}pt; vertical-align: top; }
+  .gap-row   { height: {{ $gapHeight }}pt; }
+  .id-row    { height: {{ $idRowHeight }}pt; vertical-align: middle; }
 
-  /* Inner grid of item cells */
   .items-table {
     width: 100%;
-    height: 100%;
+    height: {{ $itemsHeight }}pt;
     border-collapse: separate;
     border-spacing: 5pt;
+    page-break-inside: avoid;
   }
+
+  .items-table tr { page-break-inside: avoid; }
 
   .item {
     border: 2pt solid #000;
@@ -62,34 +69,38 @@
     vertical-align: top;
     padding: 5pt;
     width: {{ round(100 / $cols, 2) }}%;
+    height: {{ $itemsHeight }}pt;
+    overflow: hidden;
   }
 
   .item img {
     width: 100%;
-    max-height: 255pt;
+    height: {{ $imageHeight }}pt;
     object-fit: contain;
     filter: grayscale(100%) contrast(130%);
+    display: block;
   }
 
   .no-image {
-    height: 240pt;
+    width: 100%;
+    height: {{ $imageHeight }}pt;
     color: #aaa;
     font-size: 10pt;
-    line-height: 240pt;
     text-align: center;
+    display: block;
   }
 
   .sku {
     border-top: 2pt solid #000;
-    margin-top: 5pt;
-    padding-top: 4pt;
+    margin-top: 4pt;
+    padding-top: 3pt;
     font-weight: bold;
     font-size: 16pt;
+    line-height: 1.1;
     word-break: break-all;
     text-align: center;
   }
 
-  /* Shelf ID strip */
   .shelf-id {
     border: 2pt solid #000;
     text-align: right;
@@ -99,6 +110,8 @@
     padding: 8pt 12pt;
     vertical-align: middle;
     letter-spacing: 0.01em;
+    height: {{ $idRowHeight }}pt;
+    overflow: hidden;
   }
 </style>
 </head>
@@ -123,7 +136,6 @@
                     <div class="sku">{{ $item['sku'] }}</div>
                   </td>
                 @endforeach
-                {{-- Pad incomplete last row so columns stay even width --}}
                 @if (count($row) < $cols)
                   @for ($p = 0; $p < $cols - count($row); $p++)
                     <td class="item" style="border:2pt solid #ddd;"></td>
