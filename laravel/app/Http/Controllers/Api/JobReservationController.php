@@ -728,17 +728,6 @@ class JobReservationController extends Controller
                     ], 422);
                 }
 
-                // Check available inventory if increasing committed_qty
-                if ($request->has('committed_qty') && $request->committed_qty > $item->committed_qty) {
-                    $increase = $request->committed_qty - $item->committed_qty;
-                    if ($increase > $item->product->quantity_available) {
-                        return response()->json([
-                            'error' => 'Insufficient inventory',
-                            'message' => "Only {$item->product->quantity_available} available. Cannot increase by {$increase}.",
-                        ], 422);
-                    }
-                }
-
                 // Update quantities
                 if ($request->has('requested_qty')) {
                     $item->requested_qty = $request->requested_qty;

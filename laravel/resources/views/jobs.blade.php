@@ -1895,15 +1895,6 @@
                 return;
             }
 
-            if (field === 'committed_qty' && numValue > item.committed_qty) {
-                const increase = numValue - item.committed_qty;
-                if (increase > item.product.quantity_available) {
-                    alert(`Only ${item.product.quantity_available} available. Cannot increase by ${increase}.`);
-                    renderEditResItems();
-                    return;
-                }
-            }
-
             item[field] = numValue;
         }
 
@@ -1945,11 +1936,6 @@
 
                 if (editingResItems.some(item => item.product_id === product.id)) {
                     alert('This product is already in the reservation');
-                    return;
-                }
-
-                if (committedQty > product.quantity_available) {
-                    alert(`Only ${product.quantity_available} available. Cannot commit ${committedQty}.`);
                     return;
                 }
 
