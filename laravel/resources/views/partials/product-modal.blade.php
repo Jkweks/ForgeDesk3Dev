@@ -740,7 +740,7 @@
       const badges = {
         'in_stock':     '<span class="badge text-bg-success status-badge">In Stock</span>',
         'low':          '<span class="badge text-bg-warning status-badge">Low Stock</span>',
-        'very_low':     '<span class="badge status-badge" style="background-color:#fd7e14;color:#fff;">Very Low</span>',
+        'very_low':     '<span class="badge text-bg-orange status-badge">Very Low</span>',
         'critical':     '<span class="badge text-bg-danger status-badge">Critical</span>',
         'out_of_stock': '<span class="badge text-bg-dark status-badge">Out of Stock</span>'
       };
@@ -790,7 +790,7 @@
           <div class="d-flex align-items-start gap-3 mb-3">
             ${product.photo_url ? `
               <div class="flex-shrink-0">
-                <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--tblr-border-color);padding:3px;">
                 <div class="text-center mt-1">
                   <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-photo-edit"></i> Change</a>
                 </div>
@@ -798,7 +798,7 @@
               </div>
             ` : `
               <div class="flex-shrink-0 text-center" style="width:80px;">
-                <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed var(--tblr-border-color);background:var(--tblr-bg-surface-secondary);">
                   <i class="ti ti-photo" style="font-size:1.5rem;"></i>
                 </div>
                 <a href="#" class="text-muted small" onclick="event.preventDefault();triggerProductPhotoUpload(${product.id})"><i class="ti ti-upload"></i> Upload</a>
@@ -1106,9 +1106,9 @@
             <div class="flex-shrink-0 text-center" style="width:80px;">
               <div id="editPhotoPreview">
                 ${product.photo_url ? `
-                  <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid #dee2e6;padding:3px;">
+                  <img src="${product.photo_url}" alt="Product photo" class="rounded" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--tblr-border-color);padding:3px;">
                 ` : `
-                  <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed #ccc;background:#f8f9fa;">
+                  <div class="rounded d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;border:1px dashed var(--tblr-border-color);background:var(--tblr-bg-surface-secondary);">
                     <i class="ti ti-photo" style="font-size:1.5rem;"></i>
                   </div>
                 `}
@@ -1125,11 +1125,11 @@
               <div class="row g-2 mb-2">
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">SKU</label>
-                  <input type="text" class="form-control form-control-sm" name="sku" value="${product.sku}" readonly>
+                  <input type="text" class="form-control form-control-sm" name="sku" value="" readonly>
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Part Number</label>
-                  <input type="text" class="form-control form-control-sm" name="part_number" value="${product.part_number || ''}" placeholder="e.g., ABC-123">
+                  <input type="text" class="form-control form-control-sm" name="part_number" value="" placeholder="e.g., ABC-123">
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
@@ -1148,11 +1148,11 @@
               </div>
               <div class="mb-2">
                 <label class="form-label small text-muted mb-1">Description <span class="text-danger">*</span></label>
-                <input type="text" class="form-control form-control-sm" name="description" value="${product.description}" required>
+                <input type="text" class="form-control form-control-sm" name="description" value="" required>
               </div>
               <div class="mb-2">
                 <label class="form-label small text-muted mb-1">Long Description</label>
-                <textarea class="form-control form-control-sm" name="long_description" rows="2">${product.long_description || ''}</textarea>
+                <textarea class="form-control form-control-sm" name="long_description" rows="2"></textarea>
               </div>
               <div>
                 <label class="form-label small text-muted mb-1">Categories</label>
@@ -1205,7 +1205,7 @@
                     </div>
                     <div class="col-4">
                       <label class="form-label small text-muted mb-1">Supplier SKU</label>
-                      <input type="text" class="form-control form-control-sm" name="supplier_sku" value="${product.supplier_sku || ''}">
+                      <input type="text" class="form-control form-control-sm" name="supplier_sku" value="">
                     </div>
                     <div class="col-3">
                       <label class="form-label small text-muted mb-1">Lead Time (d)</label>
@@ -1238,8 +1238,8 @@
                       <input type="number" class="form-control form-control-sm" name="safety_stock" value="${product.safety_stock || ''}" min="0" step="0.01">
                     </div>
                     <div class="col-6 mt-2">
-                      <label class="form-label small text-muted mb-1">Avg Daily Use</label>
-                      <input type="number" class="form-control form-control-sm" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01">
+                      <label class="form-label small text-muted mb-1">Avg Daily Use <span class="text-muted" style="font-size:0.7em">(auto-calculated)</span></label>
+                      <input type="number" class="form-control form-control-sm bg-body-secondary" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01" readonly tabindex="-1">
                     </div>
                   </div>
                 </div>
@@ -1276,6 +1276,15 @@
           </div>
         </form>
       `;
+
+      // Set text field values programmatically so special characters like " (inch marks)
+      // in descriptions don't break the HTML attribute and corrupt the saved value.
+      const editForm = document.getElementById('editProductFormElement');
+      editForm.querySelector('[name="sku"]').value          = product.sku || '';
+      editForm.querySelector('[name="part_number"]').value  = product.part_number || '';
+      editForm.querySelector('[name="description"]').value  = product.description || '';
+      editForm.querySelector('[name="long_description"]').value = product.long_description || '';
+      editForm.querySelector('[name="supplier_sku"]').value = product.supplier_sku || '';
     }
 
     function triggerProductPhotoUpload(productId) {
@@ -1316,7 +1325,7 @@
       reader.onload = (e) => {
         const preview = document.getElementById('editPhotoPreview');
         if (preview) {
-          preview.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid #dee2e6; padding: 4px; display: block;">`;
+          preview.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded mb-2" style="max-height: 150px; max-width: 100%; object-fit: contain; border: 1px solid var(--tblr-border-color); padding: 4px; display: block;">`;
         }
       };
       reader.readAsDataURL(file);

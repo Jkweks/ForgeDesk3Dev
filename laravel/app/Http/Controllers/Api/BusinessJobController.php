@@ -475,23 +475,24 @@ class BusinessJobController extends Controller
                 // release_number auto-assigned by JobReservation::creating() boot hook
             ]);
 
-            // Add items
-            $warnings = [];
+            // Merge duplicate product_ids by summing quantities
+            $mergedItems = [];
             foreach ($request->items as $itemData) {
+                $pid = $itemData['product_id'];
+                if (isset($mergedItems[$pid])) {
+                    $mergedItems[$pid]['requested_qty'] += $itemData['requested_qty'];
+                    $mergedItems[$pid]['committed_qty'] = ($mergedItems[$pid]['committed_qty'] ?? 0) + ($itemData['committed_qty'] ?? $itemData['requested_qty']);
+                } else {
+                    $mergedItems[$pid] = $itemData;
+                }
+            }
+
+            // Add items — commit full requested qty to allow negative stock for reorder flagging
+            foreach ($mergedItems as $itemData) {
                 $product = Product::findOrFail($itemData['product_id']);
 
                 $requestedQty = $itemData['requested_qty'];
-                $committedQty = $itemData['committed_qty'] ?? min($requestedQty, $product->quantity_available);
-
-                // Check availability
-                if ($committedQty > $product->quantity_available) {
-                    $warnings[] = [
-                        'product_id' => $product->id,
-                        'sku' => $product->sku,
-                        'message' => "Insufficient inventory for {$product->sku}. Available: {$product->quantity_available}, Requested: {$committedQty}",
-                    ];
-                    $committedQty = $product->quantity_available;
-                }
+                $committedQty = $itemData['committed_qty'] ?? $requestedQty;
 
                 JobReservationItem::create([
                     'reservation_id' => $reservation->id,
@@ -518,7 +519,7 @@ class BusinessJobController extends Controller
                     'job_number' => $reservation->job_number,
                     'status' => $reservation->status,
                 ],
-                'warnings' => $warnings,
+                'warnings' => [],
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();

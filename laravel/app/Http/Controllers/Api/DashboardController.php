@@ -139,7 +139,8 @@ class DashboardController extends Controller
             return $product;
         };
 
-        // Handle sorting - for calculated fields, use a DB-level correlated subquery
+        // Handle sorting - for calculated fields, embed the subquery directly in ORDER BY
+        // (avoids selectRaw which breaks Eloquent's paginate COUNT query)
         if (in_array($sortBy, ['quantity_committed', 'quantity_available'])) {
             $committedSubquery = "COALESCE((
                 SELECT SUM(ri.committed_qty)
@@ -150,12 +151,10 @@ class DashboardController extends Controller
                   AND r.deleted_at IS NULL
             ), 0)";
 
-            $inventoryQuery->selectRaw("products.*, {$committedSubquery} as committed_qty_computed");
-
             if ($sortBy === 'quantity_committed') {
-                $inventoryQuery->orderByRaw("committed_qty_computed {$sortDir}");
+                $inventoryQuery->orderByRaw("({$committedSubquery}) {$sortDir}");
             } else {
-                $inventoryQuery->orderByRaw("(products.quantity_on_hand - committed_qty_computed) {$sortDir}");
+                $inventoryQuery->orderByRaw("(products.quantity_on_hand - ({$committedSubquery})) {$sortDir}");
             }
         } else {
             $inventoryQuery->orderBy($sortBy, $sortDir);

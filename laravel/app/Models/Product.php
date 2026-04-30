@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Product extends Model
 {
@@ -17,7 +18,7 @@ class Product extends Model
         'unit_cost', 'net_cost', 'pricing_category',
         'finish_multiplier', 'category_multiplier', 'price_per_length', 'price_per_package',
         'quantity_on_hand', 'quantity_committed',
-        'minimum_quantity', 'reorder_point', 'safety_stock', 'average_daily_use',
+        'minimum_quantity', 'reorder_point', 'safety_stock', 'nonsof', 'average_daily_use',
         'on_order_qty', 'maximum_quantity', 'unit_of_measure',
         'pack_size', 'purchase_uom', 'stock_uom', 'min_order_qty', 'order_multiple',
         'supplier_id', 'supplier_sku', 'supplier_contact', 'lead_time_days',
@@ -41,6 +42,7 @@ class Product extends Model
         'dimension_depth' => 'decimal:2',
         'is_active' => 'boolean',
         'is_discontinued' => 'boolean',
+        'nonsof' => 'boolean',
         'configurator_available' => 'boolean',
         'tool_life_max' => 'decimal:2',
         'compatible_machine_types' => 'array',
@@ -282,11 +284,9 @@ class Product extends Model
         $reorderPoint = $this->reorder_point ?? 0;
         $safetyStock  = $this->safety_stock ?? 0;
 
-        if ($available < 0) {
-            // Overcommitted — critical, unless reorder_point is 0 (treat as out_of_stock)
-            $this->status = ($reorderPoint == 0) ? 'out_of_stock' : 'critical';
-        } elseif ($available == 0) {
-            $this->status = 'out_of_stock';
+        if ($available <= 0) {
+            // Zero or overcommitted — critical if a reorder point is set, otherwise out_of_stock
+            $this->status = ($reorderPoint > 0) ? 'critical' : 'out_of_stock';
         } elseif ($available > $reorderPoint) {
             $this->status = 'in_stock';
         } elseif ($available > $safetyStock) {
@@ -411,6 +411,50 @@ class Product extends Model
         }
 
         return $this->safety_stock ?: 0;
+    }
+
+    /**
+     * Recalculate average_daily_use from outbound transaction history.
+     *
+     * Outbound types: issue, shipment, job_issue.
+     * Quantities for these are stored as negative values in the DB.
+     *
+     * @param  int|array|null  $productIds  Specific product(s) to update, or null for all.
+     * @param  string          $startDate   Earliest transaction_date to include.
+     */
+    public static function recalculateDailyUse($productIds = null, string $startDate = '2026-01-01'): void
+    {
+        $start      = \Carbon\Carbon::parse($startDate)->startOfDay();
+        $today      = \Carbon\Carbon::today();
+        $daysElapsed = max(1, $start->diffInDays($today));
+
+        $outboundTypes = ['issue', 'shipment', 'job_issue', 'fulfillment'];
+
+        // Sum absolute outbound quantities per product since the start date
+        $query = DB::table('inventory_transactions')
+            ->whereIn('type', $outboundTypes)
+            ->where('transaction_date', '>=', $start)
+            ->select('product_id', DB::raw('SUM(ABS(quantity)) as total_consumed'))
+            ->groupBy('product_id');
+
+        if ($productIds !== null) {
+            $ids = is_array($productIds) ? $productIds : [$productIds];
+            $query->whereIn('product_id', $ids);
+        }
+
+        $rows = $query->pluck('total_consumed', 'product_id');
+
+        // Determine the full set of products to update
+        $allIds = $productIds !== null
+            ? (is_array($productIds) ? $productIds : [$productIds])
+            : self::pluck('id')->toArray();
+
+        foreach ($allIds as $id) {
+            $totalConsumed = $rows[$id] ?? 0;
+            self::where('id', $id)->update([
+                'average_daily_use' => round($totalConsumed / $daysElapsed, 2),
+            ]);
+        }
     }
 
     /**
