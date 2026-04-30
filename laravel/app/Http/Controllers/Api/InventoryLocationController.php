@@ -371,6 +371,7 @@ class InventoryLocationController extends Controller
                 'sku'                => $il->product->sku,
                 'part_number'        => $il->product->part_number,
                 'description'        => $il->product->description,
+                'photo_url'          => $il->product->photo_url,
                 'quantity'           => $il->quantity,
                 'quantity_committed' => $il->quantity_committed,
                 'is_primary'         => (bool) $il->is_primary,
