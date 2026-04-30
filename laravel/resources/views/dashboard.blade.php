@@ -839,6 +839,9 @@
           url += `&search=${encodeURIComponent(currentSearch)}`;
         }
         const response = await apiCall(url);
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
         const data = await response.json();
         renderInventoryTable(data.data);
         renderPagination(data);
@@ -848,6 +851,10 @@
         document.getElementById('inventoryTableContainer').style.display = 'block';
       } catch (error) {
         console.error('Error loading filtered inventory:', error);
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('inventoryTableContainer').style.display = 'block';
+        const tbody = document.getElementById('inventoryTableBody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Failed to load inventory. Please try again.</td></tr>';
       }
     }
 

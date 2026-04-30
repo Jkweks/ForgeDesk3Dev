@@ -216,7 +216,7 @@
         <form id="loginForm">
           <div class="mb-3">
             <label class="form-label">Email</label>
-            <input type="email" class="form-control" id="loginEmail" value="admin@forgedesk.local" required>
+            <input type="email" class="form-control" id="loginEmail" value="admin@forgedesk.local" autocomplete="email" required>
           </div>
           <div class="mb-3">
             <label class="form-label">Password</label>
@@ -273,7 +273,7 @@
         <div class="modal-body">
           <form id="resetPasswordForm">
             <input type="hidden" id="resetToken">
-            <input type="hidden" id="resetEmail">
+            <input type="hidden" id="resetEmail" autocomplete="username">
             <div class="mb-3">
               <label class="form-label">New Password</label>
               <input type="password" class="form-control" id="newPassword" minlength="8" autocomplete="new-password" required>
