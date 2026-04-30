@@ -755,15 +755,15 @@
 <meta charset="UTF-8" />
 <title>Shelf Tag - ${shelfId}</title>
 <style>
-  @page { size: 9in 6in; margin: 0; }
-  html, body { height: 100%; }
+  @page { size: 8.5in 5.5in; margin: 0; }
+  html, body { width: 8.5in; height: 5.5in; overflow: hidden; }
   body { margin: 0; font-family: Calibri, Arial, Helvetica, sans-serif; color: #000; background: #fff; }
-  .label { width: 9in; height: 6in; box-sizing: border-box; padding: 0.13in; border: 3px solid #000; display: flex; flex-direction: column; gap: 0.12in; }
-  .shelf-id { border: 3px solid #000; padding: 0.10in 0.15in; font-weight: 900; letter-spacing: 0.02em; font-size: 0.85in; line-height: 1; text-align: right; }
-  .items { flex: 1; display: grid; gap: 0.12in; min-height: 0; }
-  .item { border: 3px solid #000; padding: 0.10in; display: grid; grid-template-rows: 1fr auto; align-items: center; justify-items: center; min-height: 0; }
+  .label { width: 8.5in; height: 5.5in; box-sizing: border-box; padding: 0.1in; border: 3px solid #000; display: flex; flex-direction: column; gap: 0.08in; }
+  .shelf-id { border: 3px solid #000; padding: 0.06in 0.12in; font-weight: 900; letter-spacing: 0.02em; font-size: 0.68in; line-height: 1; text-align: right; }
+  .items { flex: 1; display: grid; gap: 0.08in; min-height: 0; }
+  .item { border: 3px solid #000; padding: 0.08in; display: grid; grid-template-rows: 1fr auto; align-items: center; justify-items: center; min-height: 0; }
   .item img { width: 100%; height: 100%; object-fit: contain; filter: grayscale(100%) contrast(130%); }
-  .part-number { width: 100%; border-top: 3px solid #000; margin-top: 0.08in; padding-top: 0.06in; text-align: center; font-weight: 900; font-size: 0.34in; line-height: 1.05; word-break: break-word; }
+  .part-number { width: 100%; border-top: 2px solid #000; margin-top: 0.06in; padding-top: 0.04in; text-align: center; font-weight: 900; font-size: 0.28in; line-height: 1.05; word-break: break-word; }
   .items.count-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
   .items.count-2 { grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; }
   .items.count-3 { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr; }
