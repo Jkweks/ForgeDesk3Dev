@@ -1490,7 +1490,16 @@ async function completeSession() {
     return;
   }
 
-  if (!confirm('Complete this cycle count session? All variances must be reviewed first.')) return;
+  // Block completion if any variances have not been approved
+  const unapprovedVariances = currentSession.items.filter(
+    item => item.variance !== 0 && item.variance_status !== 'approved'
+  );
+  if (unapprovedVariances.length > 0) {
+    showNotification(`Cannot complete: ${unapprovedVariances.length} variance(s) must be approved first. Use "Review Variances" to approve them.`, 'warning');
+    return;
+  }
+
+  if (!confirm('Complete this cycle count session?')) return;
 
   try {
     await authenticatedFetch(`/cycle-counts/${sessionId}/complete`, { method: 'POST' });
@@ -1957,7 +1966,7 @@ async function guidedSave() {
     } else {
       // All counted - update status on current item and notify
       renderGuidedItem();
-      showNotification('All items counted! Review variances or complete the session.', 'success');
+      showNotification('All items counted! Review and approve variances before completing.', 'success');
     }
 
     updateGuidedProgress();

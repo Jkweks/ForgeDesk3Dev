@@ -35,7 +35,7 @@ planned → in_progress → completed
 | Transition | Trigger | Notes |
 |---|---|---|
 | `planned → in_progress` | `POST .../start` or first count recorded | Sets `started_at` |
-| `in_progress → completed` | `POST .../complete` | All items must be counted; all non-zero variances must be approved |
+| `in_progress → completed` | `POST .../complete` | All items must be counted; **all non-zero variances must be approved** (within-tolerance variances are not exempt) |
 | Any → `cancelled` | `POST .../cancel` | Cannot cancel a completed session |
 
 ---
@@ -138,7 +138,7 @@ POST /api/v1/cycle-counts/{id}/approve-variances
 
 **Preconditions (both must pass):**
 1. All items have a `counted_quantity` (no uncounted items)
-2. All items with `variance != 0` have a `variance_status != 'pending'` (reviewed/approved)
+2. All items with `variance != 0` have `variance_status = 'approved'` — items classified as `within_tolerance` are not exempt; they must be explicitly approved via the variance review step
 
 On completion: `status = 'completed'`, `completed_at = now()`, `reviewed_by = current user`.
 
