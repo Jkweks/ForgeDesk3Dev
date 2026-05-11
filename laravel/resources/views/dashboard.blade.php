@@ -1042,6 +1042,8 @@
     }
 
     // Auto-generate SKU preview
+    let lastGeneratedSku = '';
+
     function updateSkuPreview() {
       const partNumber = document.getElementById('productPartNumber').value.trim().toUpperCase();
       const finish = document.getElementById('productFinish').value;
@@ -1053,13 +1055,18 @@
         skuPreview.textContent = `Will generate: ${generatedSku}`;
         skuPreview.classList.add('text-primary');
 
-        // Auto-fill SKU if empty
-        if (!skuField.value) {
+        // Auto-fill if empty or if field still matches the last auto-generated value
+        if (!skuField.value || skuField.value === lastGeneratedSku) {
           skuField.value = generatedSku;
+          lastGeneratedSku = generatedSku;
         }
       } else {
         skuPreview.textContent = '';
         skuPreview.classList.remove('text-primary');
+        if (skuField.value === lastGeneratedSku) {
+          skuField.value = '';
+          lastGeneratedSku = '';
+        }
       }
     }
 
@@ -1099,6 +1106,7 @@
       document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
       document.getElementById('skuPreview').textContent = '';
       document.getElementById('reorderPreview').textContent = '';
+      lastGeneratedSku = '';
       showModal(document.getElementById('addProductModal'));
     }
 
