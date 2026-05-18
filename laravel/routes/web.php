@@ -76,6 +76,10 @@ Route::get('/fabrication/documents', function () {
     return view('fabrication.documents');
 });
 
+Route::get('/fabrication/work-orders', function () {
+    return view('fabrication.work-orders');
+});
+
 // System Status
 Route::get('/status', function () {
     return view('status');

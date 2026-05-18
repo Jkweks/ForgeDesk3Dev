@@ -414,6 +414,24 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/door-frame-configurations/{id}/door-config', [DoorFrameConfigurationController::class, 'updateDoorConfig']);
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release']);
 
+        // Fabrication Work Orders
+        Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
+        Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store']);
+        Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);
+        Route::put('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
+        Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'patch']);
+        Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy']);
+
+        Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
+        Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store']);
+        Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update']);
+        Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy']);
+
+        Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
+        Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);
+        Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update']);
+        Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy']);
+
         // Fabrication Documents
         Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions']);
         Route::get('/fabrication-documents', [FabricationDocumentController::class, 'index']);
