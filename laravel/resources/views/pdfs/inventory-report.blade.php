@@ -124,7 +124,7 @@
             <tr>
                 <th style="width: 8%;">Part #</th>
                 <th style="width: 5%;">Finish</th>
-                <th style="width: 20%;">Description</th>
+                <th style="width: 18%;">Description</th>
                 <th style="width: 6%;" class="text-right">Unit Cost</th>
                 <th style="width: 6%;" class="text-right">Net Cost</th>
                 <th style="width: 5%;" class="text-right">Pack</th>
@@ -132,8 +132,9 @@
                 <th style="width: 6%;" class="text-right">Commit</th>
                 <th style="width: 6%;" class="text-right">Avail</th>
                 <th style="width: 5%;">UOM</th>
-                <th style="width: 8%;" class="text-right">Val (List)</th>
-                <th style="width: 8%;" class="text-right">Val (Net)</th>
+                <th style="width: 7%;" class="text-right">Val (List)</th>
+                <th style="width: 7%;" class="text-right">Val (Net)</th>
+                <th style="width: 5%;" class="text-center">Boneyard</th>
             </tr>
         </thead>
         <tbody>
@@ -151,10 +152,11 @@
                     <td>{{ $product['unit_of_measure'] }}</td>
                     <td class="text-right">${{ number_format($product['available_value_list'], 2) }}</td>
                     <td class="text-right">${{ number_format($product['available_value_net'], 2) }}</td>
+                    <td class="text-center">{{ $product['nonsof'] ? 'Y' : 'N' }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="12" class="text-center" style="padding: 20px; color: #999;">
+                    <td colspan="13" class="text-center" style="padding: 20px; color: #999;">
                         No inventory items found.
                     </td>
                 </tr>

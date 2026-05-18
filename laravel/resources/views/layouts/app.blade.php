@@ -216,11 +216,11 @@
         <form id="loginForm">
           <div class="mb-3">
             <label class="form-label">Email</label>
-            <input type="email" class="form-control" id="loginEmail" value="admin@forgedesk.local" required>
+            <input type="email" class="form-control" id="loginEmail" value="admin@forgedesk.local" autocomplete="email" required>
           </div>
           <div class="mb-3">
             <label class="form-label">Password</label>
-            <input type="password" class="form-control" id="loginPassword" value="password" required>
+            <input type="password" class="form-control" id="loginPassword" value="password" autocomplete="current-password" required>
           </div>
           <div class="mb-3">
             <label class="form-check">
@@ -273,15 +273,15 @@
         <div class="modal-body">
           <form id="resetPasswordForm">
             <input type="hidden" id="resetToken">
-            <input type="hidden" id="resetEmail">
+            <input type="hidden" id="resetEmail" autocomplete="username">
             <div class="mb-3">
               <label class="form-label">New Password</label>
-              <input type="password" class="form-control" id="newPassword" minlength="8" required>
+              <input type="password" class="form-control" id="newPassword" minlength="8" autocomplete="new-password" required>
               <small class="form-hint">Must be at least 8 characters long</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Confirm Password</label>
-              <input type="password" class="form-control" id="confirmPassword" minlength="8" required>
+              <input type="password" class="form-control" id="confirmPassword" minlength="8" autocomplete="new-password" required>
             </div>
             <div id="resetPasswordError" class="alert alert-danger" style="display: none;"></div>
             <div id="resetPasswordSuccess" class="alert alert-success" style="display: none;"></div>

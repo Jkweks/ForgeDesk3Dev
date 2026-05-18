@@ -839,6 +839,9 @@
           url += `&search=${encodeURIComponent(currentSearch)}`;
         }
         const response = await apiCall(url);
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
         const data = await response.json();
         renderInventoryTable(data.data);
         renderPagination(data);
@@ -848,6 +851,10 @@
         document.getElementById('inventoryTableContainer').style.display = 'block';
       } catch (error) {
         console.error('Error loading filtered inventory:', error);
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('inventoryTableContainer').style.display = 'block';
+        const tbody = document.getElementById('inventoryTableBody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Failed to load inventory. Please try again.</td></tr>';
       }
     }
 
@@ -1035,6 +1042,8 @@
     }
 
     // Auto-generate SKU preview
+    let lastGeneratedSku = '';
+
     function updateSkuPreview() {
       const partNumber = document.getElementById('productPartNumber').value.trim().toUpperCase();
       const finish = document.getElementById('productFinish').value;
@@ -1046,13 +1055,18 @@
         skuPreview.textContent = `Will generate: ${generatedSku}`;
         skuPreview.classList.add('text-primary');
 
-        // Auto-fill SKU if empty
-        if (!skuField.value) {
+        // Auto-fill if empty or if field still matches the last auto-generated value
+        if (!skuField.value || skuField.value === lastGeneratedSku) {
           skuField.value = generatedSku;
+          lastGeneratedSku = generatedSku;
         }
       } else {
         skuPreview.textContent = '';
         skuPreview.classList.remove('text-primary');
+        if (skuField.value === lastGeneratedSku) {
+          skuField.value = '';
+          lastGeneratedSku = '';
+        }
       }
     }
 
@@ -1092,6 +1106,7 @@
       document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
       document.getElementById('skuPreview').textContent = '';
       document.getElementById('reorderPreview').textContent = '';
+      lastGeneratedSku = '';
       showModal(document.getElementById('addProductModal'));
     }
 

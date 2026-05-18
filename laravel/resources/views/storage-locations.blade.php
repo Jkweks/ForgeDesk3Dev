@@ -235,6 +235,9 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-link" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-secondary ms-auto" id="printShelfTagBtn" onclick="printShelfLabel()">
+            <i class="ti ti-file-type-pdf me-1"></i> Download Shelf Label
+          </button>
         </div>
       </div>
     </div>
@@ -257,7 +260,7 @@
       min-height: 36px;
     }
     .tree-node-content:hover {
-      background: #f8f9fa;
+      background: var(--tblr-bg-surface-secondary);
     }
     .tree-node-toggle {
       width: 16px;
@@ -276,12 +279,12 @@
     }
     .tree-node-icon {
       margin-right: 6px;
-      color: #6c757d;
+      color: var(--tblr-secondary-color);
       font-size: 16px;
     }
     .tree-children {
       margin-left: 20px;
-      border-left: 1px dashed #dee2e6;
+      border-left: 1px dashed var(--tblr-border-color);
       padding-left: 6px;
     }
     .tree-children.collapsed {
@@ -599,7 +602,10 @@
       renderLocationsTable(filteredLocations);
     }
 
+    let currentViewLocationId = null;
+
     async function viewLocationDetails(locationId) {
+      currentViewLocationId = locationId;
       try {
         const location = currentLocations.find(l => l.id === locationId);
         if (!location) return;
@@ -707,6 +713,46 @@
       } catch (error) {
         console.error('Error loading location details:', error);
         showNotification('Failed to load location details', 'danger');
+      }
+    }
+
+    async function printShelfLabel() {
+      if (!currentViewLocationId) return;
+
+      const btn = document.getElementById('printShelfTagBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating…';
+
+      try {
+        const response = await fetch(`${API_BASE}/storage-locations/${currentViewLocationId}/shelf-label-pdf`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/pdf',
+          }
+        });
+
+        if (!response.ok) {
+          showNotification('Failed to generate shelf label PDF', 'danger');
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const location = currentLocations.find(l => l.id === currentViewLocationId);
+        a.download = `shelf-label-${(location?.code || location?.name || currentViewLocationId).replace(/[^A-Za-z0-9\-_.]/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+      } catch (e) {
+        showNotification('Failed to generate shelf label PDF', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
       }
     }
 

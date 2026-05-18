@@ -508,7 +508,7 @@
                   <input type="file" class="form-control" id="materialCheckFile" accept=".xlsx,.xlsm">
                   <small class="form-hint">Upload an EZ Estimate file to check material availability</small>
                 </div>
-                <button class="btn btn-primary" onclick="checkJobMaterials()">
+                <button id="checkJobMaterialsBtn" class="btn btn-primary" onclick="checkJobMaterials()">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
                   Check Materials
                 </button>
@@ -1337,7 +1337,7 @@
                     if (data.data && data.data.length > 0) {
                         resultsDiv.innerHTML = data.data.map(product => `
                             <button type="button" class="list-group-item list-group-item-action"
-                                    onclick="selectNewResProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', '${product.description.replace(/'/g, "\\'")}', ${product.quantity_available})">
+                                    onclick="selectNewResProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', ${JSON.stringify(product.description || '').replace(/"/g, '&quot;')}, ${product.quantity_available})">
                                 <div class="d-flex w-100 justify-content-between">
                                     <strong>${escapeHtml(product.sku)}</strong>
                                     <span class="badge bg-${product.quantity_available > 0 ? 'success' : 'warning'}">${product.quantity_available} avail</span>
@@ -1895,15 +1895,6 @@
                 return;
             }
 
-            if (field === 'committed_qty' && numValue > item.committed_qty) {
-                const increase = numValue - item.committed_qty;
-                if (increase > item.product.quantity_available) {
-                    alert(`Only ${item.product.quantity_available} available. Cannot increase by ${increase}.`);
-                    renderEditResItems();
-                    return;
-                }
-            }
-
             item[field] = numValue;
         }
 
@@ -1945,11 +1936,6 @@
 
                 if (editingResItems.some(item => item.product_id === product.id)) {
                     alert('This product is already in the reservation');
-                    return;
-                }
-
-                if (committedQty > product.quantity_available) {
-                    alert(`Only ${product.quantity_available} available. Cannot commit ${committedQty}.`);
                     return;
                 }
 
@@ -2105,7 +2091,7 @@
                     if (data.data && data.data.length > 0) {
                         resultsDiv.innerHTML = data.data.map(product => `
                             <button type="button" class="list-group-item list-group-item-action"
-                                    onclick="selectEditReplaceProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', '${product.description.replace(/'/g, "\\'")}', ${product.quantity_on_hand}, ${product.quantity_available})">
+                                    onclick="selectEditReplaceProduct(${product.id}, '${escapeHtml(product.sku)}', '${escapeHtml(product.part_number || '')}', '${escapeHtml(product.finish || '')}', ${JSON.stringify(product.description || '').replace(/"/g, '&quot;')}, ${product.quantity_on_hand}, ${product.quantity_available})">
                                 <div class="d-flex w-100 justify-content-between">
                                     <strong>${escapeHtml(product.sku)}</strong>
                                     <span class="badge bg-${product.quantity_available > 0 ? 'success' : 'danger'}">${product.quantity_available} avail</span>
@@ -2207,6 +2193,12 @@
                 return;
             }
 
+            const btn = document.getElementById('checkJobMaterialsBtn');
+            btn.disabled = true;
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-warning');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Materials…';
+
             const formData = new FormData();
             formData.append('file', file);
             formData.append('mode', 'ez_estimate');
@@ -2233,6 +2225,11 @@
             } catch (error) {
                 console.error('Error checking materials:', error);
                 alert('Error checking materials: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('btn-warning');
+                btn.classList.add('btn-primary');
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>Check Materials';
             }
         }
 
@@ -2267,6 +2264,7 @@
                 } else if (item.status === 'unavailable') {
                     statusBadge = '<span class="badge bg-danger">Out of Stock</span>';
                     statusClass = 'table-danger';
+                    canCommit = true;
                 } else if (item.status === 'not_found') {
                     statusBadge = '<span class="badge bg-secondary">Not Found</span>';
                     statusClass = 'table-secondary';
@@ -2400,7 +2398,7 @@
                     items.push({
                         product_id: item.product_id,
                         requested_qty: requiredEaches,
-                        committed_qty: Math.min(requiredEaches, availableEaches)
+                        committed_qty: requiredEaches
                     });
                 }
             });

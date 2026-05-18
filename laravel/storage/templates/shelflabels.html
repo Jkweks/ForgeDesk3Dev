@@ -5,10 +5,10 @@
 <title>Shelf Tag</title>
 
 <style>
-  /* Exact physical size */
-  @page { size: 9in 6in; margin: 0; }
+  /* Half letter portrait: 8.5 x 5.5in */
+  @page { size: 8.5in 5.5in; margin: 0; }
 
-  html, body { height: 100%; }
+  html, body { width: 8.5in; height: 5.5in; overflow: hidden; }
   body {
     margin: 0;
     font-family: Calibri, Arial, Helvetica, sans-serif;
@@ -17,23 +17,23 @@
   }
 
   .label {
-    width: 9in;
-    height: 6in;
+    width: 8.5in;
+    height: 5.5in;
     box-sizing: border-box;
-    padding: 0.13in;            /* small margin: more image real estate */
-    border: 3px solid #000;     /* thick edge so it looks intentional */
+    padding: 0.1in;
+    border: 3px solid #000;
     display: flex;
     flex-direction: column;
-    gap: 0.12in;
+    gap: 0.08in;
   }
 
-  /* Shelf ID: big, but keeps space for the photos */
+  /* Shelf ID: fits the reduced height */
   .shelf-id {
     border: 3px solid #000;
-    padding: 0.10in 0.15in;
+    padding: 0.06in 0.12in;
     font-weight: 900;
     letter-spacing: 0.02em;
-    font-size: 0.85in;          /* big and readable */
+    font-size: 0.68in;
     line-height: 1;
     text-align: right;
   }
@@ -42,14 +42,14 @@
   .items {
     flex: 1;
     display: grid;
-    gap: 0.12in;
+    gap: 0.08in;
     min-height: 0; /* important for large images in flex layouts */
   }
 
   /* B/W item card, image above label */
   .item {
     border: 3px solid #000;
-    padding: 0.10in;
+    padding: 0.08in;
     display: grid;
     grid-template-rows: 1fr auto;  /* image gets all leftover space */
     align-items: center;
@@ -67,12 +67,12 @@
 
   .part-number {
     width: 100%;
-    border-top: 3px solid #000;
-    margin-top: 0.08in;
-    padding-top: 0.06in;
+    border-top: 2px solid #000;
+    margin-top: 0.06in;
+    padding-top: 0.04in;
     text-align: center;
     font-weight: 900;
-    font-size: 0.34in;
+    font-size: 0.28in;
     line-height: 1.05;
     word-break: break-word;       /* long part numbers won’t explode layout */
   }

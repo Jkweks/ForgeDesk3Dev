@@ -786,8 +786,8 @@ async function submitPO() {
 
     safeHideModal('confirmPOModal');
 
-    const poNumber = result?.po_number || result?.data?.po_number || '';
-    showNotification(`Purchase order${poNumber ? ' ' + poNumber : ''} created successfully`, 'success');
+    const createdPONumber = result?.po_number || result?.data?.po_number || '';
+    showNotification(`Purchase order${createdPONumber ? ' ' + createdPONumber : ''} created successfully`, 'success');
 
     // Reload to reflect updated stock status
     await loadReplenishmentItems();

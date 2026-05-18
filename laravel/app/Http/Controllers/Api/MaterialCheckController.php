@@ -80,8 +80,20 @@ class MaterialCheckController extends Controller
                 $totalRequested = 0;
                 $totalCommitted = 0;
 
-                // Create reservation items
+                // Merge duplicate product_ids by summing quantities (e.g. same product in multiple estimate rows)
+                $mergedItems = [];
                 foreach ($request->items as $item) {
+                    $pid = $item['product_id'];
+                    if (isset($mergedItems[$pid])) {
+                        $mergedItems[$pid]['requested_qty'] += $item['requested_qty'];
+                        $mergedItems[$pid]['committed_qty'] += $item['committed_qty'];
+                    } else {
+                        $mergedItems[$pid] = $item;
+                    }
+                }
+
+                // Create reservation items
+                foreach ($mergedItems as $item) {
                     // Get current availability before commitment
                     $product = Product::find($item['product_id']);
                     $availableBefore = $product->quantity_available;
@@ -348,6 +360,19 @@ class MaterialCheckController extends Controller
     }
 
     /**
+     * Returns the effective value of a cell: for formula cells, returns the
+     * Excel-cached calculated value (getOldCalculatedValue) to avoid re-evaluating
+     * cross-sheet references that aren't loaded. For plain cells, returns getValue().
+     */
+    private function getCellEffectiveValue(\PhpOffice\PhpSpreadsheet\Cell\Cell $cell): mixed
+    {
+        if ($cell->getDataType() === DataType::TYPE_FORMULA) {
+            return $cell->getOldCalculatedValue();
+        }
+        return $cell->getValue();
+    }
+
+    /**
      * Process a single EZ Estimate sheet
      * Columns: A=Qty (in packs, decimals allowed), B=Part Number, C=Finish
      *
@@ -364,16 +389,13 @@ class MaterialCheckController extends Controller
 
         for ($row = $startRow; $row <= $endRow; $row++) {
             try {
-                // Use getValue() instead of getCalculatedValue() to avoid formula calculation hangs
-                // For .xlsm files with complex formulas, getCalculatedValue() can hang indefinitely
-                // getValue() returns the cached calculated value from when the file was last saved
                 $qtyCell = $sheet->getCell("A{$row}");
                 $partNumberCell = $sheet->getCell("B{$row}");
                 $finishCell = $sheet->getCell("C{$row}");
 
-                $qtyPacks = floatval($qtyCell->getValue()); // Qty is in packs (can be decimal like 0.86)
-                $partNumber = trim((string)$partNumberCell->getValue());
-                $finish = trim((string)$finishCell->getValue());
+                $qtyPacks = floatval($this->getCellEffectiveValue($qtyCell));
+                $partNumber = trim((string)$this->getCellEffectiveValue($partNumberCell));
+                $finish = trim((string)$this->getCellEffectiveValue($finishCell));
 
                 // Debug logging for first few rows
                 if ($debugCounter < $debugSampleRows) {
@@ -390,11 +412,6 @@ class MaterialCheckController extends Controller
 
                 // Skip rows where part number is empty
                 if (empty($partNumber)) {
-                    continue;
-                }
-
-                // Skip rows where part number is a formula (not user input)
-                if ($partNumberCell->getDataType() === DataType::TYPE_FORMULA) {
                     continue;
                 }
 

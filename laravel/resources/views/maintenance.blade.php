@@ -3,12 +3,12 @@
 @section('title', 'Maintenance Hub - ForgeDesk')
 
 @section('styles')
-.priority-critical { background-color: #d63939; color: white; }
-.priority-high { background-color: #f76707; color: white; }
-.priority-medium { background-color: #fab005; color: white; }
-.priority-low { background-color: #74b816; color: white; }
-.overdue { background-color: #d63939; color: white; }
-.due-soon { background-color: #fab005; color: white; }
+.priority-critical { background-color: var(--tblr-danger); color: #fff; }
+.priority-high { background-color: var(--tblr-orange); color: #fff; }
+.priority-medium { background-color: var(--tblr-warning); color: #fff; }
+.priority-low { background-color: var(--tblr-success); color: #fff; }
+.overdue { background-color: var(--tblr-danger); color: #fff; }
+.due-soon { background-color: var(--tblr-warning); color: #fff; }
 @endsection
 
 @section('content')

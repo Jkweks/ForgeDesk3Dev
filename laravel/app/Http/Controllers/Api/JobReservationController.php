@@ -444,6 +444,12 @@ class JobReservationController extends Controller
 
                 DB::commit();
 
+                // Recalculate average daily use for all consumed products
+                $consumedProductIds = collect($itemsData)->pluck('product_id')->unique()->values()->all();
+                if (!empty($consumedProductIds)) {
+                    \App\Models\Product::recalculateDailyUse($consumedProductIds);
+                }
+
                 Log::info('Job reservation completed', [
                     'reservation_id' => $id,
                     'job_number' => $reservation->job_number,
@@ -620,14 +626,6 @@ class JobReservationController extends Controller
                     ], 422);
                 }
 
-                // Validate committed quantity doesn't exceed available
-                if ($request->committed_qty > $product->quantity_available) {
-                    return response()->json([
-                        'error' => 'Insufficient inventory',
-                        'message' => "Only {$product->quantity_available} available. Cannot commit {$request->committed_qty}.",
-                    ], 422);
-                }
-
                 // Create new item
                 $item = JobReservationItem::create([
                     'reservation_id' => $id,
@@ -726,17 +724,6 @@ class JobReservationController extends Controller
                         'error' => 'Invalid quantity',
                         'message' => "Cannot reduce committed quantity below already consumed ({$item->consumed_qty})",
                     ], 422);
-                }
-
-                // Check available inventory if increasing committed_qty
-                if ($request->has('committed_qty') && $request->committed_qty > $item->committed_qty) {
-                    $increase = $request->committed_qty - $item->committed_qty;
-                    if ($increase > $item->product->quantity_available) {
-                        return response()->json([
-                            'error' => 'Insufficient inventory',
-                            'message' => "Only {$item->product->quantity_available} available. Cannot increase by {$increase}.",
-                        ], 422);
-                    }
                 }
 
                 // Update quantities
@@ -1137,9 +1124,8 @@ class JobReservationController extends Controller
                 foreach ($request->items as $itemData) {
                     $product = Product::find($itemData['product_id']);
 
-                    // If committed_qty not provided, default to min(requested_qty, available)
                     $requestedQty = $itemData['requested_qty'];
-                    $committedQty = $itemData['committed_qty'] ?? min($requestedQty, $product->quantity_available);
+                    $committedQty = $itemData['committed_qty'] ?? $requestedQty;
 
                     // Check if committed exceeds available (allow but warn)
                     if ($committedQty > $product->quantity_available) {
@@ -1303,19 +1289,6 @@ class JobReservationController extends Controller
                 return response()->json([
                     'error' => 'Product ' . $newProduct->sku . ' already exists in this reservation',
                     'message' => 'Consider updating the existing item quantities instead',
-                ], 400);
-            }
-
-            // Check availability of new product for the committed quantity
-            if ($newProduct->quantity_available < $item->committed_qty) {
-                return response()->json([
-                    'error' => 'Insufficient availability for new product',
-                    'details' => [
-                        'new_sku' => $newProduct->sku,
-                        'required_qty' => $item->committed_qty,
-                        'available_qty' => $newProduct->quantity_available,
-                        'shortage' => $item->committed_qty - $newProduct->quantity_available,
-                    ],
                 ], 400);
             }
 
