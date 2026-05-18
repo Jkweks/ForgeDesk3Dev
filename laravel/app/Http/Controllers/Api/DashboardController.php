@@ -227,12 +227,10 @@ class DashboardController extends Controller
                   AND r.deleted_at IS NULL
             ), 0)";
 
-            $query->selectRaw("products.*, {$committedSubquery} as committed_qty_computed");
-
             if ($sortBy === 'quantity_committed') {
-                $query->orderByRaw("committed_qty_computed {$sortDir}");
+                $query->orderByRaw("({$committedSubquery}) {$sortDir}");
             } else {
-                $query->orderByRaw("(products.quantity_on_hand - committed_qty_computed) {$sortDir}");
+                $query->orderByRaw("(products.quantity_on_hand - ({$committedSubquery})) {$sortDir}");
             }
         } else {
             $query->orderBy($sortBy, $sortDir);

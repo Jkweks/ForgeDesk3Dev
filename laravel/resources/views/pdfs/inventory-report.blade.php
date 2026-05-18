@@ -134,7 +134,7 @@
                 <th style="width: 5%;">UOM</th>
                 <th style="width: 7%;" class="text-right">Val (List)</th>
                 <th style="width: 7%;" class="text-right">Val (Net)</th>
-                <th style="width: 5%;" class="text-center">NONSOF</th>
+                <th style="width: 5%;" class="text-center">Boneyard</th>
             </tr>
         </thead>
         <tbody>
