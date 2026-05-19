@@ -126,7 +126,7 @@
 <div class="offcanvas offcanvas-end" tabindex="-1" id="detail-offcanvas" style="width:440px;">
   <div class="offcanvas-header border-bottom">
     <h5 class="offcanvas-title" id="detail-title">Work Order Detail</h5>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    <button type="button" class="btn-close" onclick="closeOffcanvas('detail-offcanvas')" aria-label="Close"></button>
   </div>
   <div class="offcanvas-body p-0" id="detail-body">
     <div class="text-center py-5 text-muted">Select a work order to view details</div>
@@ -443,18 +443,42 @@ function renderShopGrid() {
   `).join('');
 }
 
-// ── Detail offcanvas ──────────────────────────────────────────────────────────
-let detailOffcanvas = null;
+// ── Offcanvas helpers (Bootstrap-independent fallback) ────────────────────────
+function openOffcanvas(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (window.bootstrap?.Offcanvas) {
+    new window.bootstrap.Offcanvas(el).show();
+    return;
+  }
+  // Manual fallback
+  let bd = document.getElementById('offcanvas-backdrop');
+  if (!bd) {
+    bd = document.createElement('div');
+    bd.id = 'offcanvas-backdrop';
+    bd.className = 'offcanvas-backdrop fade show';
+    bd.onclick = () => closeOffcanvas(id);
+    document.body.appendChild(bd);
+  }
+  el.classList.add('show');
+  document.body.classList.add('offcanvas-open');
+}
 
+function closeOffcanvas(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('show');
+  document.body.classList.remove('offcanvas-open');
+  document.getElementById('offcanvas-backdrop')?.remove();
+}
+
+// ── Detail offcanvas ──────────────────────────────────────────────────────────
 async function openDetail(id) {
   selectedWOId = id;
   const panel = document.getElementById('detail-body');
   panel.innerHTML = '<div class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
 
-  if (!detailOffcanvas) {
-    detailOffcanvas = new window.bootstrap.Offcanvas(document.getElementById('detail-offcanvas'));
-  }
-  detailOffcanvas.show();
+  openOffcanvas('detail-offcanvas');
 
   try {
     const res = await fetch(`${API}/work-orders/${id}`, { headers: authHeaders() });
@@ -582,20 +606,13 @@ async function promptAddStage(woId) {
 }
 
 // ── WO Modal ──────────────────────────────────────────────────────────────────
-let woModal = null;
-
-function getModal() {
-  if (!woModal) woModal = new window.bootstrap.Modal(document.getElementById('wo-modal'));
-  return woModal;
-}
-
 function openNewWO() {
   document.getElementById('wo-modal-title').textContent = 'New Work Order';
   document.getElementById('wo-edit-id').value = '';
   document.getElementById('wo-archive-btn').classList.add('d-none');
   clearModalForm();
   updateCalcHours();
-  getModal().show();
+  showModal(document.getElementById('wo-modal'));
 }
 
 function editWO(id) {
@@ -606,7 +623,7 @@ function editWO(id) {
   document.getElementById('wo-archive-btn').classList.remove('d-none');
   fillModalForm(wo);
   updateCalcHours();
-  getModal().show();
+  showModal(document.getElementById('wo-modal'));
 }
 
 function clearModalForm() {
@@ -695,7 +712,7 @@ async function saveWO() {
   try {
     const res = await fetch(url, { method, headers: authHeaders(), body: JSON.stringify(payload) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Save failed'); }
-    getModal().hide();
+    hideModal(document.getElementById('wo-modal'));
     showToast(editId ? 'Work order updated' : 'Work order created', 'success');
     loadWOs();
   } catch (e) {
@@ -714,8 +731,8 @@ async function archiveWODirect(id) {
   try {
     const res = await fetch(`${API}/work-orders/${id}`, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) throw new Error();
-    getModal()?.hide();
-    if (detailOffcanvas) detailOffcanvas.hide();
+    hideModal(document.getElementById('wo-modal'));
+    closeOffcanvas('detail-offcanvas');
     showToast('Work order archived', 'success');
     loadWOs();
   } catch {
