@@ -306,8 +306,7 @@ let filterDebounce = null;
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
 function authHeaders() {
-  const token = localStorage.getItem('auth_token');
-  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` };
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
@@ -453,7 +452,7 @@ async function openDetail(id) {
   panel.innerHTML = '<div class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
 
   if (!detailOffcanvas) {
-    detailOffcanvas = new bootstrap.Offcanvas(document.getElementById('detail-offcanvas'));
+    detailOffcanvas = new window.bootstrap.Offcanvas(document.getElementById('detail-offcanvas'));
   }
   detailOffcanvas.show();
 
@@ -586,7 +585,7 @@ async function promptAddStage(woId) {
 let woModal = null;
 
 function getModal() {
-  if (!woModal) woModal = new bootstrap.Modal(document.getElementById('wo-modal'));
+  if (!woModal) woModal = new window.bootstrap.Modal(document.getElementById('wo-modal'));
   return woModal;
 }
 
