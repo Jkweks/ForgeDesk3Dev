@@ -585,7 +585,8 @@ function elevRow(e) {
         : '<span class="text-muted">—</span>';
 
     const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset' };
-    const pips = (e.stages || []).map(s =>
+    const stages = e.stages || [];
+    const pips = stages.map(s =>
         `<span class="pip pip-${s.status}" style="cursor:pointer"
             title="${s.name}: ${s.status} → click to ${nextLabels[s.status] || 'advance'}"
             onclick="cycleStage(${s.id},'${s.status}',event)"></span>`
@@ -595,13 +596,59 @@ function elevRow(e) {
         ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-muted">${esc(e.completed_by_name)}</small>` : ''}`
         : `<span class="text-muted small">—</span>`;
 
+    const hasStages = stages.length > 0;
+    const expandBtn = hasStages
+        ? `<button class="btn btn-ghost-secondary btn-sm px-1" onclick="toggleStages('elev-stages-${e.id}', this)" title="Expand stages">
+               <i class="ti ti-chevron-right" style="transition:transform .15s"></i>
+           </button>`
+        : '';
+
+    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger' };
+    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked' };
+    const stageDetailRows = stages.map(s => `
+        <tr>
+            <td style="padding-left:2rem" class="text-muted small">${esc(s.name)}</td>
+            <td>
+                <span class="badge bg-${stageColors[s.status] || 'secondary'}" style="cursor:pointer"
+                    onclick="cycleStage(${s.id},'${s.status}',event)">
+                    ${stageLabels[s.status] || s.status}
+                </span>
+            </td>
+            <td class="text-muted small">${s.assigned_name ? esc(s.assigned_name) : '—'}</td>
+            <td class="text-muted small">${s.started_at ? new Date(s.started_at).toLocaleDateString() : '—'}</td>
+            <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}</td>
+        </tr>`).join('');
+
+    const stageDetailBlock = hasStages ? `
+        <tr id="elev-stages-${e.id}" style="display:none">
+            <td colspan="7" class="p-0">
+                <table class="table table-sm mb-0" style="background:rgba(0,0,0,.15)">
+                    <thead>
+                        <tr class="text-muted" style="font-size:.7rem;text-transform:uppercase">
+                            <th style="padding-left:2rem">Stage</th>
+                            <th>Status</th>
+                            <th>Assigned</th>
+                            <th>Started</th>
+                            <th>Completed</th>
+                        </tr>
+                    </thead>
+                    <tbody>${stageDetailRows}</tbody>
+                </table>
+            </td>
+        </tr>` : '';
+
     return `<tr class="elev-row">
         <td><strong>${esc(e.elevation_tag)}</strong></td>
         <td>${typeBadge}</td>
         <td>${e.quantity}</td>
         <td class="text-muted small">${e.date_requested || '—'}</td>
         <td>${completedInfo}</td>
-        <td><div class="d-flex flex-wrap gap-0">${pips || '<span class="text-muted small">—</span>'}</div></td>
+        <td>
+            <div class="d-flex align-items-center gap-1">
+                <div class="d-flex flex-wrap gap-0">${pips || '<span class="text-muted small">—</span>'}</div>
+                ${expandBtn}
+            </div>
+        </td>
         <td>
             <div class="btn-group btn-group-sm">
                 <button class="btn btn-ghost-secondary" onclick="openEditElev(${e.id})" title="Edit">
@@ -612,7 +659,16 @@ function elevRow(e) {
                 </button>
             </div>
         </td>
-    </tr>`;
+    </tr>${stageDetailBlock}`;
+}
+
+function toggleStages(rowId, btn) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const icon = btn.querySelector('i');
+    const isOpen = row.style.display !== 'none';
+    row.style.display = isOpen ? 'none' : '';
+    icon.style.transform = isOpen ? '' : 'rotate(90deg)';
 }
 
 // ============================================================
