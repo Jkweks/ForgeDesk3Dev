@@ -14,6 +14,7 @@ class BusinessJob extends Model
         'job_number',
         'job_name',
         'customer_name',
+        'project_manager',
         'site_address',
         'contact_name',
         'contact_phone',
@@ -62,6 +63,22 @@ class BusinessJob extends Model
     public function jobReservations()
     {
         return $this->hasMany(JobReservation::class, 'business_job_id');
+    }
+
+    /**
+     * Get fabrication work orders for this job
+     */
+    public function workOrders()
+    {
+        return $this->hasMany(\App\Models\FdWorkOrder::class, 'business_job_id')->orderBy('release_number');
+    }
+
+    /**
+     * Division derived from first character of job_number
+     */
+    public function getDivisionAttribute(): string
+    {
+        return $this->job_number ? substr($this->job_number, 0, 1) : '—';
     }
 
     /**

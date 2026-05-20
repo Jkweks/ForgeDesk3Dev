@@ -49,6 +49,8 @@ class BusinessJobController extends Controller
                         'job_number' => $job->job_number,
                         'job_name' => $job->job_name,
                         'customer_name' => $job->customer_name,
+                        'project_manager' => $job->project_manager,
+                        'division' => substr($job->job_number ?? '', 0, 1) ?: '—',
                         'status' => $job->status,
                         'status_label' => $job->status_label,
                         'start_date' => $job->start_date?->format('Y-m-d'),
@@ -162,6 +164,7 @@ class BusinessJobController extends Controller
                 'job_number' => $request->job_number,
                 'job_name' => $request->job_name,
                 'customer_name' => $request->customer_name,
+                'project_manager' => $request->project_manager,
                 'site_address' => $request->site_address,
                 'contact_name' => $request->contact_name,
                 'contact_phone' => $request->contact_phone,
@@ -235,6 +238,7 @@ class BusinessJobController extends Controller
                 'job_number',
                 'job_name',
                 'customer_name',
+                'project_manager',
                 'site_address',
                 'contact_name',
                 'contact_phone',
@@ -641,5 +645,30 @@ class BusinessJobController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * List fabrication work orders for a job
+     */
+    public function getWorkOrders($jobId)
+    {
+        $job = BusinessJob::findOrFail($jobId);
+        $workOrders = $job->workOrders()
+            ->withCount(['elevations', 'elevations as elevations_complete' => fn($q) => $q->whereNotNull('date_completed')])
+            ->get()
+            ->map(fn($wo) => [
+                'id'                  => $wo->id,
+                'release_number'      => $wo->release_number,
+                'release_label'       => "{$job->job_number}-R{$wo->release_number}",
+                'date_issued'         => $wo->date_issued?->format('Y-m-d'),
+                'material_delivery'   => $wo->material_delivery,
+                'notes'               => $wo->notes,
+                'archived'            => $wo->archived,
+                'elevation_count'     => $wo->elevations_count ?? 0,
+                'elevations_complete' => $wo->elevations_complete ?? 0,
+                'created_at'          => $wo->created_at->toIso8601String(),
+            ]);
+
+        return response()->json(['work_orders' => $workOrders]);
     }
 }

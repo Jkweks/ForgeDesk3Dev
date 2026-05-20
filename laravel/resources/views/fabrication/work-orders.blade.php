@@ -2,6 +2,18 @@
 
 @section('title', 'Work Orders – Fabrication')
 
+@push('styles')
+<style>
+.pip { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin: 1px; }
+.pip-pending    { background: #adb5bd; }
+.pip-in_progress{ background: #f59f00; }
+.pip-complete   { background: #2fb344; }
+.pip-blocked    { background: #d63939; }
+.wo-offcanvas   { width: 700px !important; }
+.elev-row td    { vertical-align: middle; }
+</style>
+@endpush
+
 @section('content')
 <div class="page-wrapper">
   <div class="page-header d-print-none">
@@ -9,22 +21,15 @@
       <div class="row g-2 align-items-center">
         <div class="col">
           <h2 class="page-title">Work Orders</h2>
-          <div class="text-muted mt-1">Fabrication scheduling dashboard</div>
+          <div class="text-muted mt-1">Fabrication production releases</div>
         </div>
         <div class="col-auto ms-auto d-print-none">
-          <!-- View toggle -->
-          <div class="btn-group me-2" role="group" aria-label="View">
-            <button type="button" class="btn btn-outline-secondary btn-sm active" id="btn-manager-view" onclick="switchView('manager')">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-1"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>
-              Manager
-            </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-shop-view" onclick="switchView('shop')">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-1"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 4m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /><path d="M14 4m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /><path d="M4 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /><path d="M14 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" /></svg>
-              Shop Floor
-            </button>
+          <div class="form-check form-switch me-3 d-inline-flex align-items-center">
+            <input class="form-check-input" type="checkbox" id="toggle-archived" onchange="applyFilter()">
+            <label class="form-check-label ms-2" for="toggle-archived">Show Archived</label>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openNewWO()" data-permission="fabrication.work-orders.create">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+          <button class="btn btn-primary" onclick="openCreateWO()" data-permission="fabrication.work-orders.create">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>
             New Work Order
           </button>
         </div>
@@ -40,785 +45,747 @@
         <div class="card-body py-2">
           <div class="row g-2 align-items-center">
             <div class="col-12 col-md-4">
-              <input type="text" class="form-control form-control-sm" id="wo-search" placeholder="Search project, WO#, job#…" oninput="debounceFilter()">
-            </div>
-            <div class="col-auto">
-              <select class="form-select form-select-sm" id="filter-type" onchange="applyFilter()">
-                <option value="">All Types</option>
-                <option value="SF">SF – Storefront</option>
-                <option value="CW">CW – Curtain Wall</option>
-              </select>
-            </div>
-            <div class="col-auto">
-              <select class="form-select form-select-sm" id="filter-pm" onchange="applyFilter()">
-                <option value="">All PMs</option>
-              </select>
+              <input type="text" class="form-control form-control-sm" id="wo-search"
+                placeholder="Search job #, name…" oninput="debounceFilter()">
             </div>
             <div class="col-auto">
               <select class="form-select form-select-sm" id="filter-material" onchange="applyFilter()">
                 <option value="">All Material</option>
-                <option value="yes">Arrived</option>
+                <option value="in_shop">In Shop</option>
                 <option value="sof">SOF</option>
-                <option value="no">Pending</option>
+                <option value="pending">Pending</option>
               </select>
             </div>
             <div class="col-auto ms-auto">
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" id="show-archived" onchange="applyFilter()">
-                <label class="form-check-label small" for="show-archived">Show Archived</label>
-              </div>
+              <span class="text-muted small" id="wo-count-label"></span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Loading state -->
-      <div id="wo-loading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status"></div>
-        <div class="mt-2 text-muted">Loading work orders…</div>
+      <!-- Loading -->
+      <div id="wo-loading" class="text-center text-muted py-5">
+        <div class="spinner-border" role="status"></div>
+        <p class="mt-2">Loading work orders…</p>
       </div>
 
-      <!-- Empty state -->
-      <div id="wo-empty" class="card" style="display:none;">
-        <div class="card-body text-center py-5">
-          <div class="mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon text-muted"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /></svg>
-          </div>
-          <h3 class="text-muted">No work orders found</h3>
-          <p class="text-muted">Try adjusting your filters or create a new work order.</p>
-          <button class="btn btn-primary" onclick="openNewWO()" data-permission="fabrication.work-orders.create">New Work Order</button>
+      <!-- Empty -->
+      <div id="wo-empty" style="display:none;" class="empty">
+        <div class="empty-icon">
+          <i class="ti ti-tool" style="font-size: 3rem; opacity: 0.4;"></i>
+        </div>
+        <p class="empty-title">No work orders found</p>
+        <p class="empty-subtitle text-muted">Try adjusting your filters or create a new work order.</p>
+        <div class="empty-action">
+          <button class="btn btn-primary" onclick="openCreateWO()">New Work Order</button>
         </div>
       </div>
 
-      <!-- Manager table view -->
-      <div id="manager-view" style="display:none;">
+      <!-- WO table -->
+      <div id="wo-table-wrap" style="display:none;">
         <div class="card">
           <div class="table-responsive">
-            <table class="table table-vcenter table-hover card-table">
+            <table class="table table-vcenter card-table table-hover">
               <thead>
                 <tr>
-                  <th>WO # / Project</th>
-                  <th>Type</th>
+                  <th>Release</th>
+                  <th>Job Name</th>
                   <th>PM</th>
+                  <th>Date Issued</th>
                   <th>Material</th>
-                  <th>Stages</th>
-                  <th>Hours</th>
-                  <th>Due</th>
+                  <th>Elevations</th>
                   <th class="w-1"></th>
                 </tr>
               </thead>
-              <tbody id="wo-table-body"></tbody>
+              <tbody id="wo-tbody"></tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <!-- Shop floor card grid -->
-      <div id="shop-view" style="display:none;">
-        <div class="row row-cards" id="wo-card-grid"></div>
-      </div>
-
     </div>
   </div>
 </div>
 
-<!-- Detail Offcanvas (right side) -->
-<div class="offcanvas offcanvas-end" tabindex="-1" id="detail-offcanvas" style="width:440px;">
+<!-- ============================================================
+     Detail Offcanvas
+     ============================================================ -->
+<div class="offcanvas offcanvas-end wo-offcanvas" tabindex="-1" id="wo-detail">
   <div class="offcanvas-header border-bottom">
-    <h5 class="offcanvas-title" id="detail-title">Work Order Detail</h5>
-    <button type="button" class="btn-close" onclick="closeOffcanvas('detail-offcanvas')" aria-label="Close"></button>
+    <h5 class="offcanvas-title" id="wo-detail-title">Work Order</h5>
+    <div class="ms-auto d-flex gap-2">
+      <button class="btn btn-sm btn-outline-warning" onclick="archiveCurrentWO()" id="btn-archive-wo" title="Archive">
+        <i class="ti ti-archive"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-danger" onclick="closeOffcanvas('wo-detail')">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>
   </div>
-  <div class="offcanvas-body p-0" id="detail-body">
-    <div class="text-center py-5 text-muted">Select a work order to view details</div>
+  <div class="offcanvas-body p-0">
+
+    <!-- WO Header -->
+    <div class="p-3 border-bottom bg-light">
+      <div class="row g-3">
+        <div class="col-6 col-md-3">
+          <div class="subheader">Job</div>
+          <div class="fw-bold" id="d-job-number">—</div>
+        </div>
+        <div class="col-6 col-md-5">
+          <div class="subheader">Job Name</div>
+          <div id="d-job-name">—</div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="subheader">PM</div>
+          <div id="d-pm">—</div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="subheader">Division</div>
+          <div id="d-division">—</div>
+        </div>
+      </div>
+      <div class="row g-3 mt-1">
+        <div class="col-auto">
+          <div class="subheader">Date Issued</div>
+          <input type="date" class="form-control form-control-sm" id="d-date-issued" style="width:150px"
+            onchange="patchWO('date_issued', this.value)">
+        </div>
+        <div class="col-auto">
+          <div class="subheader">Material Delivery</div>
+          <div class="input-group input-group-sm" style="width:260px">
+            <input type="text" class="form-control" id="d-material" placeholder="Date, In Shop, SOF"
+              onchange="patchWO('material_delivery', this.value || null)">
+            <button class="btn btn-outline-success" type="button"
+              onclick="setMaterial('In Shop')">In Shop</button>
+            <button class="btn btn-outline-warning" type="button"
+              onclick="setMaterial('SOF')">SOF</button>
+          </div>
+        </div>
+        <div class="col">
+          <div class="subheader">Notes</div>
+          <input type="text" class="form-control form-control-sm" id="d-notes" placeholder="Notes"
+            onchange="patchWO('notes', this.value || null)">
+        </div>
+      </div>
+    </div>
+
+    <!-- Shop Drawings -->
+    <div class="p-3 border-bottom">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">Shop Drawings</h5>
+        <label class="btn btn-sm btn-outline-primary mb-0" for="drawing-upload">
+          <i class="ti ti-upload me-1"></i>Upload
+          <input type="file" id="drawing-upload" class="d-none" multiple
+            accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+            onchange="uploadDrawings(this.files)">
+        </label>
+      </div>
+      <div id="drawings-loading" class="text-muted small" style="display:none;">Uploading…</div>
+      <div id="drawings-list">
+        <div class="text-muted small">No drawings attached.</div>
+      </div>
+    </div>
+
+    <!-- Elevations -->
+    <div class="p-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">Elevations</h5>
+        <button class="btn btn-sm btn-outline-primary" onclick="openAddElev()">
+          <i class="ti ti-plus me-1"></i>Add Elevation
+        </button>
+      </div>
+      <div id="elevations-loading" class="text-muted small" style="display:none;">Loading…</div>
+      <div id="elevations-list">
+        <div class="text-muted small">No elevations yet.</div>
+      </div>
+    </div>
+
   </div>
 </div>
+<div id="wo-backdrop" onclick="closeOffcanvas('wo-detail')"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:1040;"></div>
 
-<!-- Create / Edit WO Modal -->
-<div class="modal modal-blur fade" id="wo-modal" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+<!-- ============================================================
+     Create WO Modal
+     ============================================================ -->
+<div class="modal fade" id="createWoModal" tabindex="-1">
+  <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="wo-modal-title">New Work Order</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title">New Work Order</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('createWoModal'))"></button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="wo-edit-id">
-        <div class="row g-3">
-          <div class="col-12 col-md-8">
-            <label class="form-label required">Project Name</label>
-            <input type="text" class="form-control" id="f-project-name" placeholder="e.g. Main St Office Lobby">
+        <div class="mb-3">
+          <label class="form-label required">Job</label>
+          <select class="form-select" id="new-wo-job" required>
+            <option value="">— Select a job —</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Date Issued</label>
+          <input type="date" class="form-control" id="new-wo-date">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Material Delivery</label>
+          <div class="input-group">
+            <input type="text" class="form-control" id="new-wo-material" placeholder="Date, In Shop, or SOF">
+            <button type="button" class="btn btn-outline-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
+            <button type="button" class="btn btn-outline-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
           </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label required">Type</label>
-            <select class="form-select" id="f-job-type">
-              <option value="SF">SF – Storefront</option>
-              <option value="CW">CW – Curtain Wall</option>
-            </select>
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label required">WO Number</label>
-            <input type="text" class="form-control" id="f-wo-number" placeholder="e.g. WO-2026-001">
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Job Number</label>
-            <input type="text" class="form-control" id="f-job-number" placeholder="e.g. J-4512">
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">System</label>
-            <input type="text" class="form-control" id="f-system" placeholder="e.g. Series 400">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label">Joints</label>
-            <input type="number" class="form-control" id="f-joints" value="0" min="0" oninput="updateCalcHours()">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label">Dr/Fr Units</label>
-            <input type="number" class="form-control" id="f-dr-fr" value="0" min="0" oninput="updateCalcHours()">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label">Door Units</label>
-            <input type="number" class="form-control" id="f-doors" value="0" min="0" oninput="updateCalcHours()">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label">Est. Hours</label>
-            <div class="input-group">
-              <span class="input-group-text bg-muted-lt" id="calc-hours-display" title="Calculated">0.0</span>
-              <input type="number" class="form-control" id="f-hours-override" placeholder="Override" step="0.25" min="0">
-            </div>
-            <div class="form-hint">Calc'd / override</div>
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Date Received</label>
-            <input type="date" class="form-control" id="f-date-received">
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Planned Start</label>
-            <input type="date" class="form-control" id="f-planned-start">
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Planned Complete</label>
-            <input type="date" class="form-control" id="f-planned-complete">
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Requested Finish</label>
-            <input type="date" class="form-control" id="f-requested-finish">
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Material Status</label>
-            <select class="form-select" id="f-material">
-              <option value="">Pending</option>
-              <option value="SOF">SOF</option>
-              <option value="Yes">Arrived</option>
-            </select>
-          </div>
-          <div class="col-12 col-md-4">
-            <label class="form-label">Project Manager</label>
-            <input type="text" class="form-control" id="f-pm" placeholder="e.g. Dan S">
-          </div>
-          <div class="col-12">
-            <div class="form-check">
-              <input type="checkbox" class="form-check-input" id="f-cut-list">
-              <label class="form-check-label" for="f-cut-list">Cut List / Glazer Released</label>
-            </div>
-          </div>
-          <div class="col-12">
-            <label class="form-label">Notes</label>
-            <textarea class="form-control" id="f-notes" rows="2"></textarea>
-          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" id="new-wo-notes" rows="2"></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn me-auto btn-danger d-none" id="wo-archive-btn" onclick="archiveWO()">Archive</button>
-        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="saveWO()">Save Work Order</button>
+        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('createWoModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveNewWO()">Create</button>
       </div>
     </div>
   </div>
 </div>
 
-<style>
-  /* Stage pip squares */
-  .stage-pip {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    margin: 1px;
-    background: var(--tblr-border-color);
-  }
-  .stage-pip.complete   { background: var(--tblr-success); }
-  .stage-pip.in_progress{ background: var(--tblr-warning); }
-  .stage-pip.blocked    { background: var(--tblr-danger); }
-
-  /* Material bar on shop floor cards */
-  .wo-card { position: relative; overflow: hidden; }
-  .mat-bar {
-    position: absolute; top: 0; left: 0; right: 0;
-    height: 3px;
-  }
-  .mat-bar.mat-yes { background: var(--tblr-success); }
-  .mat-bar.mat-sof { background: var(--tblr-warning); }
-  .mat-bar.mat-no  { background: var(--tblr-danger); }
-
-  /* Due date urgency colors */
-  .date-ok   { color: var(--tblr-success); }
-  .date-warn { color: var(--tblr-warning); }
-  .date-late { color: var(--tblr-danger); font-weight: 600; }
-
-  /* Hours override star indicator */
-  .hours-override { color: var(--tblr-warning); font-size: 0.7em; }
-
-  /* Offcanvas stage rows */
-  .stage-row {
-    display: flex; align-items: center; gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--tblr-border-color);
-  }
-  .stage-row:last-child { border-bottom: none; }
-  .stage-status-dot {
-    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-    background: var(--tblr-border-color);
-  }
-  .stage-status-dot.complete    { background: var(--tblr-success); }
-  .stage-status-dot.in_progress { background: var(--tblr-warning); }
-  .stage-status-dot.blocked     { background: var(--tblr-danger); }
-
-  /* Shop floor card clickable */
-  .wo-card { cursor: pointer; transition: box-shadow 0.15s; }
-  .wo-card:hover { box-shadow: 0 0 0 2px var(--tblr-primary); }
-
-  /* Table row clickable */
-  #wo-table-body tr { cursor: pointer; }
-</style>
+<!-- ============================================================
+     Add / Edit Elevation Modal
+     ============================================================ -->
+<div class="modal fade" id="addElevModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="elev-modal-title">Add Elevation</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('addElevModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="elev-id">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label required">Elevation Tag</label>
+            <input type="text" class="form-control" id="elev-tag" placeholder="e.g. A1, B2">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Type</label>
+            <select class="form-select" id="elev-type">
+              <option value="">— None —</option>
+            </select>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Quantity</label>
+            <input type="number" class="form-control" id="elev-qty" value="1" min="1">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date Requested</label>
+            <input type="date" class="form-control" id="elev-date-req">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date Completed</label>
+            <input type="date" class="form-control" id="elev-date-done">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" id="elev-notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('addElevModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveElev()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
-const API = '/api/v1';
-const RATES = { cw_prep: 0.5, fab_joints: 0.25, fab_doors: 2.25, fab_frames: 1.5 };
-
+// ============================================================
+// Globals
+// ============================================================
 let allWOs = [];
-let filtered = [];
-let activeView = 'manager';
-let selectedWOId = null;
-let fabUsers = [];
-let filterDebounce = null;
+let currentWO = null;
+let elevTypes = [];
+let filterTimer = null;
 
-// ── Auth helper ──────────────────────────────────────────────────────────────
-function authHeaders() {
-  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` };
-}
-
-// ── Bootstrap ────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  loadWOs();
-  loadFabUsers();
+const API = (path, opts = {}) => fetch('/api/v1' + path, {
+    ...opts,
+    headers: {
+        'Authorization': 'Bearer ' + authToken,
+        ...(opts.headers || {}),
+    },
 });
 
-async function loadWOs() {
-  showLoading(true);
-  try {
-    const archived = document.getElementById('show-archived').checked ? 1 : 0;
-    const params = new URLSearchParams({ archived });
-
-    const type = document.getElementById('filter-type').value;
-    const pm   = document.getElementById('filter-pm').value;
-    const mat  = document.getElementById('filter-material').value;
-    const q    = document.getElementById('wo-search').value.trim();
-
-    if (type) params.set('type', type);
-    if (pm)   params.set('pm', pm);
-    if (mat)  params.set('material', mat);
-    if (q)    params.set('q', q);
-
-    const res = await fetch(`${API}/work-orders?${params}`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('API error');
-    const data = await res.json();
-    allWOs = data.work_orders || [];
-    filtered = allWOs;
-    populatePmFilter();
-    render();
-  } catch (e) {
-    showToast('Failed to load work orders', 'danger');
-  } finally {
-    showLoading(false);
-  }
-}
-
-async function loadFabUsers() {
-  try {
-    const res = await fetch(`${API}/fab-users`, { headers: authHeaders() });
-    if (!res.ok) return;
-    const data = await res.json();
-    fabUsers = data.users || [];
-  } catch {}
-}
-
-// ── Filtering ─────────────────────────────────────────────────────────────────
-function debounceFilter() {
-  clearTimeout(filterDebounce);
-  filterDebounce = setTimeout(applyFilter, 220);
-}
-
-function applyFilter() {
-  loadWOs();
-}
-
-function populatePmFilter() {
-  const sel = document.getElementById('filter-pm');
-  const current = sel.value;
-  const pms = [...new Set(allWOs.map(w => w.project_manager).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">All PMs</option>' +
-    pms.map(pm => `<option value="${esc(pm)}" ${pm === current ? 'selected' : ''}>${esc(pm)}</option>`).join('');
-}
-
-// ── View switching ────────────────────────────────────────────────────────────
-function switchView(v) {
-  activeView = v;
-  document.getElementById('btn-manager-view').classList.toggle('active', v === 'manager');
-  document.getElementById('btn-shop-view').classList.toggle('active', v === 'shop');
-  render();
-}
-
-function render() {
-  const hasItems = filtered.length > 0;
-  document.getElementById('wo-empty').style.display    = hasItems ? 'none' : 'block';
-  document.getElementById('manager-view').style.display = hasItems && activeView === 'manager' ? 'block' : 'none';
-  document.getElementById('shop-view').style.display    = hasItems && activeView === 'shop'    ? 'block' : 'none';
-
-  if (activeView === 'manager') renderTable();
-  else renderShopGrid();
-}
-
-// ── Manager table ─────────────────────────────────────────────────────────────
-function renderTable() {
-  const tbody = document.getElementById('wo-table-body');
-  if (!filtered.length) { tbody.innerHTML = ''; return; }
-
-  tbody.innerHTML = filtered.map(wo => `
-    <tr onclick="openDetail(${wo.id})">
-      <td>
-        <div class="fw-semibold">${esc(wo.project_name)}</div>
-        <div class="text-muted small">${esc(wo.wo_number)}${wo.job_number ? ' &middot; ' + esc(wo.job_number) : ''}</div>
-      </td>
-      <td>${jobTypeBadge(wo.job_type)}</td>
-      <td><span class="text-muted small">${esc(wo.project_manager || '—')}</span></td>
-      <td>${matBadge(wo.material_arrived)}</td>
-      <td><div class="d-flex flex-wrap">${stagePips(wo)}</div></td>
-      <td><span class="text-body-secondary small">${hoursDisplay(wo)}</span></td>
-      <td><span class="${dueCss(wo.planned_complete_date)} small">${fmtDate(wo.planned_complete_date)}</span></td>
-      <td>
-        <button class="btn btn-sm btn-ghost-secondary" onclick="event.stopPropagation(); editWO(${wo.id})" data-permission="fabrication.work-orders.edit" title="Edit">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /></svg>
-        </button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-// ── Shop floor grid ───────────────────────────────────────────────────────────
-function renderShopGrid() {
-  const grid = document.getElementById('wo-card-grid');
-  if (!filtered.length) { grid.innerHTML = ''; return; }
-
-  grid.innerHTML = filtered.map(wo => `
-    <div class="col-12 col-sm-6 col-lg-4">
-      <div class="card wo-card" onclick="openDetail(${wo.id})">
-        <div class="mat-bar ${matBarClass(wo.material_arrived)}"></div>
-        <div class="card-body pt-3">
-          <div class="d-flex justify-content-between align-items-start mb-1">
-            <div>${jobTypeBadge(wo.job_type)}</div>
-            <span class="${dueCss(wo.planned_complete_date)} small fw-semibold">${fmtDate(wo.planned_complete_date)}</span>
-          </div>
-          <div class="fw-semibold">${esc(wo.project_name)}</div>
-          <div class="text-muted small mb-2">${esc(wo.wo_number)}${wo.assigned_name ? ' · ' + esc(wo.assigned_name) : ''}</div>
-          <div class="d-flex align-items-center justify-content-between">
-            <div class="d-flex flex-wrap">${stagePips(wo)}</div>
-            <span class="text-muted small">${hoursDisplay(wo)} hrs</span>
-          </div>
-          ${wo.notes ? `<div class="text-muted small mt-2 text-truncate">${esc(wo.notes)}</div>` : ''}
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// ── Offcanvas helpers (Bootstrap-independent fallback) ────────────────────────
+// ============================================================
+// Offcanvas helpers (Tabler doesn't expose window.bootstrap)
+// ============================================================
 function openOffcanvas(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (window.bootstrap?.Offcanvas) {
-    new window.bootstrap.Offcanvas(el).show();
-    return;
-  }
-  // Manual fallback
-  let bd = document.getElementById('offcanvas-backdrop');
-  if (!bd) {
-    bd = document.createElement('div');
-    bd.id = 'offcanvas-backdrop';
-    bd.className = 'offcanvas-backdrop fade show';
-    bd.onclick = () => closeOffcanvas(id);
-    document.body.appendChild(bd);
-  }
-  el.classList.add('show');
-  document.body.classList.add('offcanvas-open');
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('show');
+    el.style.visibility = 'visible';
+    document.getElementById('wo-backdrop').style.display = 'block';
+    document.body.classList.add('offcanvas-open');
 }
-
 function closeOffcanvas(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.remove('show');
-  document.body.classList.remove('offcanvas-open');
-  document.getElementById('offcanvas-backdrop')?.remove();
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('show');
+    el.style.visibility = '';
+    document.getElementById('wo-backdrop').style.display = 'none';
+    document.body.classList.remove('offcanvas-open');
 }
 
-// ── Detail offcanvas ──────────────────────────────────────────────────────────
-async function openDetail(id) {
-  selectedWOId = id;
-  const panel = document.getElementById('detail-body');
-  panel.innerHTML = '<div class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+// ============================================================
+// Init
+// ============================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    await Promise.all([loadWorkOrders(), loadElevTypes()]);
 
-  openOffcanvas('detail-offcanvas');
+    // Open WO from query param (e.g. linked from Jobs page)
+    const params = new URLSearchParams(location.search);
+    if (params.has('wo')) openWODetail(parseInt(params.get('wo')));
+});
 
-  try {
-    const res = await fetch(`${API}/work-orders/${id}`, { headers: authHeaders() });
-    if (!res.ok) throw new Error();
-    const wo = await res.json();
-    document.getElementById('detail-title').textContent = wo.wo_number;
-    renderDetailPanel(wo);
-  } catch {
-    panel.innerHTML = '<div class="text-center py-5 text-danger">Failed to load details</div>';
-  }
+// ============================================================
+// Load & render WO list
+// ============================================================
+async function loadWorkOrders() {
+    const archived = document.getElementById('toggle-archived').checked;
+    const q = document.getElementById('wo-search').value.trim();
+    const mat = document.getElementById('filter-material').value;
+
+    const qs = new URLSearchParams();
+    if (archived) qs.set('archived', '1');
+    if (q) qs.set('q', q);
+    if (mat) qs.set('material', mat);
+
+    document.getElementById('wo-loading').style.display = 'block';
+    document.getElementById('wo-table-wrap').style.display = 'none';
+    document.getElementById('wo-empty').style.display = 'none';
+
+    try {
+        const r = await API('/work-orders?' + qs.toString());
+        const data = await r.json();
+        allWOs = data.work_orders || [];
+        renderWOList(allWOs);
+    } catch (e) {
+        console.error(e);
+        document.getElementById('wo-loading').style.display = 'none';
+    }
 }
 
-function renderDetailPanel(wo) {
-  const stages = wo.stages || [];
-  const canEdit = typeof hasPermission === 'function' ? hasPermission('fabrication.work-orders.edit') : true;
+function renderWOList(wos) {
+    document.getElementById('wo-loading').style.display = 'none';
+    document.getElementById('wo-count-label').textContent = `${wos.length} work order${wos.length !== 1 ? 's' : ''}`;
 
-  const stageRows = stages.map(s => `
-    <div class="stage-row">
-      <div class="stage-status-dot ${s.status}"></div>
-      <div class="flex-fill">
-        <div class="fw-semibold small">${esc(s.name)}</div>
-        ${s.assigned_name ? `<div class="text-muted" style="font-size:0.75rem">${esc(s.assigned_name)}</div>` : ''}
-      </div>
-      ${canEdit ? `
-        <div class="btn-group btn-group-sm">
-          ${s.status !== 'complete' ? `<button class="btn btn-sm btn-ghost-success py-0 px-1" onclick="cycleStage(${s.id}, '${nextStatus(s.status)}')" title="Advance">&rsaquo;</button>` : ''}
-          ${s.status === 'pending' ? `<button class="btn btn-sm btn-ghost-danger py-0 px-1" onclick="cycleStage(${s.id}, 'blocked')" title="Block">!</button>` : ''}
-        </div>
-      ` : ''}
-    </div>
-  `).join('');
+    if (wos.length === 0) {
+        document.getElementById('wo-empty').style.display = 'block';
+        return;
+    }
 
-  document.getElementById('detail-body').innerHTML = `
-    <div class="p-3 border-bottom">
-      <div class="row g-2 small">
-        <div class="col-6">
-          <div class="text-muted">Project</div>
-          <div class="fw-semibold">${esc(wo.project_name)}</div>
-        </div>
-        <div class="col-6">
-          <div class="text-muted">Type</div>
-          <div>${jobTypeBadge(wo.job_type)}</div>
-        </div>
-        <div class="col-6">
-          <div class="text-muted">PM</div>
-          <div>${esc(wo.project_manager || '—')}</div>
-        </div>
-        <div class="col-6">
-          <div class="text-muted">Material</div>
-          <div>${matBadge(wo.material_arrived)}</div>
-        </div>
-        <div class="col-4">
-          <div class="text-muted">Joints</div>
-          <div>${wo.joints}</div>
-        </div>
-        <div class="col-4">
-          <div class="text-muted">Dr/Fr</div>
-          <div>${wo.dr_fr_units}</div>
-        </div>
-        <div class="col-4">
-          <div class="text-muted">Doors</div>
-          <div>${wo.doors_units}</div>
-        </div>
-        <div class="col-6">
-          <div class="text-muted">Est. Hours</div>
-          <div>${hoursDisplay(wo)}</div>
-        </div>
-        <div class="col-6">
-          <div class="text-muted">Due</div>
-          <div class="${dueCss(wo.planned_complete_date)}">${fmtDate(wo.planned_complete_date)}</div>
-        </div>
-        ${wo.notes ? `<div class="col-12"><div class="text-muted">Notes</div><div>${esc(wo.notes)}</div></div>` : ''}
-      </div>
-      ${canEdit ? `
-        <div class="mt-2 d-flex gap-2">
-          <button class="btn btn-sm btn-outline-secondary" onclick="editWO(${wo.id})">Edit</button>
-          <button class="btn btn-sm btn-outline-danger ms-auto" onclick="archiveWODirect(${wo.id})" data-permission="fabrication.work-orders.delete">Archive</button>
-        </div>
-      ` : ''}
-    </div>
-    <div class="p-2">
-      <div class="d-flex justify-content-between align-items-center px-1 mb-1">
-        <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Stages (${stages.length})</span>
-        ${canEdit ? `<button class="btn btn-sm btn-ghost-secondary py-0" onclick="promptAddStage(${wo.id})">+ Add</button>` : ''}
-      </div>
-      <div>${stageRows || '<div class="text-muted text-center small py-2">No stages</div>'}</div>
-    </div>
-  `;
+    document.getElementById('wo-table-wrap').style.display = 'block';
+    const tbody = document.getElementById('wo-tbody');
+    tbody.innerHTML = wos.map(wo => `
+        <tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
+            <td><strong>${esc(wo.release_label)}</strong></td>
+            <td>${esc(wo.job?.job_name || '—')}</td>
+            <td class="text-muted">${esc(wo.job?.project_manager || '—')}</td>
+            <td>${wo.date_issued || '<span class="text-muted">—</span>'}</td>
+            <td>${matBadge(wo.material_delivery)}</td>
+            <td>
+                ${wo.elevation_count > 0
+                    ? `<span class="text-muted small">${wo.elevations_complete}/${wo.elevation_count} done</span>`
+                    : '<span class="text-muted">—</span>'}
+            </td>
+            <td>
+                <button class="btn btn-sm btn-ghost-secondary" onclick="event.stopPropagation();openWODetail(${wo.id})">
+                    <i class="ti ti-chevron-right"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
 }
 
-// ── Stage actions ─────────────────────────────────────────────────────────────
-function nextStatus(current) {
-  const map = { pending: 'in_progress', in_progress: 'complete', blocked: 'in_progress' };
-  return map[current] || 'pending';
+// ============================================================
+// Filters
+// ============================================================
+function debounceFilter() {
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(applyFilter, 300);
 }
 
-async function cycleStage(stageId, status) {
-  try {
-    const res = await fetch(`${API}/work-order-stages/${stageId}`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) throw new Error();
-    if (selectedWOId) await openDetail(selectedWOId);
-  } catch {
-    showToast('Failed to update stage', 'danger');
-  }
+async function applyFilter() {
+    await loadWorkOrders();
 }
 
-async function promptAddStage(woId) {
-  const name = prompt('Stage name:');
-  if (!name || !name.trim()) return;
-  try {
-    const res = await fetch(`${API}/work-order-stages`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ work_order_id: woId, name: name.trim() }),
-    });
-    if (!res.ok) throw new Error();
-    await openDetail(woId);
-  } catch {
-    showToast('Failed to add stage', 'danger');
-  }
+// ============================================================
+// WO Detail offcanvas
+// ============================================================
+async function openWODetail(id) {
+    currentWO = allWOs.find(w => w.id === id) || { id };
+    document.getElementById('wo-detail-title').textContent = 'Loading…';
+    openOffcanvas('wo-detail');
+
+    try {
+        const r = await API(`/work-orders/${id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        populateDetail(wo);
+    } catch (e) {
+        console.error(e);
+    }
 }
 
-// ── WO Modal ──────────────────────────────────────────────────────────────────
-function openNewWO() {
-  document.getElementById('wo-modal-title').textContent = 'New Work Order';
-  document.getElementById('wo-edit-id').value = '';
-  document.getElementById('wo-archive-btn').classList.add('d-none');
-  clearModalForm();
-  updateCalcHours();
-  showModal(document.getElementById('wo-modal'));
+function populateDetail(wo) {
+    const job = wo.job || {};
+    document.getElementById('wo-detail-title').textContent = wo.release_label || `WO #${wo.id}`;
+    document.getElementById('d-job-number').textContent = job.job_number || '—';
+    document.getElementById('d-job-name').textContent = job.job_name || '—';
+    document.getElementById('d-pm').textContent = job.project_manager || '—';
+    document.getElementById('d-division').textContent = job.division || '—';
+    document.getElementById('d-date-issued').value = wo.date_issued || '';
+    document.getElementById('d-material').value = wo.material_delivery || '';
+    document.getElementById('d-notes').value = wo.notes || '';
+
+    renderDrawings(wo.drawings || []);
+    renderElevations(wo.elevations || []);
 }
 
-function editWO(id) {
-  const wo = allWOs.find(w => w.id === id);
-  if (!wo) return;
-  document.getElementById('wo-modal-title').textContent = 'Edit Work Order';
-  document.getElementById('wo-edit-id').value = id;
-  document.getElementById('wo-archive-btn').classList.remove('d-none');
-  fillModalForm(wo);
-  updateCalcHours();
-  showModal(document.getElementById('wo-modal'));
+// ============================================================
+// Inline WO patch
+// ============================================================
+async function patchWO(field, value) {
+    if (!currentWO) return;
+    try {
+        await API(`/work-orders/${currentWO.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value }),
+        });
+        // Refresh list silently
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+    }
 }
 
-function clearModalForm() {
-  ['f-project-name','f-wo-number','f-job-number','f-system','f-pm','f-notes'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('f-job-type').value = 'SF';
-  document.getElementById('f-joints').value = 0;
-  document.getElementById('f-dr-fr').value = 0;
-  document.getElementById('f-doors').value = 0;
-  document.getElementById('f-hours-override').value = '';
-  document.getElementById('f-material').value = '';
-  document.getElementById('f-cut-list').checked = false;
-  ['f-date-received','f-planned-start','f-planned-complete','f-requested-finish'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
+function setMaterial(val) {
+    document.getElementById('d-material').value = val;
+    patchWO('material_delivery', val);
 }
 
-function fillModalForm(wo) {
-  document.getElementById('f-project-name').value = wo.project_name || '';
-  document.getElementById('f-wo-number').value    = wo.wo_number || '';
-  document.getElementById('f-job-number').value   = wo.job_number || '';
-  document.getElementById('f-job-type').value     = wo.job_type || 'SF';
-  document.getElementById('f-system').value       = wo.system || '';
-  document.getElementById('f-joints').value       = wo.joints || 0;
-  document.getElementById('f-dr-fr').value        = wo.dr_fr_units || 0;
-  document.getElementById('f-doors').value        = wo.doors_units || 0;
-  document.getElementById('f-hours-override').value = wo.estimated_hours_override || '';
-  document.getElementById('f-material').value     = wo.material_arrived || '';
-  document.getElementById('f-pm').value           = wo.project_manager || '';
-  document.getElementById('f-cut-list').checked   = !!wo.cut_list_glazer;
-  document.getElementById('f-notes').value        = wo.notes || '';
-  document.getElementById('f-date-received').value     = wo.date_received || '';
-  document.getElementById('f-planned-start').value     = wo.planned_start_date || '';
-  document.getElementById('f-planned-complete').value  = wo.planned_complete_date || '';
-  document.getElementById('f-requested-finish').value  = wo.requested_finish_date || '';
+// ============================================================
+// Archive
+// ============================================================
+async function archiveCurrentWO() {
+    if (!currentWO || !confirm('Archive this work order?')) return;
+    try {
+        await API(`/work-orders/${currentWO.id}`, { method: 'DELETE' });
+        closeOffcanvas('wo-detail');
+        await loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to archive work order');
+    }
 }
 
-function updateCalcHours() {
-  const type  = document.getElementById('f-job-type').value;
-  const j = parseFloat(document.getElementById('f-joints').value) || 0;
-  const f = parseFloat(document.getElementById('f-dr-fr').value)  || 0;
-  const d = parseFloat(document.getElementById('f-doors').value)  || 0;
-  let hrs;
-  if (type === 'CW') {
-    hrs = (j * RATES.cw_prep) + (f * RATES.fab_frames) + (d * RATES.fab_doors);
-  } else {
-    hrs = (j * RATES.fab_joints) + (f * RATES.fab_frames) + (d * RATES.fab_doors);
-  }
-  document.getElementById('calc-hours-display').textContent = hrs.toFixed(2);
+// ============================================================
+// Drawings
+// ============================================================
+function renderDrawings(drawings) {
+    const el = document.getElementById('drawings-list');
+    if (!drawings.length) {
+        el.innerHTML = '<div class="text-muted small">No drawings attached.</div>';
+        return;
+    }
+    el.innerHTML = `<div class="list-group list-group-flush">
+        ${drawings.map(d => `
+            <div class="list-group-item d-flex align-items-center gap-2 px-0">
+                <i class="ti ti-file text-muted"></i>
+                <a href="${esc(d.download_url)}" target="_blank" class="flex-grow-1 text-truncate small">${esc(d.original_name)}</a>
+                <span class="text-muted small">${formatBytes(d.file_size)}</span>
+                <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${d.id})">
+                    <i class="ti ti-trash"></i>
+                </button>
+            </div>`).join('')}
+    </div>`;
 }
 
-// Also update hours when job type changes
-document.getElementById('f-job-type')?.addEventListener('change', updateCalcHours);
-
-async function saveWO() {
-  const name = document.getElementById('f-project-name').value.trim();
-  const wo   = document.getElementById('f-wo-number').value.trim();
-  const type = document.getElementById('f-job-type').value;
-  if (!name || !wo) { showToast('Project Name and WO Number are required', 'warning'); return; }
-
-  const payload = {
-    project_name:             name,
-    wo_number:                wo,
-    job_number:               document.getElementById('f-job-number').value.trim() || null,
-    job_type:                 type,
-    system:                   document.getElementById('f-system').value.trim() || null,
-    joints:                   parseInt(document.getElementById('f-joints').value) || 0,
-    dr_fr_units:              parseInt(document.getElementById('f-dr-fr').value) || 0,
-    doors_units:              parseInt(document.getElementById('f-doors').value) || 0,
-    estimated_hours_override: parseFloat(document.getElementById('f-hours-override').value) || null,
-    material_arrived:         document.getElementById('f-material').value || null,
-    project_manager:          document.getElementById('f-pm').value.trim() || null,
-    cut_list_glazer:          document.getElementById('f-cut-list').checked,
-    notes:                    document.getElementById('f-notes').value.trim() || null,
-    date_received:            document.getElementById('f-date-received').value || null,
-    planned_start_date:       document.getElementById('f-planned-start').value || null,
-    planned_complete_date:    document.getElementById('f-planned-complete').value || null,
-    requested_finish_date:    document.getElementById('f-requested-finish').value || null,
-  };
-
-  const editId = document.getElementById('wo-edit-id').value;
-  const method = editId ? 'PUT' : 'POST';
-  const url    = editId ? `${API}/work-orders/${editId}` : `${API}/work-orders`;
-
-  try {
-    const res = await fetch(url, { method, headers: authHeaders(), body: JSON.stringify(payload) });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Save failed'); }
-    hideModal(document.getElementById('wo-modal'));
-    showToast(editId ? 'Work order updated' : 'Work order created', 'success');
-    loadWOs();
-  } catch (e) {
-    showToast(e.message || 'Failed to save', 'danger');
-  }
+async function uploadDrawings(files) {
+    if (!currentWO || !files.length) return;
+    document.getElementById('drawings-loading').style.display = 'block';
+    for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            await fetch(`/api/v1/work-orders/${currentWO.id}/drawings`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + authToken },
+                body: fd,
+            });
+        } catch (e) {
+            console.error('Upload failed:', e);
+        }
+    }
+    document.getElementById('drawings-loading').style.display = 'none';
+    document.getElementById('drawing-upload').value = '';
+    // Reload detail to get fresh drawings list
+    const r = await API(`/work-orders/${currentWO.id}`);
+    const wo = await r.json();
+    renderDrawings(wo.drawings || []);
 }
 
-function archiveWO() {
-  const id = document.getElementById('wo-edit-id').value;
-  if (!id) return;
-  archiveWODirect(parseInt(id));
+async function deleteDrawing(drawingId) {
+    if (!currentWO || !confirm('Delete this drawing?')) return;
+    try {
+        await API(`/work-orders/${currentWO.id}/drawings/${drawingId}`, { method: 'DELETE' });
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        renderDrawings(wo.drawings || []);
+    } catch (e) {
+        console.error(e);
+        alert('Failed to delete drawing');
+    }
 }
 
-async function archiveWODirect(id) {
-  if (!confirm('Archive this work order?')) return;
-  try {
-    const res = await fetch(`${API}/work-orders/${id}`, { method: 'DELETE', headers: authHeaders() });
-    if (!res.ok) throw new Error();
-    hideModal(document.getElementById('wo-modal'));
-    closeOffcanvas('detail-offcanvas');
-    showToast('Work order archived', 'success');
-    loadWOs();
-  } catch {
-    showToast('Failed to archive', 'danger');
-  }
+// ============================================================
+// Elevations
+// ============================================================
+function renderElevations(elevations) {
+    const el = document.getElementById('elevations-list');
+    if (!elevations.length) {
+        el.innerHTML = '<div class="text-muted small">No elevations yet.</div>';
+        return;
+    }
+    el.innerHTML = `<div class="table-responsive">
+        <table class="table table-sm table-vcenter">
+            <thead><tr>
+                <th>Tag</th><th>Type</th><th>Qty</th>
+                <th>Requested</th><th>Completed</th>
+                <th>Stages</th><th class="w-1"></th>
+            </tr></thead>
+            <tbody>
+                ${elevations.map(e => elevRow(e)).join('')}
+            </tbody>
+        </table>
+    </div>`;
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────────
-function jobTypeBadge(type) {
-  if (type === 'SF') return '<span class="badge bg-blue-lt text-blue">SF</span>';
-  if (type === 'CW') return '<span class="badge bg-orange-lt text-orange">CW</span>';
-  return `<span class="badge bg-secondary-lt">${esc(type)}</span>`;
+function elevRow(e) {
+    const typeBadge = e.elevation_type
+        ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')}">${esc(e.elevation_type.name)}</span>`
+        : '<span class="text-muted">—</span>';
+
+    const pips = (e.stages || []).map(s =>
+        `<span class="pip pip-${s.status}" title="${s.name}: ${s.status}"></span>`
+    ).join('');
+
+    const completedInfo = e.date_completed
+        ? `<span class="badge bg-success">${e.date_completed}</span>`
+        : `<span class="text-muted small">—</span>`;
+
+    return `<tr class="elev-row">
+        <td><strong>${esc(e.elevation_tag)}</strong></td>
+        <td>${typeBadge}</td>
+        <td>${e.quantity}</td>
+        <td class="text-muted small">${e.date_requested || '—'}</td>
+        <td>${completedInfo}</td>
+        <td><div class="d-flex flex-wrap gap-0">${pips || '<span class="text-muted small">—</span>'}</div></td>
+        <td>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-ghost-secondary" onclick="openEditElev(${e.id})" title="Edit">
+                    <i class="ti ti-pencil"></i>
+                </button>
+                <button class="btn btn-ghost-danger" onclick="deleteElev(${e.id})" title="Delete">
+                    <i class="ti ti-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>`;
+}
+
+// ============================================================
+// Add / Edit Elevation
+// ============================================================
+async function loadElevTypes() {
+    try {
+        const r = await API('/elevation-types');
+        const data = await r.json();
+        elevTypes = data.elevation_types || [];
+        const sel = document.getElementById('elev-type');
+        elevTypes.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = t.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function openAddElev() {
+    document.getElementById('elev-modal-title').textContent = 'Add Elevation';
+    document.getElementById('elev-id').value = '';
+    document.getElementById('elev-tag').value = '';
+    document.getElementById('elev-type').value = '';
+    document.getElementById('elev-qty').value = 1;
+    document.getElementById('elev-date-req').value = '';
+    document.getElementById('elev-date-done').value = '';
+    document.getElementById('elev-notes').value = '';
+    showModal(document.getElementById('addElevModal'));
+}
+
+function openEditElev(elevId) {
+    if (!currentWO) return;
+    const e = (currentWO.elevations || []).find(x => x.id === elevId);
+    if (!e) return;
+    document.getElementById('elev-modal-title').textContent = 'Edit Elevation';
+    document.getElementById('elev-id').value = e.id;
+    document.getElementById('elev-tag').value = e.elevation_tag;
+    document.getElementById('elev-type').value = e.elevation_type_id || '';
+    document.getElementById('elev-qty').value = e.quantity;
+    document.getElementById('elev-date-req').value = e.date_requested || '';
+    document.getElementById('elev-date-done').value = e.date_completed || '';
+    document.getElementById('elev-notes').value = e.notes || '';
+    showModal(document.getElementById('addElevModal'));
+}
+
+async function saveElev() {
+    if (!currentWO) return;
+    const elevId = document.getElementById('elev-id').value;
+    const isEdit = !!elevId;
+
+    const body = {
+        elevation_tag: document.getElementById('elev-tag').value,
+        elevation_type_id: document.getElementById('elev-type').value || null,
+        quantity: parseInt(document.getElementById('elev-qty').value) || 1,
+        date_requested: document.getElementById('elev-date-req').value || null,
+        date_completed: document.getElementById('elev-date-done').value || null,
+        notes: document.getElementById('elev-notes').value || null,
+    };
+
+    if (!body.elevation_tag) { alert('Elevation Tag is required.'); return; }
+
+    try {
+        if (isEdit) {
+            await API(`/elevations/${elevId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        } else {
+            await API(`/work-orders/${currentWO.id}/elevations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        }
+        hideModal(document.getElementById('addElevModal'));
+        // Reload detail
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to save elevation');
+    }
+}
+
+async function deleteElev(elevId) {
+    if (!confirm('Delete this elevation and all its stages?')) return;
+    try {
+        await API(`/elevations/${elevId}`, { method: 'DELETE' });
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to delete elevation');
+    }
+}
+
+// ============================================================
+// Create New WO Modal
+// ============================================================
+async function openCreateWO() {
+    // Populate job selector
+    const sel = document.getElementById('new-wo-job');
+    sel.innerHTML = '<option value="">— Select a job —</option>';
+    try {
+        const r = await API('/business-jobs?per_page=500&status=active');
+        const data = await r.json();
+        (data.jobs || []).forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j.id;
+            opt.textContent = `${j.job_number} – ${j.job_name}`;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error(e);
+    }
+    document.getElementById('new-wo-date').value = '';
+    document.getElementById('new-wo-material').value = '';
+    document.getElementById('new-wo-notes').value = '';
+    showModal(document.getElementById('createWoModal'));
+}
+
+async function saveNewWO() {
+    const jobId = document.getElementById('new-wo-job').value;
+    if (!jobId) { alert('Please select a job.'); return; }
+
+    const body = {
+        business_job_id: parseInt(jobId),
+        date_issued: document.getElementById('new-wo-date').value || null,
+        material_delivery: document.getElementById('new-wo-material').value || null,
+        notes: document.getElementById('new-wo-notes').value || null,
+    };
+
+    try {
+        const r = await API('/work-orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error('Failed to create');
+        const data = await r.json();
+        hideModal(document.getElementById('createWoModal'));
+        await loadWorkOrders();
+        openWODetail(data.id);
+    } catch (e) {
+        console.error(e);
+        alert('Failed to create work order');
+    }
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function esc(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
 }
 
 function matBadge(mat) {
-  if (mat === 'Yes') return '<span class="badge bg-success-lt text-success">Arrived</span>';
-  if (mat === 'SOF') return '<span class="badge bg-warning-lt text-warning">SOF</span>';
-  return '<span class="badge bg-danger-lt text-danger">Pending</span>';
+    if (!mat) return '<span class="badge bg-secondary">Pending</span>';
+    if (mat === 'In Shop') return '<span class="badge bg-success">In Shop</span>';
+    if (mat === 'SOF') return '<span class="badge bg-warning text-dark">SOF</span>';
+    return `<span class="badge bg-info">${esc(mat)}</span>`;
 }
 
-function matBarClass(mat) {
-  if (mat === 'Yes') return 'mat-yes';
-  if (mat === 'SOF') return 'mat-sof';
-  return 'mat-no';
-}
-
-function stagePips(wo) {
-  const total  = wo.stage_count || 0;
-  const done   = wo.stages_done || 0;
-  const active = wo.stages_active || 0;
-  const blocked= wo.stages_blocked || 0;
-  const pending= total - done - active - blocked;
-
-  return [
-    ...Array(done).fill('<span class="stage-pip complete"></span>'),
-    ...Array(active).fill('<span class="stage-pip in_progress"></span>'),
-    ...Array(blocked).fill('<span class="stage-pip blocked"></span>'),
-    ...Array(Math.max(0, pending)).fill('<span class="stage-pip"></span>'),
-  ].join('');
-}
-
-function hoursDisplay(wo) {
-  if (wo.estimated_hours_override != null) {
-    return `${parseFloat(wo.estimated_hours_override).toFixed(1)}<span class="hours-override" title="Override">★</span>`;
-  }
-  return parseFloat(wo.estimated_hours_calc || 0).toFixed(1);
-}
-
-function fmtDate(d) {
-  if (!d) return '—';
-  const dt = new Date(d + 'T00:00:00');
-  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function dueCss(d) {
-  if (!d) return 'text-muted';
-  const diff = (new Date(d + 'T00:00:00') - new Date()) / 86400000;
-  if (diff < 0) return 'date-late';
-  if (diff <= 3) return 'date-warn';
-  return 'date-ok';
-}
-
-function showLoading(v) {
-  document.getElementById('wo-loading').style.display = v ? 'block' : 'none';
-  if (v) {
-    document.getElementById('wo-empty').style.display   = 'none';
-    document.getElementById('manager-view').style.display = 'none';
-    document.getElementById('shop-view').style.display    = 'none';
-  }
-}
-
-function esc(s) {
-  if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function showToast(message, type = 'info') {
-  const colors = { success: 'bg-success', danger: 'bg-danger', warning: 'bg-warning', info: 'bg-info' };
-  const id = 'toast-' + Date.now();
-  const el = document.createElement('div');
-  el.id = id;
-  el.className = `alert alert-${type} alert-dismissible position-fixed bottom-0 end-0 m-3`;
-  el.style.zIndex = 9999;
-  el.innerHTML = `${esc(message)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+function formatBytes(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
 }
 </script>
 @endpush

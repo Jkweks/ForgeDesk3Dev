@@ -11,9 +11,8 @@ class FdWoStage extends Model
     protected $table = 'fd_wo_stages';
 
     protected $fillable = [
-        'work_order_id', 'template_id', 'name', 'description',
-        'sort_order', 'status', 'assigned_to_id', 'started_at',
-        'completed_at', 'notes',
+        'work_order_id', 'elevation_id', 'template_id', 'name', 'description',
+        'sort_order', 'status', 'assigned_to_id', 'started_at', 'completed_at', 'notes',
     ];
 
     protected $casts = [
@@ -24,6 +23,11 @@ class FdWoStage extends Model
     public function workOrder(): BelongsTo
     {
         return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
+    }
+
+    public function elevation(): BelongsTo
+    {
+        return $this->belongsTo(FdWoElevation::class, 'elevation_id');
     }
 
     public function assignedTo(): BelongsTo

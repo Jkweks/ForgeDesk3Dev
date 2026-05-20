@@ -397,6 +397,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Business Jobs (Project Management)
         Route::apiResource('business-jobs', BusinessJobController::class);
 
+        // Job-specific Work Orders (Fabrication)
+        Route::get('/business-jobs/{jobId}/work-orders', [BusinessJobController::class, 'getWorkOrders']);
+
         // Job-specific Reservations
         Route::get('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'getReservations']);
         Route::post('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'createReservation']);
@@ -419,13 +422,32 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store']);
         Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);
         Route::put('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
-        Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'patch']);
+        Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
         Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy']);
 
+        // Work Order Drawings (shop drawings file uploads)
+        Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
+        Route::post('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'store']);
+        Route::get('/work-orders/{id}/drawings/{drawing}/download', [\App\Http\Controllers\Api\WoDrawingController::class, 'download']);
+        Route::delete('/work-orders/{id}/drawings/{drawing}', [\App\Http\Controllers\Api\WoDrawingController::class, 'destroy']);
+
+        // Elevations (per work order)
+        Route::get('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'index']);
+        Route::post('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'store']);
+        Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update']);
+        Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy']);
+
+        // Elevation Stage cycling (reuse existing stage controller)
         Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
         Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store']);
         Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update']);
         Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy']);
+
+        // Elevation Types (admin-managed list)
+        Route::get('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'index']);
+        Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store']);
+        Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update']);
+        Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy']);
 
         Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
         Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);

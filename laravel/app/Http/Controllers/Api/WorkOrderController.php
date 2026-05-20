@@ -4,8 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FdWorkOrder;
-use App\Models\FdWoStage;
-use App\Models\FdStageTemplate;
+use App\Models\BusinessJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,46 +14,40 @@ class WorkOrderController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = FdWorkOrder::with('assignedTo')
+            $query = FdWorkOrder::with('businessJob')
                 ->withCount([
-                    'stages',
-                    'stages as stages_done'     => fn($q) => $q->where('status', 'complete'),
-                    'stages as stages_active'   => fn($q) => $q->where('status', 'in_progress'),
-                    'stages as stages_blocked'  => fn($q) => $q->where('status', 'blocked'),
+                    'elevations',
+                    'elevations as elevations_complete' => fn($q) => $q->whereNotNull('date_completed'),
                 ]);
 
             $archived = $request->boolean('archived', false);
             $query->where('archived', $archived);
 
-            if ($request->filled('type')) {
-                $query->where('job_type', $request->type);
-            }
-
-            if ($request->filled('pm')) {
-                $query->where('project_manager', $request->pm);
+            if ($request->filled('job_id')) {
+                $query->where('business_job_id', $request->job_id);
             }
 
             if ($request->filled('q')) {
                 $q = $request->q;
-                $query->where(function ($sub) use ($q) {
-                    $sub->where('project_name', 'like', "%{$q}%")
-                        ->orWhere('job_number', 'like', "%{$q}%")
-                        ->orWhere('wo_number', 'like', "%{$q}%");
+                $query->whereHas('businessJob', function ($sub) use ($q) {
+                    $sub->where('job_number', 'like', "%{$q}%")
+                        ->orWhere('job_name', 'like', "%{$q}%");
                 });
             }
 
             if ($request->filled('material')) {
                 $mat = $request->material;
-                if ($mat === 'yes') {
-                    $query->where('material_arrived', 'Yes');
+                if ($mat === 'in_shop') {
+                    $query->where('material_delivery', 'In Shop');
                 } elseif ($mat === 'sof') {
-                    $query->where('material_arrived', 'SOF');
-                } elseif ($mat === 'no') {
-                    $query->whereNull('material_arrived');
+                    $query->where('material_delivery', 'SOF');
+                } elseif ($mat === 'pending') {
+                    $query->whereNull('material_delivery');
                 }
             }
 
-            $workOrders = $query->orderByRaw('planned_complete_date IS NULL, planned_complete_date ASC')
+            $workOrders = $query
+                ->orderBy('date_issued', 'desc')
                 ->get()
                 ->map(fn($wo) => $this->formatWo($wo));
 
@@ -69,13 +62,23 @@ class WorkOrderController extends Controller
     {
         try {
             $wo = FdWorkOrder::with([
-                'assignedTo',
-                'stages.assignedTo',
-                'stages.log',
+                'businessJob',
+                'drawings',
+                'elevations.elevationType',
+                'elevations.completedBy',
+                'elevations.stages.assignedTo',
             ])->findOrFail($id);
 
             $data = $this->formatWo($wo);
-            $data['stages'] = $wo->stages->map(fn($s) => $this->formatStage($s))->values();
+            $data['drawings']   = $wo->drawings->map(fn($d) => [
+                'id'            => $d->id,
+                'original_name' => $d->original_name,
+                'file_size'     => $d->file_size,
+                'file_mime'     => $d->file_mime,
+                'download_url'  => "/api/v1/work-orders/{$wo->id}/drawings/{$d->id}/download",
+                'created_at'    => $d->created_at->toIso8601String(),
+            ])->values();
+            $data['elevations'] = $wo->elevations->map(fn($e) => $this->formatElevation($e))->values();
 
             return response()->json($data);
         } catch (\Exception $e) {
@@ -87,45 +90,23 @@ class WorkOrderController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'project_name' => 'required|string|max:255',
-            'wo_number'    => 'required|string|max:100',
-            'job_type'     => 'required|in:SF,CW',
+            'business_job_id' => 'required|integer|exists:business_jobs,id',
         ]);
 
         try {
-            DB::beginTransaction();
+            // Auto-assign release number scoped to this job
+            $nextRelease = FdWorkOrder::where('business_job_id', $request->business_job_id)->max('release_number') + 1;
 
-            $wo = new FdWorkOrder($request->only([
-                'project_name', 'job_number', 'wo_number', 'job_type', 'system',
-                'date_received', 'planned_start_date', 'planned_complete_date',
-                'requested_finish_date', 'joints', 'dr_fr_units', 'doors_units',
-                'estimated_hours_override', 'material_arrived', 'cut_list_glazer',
-                'notes', 'project_manager', 'assigned_to_id',
-            ]));
-            $wo->estimated_hours_calc = $wo->calcHours();
-            $wo->save();
+            $wo = FdWorkOrder::create([
+                'business_job_id'  => $request->business_job_id,
+                'release_number'   => $nextRelease,
+                'date_issued'      => $request->date_issued,
+                'material_delivery'=> $request->material_delivery,
+                'notes'            => $request->notes,
+            ]);
 
-            // Seed stages from template
-            $templates = FdStageTemplate::where('job_type', $wo->job_type)
-                ->orderBy('sort_order')
-                ->get();
-
-            foreach ($templates as $tpl) {
-                FdWoStage::create([
-                    'work_order_id' => $wo->id,
-                    'template_id'   => $tpl->id,
-                    'name'          => $tpl->name,
-                    'description'   => $tpl->description,
-                    'sort_order'    => $tpl->sort_order,
-                    'status'        => 'pending',
-                ]);
-            }
-
-            DB::commit();
-
-            return response()->json(['id' => $wo->id], 201);
+            return response()->json(['id' => $wo->id, 'release_number' => $wo->release_number], 201);
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('WorkOrderController@store failed', ['message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to create work order'], 500);
         }
@@ -135,14 +116,7 @@ class WorkOrderController extends Controller
     {
         try {
             $wo = FdWorkOrder::findOrFail($id);
-            $wo->fill($request->only([
-                'project_name', 'job_number', 'wo_number', 'job_type', 'system',
-                'date_received', 'planned_start_date', 'planned_complete_date',
-                'requested_finish_date', 'joints', 'dr_fr_units', 'doors_units',
-                'estimated_hours_override', 'material_arrived', 'cut_list_glazer',
-                'notes', 'project_manager', 'assigned_to_id',
-            ]));
-            $wo->estimated_hours_calc = $wo->calcHours();
+            $wo->fill($request->only(['date_issued', 'material_delivery', 'notes']));
             $wo->save();
 
             return response()->json(['updated' => $id]);
@@ -152,46 +126,11 @@ class WorkOrderController extends Controller
         }
     }
 
-    public function patch(Request $request, int $id)
-    {
-        try {
-            $wo = FdWorkOrder::findOrFail($id);
-
-            $allowed = [
-                'project_name', 'job_number', 'wo_number', 'job_type', 'system',
-                'date_received', 'planned_start_date', 'planned_complete_date',
-                'requested_finish_date', 'joints', 'dr_fr_units', 'doors_units',
-                'estimated_hours_override', 'material_arrived', 'cut_list_glazer',
-                'notes', 'project_manager', 'assigned_to_id',
-            ];
-
-            $wo->fill($request->only($allowed));
-
-            // Clear override if explicitly sent as null
-            if ($request->has('estimated_hours_override') && is_null($request->estimated_hours_override)) {
-                $wo->estimated_hours_override = null;
-            }
-
-            // Recompute if any qty field was touched
-            if ($request->hasAny(['joints', 'dr_fr_units', 'doors_units', 'job_type'])) {
-                $wo->estimated_hours_calc = $wo->calcHours();
-            }
-
-            $wo->save();
-
-            return response()->json(['updated' => $id]);
-        } catch (\Exception $e) {
-            Log::error('WorkOrderController@patch failed', ['id' => $id, 'message' => $e->getMessage()]);
-            return response()->json(['error' => 'Failed to patch work order'], 500);
-        }
-    }
-
     public function destroy(int $id)
     {
         try {
             $wo = FdWorkOrder::findOrFail($id);
-            $wo->archived    = true;
-            $wo->archived_at = now();
+            $wo->archived = true;
             $wo->save();
 
             return response()->json(['archived' => $id]);
@@ -203,64 +142,63 @@ class WorkOrderController extends Controller
 
     private function formatWo(FdWorkOrder $wo): array
     {
+        $job = $wo->relationLoaded('businessJob') ? $wo->businessJob : $wo->businessJob()->first();
+
         return [
-            'id'                       => $wo->id,
-            'project_name'             => $wo->project_name,
-            'job_number'               => $wo->job_number,
-            'wo_number'                => $wo->wo_number,
-            'job_type'                 => $wo->job_type,
-            'system'                   => $wo->system,
-            'date_received'            => $wo->date_received?->format('Y-m-d'),
-            'planned_start_date'       => $wo->planned_start_date?->format('Y-m-d'),
-            'planned_complete_date'    => $wo->planned_complete_date?->format('Y-m-d'),
-            'requested_finish_date'    => $wo->requested_finish_date?->format('Y-m-d'),
-            'joints'                   => $wo->joints,
-            'dr_fr_units'              => $wo->dr_fr_units,
-            'doors_units'              => $wo->doors_units,
-            'estimated_hours_calc'     => $wo->estimated_hours_calc,
-            'estimated_hours_override' => $wo->estimated_hours_override,
-            'effective_hours'          => $wo->effectiveHours(),
-            'material_arrived'         => $wo->material_arrived,
-            'cut_list_glazer'          => $wo->cut_list_glazer,
-            'notes'                    => $wo->notes,
-            'project_manager'          => $wo->project_manager,
-            'assigned_to_id'           => $wo->assigned_to_id,
-            'assigned_name'            => $wo->assignedTo?->name,
-            'assigned_initials'        => $wo->assignedTo?->initials,
-            'stage_count'              => $wo->stages_count ?? 0,
-            'stages_done'              => $wo->stages_done ?? 0,
-            'stages_active'            => $wo->stages_active ?? 0,
-            'stages_blocked'           => $wo->stages_blocked ?? 0,
-            'archived'                 => $wo->archived,
-            'archived_at'              => $wo->archived_at?->toIso8601String(),
-            'created_at'               => $wo->created_at->toIso8601String(),
-            'updated_at'               => $wo->updated_at->toIso8601String(),
+            'id'                  => $wo->id,
+            'business_job_id'     => $wo->business_job_id,
+            'release_number'      => $wo->release_number,
+            'release_label'       => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}",
+            'date_issued'         => $wo->date_issued?->format('Y-m-d'),
+            'material_delivery'   => $wo->material_delivery,
+            'notes'               => $wo->notes,
+            'archived'            => $wo->archived,
+            'elevation_count'     => $wo->elevations_count ?? 0,
+            'elevations_complete' => $wo->elevations_complete ?? 0,
+            'job'                 => $job ? [
+                'id'              => $job->id,
+                'job_number'      => $job->job_number,
+                'job_name'        => $job->job_name,
+                'project_manager' => $job->project_manager,
+                'division'        => substr($job->job_number ?? '', 0, 1) ?: '—',
+            ] : null,
+            'created_at'          => $wo->created_at->toIso8601String(),
+            'updated_at'          => $wo->updated_at->toIso8601String(),
         ];
     }
 
-    private function formatStage(FdWoStage $s): array
+    private function formatElevation($e): array
     {
+        $stages = $e->relationLoaded('stages') ? $e->stages : collect();
+
         return [
-            'id'             => $s->id,
-            'work_order_id'  => $s->work_order_id,
-            'template_id'    => $s->template_id,
-            'name'           => $s->name,
-            'description'    => $s->description,
-            'sort_order'     => $s->sort_order,
-            'status'         => $s->status,
-            'assigned_to_id' => $s->assigned_to_id,
-            'assigned_name'  => $s->assignedTo?->name,
-            'started_at'     => $s->started_at?->toIso8601String(),
-            'completed_at'   => $s->completed_at?->toIso8601String(),
-            'notes'          => $s->notes,
-            'log'            => $s->log->map(fn($l) => [
-                'id'         => $l->id,
-                'user_id'    => $l->user_id,
-                'message'    => $l->message,
-                'created_at' => $l->created_at?->toIso8601String(),
+            'id'                => $e->id,
+            'elevation_type_id' => $e->elevation_type_id,
+            'elevation_type'    => $e->elevationType ? [
+                'id'    => $e->elevationType->id,
+                'name'  => $e->elevationType->name,
+                'color' => $e->elevationType->color,
+            ] : null,
+            'elevation_tag'     => $e->elevation_tag,
+            'quantity'          => $e->quantity,
+            'date_requested'    => $e->date_requested?->format('Y-m-d'),
+            'date_completed'    => $e->date_completed?->format('Y-m-d'),
+            'completed_by_id'   => $e->completed_by_id,
+            'completed_by_name' => $e->completedBy?->name,
+            'notes'             => $e->notes,
+            'stage_count'       => $stages->count(),
+            'stages_done'       => $stages->where('status', 'complete')->count(),
+            'stages_active'     => $stages->where('status', 'in_progress')->count(),
+            'stages_blocked'    => $stages->where('status', 'blocked')->count(),
+            'stages'            => $stages->map(fn($s) => [
+                'id'           => $s->id,
+                'name'         => $s->name,
+                'status'       => $s->status,
+                'sort_order'   => $s->sort_order,
+                'assigned_name'=> $s->assignedTo?->name,
+                'started_at'   => $s->started_at?->toIso8601String(),
+                'completed_at' => $s->completed_at?->toIso8601String(),
             ])->values(),
-            'created_at'     => $s->created_at->toIso8601String(),
-            'updated_at'     => $s->updated_at->toIso8601String(),
         ];
     }
 }
