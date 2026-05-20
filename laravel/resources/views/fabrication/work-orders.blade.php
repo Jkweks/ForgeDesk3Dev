@@ -2,7 +2,7 @@
 
 @section('title', 'Work Orders – Fabrication')
 
-@push('styles')
+@section('styles')
 <style>
 .pip { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin: 1px; }
 .pip-pending    { background: #adb5bd; }
@@ -12,7 +12,7 @@
 .wo-offcanvas   { width: 700px !important; }
 .elev-row td    { vertical-align: middle; }
 </style>
-@endpush
+@endsection
 
 @section('content')
 <div class="page-wrapper">
