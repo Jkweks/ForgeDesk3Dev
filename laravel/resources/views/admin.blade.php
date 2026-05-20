@@ -88,6 +88,12 @@
                         <i class="ti ti-building-warehouse me-2"></i>Location Assignment
                       </a>
                     </li>
+                    <li class="nav-item" role="presentation">
+                      <a href="#tab-elevation-types" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
+                         onclick="loadElevationTypes()">
+                        <i class="ti ti-ruler-2 me-2"></i>Elevation Types
+                      </a>
+                    </li>
                   </ul>
                 </div>
 
@@ -507,6 +513,41 @@
 
                     </div><!-- /tab-location-assignment -->
 
+                    <!-- Elevation Types Tab -->
+                    <div class="tab-pane" id="tab-elevation-types" role="tabpanel">
+                      <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                          <h3 class="mb-1">Elevation Types</h3>
+                          <p class="text-muted mb-0">Manage types used on fabrication work order elevations. Each type can have its own stage checklist.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="openAddElevType()">
+                          <i class="ti ti-plus me-1"></i>Add Type
+                        </button>
+                      </div>
+
+                      <div id="elev-types-loading" class="text-center text-muted py-4" style="display:none;">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <p class="mt-2 mb-0">Loading…</p>
+                      </div>
+
+                      <div class="table-responsive">
+                        <table class="table table-vcenter card-table">
+                          <thead>
+                            <tr>
+                              <th style="width:50px">Color</th>
+                              <th>Name</th>
+                              <th>Sort</th>
+                              <th>Status</th>
+                              <th class="w-1">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="elev-types-tbody">
+                            <tr><td colspan="5" class="text-muted text-center py-3">Click "Elevation Types" tab to load.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div><!-- /tab-elevation-types -->
+
                   </div>
                 </div>
               </div>
@@ -514,6 +555,44 @@
           </div>
         </div>
       </main>
+    </div>
+
+    <!-- Elevation Type Modal -->
+    <div class="modal fade" id="elevTypeModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="elevTypeModalTitle">Add Elevation Type</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="elevTypeId">
+            <div class="row mb-3">
+              <div class="col-md-8">
+                <label class="form-label required">Name</label>
+                <input type="text" class="form-control" id="elevTypeName" placeholder="e.g. Storefront">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Color</label>
+                <div class="input-group">
+                  <input type="color" class="form-control form-control-color" id="elevTypeColor" value="#3b82f6">
+                  <input type="text" class="form-control" id="elevTypeColorHex" value="#3b82f6"
+                    oninput="document.getElementById('elevTypeColor').value=this.value"
+                    style="max-width:90px;font-family:monospace;">
+                </div>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Sort Order</label>
+              <input type="number" class="form-control" id="elevTypeSortOrder" value="99" min="1">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveElevType()">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Add User Modal -->
@@ -1786,6 +1865,131 @@
         d.textContent = str ?? '';
         return d.innerHTML;
       }
+
+      // ============================================================
+      // Elevation Types admin
+      // ============================================================
+      let elevationTypes = [];
+
+      async function loadElevationTypes() {
+        document.getElementById('elev-types-loading').style.display = 'block';
+        try {
+          const r = await fetch('/api/v1/elevation-types', {
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+          });
+          const data = await r.json();
+          elevationTypes = data.elevation_types || [];
+          renderElevTypes();
+        } catch (e) {
+          console.error(e);
+        } finally {
+          document.getElementById('elev-types-loading').style.display = 'none';
+        }
+      }
+
+      function renderElevTypes() {
+        const tbody = document.getElementById('elev-types-tbody');
+        if (!elevationTypes.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No elevation types defined.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = elevationTypes.map(t => `
+          <tr>
+            <td><span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:${locEscHtml(t.color)}"></span></td>
+            <td><strong>${locEscHtml(t.name)}</strong></td>
+            <td>${t.sort_order}</td>
+            <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+            <td>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" onclick="openEditElevType(${t.id})" title="Edit">
+                  <i class="ti ti-pencil"></i>
+                </button>
+                <button class="btn btn-outline-danger" onclick="deactivateElevType(${t.id})" title="Deactivate" ${!t.active ? 'disabled' : ''}>
+                  <i class="ti ti-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>`).join('');
+      }
+
+      function openAddElevType() {
+        document.getElementById('elevTypeModalTitle').textContent = 'Add Elevation Type';
+        document.getElementById('elevTypeId').value = '';
+        document.getElementById('elevTypeName').value = '';
+        document.getElementById('elevTypeColor').value = '#3b82f6';
+        document.getElementById('elevTypeColorHex').value = '#3b82f6';
+        document.getElementById('elevTypeSortOrder').value = (elevationTypes.length + 1);
+        // Use data-bs-dismiss or manual show
+        const modal = document.getElementById('elevTypeModal');
+        if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
+        else modal.classList.add('show'), modal.style.display = 'block', document.body.classList.add('modal-open');
+      }
+
+      function openEditElevType(id) {
+        const t = elevationTypes.find(x => x.id === id);
+        if (!t) return;
+        document.getElementById('elevTypeModalTitle').textContent = 'Edit Elevation Type';
+        document.getElementById('elevTypeId').value = t.id;
+        document.getElementById('elevTypeName').value = t.name;
+        document.getElementById('elevTypeColor').value = t.color || '#3b82f6';
+        document.getElementById('elevTypeColorHex').value = t.color || '#3b82f6';
+        document.getElementById('elevTypeSortOrder').value = t.sort_order;
+        const modal = document.getElementById('elevTypeModal');
+        if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
+        else modal.classList.add('show'), modal.style.display = 'block', document.body.classList.add('modal-open');
+      }
+
+      async function saveElevType() {
+        const id = document.getElementById('elevTypeId').value;
+        const color = document.getElementById('elevTypeColorHex').value || document.getElementById('elevTypeColor').value;
+        const body = {
+          name: document.getElementById('elevTypeName').value,
+          color: color,
+          sort_order: parseInt(document.getElementById('elevTypeSortOrder').value) || 99,
+        };
+        if (!body.name) { alert('Name is required.'); return; }
+        try {
+          const url = id ? `/api/v1/elevation-types/${id}` : '/api/v1/elevation-types';
+          const method = id ? 'PUT' : 'POST';
+          const r = await fetch(url, {
+            method,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+            },
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) throw new Error('Save failed');
+          const modal = document.getElementById('elevTypeModal');
+          modal.classList.remove('show'); modal.style.display = '';
+          document.body.classList.remove('modal-open');
+          await loadElevationTypes();
+        } catch (e) {
+          console.error(e);
+          alert('Failed to save elevation type');
+        }
+      }
+
+      async function deactivateElevType(id) {
+        if (!confirm('Deactivate this elevation type? It will no longer appear in work order forms.')) return;
+        try {
+          await fetch(`/api/v1/elevation-types/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+          });
+          await loadElevationTypes();
+        } catch (e) {
+          console.error(e);
+          alert('Failed to deactivate');
+        }
+      }
+
+      // Sync color picker → hex input
+      document.addEventListener('DOMContentLoaded', () => {
+        const picker = document.getElementById('elevTypeColor');
+        const hex = document.getElementById('elevTypeColorHex');
+        if (picker && hex) picker.addEventListener('input', () => hex.value = picker.value);
+      });
 
     </script>
 

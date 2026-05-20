@@ -23,7 +23,7 @@ class ElevationTypeController extends Controller
         $type = FdElevationType::create([
             'name'       => $request->name,
             'color'      => $request->color ?? '#6b7280',
-            'sort_order' => $maxOrder + 1,
+            'sort_order' => $request->sort_order ?? ($maxOrder + 1),
             'active'     => true,
         ]);
 

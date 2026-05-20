@@ -286,6 +286,12 @@
           </div>
         </div>
         <div class="mb-3">
+          <label class="form-label">Completed By</label>
+          <select class="form-select" id="elev-completed-by">
+            <option value="">— None —</option>
+          </select>
+        </div>
+        <div class="mb-3">
           <label class="form-label">Notes</label>
           <textarea class="form-control" id="elev-notes" rows="2"></textarea>
         </div>
@@ -307,7 +313,10 @@
 let allWOs = [];
 let currentWO = null;
 let elevTypes = [];
+let fabUsers = [];
 let filterTimer = null;
+
+const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending' };
 
 const API = (path, opts = {}) => fetch('/api/v1' + path, {
     ...opts,
@@ -341,7 +350,7 @@ function closeOffcanvas(id) {
 // Init
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    await Promise.all([loadWorkOrders(), loadElevTypes()]);
+    await Promise.all([loadWorkOrders(), loadElevTypes(), loadFabUsers()]);
 
     // Open WO from query param (e.g. linked from Jobs page)
     const params = new URLSearchParams(location.search);
@@ -578,12 +587,15 @@ function elevRow(e) {
         ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')}">${esc(e.elevation_type.name)}</span>`
         : '<span class="text-muted">—</span>';
 
+    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset' };
     const pips = (e.stages || []).map(s =>
-        `<span class="pip pip-${s.status}" title="${s.name}: ${s.status}"></span>`
+        `<span class="pip pip-${s.status}" style="cursor:pointer"
+            title="${s.name}: ${s.status} → click to ${nextLabels[s.status] || 'advance'}"
+            onclick="cycleStage(${s.id},'${s.status}',event)"></span>`
     ).join('');
 
     const completedInfo = e.date_completed
-        ? `<span class="badge bg-success">${e.date_completed}</span>`
+        ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-muted">${esc(e.completed_by_name)}</small>` : ''}`
         : `<span class="text-muted small">—</span>`;
 
     return `<tr class="elev-row">
@@ -626,6 +638,46 @@ async function loadElevTypes() {
     }
 }
 
+async function loadFabUsers() {
+    try {
+        const r = await API('/fab-users');
+        const data = await r.json();
+        fabUsers = data.users || [];
+        const sel = document.getElementById('elev-completed-by');
+        fabUsers.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// ============================================================
+// Stage cycling
+// ============================================================
+async function cycleStage(stageId, currentStatus, event) {
+    event.stopPropagation();
+    const nextStatus = STAGE_CYCLE[currentStatus] || 'pending';
+    try {
+        await API(`/work-order-stages/${stageId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus }),
+        });
+        // Refresh elevations in offcanvas
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 function openAddElev() {
     document.getElementById('elev-modal-title').textContent = 'Add Elevation';
     document.getElementById('elev-id').value = '';
@@ -634,6 +686,7 @@ function openAddElev() {
     document.getElementById('elev-qty').value = 1;
     document.getElementById('elev-date-req').value = '';
     document.getElementById('elev-date-done').value = '';
+    document.getElementById('elev-completed-by').value = '';
     document.getElementById('elev-notes').value = '';
     showModal(document.getElementById('addElevModal'));
 }
@@ -649,6 +702,7 @@ function openEditElev(elevId) {
     document.getElementById('elev-qty').value = e.quantity;
     document.getElementById('elev-date-req').value = e.date_requested || '';
     document.getElementById('elev-date-done').value = e.date_completed || '';
+    document.getElementById('elev-completed-by').value = e.completed_by_id || '';
     document.getElementById('elev-notes').value = e.notes || '';
     showModal(document.getElementById('addElevModal'));
 }
@@ -664,6 +718,7 @@ async function saveElev() {
         quantity: parseInt(document.getElementById('elev-qty').value) || 1,
         date_requested: document.getElementById('elev-date-req').value || null,
         date_completed: document.getElementById('elev-date-done').value || null,
+        completed_by_id: document.getElementById('elev-completed-by').value || null,
         notes: document.getElementById('elev-notes').value || null,
     };
 
