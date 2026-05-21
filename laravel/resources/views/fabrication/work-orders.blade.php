@@ -720,15 +720,35 @@ async function cycleStage(stageId, currentStatus, event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: nextStatus }),
         });
-        // Refresh elevations in offcanvas
+        const expanded = getExpandedElevationIds();
         const r = await API(`/work-orders/${currentWO.id}`);
         const wo = await r.json();
         currentWO = wo;
         renderElevations(wo.elevations || []);
+        restoreExpandedElevations(expanded);
         loadWorkOrders();
     } catch (e) {
         console.error(e);
     }
+}
+
+function getExpandedElevationIds() {
+    return [...document.querySelectorAll('[id^="elev-stages-"]')]
+        .filter(row => row.style.display !== 'none')
+        .map(row => row.id.replace('elev-stages-', ''));
+}
+
+function restoreExpandedElevations(ids) {
+    ids.forEach(id => {
+        const row = document.getElementById(`elev-stages-${id}`);
+        if (!row) return;
+        row.style.display = '';
+        const elevRow = row.previousElementSibling;
+        if (elevRow) {
+            const btn = elevRow.querySelector('button[onclick^="toggleStages"]');
+            if (btn) btn.querySelector('i').style.transform = 'rotate(90deg)';
+        }
+    });
 }
 
 function openAddElev() {
