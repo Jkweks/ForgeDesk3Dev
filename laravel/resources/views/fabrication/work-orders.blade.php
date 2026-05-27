@@ -246,18 +246,12 @@
               <option value="">— Select a job —</option>
             </select>
           </div>
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Date Issued</label>
-              <input type="date" class="form-control" id="new-wo-date">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Material Delivery</label>
-              <div class="input-group">
-                <input type="text" class="form-control" id="new-wo-material" placeholder="Date, In Shop, or SOF">
-                <button type="button" class="btn btn-ghost-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
-                <button type="button" class="btn btn-ghost-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
-              </div>
+          <div class="mb-3">
+            <label class="form-label">Material Delivery</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="new-wo-material" placeholder="Date, In Shop, or SOF">
+              <button type="button" class="btn btn-ghost-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
+              <button type="button" class="btn btn-ghost-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
             </div>
           </div>
           <div class="mb-0">
@@ -1095,7 +1089,6 @@ async function openCreateWO() {
             sel.appendChild(opt);
         });
     } catch (e) { console.error(e); }
-    document.getElementById('new-wo-date').value = '';
     document.getElementById('new-wo-material').value = '';
     document.getElementById('new-wo-notes').value = '';
 
@@ -1159,12 +1152,13 @@ async function wizardCreateWO() {
     const btn = document.getElementById('wo-wizard-next');
     btn.disabled = true; btn.textContent = 'Creating…';
     try {
+        const today = new Date().toISOString().slice(0, 10);
         const r = await API('/work-orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                business_job_id: parseInt(jobId),
-                date_issued:       document.getElementById('new-wo-date').value || null,
+                business_job_id:   parseInt(jobId),
+                date_issued:       today,
                 material_delivery: document.getElementById('new-wo-material').value || null,
                 notes:             document.getElementById('new-wo-notes').value || null,
             }),
