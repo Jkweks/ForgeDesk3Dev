@@ -7,7 +7,7 @@
   <link href="{{ asset('assets/tabler/css/tabler.min.css') }}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
   <style>
-    body { background: var(--tblr-bg-surface); font-size: 15px; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--tblr-bg-surface); font-size: 15px; -webkit-tap-highlight-color: transparent; overflow-x: clip; }
 
     /* ── Header ── */
     .sf-header {
@@ -171,23 +171,21 @@
 
 <!-- ── Table ── -->
 <div id="sf-content" style="display:none">
-  <div style="overflow-x:auto">
-    <table class="sf-table">
-      <thead>
-        <tr>
-          <th style="width:36px"></th>
-          <th style="width:44px" class="hide-sm">#</th>
-          <th style="width:110px">Release</th>
-          <th>Job</th>
-          <th class="hide-sm" style="width:130px">Assigned</th>
-          <th style="width:110px">Elevations</th>
-          <th style="width:130px">Progress</th>
-          <th class="hide-sm" style="width:120px">Status</th>
-        </tr>
-      </thead>
-      <tbody id="sf-tbody"></tbody>
-    </table>
-  </div>
+  <table class="sf-table">
+    <thead>
+      <tr>
+        <th style="width:36px"></th>
+        <th style="width:44px" class="hide-sm">#</th>
+        <th style="width:110px">Release</th>
+        <th>Job</th>
+        <th class="hide-sm" style="width:130px">Assigned</th>
+        <th style="width:110px">Elevations</th>
+        <th style="width:130px">Progress</th>
+        <th class="hide-sm" style="width:120px">Status</th>
+      </tr>
+    </thead>
+    <tbody id="sf-tbody"></tbody>
+  </table>
   <div id="sf-empty" class="sf-empty" style="display:none">
     <i class="ti ti-clipboard-check" style="font-size:3rem;opacity:.25"></i>
     <p class="mt-2">No work orders to show</p>
