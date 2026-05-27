@@ -405,15 +405,15 @@ class CycleCountController extends Controller
             ], 422);
         }
 
-        // Check if all variances have been reviewed
-        $pending = $cycleCountSession->items()
+        // All non-zero variances must be explicitly approved before completing
+        $unapproved = $cycleCountSession->items()
             ->where('variance', '!=', 0)
-            ->where('variance_status', 'pending')
+            ->where('variance_status', '!=', 'approved')
             ->count();
 
-        if ($pending > 0) {
+        if ($unapproved > 0) {
             return response()->json([
-                'message' => "Cannot complete session: {$pending} variances require review"
+                'message' => "Cannot complete session: {$unapproved} variance(s) have not been approved. Review and approve all variances before completing."
             ], 422);
         }
 
