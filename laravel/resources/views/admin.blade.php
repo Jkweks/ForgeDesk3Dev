@@ -656,25 +656,6 @@
       </div>
     </div>
 
-    <!-- Stage Templates Modal -->
-    <div class="modal modal-blur fade" id="tplModal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="tplModalTypeName">Stage Templates</h5>
-            <button type="button" class="btn-close" onclick="closeTemplateModal()"></button>
-          </div>
-          <div class="modal-body" id="tplModalBody">
-            <p class="text-muted">Loading…</p>
-          </div>
-          <div class="modal-footer">
-            <p class="text-muted small me-auto">Changes save automatically.</p>
-            <button type="button" class="btn btn-ghost-secondary" onclick="closeTemplateModal()">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Fab User Modal -->
     <div class="modal modal-blur fade" id="fabUserModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
