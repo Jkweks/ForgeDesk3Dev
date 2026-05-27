@@ -2,39 +2,43 @@
 
 @section('title', 'Work Orders – Fabrication')
 
+@section('styles')
+.pip { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin: 1px; cursor: pointer; }
+.pip-pending     { background: var(--tblr-secondary, #adb5bd); }
+.pip-in_progress { background: var(--tblr-warning, #f59f00); }
+.pip-complete    { background: var(--tblr-success, #2fb344); }
+.pip-blocked     { background: var(--tblr-danger, #d63939); }
+.wo-offcanvas    { width: 700px !important; }
+.elev-row td     { vertical-align: middle; }
+.wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
+@endsection
+
 @section('content')
-<style>
-.pip { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin: 1px; }
-.pip-pending    { background: #adb5bd; }
-.pip-in_progress{ background: #f59f00; }
-.pip-complete   { background: #2fb344; }
-.pip-blocked    { background: #d63939; }
-.wo-offcanvas   { width: 700px !important; }
-.elev-row td    { vertical-align: middle; }
-</style>
 <div class="page-wrapper">
   <div class="page-header d-print-none">
     <div class="container-xl">
       <div class="row g-2 align-items-center">
         <div class="col">
+          <div class="page-pretitle">Fabrication</div>
           <h2 class="page-title">Work Orders</h2>
-          <div class="text-muted mt-1">Fabrication production releases</div>
         </div>
         <div class="col-auto ms-auto d-print-none">
-          <div class="form-check form-switch me-3 d-inline-flex align-items-center">
-            <input class="form-check-input" type="checkbox" id="toggle-archived" onchange="applyFilter()">
-            <label class="form-check-label ms-2" for="toggle-archived">Show Archived</label>
+          <div class="btn-list">
+            <div class="form-check form-switch d-inline-flex align-items-center me-1">
+              <input class="form-check-input" type="checkbox" id="toggle-archived" onchange="applyFilter()">
+              <label class="form-check-label ms-2" for="toggle-archived">Archived</label>
+            </div>
+            <button class="btn btn-primary" onclick="openCreateWO()" data-permission="fabrication.work-orders.create">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>
+              New Work Order
+            </button>
           </div>
-          <button class="btn btn-primary" onclick="openCreateWO()" data-permission="fabrication.work-orders.create">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>
-            New Work Order
-          </button>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="page-body">
+  <main id="content" class="page-body">
     <div class="container-xl">
 
       <!-- Filter bar -->
@@ -82,7 +86,7 @@
       <div id="wo-table-wrap" style="display:none;">
         <div class="card">
           <div class="table-responsive">
-            <table class="table table-vcenter card-table table-hover">
+            <table class="table table-vcenter card-table table-hover table-striped">
               <thead>
                 <tr>
                   <th>Release</th>
@@ -101,7 +105,7 @@
       </div>
 
     </div>
-  </div>
+  </main>
 </div>
 
 <!-- ============================================================
@@ -111,10 +115,10 @@
   <div class="offcanvas-header border-bottom">
     <h5 class="offcanvas-title" id="wo-detail-title">Work Order</h5>
     <div class="ms-auto d-flex gap-2">
-      <button class="btn btn-sm btn-outline-warning" onclick="archiveCurrentWO()" id="btn-archive-wo" title="Archive">
+      <button class="btn btn-sm btn-ghost-warning" onclick="archiveCurrentWO()" id="btn-archive-wo" title="Archive">
         <i class="ti ti-archive"></i>
       </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="closeOffcanvas('wo-detail')">
+      <button class="btn btn-sm btn-ghost-secondary" onclick="closeOffcanvas('wo-detail')" title="Close">
         <i class="ti ti-x"></i>
       </button>
     </div>
@@ -122,7 +126,7 @@
   <div class="offcanvas-body p-0">
 
     <!-- WO Header -->
-    <div class="p-3 border-bottom bg-light">
+    <div class="p-3 border-bottom wo-detail-header">
       <div class="row g-3">
         <div class="col-6 col-md-3">
           <div class="subheader">Job</div>
@@ -152,9 +156,9 @@
           <div class="input-group input-group-sm" style="width:260px">
             <input type="text" class="form-control" id="d-material" placeholder="Date, In Shop, SOF"
               onchange="patchWO('material_delivery', this.value || null)">
-            <button class="btn btn-outline-success" type="button"
+            <button class="btn btn-ghost-success" type="button"
               onclick="setMaterial('In Shop')">In Shop</button>
-            <button class="btn btn-outline-warning" type="button"
+            <button class="btn btn-ghost-warning" type="button"
               onclick="setMaterial('SOF')">SOF</button>
           </div>
         </div>
@@ -170,7 +174,7 @@
     <div class="p-3 border-bottom">
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0">Shop Drawings</h5>
-        <label class="btn btn-sm btn-outline-primary mb-0" for="drawing-upload">
+        <label class="btn btn-sm btn-ghost-primary mb-0" for="drawing-upload">
           <i class="ti ti-upload me-1"></i>Upload
           <input type="file" id="drawing-upload" class="d-none" multiple
             accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
@@ -188,10 +192,10 @@
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0">Elevations</h5>
         <div class="btn-group btn-group-sm">
-          <button class="btn btn-outline-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
+          <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
             <i class="ti ti-door me-1"></i>Door Schedule
           </button>
-          <button class="btn btn-outline-primary" onclick="openBulkElev()">
+          <button class="btn btn-ghost-primary" onclick="openBulkElev()">
             <i class="ti ti-plus me-1"></i>Add Elevation
           </button>
         </div>
@@ -210,8 +214,8 @@
 <!-- ============================================================
      Create WO Modal
      ============================================================ -->
-<div class="modal fade" id="createWoModal" tabindex="-1">
-  <div class="modal-dialog">
+<div class="modal modal-blur fade" id="createWoModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">New Work Order</h5>
@@ -232,8 +236,8 @@
           <label class="form-label">Material Delivery</label>
           <div class="input-group">
             <input type="text" class="form-control" id="new-wo-material" placeholder="Date, In Shop, or SOF">
-            <button type="button" class="btn btn-outline-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
-            <button type="button" class="btn btn-outline-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
+            <button type="button" class="btn btn-ghost-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
+            <button type="button" class="btn btn-ghost-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
           </div>
         </div>
         <div class="mb-3">
@@ -252,8 +256,8 @@
 <!-- ============================================================
      Add / Edit Elevation Modal
      ============================================================ -->
-<div class="modal fade" id="addElevModal" tabindex="-1">
-  <div class="modal-dialog">
+<div class="modal modal-blur fade" id="addElevModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="elev-modal-title">Add Elevation</h5>
@@ -319,8 +323,8 @@
 <!-- ============================================================
      Bulk Add Elevations Modal
      ============================================================ -->
-<div class="modal fade" id="bulkElevModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+<div class="modal modal-blur fade" id="bulkElevModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Add Elevations</h5>
@@ -359,8 +363,8 @@
 <!-- ============================================================
      Door / Frame Schedule Modal
      ============================================================ -->
-<div class="modal fade" id="doorScheduleModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+<div class="modal modal-blur fade" id="doorScheduleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Door / Frame Schedule</h5>
@@ -720,7 +724,7 @@ function elevRow(e) {
     const stageDetailBlock = hasStages ? `
         <tr id="elev-stages-${e.id}" style="display:none">
             <td colspan="7" class="p-0">
-                <table class="table table-sm mb-0" style="background:rgba(0,0,0,.15)">
+                <table class="table table-sm mb-0 bg-light">
                     <thead>
                         <tr class="text-muted" style="font-size:.7rem;text-transform:uppercase">
                             <th style="padding-left:2rem">Stage</th>
@@ -1008,10 +1012,10 @@ function esc(str) {
 }
 
 function matBadge(mat) {
-    if (!mat) return '<span class="badge bg-secondary">Pending</span>';
-    if (mat === 'In Shop') return '<span class="badge bg-success">In Shop</span>';
-    if (mat === 'SOF') return '<span class="badge bg-warning text-dark">SOF</span>';
-    return `<span class="badge bg-info">${esc(mat)}</span>`;
+    if (!mat) return '<span class="badge bg-secondary-lt text-secondary">Pending</span>';
+    if (mat === 'In Shop') return '<span class="badge bg-success-lt text-success">In Shop</span>';
+    if (mat === 'SOF') return '<span class="badge bg-warning-lt text-warning">SOF</span>';
+    return `<span class="badge bg-info-lt text-info">${esc(mat)}</span>`;
 }
 
 function formatBytes(bytes) {
