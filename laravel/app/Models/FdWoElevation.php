@@ -12,7 +12,7 @@ class FdWoElevation extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_type_id', 'elevation_tag',
-        'quantity', 'date_requested', 'date_completed', 'completed_by_id', 'notes',
+        'quantity', 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
     ];
 
     protected $casts = [

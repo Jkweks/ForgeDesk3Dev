@@ -287,11 +287,22 @@
             <input type="date" class="form-control" id="elev-date-done">
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Completed By</label>
-          <select class="form-select" id="elev-completed-by">
-            <option value="">— None —</option>
-          </select>
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Completed By</label>
+            <select class="form-select" id="elev-completed-by">
+              <option value="">— None —</option>
+            </select>
+          </div>
+          <div class="col-md-6 d-flex align-items-end pb-1">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="elev-scope" checked>
+              <label class="form-check-label" for="elev-scope">
+                <strong>Assemble</strong>
+                <span class="text-muted small d-block">Uncheck for Kit</span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="mb-3">
           <label class="form-label">Notes</label>
@@ -320,11 +331,12 @@
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th style="width:25%">Tag</th>
-                <th style="width:25%">Type</th>
-                <th style="width:12%">Qty</th>
-                <th style="width:22%">Date Requested</th>
-                <th style="width:16%"></th>
+                <th style="width:22%">Tag</th>
+                <th style="width:22%">Type</th>
+                <th style="width:10%">Qty</th>
+                <th style="width:20%">Date Requested</th>
+                <th style="width:14%" title="Checked = Assemble, Unchecked = Kit">Assemble</th>
+                <th style="width:12%"></th>
               </tr>
             </thead>
             <tbody id="bulk-elev-body"></tbody>
@@ -723,8 +735,12 @@ function elevRow(e) {
             </td>
         </tr>` : '';
 
+    const scopeBadge = e.scope === 'kit'
+        ? '<span class="badge bg-orange-lt ms-1">Kit</span>'
+        : '';
+
     return `<tr class="elev-row">
-        <td><strong>${esc(e.elevation_tag)}</strong></td>
+        <td><strong>${esc(e.elevation_tag)}</strong>${scopeBadge}</td>
         <td>${typeBadge}</td>
         <td>${e.quantity}</td>
         <td class="text-muted small">${e.date_requested || '—'}</td>
@@ -846,6 +862,7 @@ function openAddElev() {
     document.getElementById('elev-date-req').value = '';
     document.getElementById('elev-date-done').value = '';
     document.getElementById('elev-completed-by').value = '';
+    document.getElementById('elev-scope').checked = true;
     document.getElementById('elev-notes').value = '';
     showModal(document.getElementById('addElevModal'));
 }
@@ -862,6 +879,7 @@ function openEditElev(elevId) {
     document.getElementById('elev-date-req').value = e.date_requested || '';
     document.getElementById('elev-date-done').value = e.date_completed || '';
     document.getElementById('elev-completed-by').value = e.completed_by_id || '';
+    document.getElementById('elev-scope').checked = (e.scope !== 'kit');
     document.getElementById('elev-notes').value = e.notes || '';
     showModal(document.getElementById('addElevModal'));
 }
@@ -878,6 +896,7 @@ async function saveElev() {
         date_requested: document.getElementById('elev-date-req').value || null,
         date_completed: document.getElementById('elev-date-done').value || null,
         completed_by_id: document.getElementById('elev-completed-by').value || null,
+        scope: document.getElementById('elev-scope').checked ? 'assemble' : 'kit',
         notes: document.getElementById('elev-notes').value || null,
     };
 
@@ -1040,6 +1059,10 @@ function addBulkElevRow() {
         <td>
             <input type="date" class="form-control form-control-sm bulk-date">
         </td>
+        <td class="text-center">
+            <input type="checkbox" class="form-check-input bulk-scope" checked
+                title="Checked = Assemble, Unchecked = Kit">
+        </td>
         <td>
             <button class="btn btn-sm btn-ghost-danger"
                 onclick="document.getElementById('bulk-elev-row-${id}').remove()">
@@ -1067,6 +1090,7 @@ async function saveBulkElev() {
             elevation_type_id: row.querySelector('.bulk-type')?.value || null,
             quantity:          parseInt(row.querySelector('.bulk-qty')?.value) || 1,
             date_requested:    row.querySelector('.bulk-date')?.value || null,
+            scope:             row.querySelector('.bulk-scope')?.checked ? 'assemble' : 'kit',
         });
     });
 

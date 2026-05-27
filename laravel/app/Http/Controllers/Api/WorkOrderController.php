@@ -186,6 +186,7 @@ class WorkOrderController extends Controller
             'completed_by_id'   => $e->completed_by_id,
             'completed_by_name' => $e->completedBy?->name,
             'notes'             => $e->notes,
+            'scope'             => $e->scope ?? 'assemble',
             'stage_count'       => $stages->count(),
             'stages_done'       => $stages->where('status', 'complete')->count(),
             'stages_active'     => $stages->where('status', 'in_progress')->count(),

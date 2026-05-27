@@ -43,6 +43,7 @@ class ElevationController extends Controller
                 'quantity'          => $request->quantity ?? 1,
                 'date_requested'    => $request->date_requested,
                 'notes'             => $request->notes,
+                'scope'             => $request->scope ?? 'assemble',
             ]);
 
             // Auto-seed stages from template for this elevation type
@@ -81,7 +82,7 @@ class ElevationController extends Controller
             $elevation = FdWoElevation::findOrFail($id);
             $elevation->fill($request->only([
                 'elevation_type_id', 'elevation_tag', 'quantity',
-                'date_requested', 'date_completed', 'completed_by_id', 'notes',
+                'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
             ]));
             $elevation->save();
 
@@ -124,6 +125,7 @@ class ElevationController extends Controller
             'completed_by_id'   => $e->completed_by_id,
             'completed_by_name' => $e->completedBy?->name,
             'notes'             => $e->notes,
+            'scope'             => $e->scope ?? 'assemble',
             'stage_count'       => $stageCount,
             'stages_done'       => $stagesDone,
             'stages_active'     => $stagesActive,
