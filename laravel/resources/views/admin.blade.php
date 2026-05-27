@@ -637,6 +637,44 @@
       </div>
     </div>
 
+    <!-- Stage Templates Default-User Modal -->
+    <div class="modal modal-blur fade" id="tplModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tplModalTypeName">Stage Defaults</h5>
+            <button type="button" class="btn-close" onclick="closeTplModal()"></button>
+          </div>
+          <div class="modal-body" id="tplModalBody">
+            <p class="text-muted">Loading…</p>
+          </div>
+          <div class="modal-footer">
+            <span class="text-muted small me-auto">Changes save automatically.</span>
+            <button type="button" class="btn btn-ghost-secondary" onclick="closeTplModal()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stage Templates Modal -->
+    <div class="modal modal-blur fade" id="tplModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tplModalTypeName">Stage Templates</h5>
+            <button type="button" class="btn-close" onclick="closeTemplateModal()"></button>
+          </div>
+          <div class="modal-body" id="tplModalBody">
+            <p class="text-muted">Loading…</p>
+          </div>
+          <div class="modal-footer">
+            <p class="text-muted small me-auto">Changes save automatically.</p>
+            <button type="button" class="btn btn-ghost-secondary" onclick="closeTemplateModal()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Fab User Modal -->
     <div class="modal modal-blur fade" id="fabUserModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered">
@@ -1992,10 +2030,13 @@
             <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
             <td>
               <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-secondary" onclick="openEditElevType(${t.id})" title="Edit">
+                <button class="btn btn-ghost-secondary" onclick="openTypeTemplates(${t.id}, '${t.name.replace(/'/g, "\\'")}')" title="Stage defaults">
+                  <i class="ti ti-users"></i>
+                </button>
+                <button class="btn btn-ghost-secondary" onclick="openEditElevType(${t.id})" title="Edit">
                   <i class="ti ti-pencil"></i>
                 </button>
-                <button class="btn btn-outline-danger" onclick="deactivateElevType(${t.id})" title="Deactivate" ${!t.active ? 'disabled' : ''}>
+                <button class="btn btn-ghost-danger" onclick="deactivateElevType(${t.id})" title="Deactivate" ${!t.active ? 'disabled' : ''}>
                   <i class="ti ti-trash"></i>
                 </button>
               </div>
@@ -2220,6 +2261,99 @@
       }
       function closeFabUserModal() {
         const m = document.getElementById('fabUserModal');
+        m.classList.remove('show'); m.style.display = '';
+        document.body.classList.remove('modal-open');
+      }
+
+      // ============================================================
+      // Stage template default-user management
+      // ============================================================
+      function escT(str) {
+        if (!str) return '';
+        const d = document.createElement('div'); d.textContent = String(str); return d.innerHTML;
+      }
+
+      async function openTypeTemplates(typeId, typeName) {
+        document.getElementById('tplModalTypeName').textContent = typeName + ' — Stage Defaults';
+        document.getElementById('tplModalBody').innerHTML = '<p class="text-muted">Loading…</p>';
+        showTplModal();
+        try {
+          const [tplRes, uRes] = await Promise.all([
+            fetch('/api/v1/elevation-types?with_templates=1', {
+              headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+            }),
+            fetch('/api/v1/fab-users?all=1', {
+              headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+            }),
+          ]);
+          const typeData = ((await tplRes.json()).elevation_types || []).find(t => t.id === typeId);
+          const users    = (await uRes.json()).users || [];
+          const templates = typeData?.stage_templates || [];
+
+          const userOpts = '<option value="">— No default —</option>' +
+            users.map(u => `<option value="${u.id}">${escT(u.name)}</option>`).join('');
+
+          if (!templates.length) {
+            document.getElementById('tplModalBody').innerHTML =
+              '<p class="text-muted text-center py-3">No stage templates defined for this type.</p>';
+            return;
+          }
+
+          document.getElementById('tplModalBody').innerHTML = `
+            <p class="text-muted small mb-3">
+              Set a default assignee per stage. New elevations of this type will auto-assign stages to these users.
+            </p>
+            <table class="table table-sm table-vcenter">
+              <thead>
+                <tr>
+                  <th style="width:36px">#</th>
+                  <th>Stage</th>
+                  <th>Default Assignee</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${templates.map(t => `
+                  <tr>
+                    <td class="text-muted small">${t.sort_order}</td>
+                    <td class="fw-semibold">${escT(t.name)}</td>
+                    <td>
+                      <select class="form-select form-select-sm" style="width:180px"
+                          onchange="saveTemplateUser(${t.id}, this.value)">
+                        ${userOpts.replace(
+                          `value="${t.default_user_id || ''}"`,
+                          `value="${t.default_user_id || ''}" selected`
+                        )}
+                      </select>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>`;
+        } catch (e) {
+          console.error(e);
+          document.getElementById('tplModalBody').innerHTML = '<p class="text-danger">Failed to load templates.</p>';
+        }
+      }
+
+      async function saveTemplateUser(templateId, userId) {
+        try {
+          await fetch(`/api/v1/stage-templates/${templateId}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ default_user_id: userId || null }),
+          });
+        } catch (e) { console.error(e); alert('Failed to save default user'); }
+      }
+
+      function showTplModal() {
+        const m = document.getElementById('tplModal');
+        m.classList.add('show'); m.style.display = 'block';
+        document.body.classList.add('modal-open');
+      }
+      function closeTplModal() {
+        const m = document.getElementById('tplModal');
         m.classList.remove('show'); m.style.display = '';
         document.body.classList.remove('modal-open');
       }

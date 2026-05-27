@@ -9,10 +9,15 @@ class FdStageTemplate extends Model
 {
     protected $table = 'fd_stage_templates';
 
-    protected $fillable = ['elevation_type_id', 'job_type', 'name', 'description', 'sort_order'];
+    protected $fillable = ['elevation_type_id', 'job_type', 'name', 'description', 'sort_order', 'default_user_id'];
 
     public function elevationType(): BelongsTo
     {
         return $this->belongsTo(FdElevationType::class, 'elevation_type_id');
+    }
+
+    public function defaultUser(): BelongsTo
+    {
+        return $this->belongsTo(FdUser::class, 'default_user_id');
     }
 }

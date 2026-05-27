@@ -159,6 +159,13 @@ Route::post('/password/verify-token', [PasswordResetController::class, 'verifyTo
 
 // Fulfillment routes (public for internal use)
 Route::prefix('v1')->group(function () {
+    // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
+    Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
+    Route::get('/shop/fab-users',   [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
+    Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
+    Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
+    // ─────────────────────────────────────────────────────────────────────────
+
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
     Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials']);
     Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials']);
@@ -448,6 +455,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store']);
         Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update']);
         Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy']);
+        Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate']);
 
         Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
         Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);

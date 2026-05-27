@@ -54,13 +54,14 @@ class ElevationController extends Controller
 
                 foreach ($templates as $tpl) {
                     FdWoStage::create([
-                        'elevation_id' => $elevation->id,
-                        'work_order_id' => null,
-                        'template_id'  => $tpl->id,
-                        'name'         => $tpl->name,
-                        'description'  => $tpl->description,
-                        'sort_order'   => $tpl->sort_order,
-                        'status'       => 'pending',
+                        'elevation_id'   => $elevation->id,
+                        'work_order_id'  => null,
+                        'template_id'    => $tpl->id,
+                        'name'           => $tpl->name,
+                        'description'    => $tpl->description,
+                        'sort_order'     => $tpl->sort_order,
+                        'status'         => 'pending',
+                        'assigned_to_id' => $tpl->default_user_id,
                     ]);
                 }
             }

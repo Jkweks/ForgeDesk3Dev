@@ -93,3 +93,8 @@ Route::get('/admin', function () {
 Route::get('/admin/location-assignment', function () {
     return view('admin.location-assignment');
 });
+
+// Shop floor — no auth required (tablet kiosk view)
+Route::get('/shop', function () {
+    return view('shop-floor');
+});
