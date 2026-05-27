@@ -187,9 +187,14 @@
     <div class="p-3">
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0">Elevations</h5>
-        <button class="btn btn-sm btn-outline-primary" onclick="openAddElev()">
-          <i class="ti ti-plus me-1"></i>Add Elevation
-        </button>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
+            <i class="ti ti-door me-1"></i>Door Schedule
+          </button>
+          <button class="btn btn-outline-primary" onclick="openAddElev()">
+            <i class="ti ti-plus me-1"></i>Add Elevation
+          </button>
+        </div>
       </div>
       <div id="elevations-loading" class="text-muted small" style="display:none;">Loading…</div>
       <div id="elevations-list">
@@ -296,6 +301,48 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('addElevModal'))">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveElev()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ============================================================
+     Door / Frame Schedule Modal
+     ============================================================ -->
+<div class="modal fade" id="doorScheduleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Door / Frame Schedule</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('doorScheduleModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Each row creates Door and/or Frame elevations with
+          <strong>Programmed → CNC → Assembled</strong> stages.
+          Matching a door to a frame with the same tag links them visually.
+        </p>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="width:30%">Tag</th>
+                <th style="width:30%">Leaves</th>
+                <th style="width:25%" id="door-frame-col-header">Include Frame</th>
+                <th style="width:15%"></th>
+              </tr>
+            </thead>
+            <tbody id="door-schedule-body"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="addDoorRow()">
+          <i class="ti ti-plus me-1"></i>Add Row
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('doorScheduleModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveDoorSchedule()" id="door-schedule-save">
+          Create Elevations
+        </button>
       </div>
     </div>
   </div>
@@ -914,6 +961,121 @@ function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// ============================================================
+// Door / Frame Schedule
+// ============================================================
+let doorRowId = 0;
+
+function openDoorSchedule() {
+    document.getElementById('door-schedule-body').innerHTML = '';
+    doorRowId = 0;
+    addDoorRow();   // start with one empty row
+    showModal(document.getElementById('doorScheduleModal'));
+}
+
+function addDoorRow() {
+    const id = ++doorRowId;
+    const tr = document.createElement('tr');
+    tr.id = `door-row-${id}`;
+    tr.innerHTML = `
+        <td>
+            <input type="text" class="form-control form-control-sm door-tag"
+                placeholder="e.g. 101A" autocomplete="off">
+        </td>
+        <td>
+            <select class="form-select form-select-sm door-leaves" onchange="updateDoorRow(${id})">
+                <option value="1">Single (1 leaf)</option>
+                <option value="2">Pair (2 leaves)</option>
+                <option value="0">Frame Only</option>
+            </select>
+        </td>
+        <td class="text-center door-frame-cell-${id}">
+            <div class="form-check d-inline-flex align-items-center gap-2 mb-0">
+                <input class="form-check-input door-frame mt-0" type="checkbox" checked>
+            </div>
+        </td>
+        <td>
+            <button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('door-row-${id}').remove()">
+                <i class="ti ti-x"></i>
+            </button>
+        </td>`;
+    document.getElementById('door-schedule-body').appendChild(tr);
+}
+
+function updateDoorRow(id) {
+    const row = document.getElementById(`door-row-${id}`);
+    const leaves = row.querySelector('.door-leaves').value;
+    const frameCell = row.querySelector(`.door-frame-cell-${id}`);
+    if (leaves === '0') {
+        // Frame Only — frame is implied, hide checkbox
+        frameCell.innerHTML = '<span class="text-muted small">—</span>';
+    } else if (!row.querySelector('.door-frame')) {
+        // Restore checkbox if switching back from Frame Only
+        frameCell.innerHTML = `
+            <div class="form-check d-inline-flex align-items-center gap-2 mb-0">
+                <input class="form-check-input door-frame mt-0" type="checkbox" checked>
+            </div>`;
+    }
+}
+
+async function saveDoorSchedule() {
+    if (!currentWO) return;
+
+    const doorTypeId = elevTypes.find(t => t.name === 'Door')?.id;
+    const frameTypeId = elevTypes.find(t => t.name === 'Frame')?.id;
+
+    if (!doorTypeId || !frameTypeId) {
+        alert('Door or Frame elevation types not found. Check Admin → Elevation Types.');
+        return;
+    }
+
+    const rows = document.querySelectorAll('#door-schedule-body tr');
+    if (!rows.length) return;
+
+    const btn = document.getElementById('door-schedule-save');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    const creates = [];
+    rows.forEach(row => {
+        const tag = row.querySelector('.door-tag')?.value.trim();
+        const leaves = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
+        const frameChecked = row.querySelector('.door-frame')?.checked ?? false;
+        const isFrameOnly = leaves === 0;
+
+        if (!tag) return;
+
+        if (!isFrameOnly) {
+            creates.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves });
+        }
+        if (isFrameOnly || frameChecked) {
+            creates.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
+        }
+    });
+
+    try {
+        for (const body of creates) {
+            await API(`/work-orders/${currentWO.id}/elevations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        }
+        hideModal(document.getElementById('doorScheduleModal'));
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to create some elevations');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Elevations';
+    }
 }
 </script>
 @endpush
