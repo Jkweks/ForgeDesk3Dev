@@ -89,10 +89,11 @@
             <table class="table table-vcenter card-table table-hover table-striped">
               <thead>
                 <tr>
+                  <th style="width:3rem">#</th>
                   <th>Release</th>
                   <th>Job Name</th>
                   <th>PM</th>
-                  <th>Date Issued</th>
+                  <th>Assigned</th>
                   <th>Material</th>
                   <th>Elevations</th>
                   <th class="w-1"></th>
@@ -152,6 +153,11 @@
             onchange="patchWO('date_issued', this.value)">
         </div>
         <div class="col-auto">
+          <div class="subheader">Priority</div>
+          <input type="number" class="form-control form-control-sm" id="d-priority" style="width:80px"
+            min="1" placeholder="—" onchange="patchWO('priority', this.value ? parseInt(this.value) : null)">
+        </div>
+        <div class="col-auto">
           <div class="subheader">Material Delivery</div>
           <div class="input-group input-group-sm" style="width:260px">
             <input type="text" class="form-control" id="d-material" placeholder="Date, In Shop, SOF"
@@ -166,6 +172,21 @@
           <div class="subheader">Notes</div>
           <input type="text" class="form-control form-control-sm" id="d-notes" placeholder="Notes"
             onchange="patchWO('notes', this.value || null)">
+        </div>
+      </div>
+      <!-- Assigned Workers -->
+      <div class="mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="subheader">Assigned Workers</div>
+          <button class="btn btn-xs btn-ghost-primary" onclick="toggleAssignPanel()">
+            <i class="ti ti-pencil" style="font-size:.8rem"></i>
+          </button>
+        </div>
+        <div id="d-assigned-display" class="d-flex flex-wrap gap-1 min-height-1"></div>
+        <div id="d-assign-panel" style="display:none;" class="mt-2 p-2 border rounded">
+          <div id="d-assign-checkboxes" class="d-flex flex-wrap gap-2 mb-2"></div>
+          <button class="btn btn-sm btn-primary" onclick="saveWOAssignments()">Save</button>
+          <button class="btn btn-sm btn-ghost-secondary ms-1" onclick="toggleAssignPanel()">Cancel</button>
         </div>
       </div>
     </div>
@@ -583,12 +604,19 @@ function renderWOList(wos) {
 
     document.getElementById('wo-table-wrap').style.display = 'block';
     const tbody = document.getElementById('wo-tbody');
-    tbody.innerHTML = wos.map(wo => `
-        <tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
+    tbody.innerHTML = wos.map(wo => {
+        const assignedPills = (wo.assigned_users || []).map(u =>
+            `<span class="badge bg-blue-lt text-blue" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
+        ).join(' ') || '<span class="text-muted">—</span>';
+        const priorityCell = wo.priority != null
+            ? `<span class="badge bg-secondary-lt text-secondary">${wo.priority}</span>`
+            : '<span class="text-muted">—</span>';
+        return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
+            <td>${priorityCell}</td>
             <td><strong>${esc(wo.release_label)}</strong></td>
             <td>${esc(wo.job?.job_name || '—')}</td>
             <td class="text-muted">${esc(wo.job?.project_manager || '—')}</td>
-            <td>${wo.date_issued || '<span class="text-muted">—</span>'}</td>
+            <td>${assignedPills}</td>
             <td>${matBadge(wo.material_delivery)}</td>
             <td>
                 ${wo.elevation_count > 0
@@ -600,8 +628,8 @@ function renderWOList(wos) {
                     <i class="ti ti-chevron-right"></i>
                 </button>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 // ============================================================
@@ -642,9 +670,11 @@ function populateDetail(wo) {
     document.getElementById('d-pm').textContent = job.project_manager || '—';
     document.getElementById('d-division').textContent = job.division || '—';
     document.getElementById('d-date-issued').value = wo.date_issued || '';
+    document.getElementById('d-priority').value = wo.priority != null ? wo.priority : '';
     document.getElementById('d-material').value = wo.material_delivery || '';
     document.getElementById('d-notes').value = wo.notes || '';
 
+    renderAssignedUsers(wo.assigned_users || []);
     renderDrawings(wo.drawings || []);
     renderElevations(wo.elevations || []);
 }
@@ -670,6 +700,59 @@ async function patchWO(field, value) {
 function setMaterial(val) {
     document.getElementById('d-material').value = val;
     patchWO('material_delivery', val);
+}
+
+// ============================================================
+// WO Assigned Workers
+// ============================================================
+function renderAssignedUsers(users) {
+    const display = document.getElementById('d-assigned-display');
+    if (!users.length) {
+        display.innerHTML = '<span class="text-muted small">No workers assigned</span>';
+    } else {
+        display.innerHTML = users.map(u =>
+            `<span class="badge bg-blue-lt text-blue">${esc(u.initials || u.name.slice(0,2))} ${esc(u.name)}</span>`
+        ).join('');
+    }
+    // Close panel if open
+    document.getElementById('d-assign-panel').style.display = 'none';
+}
+
+function toggleAssignPanel() {
+    const panel = document.getElementById('d-assign-panel');
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        return;
+    }
+    // Build checkboxes
+    const currentIds = new Set((currentWO?.assigned_users || []).map(u => u.id));
+    const box = document.getElementById('d-assign-checkboxes');
+    box.innerHTML = fabUsers.map(u => `
+        <label class="form-check">
+            <input class="form-check-input wo-assign-chk" type="checkbox" value="${u.id}" ${currentIds.has(u.id) ? 'checked' : ''}>
+            <span class="form-check-label">${esc(u.name)}</span>
+        </label>`
+    ).join('');
+    panel.style.display = '';
+}
+
+async function saveWOAssignments() {
+    if (!currentWO) return;
+    const ids = [...document.querySelectorAll('.wo-assign-chk:checked')].map(el => parseInt(el.value));
+    try {
+        await API(`/work-orders/${currentWO.id}/assignments`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_ids: ids }),
+        });
+        // Update local state
+        currentWO.assigned_users = fabUsers.filter(u => ids.includes(u.id));
+        renderAssignedUsers(currentWO.assigned_users);
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to save assignments');
+    }
 }
 
 // ============================================================

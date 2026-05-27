@@ -176,9 +176,10 @@
       <thead>
         <tr>
           <th style="width:36px"></th>
+          <th style="width:44px" class="hide-sm">#</th>
           <th style="width:110px">Release</th>
           <th>Job</th>
-          <th class="hide-sm" style="width:120px">Date Issued</th>
+          <th class="hide-sm" style="width:130px">Assigned</th>
           <th style="width:110px">Elevations</th>
           <th style="width:130px">Progress</th>
           <th class="hide-sm" style="width:120px">Status</th>
@@ -278,14 +279,19 @@ function render() {
   const rows = [];
 
   sfWOs.forEach(wo => {
-    // Gather all stages, applying filters
     const allStages = wo.elevations.flatMap(e => e.stages.map(s => ({ ...s, elev: e })));
-    const visStages = allStages.filter(s => {
-      if (activeUser && String(s.assigned_to_id) !== activeUser) return false;
-      if (hideDone && s.status === 'complete') return false;
-      return true;
-    });
-    if (!visStages.length) return; // skip WO if nothing visible
+
+    // User filter: match WO-level assignment OR stage-level assignment
+    let woVisible = true;
+    if (activeUser) {
+      const woAssigned = (wo.assigned_users || []).some(u => String(u.id) === activeUser);
+      const stageAssigned = allStages.some(s => String(s.assigned_to_id) === activeUser);
+      woVisible = woAssigned || stageAssigned;
+    }
+    if (!woVisible) return;
+
+    const visStages = allStages.filter(s => !(hideDone && s.status === 'complete'));
+    if (!visStages.length && hideDone) return; // skip WO if all stages are done and hiding complete
 
     woCount++;
     const totalStages = allStages.length;
@@ -299,15 +305,24 @@ function render() {
       blocked ? `<span class="sf-chip blocked">${blocked} blocked</span>` : '',
     ].filter(Boolean).join(' ');
 
+    const assignedBadges = (wo.assigned_users || []).map(u =>
+      `<span style="font-size:.68rem;padding:.1rem .35rem;border-radius:4px;background:var(--tblr-blue-lt,#dce7f9);color:var(--tblr-blue,#2c5fc3);font-weight:600" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
+    ).join(' ') || '<span class="text-muted small">—</span>';
+
+    const priorityBadge = wo.priority != null
+      ? `<span style="font-size:.72rem;padding:.1rem .4rem;border-radius:4px;background:var(--tblr-gray-200,#e9ecef);color:var(--tblr-secondary)">${wo.priority}</span>`
+      : '<span class="text-muted small">—</span>';
+
     const isOpen = expandedWOs.has(wo.id);
     rows.push(`
       <tr class="wo-row${isOpen ? ' expanded' : ''}" onclick="toggleWO(${wo.id})">
         <td class="ps-3" style="width:36px">
           <i class="ti ti-chevron-right wo-chevron" style="${isOpen ? 'transform:rotate(90deg)' : ''}"></i>
         </td>
+        <td class="text-muted small hide-sm">${priorityBadge}</td>
         <td><strong>${esc(wo.release_label)}</strong></td>
         <td>${esc(wo.job_name)}</td>
-        <td class="text-muted small hide-sm">${wo.date_issued || '—'}</td>
+        <td class="hide-sm">${assignedBadges}</td>
         <td class="text-muted small">${wo.elevations.length} elevation${wo.elevations.length !== 1 ? 's' : ''}</td>
         <td>
           <div class="d-flex align-items-center gap-2">
@@ -318,7 +333,7 @@ function render() {
         <td class="hide-sm">${chips || '<span class="text-muted small">—</span>'}</td>
       </tr>
       <tr class="wo-detail-row${isOpen ? ' open' : ''}" id="wo-detail-${wo.id}">
-        <td colspan="7" class="wo-detail-cell">
+        <td colspan="8" class="wo-detail-cell">
           ${wo.elevations.map(e => elevBlock(e)).join('')}
         </td>
       </tr>`);

@@ -7,6 +7,7 @@ use App\Models\FdWorkOrder;
 use App\Models\FdWoStage;
 use App\Models\FdUser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ShopFloorController extends Controller
@@ -18,19 +19,22 @@ class ShopFloorController extends Controller
         'blocked'     => 'pending',
     ];
 
-    public function workOrders()
+    public function workOrders(Request $request)
     {
         try {
             $wos = FdWorkOrder::with([
                 'businessJob',
+                'assignedUsers',
                 'elevations.elevationType',
                 'elevations.stages.assignedTo',
             ])
             ->where('archived', false)
-            ->orderBy('date_issued', 'desc')
+            ->orderByRaw('priority IS NULL, priority ASC')
             ->get();
 
-            return response()->json(['work_orders' => $wos->map(fn($wo) => $this->formatWo($wo))]);
+            $formatted = $wos->map(fn($wo) => $this->formatWo($wo));
+
+            return response()->json(['work_orders' => $formatted]);
         } catch (\Exception $e) {
             Log::error('ShopFloorController@workOrders failed', ['message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to load data'], 500);
@@ -95,13 +99,20 @@ class ShopFloorController extends Controller
 
     private function formatWo(FdWorkOrder $wo): array
     {
-        $job = $wo->businessJob;
+        $job   = $wo->businessJob;
+        $users = $wo->relationLoaded('assignedUsers') ? $wo->assignedUsers : collect();
         return [
-            'id'            => $wo->id,
-            'release_label' => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}",
-            'job_name'      => $job?->job_name ?? '—',
-            'job_number'    => $job?->job_number ?? '—',
-            'date_issued'   => $wo->date_issued?->format('Y-m-d'),
+            'id'             => $wo->id,
+            'release_label'  => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}",
+            'job_name'       => $job?->job_name ?? '—',
+            'job_number'     => $job?->job_number ?? '—',
+            'date_issued'    => $wo->date_issued?->format('Y-m-d'),
+            'priority'       => $wo->priority,
+            'assigned_users' => $users->map(fn($u) => [
+                'id'       => $u->id,
+                'name'     => $u->name,
+                'initials' => $u->initials,
+            ])->values(),
             'elevations'    => $wo->elevations->map(fn($e) => [
                 'id'             => $e->id,
                 'elevation_tag'  => $e->elevation_tag,

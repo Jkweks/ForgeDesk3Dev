@@ -14,7 +14,7 @@ class WorkOrderController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = FdWorkOrder::with('businessJob')
+            $query = FdWorkOrder::with(['businessJob', 'assignedUsers'])
                 ->withCount([
                     'elevations',
                     'elevations as elevations_complete' => fn($q) => $q->whereNotNull('date_completed'),
@@ -47,6 +47,7 @@ class WorkOrderController extends Controller
             }
 
             $workOrders = $query
+                ->orderByRaw('priority IS NULL, priority ASC')
                 ->orderBy('date_issued', 'desc')
                 ->get()
                 ->map(fn($wo) => $this->formatWo($wo));
@@ -63,6 +64,7 @@ class WorkOrderController extends Controller
         try {
             $wo = FdWorkOrder::with([
                 'businessJob',
+                'assignedUsers',
                 'drawings',
                 'elevations.elevationType',
                 'elevations.completedBy',
@@ -94,15 +96,16 @@ class WorkOrderController extends Controller
         ]);
 
         try {
-            // Auto-assign release number scoped to this job
-            $nextRelease = FdWorkOrder::where('business_job_id', $request->business_job_id)->max('release_number') + 1;
+            $nextRelease  = FdWorkOrder::where('business_job_id', $request->business_job_id)->max('release_number') + 1;
+            $nextPriority = FdWorkOrder::where('archived', false)->max('priority') + 1;
 
             $wo = FdWorkOrder::create([
-                'business_job_id'  => $request->business_job_id,
-                'release_number'   => $nextRelease,
-                'date_issued'      => $request->date_issued,
-                'material_delivery'=> $request->material_delivery,
-                'notes'            => $request->notes,
+                'business_job_id'   => $request->business_job_id,
+                'release_number'    => $nextRelease,
+                'date_issued'       => $request->date_issued,
+                'material_delivery' => $request->material_delivery,
+                'notes'             => $request->notes,
+                'priority'          => $nextPriority,
             ]);
 
             return response()->json(['id' => $wo->id, 'release_number' => $wo->release_number], 201);
@@ -116,7 +119,7 @@ class WorkOrderController extends Controller
     {
         try {
             $wo = FdWorkOrder::findOrFail($id);
-            $wo->fill($request->only(['date_issued', 'material_delivery', 'notes']));
+            $wo->fill($request->only(['date_issued', 'material_delivery', 'notes', 'priority']));
             $wo->save();
 
             return response()->json(['updated' => $id]);
@@ -140,9 +143,24 @@ class WorkOrderController extends Controller
         }
     }
 
+    public function updateAssignments(Request $request, int $id)
+    {
+        try {
+            $wo = FdWorkOrder::findOrFail($id);
+            $userIds = $request->input('user_ids', []);
+            $wo->assignedUsers()->sync($userIds);
+            return response()->json(['updated' => $id]);
+        } catch (\Exception $e) {
+            Log::error('WorkOrderController@updateAssignments failed', ['id' => $id, 'message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to update assignments'], 500);
+        }
+    }
+
     private function formatWo(FdWorkOrder $wo): array
     {
         $job = $wo->relationLoaded('businessJob') ? $wo->businessJob : $wo->businessJob()->first();
+
+        $users = $wo->relationLoaded('assignedUsers') ? $wo->assignedUsers : collect();
 
         return [
             'id'                  => $wo->id,
@@ -153,8 +171,14 @@ class WorkOrderController extends Controller
             'material_delivery'   => $wo->material_delivery,
             'notes'               => $wo->notes,
             'archived'            => $wo->archived,
+            'priority'            => $wo->priority,
             'elevation_count'     => $wo->elevations_count ?? 0,
             'elevations_complete' => $wo->elevations_complete ?? 0,
+            'assigned_users'      => $users->map(fn($u) => [
+                'id'       => $u->id,
+                'name'     => $u->name,
+                'initials' => $u->initials,
+            ])->values(),
             'job'                 => $job ? [
                 'id'              => $job->id,
                 'job_number'      => $job->job_number,

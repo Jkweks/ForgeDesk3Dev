@@ -431,6 +431,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
         Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
         Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy']);
+        Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments']);
 
         // Work Order Drawings (shop drawings file uploads)
         Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
