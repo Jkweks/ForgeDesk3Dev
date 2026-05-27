@@ -8,11 +8,15 @@ use Illuminate\Http\Request;
 
 class FabUserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $users = FdUser::where('active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'initials', 'role']);
+        $query = FdUser::orderBy('name');
+
+        if (!$request->boolean('all')) {
+            $query->where('active', true);
+        }
+
+        $users = $query->get(['id', 'name', 'initials', 'role', 'email', 'active']);
 
         return response()->json(['users' => $users]);
     }

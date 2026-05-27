@@ -476,6 +476,26 @@
     </div>
   </div>
 </div>
+
+<!-- Date prompt modal (wizard step 2 — all dates blank) -->
+<div class="modal modal-blur fade" id="wizDatePromptModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Date Requested</h5>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">No date requested was set for any elevation. Enter a date to apply to all elevations, or leave blank to skip.</p>
+        <label class="form-label required">Date Requested</label>
+        <input type="date" class="form-control" id="wiz-date-prompt-value">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" onclick="wizDatePromptResolve(null)">Skip</button>
+        <button type="button" class="btn btn-primary" onclick="wizDatePromptSubmit()">Apply to All</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -891,10 +911,34 @@ async function loadFabUsers() {
 // ============================================================
 // Stage cycling
 // ============================================================
+function findElevationForStage(stageId) {
+    for (const elev of (currentWO?.elevations || [])) {
+        const idx = (elev.stages || []).findIndex(s => s.id === stageId);
+        if (idx >= 0) return { elevation: elev, index: idx };
+    }
+    return null;
+}
+
 async function cycleStage(stageId, currentStatus, event) {
     event.stopPropagation();
     const nextStatus = STAGE_CYCLE[currentStatus] || 'pending';
     try {
+        // Completing a stage cascades completion to all preceding incomplete stages
+        if (nextStatus === 'complete') {
+            const found = findElevationForStage(stageId);
+            if (found) {
+                const preceding = found.elevation.stages
+                    .slice(0, found.index)
+                    .filter(s => s.status !== 'complete');
+                for (const s of preceding) {
+                    await API(`/work-order-stages/${s.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'complete' }),
+                    });
+                }
+            }
+        }
         await API(`/work-order-stages/${stageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -1139,6 +1183,25 @@ async function wizardCreateWO() {
     }
 }
 
+// Promise-based date prompt modal
+let _wizDatePromptResolve = null;
+function wizDatePromptResolve(date) {
+    hideModal(document.getElementById('wizDatePromptModal'));
+    if (_wizDatePromptResolve) { _wizDatePromptResolve(date); _wizDatePromptResolve = null; }
+}
+function wizDatePromptSubmit() {
+    const val = document.getElementById('wiz-date-prompt-value').value || null;
+    if (!val) { alert('Please enter a date, or click Skip.'); return; }
+    wizDatePromptResolve(val);
+}
+function promptForDate() {
+    return new Promise(resolve => {
+        _wizDatePromptResolve = resolve;
+        document.getElementById('wiz-date-prompt-value').value = '';
+        showModal(document.getElementById('wizDatePromptModal'));
+    });
+}
+
 async function wizardSaveElevations() {
     const rows = [...document.querySelectorAll('#wiz-bulk-body tr')];
     const creates = [];
@@ -1155,6 +1218,13 @@ async function wizardSaveElevations() {
     });
 
     if (!creates.length) { showWizardStep(3); return; }
+
+    // If every row has no date_requested, prompt once and apply to all
+    const allBlank = creates.every(c => !c.date_requested);
+    if (allBlank) {
+        const sharedDate = await promptForDate();
+        if (sharedDate) creates.forEach(c => c.date_requested = sharedDate);
+    }
 
     const btn = document.getElementById('wo-wizard-next');
     btn.disabled = true; btn.textContent = 'Saving…';
@@ -1175,19 +1245,36 @@ async function wizardSaveElevations() {
     }
 }
 
+// Shared helper: expand a door-schedule row into individual elevation records.
+// Pairs produce two separate door elevations tagged {tag}-LH and {tag}-RH.
+function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId) {
+    const out = [];
+    const frameOnly = leaves === 0;
+    if (!frameOnly && doorTypeId) {
+        if (leaves === 2) {
+            out.push({ elevation_tag: `${tag}-LH`, elevation_type_id: doorTypeId, quantity: 1 });
+            out.push({ elevation_tag: `${tag}-RH`, elevation_type_id: doorTypeId, quantity: 1 });
+        } else {
+            out.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves });
+        }
+    }
+    if ((frameOnly || frameChk) && frameTypeId) {
+        out.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
+    }
+    return out;
+}
+
 async function wizardFinishDoors() {
     const doorTypeId  = elevTypes.find(t => t.name === 'Door')?.id;
     const frameTypeId = elevTypes.find(t => t.name === 'Frame')?.id;
 
     const creates = [];
     document.querySelectorAll('#wiz-door-body tr').forEach(row => {
-        const tag        = row.querySelector('.wiz-door-tag')?.value.trim();
-        const leaves     = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
-        const frameChk   = row.querySelector('.wiz-door-frame')?.checked ?? false;
-        const frameOnly  = leaves === 0;
+        const tag      = row.querySelector('.wiz-door-tag')?.value.trim();
+        const leaves   = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
+        const frameChk = row.querySelector('.wiz-door-frame')?.checked ?? false;
         if (!tag) return;
-        if (!frameOnly && doorTypeId)              creates.push({ elevation_tag: tag, elevation_type_id: doorTypeId,  quantity: leaves });
-        if ((frameOnly || frameChk) && frameTypeId) creates.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
+        creates.push(...buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId));
     });
 
     if (!creates.length) { wizardComplete(); return; }
@@ -1467,19 +1554,11 @@ async function saveDoorSchedule() {
 
     const creates = [];
     rows.forEach(row => {
-        const tag = row.querySelector('.door-tag')?.value.trim();
-        const leaves = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
+        const tag          = row.querySelector('.door-tag')?.value.trim();
+        const leaves       = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
         const frameChecked = row.querySelector('.door-frame')?.checked ?? false;
-        const isFrameOnly = leaves === 0;
-
         if (!tag) return;
-
-        if (!isFrameOnly) {
-            creates.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves });
-        }
-        if (isFrameOnly || frameChecked) {
-            creates.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
-        }
+        creates.push(...buildDoorCreates(tag, leaves, frameChecked, doorTypeId, frameTypeId));
     });
 
     try {

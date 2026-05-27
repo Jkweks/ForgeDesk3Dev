@@ -94,6 +94,12 @@
                         <i class="ti ti-ruler-2 me-2"></i>Elevation Types
                       </a>
                     </li>
+                    <li class="nav-item" role="presentation">
+                      <a href="#tab-fab-users" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
+                         onclick="loadFabUsersAdmin()">
+                        <i class="ti ti-hard-hat me-2"></i>Fab Users
+                      </a>
+                    </li>
                   </ul>
                 </div>
 
@@ -548,6 +554,42 @@
                       </div>
                     </div><!-- /tab-elevation-types -->
 
+                    <!-- Fab Users Tab -->
+                    <div class="tab-pane" id="tab-fab-users" role="tabpanel">
+                      <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                          <h3 class="mb-1">Fab Users</h3>
+                          <p class="text-muted mb-0">Shop floor workers who can be assigned to stages and listed as elevation completers.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="openAddFabUser()">
+                          <i class="ti ti-plus me-1"></i>Add Fab User
+                        </button>
+                      </div>
+
+                      <div id="fab-users-loading" class="text-center text-muted py-4" style="display:none;">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <p class="mt-2 mb-0">Loading…</p>
+                      </div>
+
+                      <div class="table-responsive">
+                        <table class="table table-vcenter card-table table-striped">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Initials</th>
+                              <th>Role</th>
+                              <th>Email</th>
+                              <th>Status</th>
+                              <th class="w-1">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="fab-users-tbody">
+                            <tr><td colspan="6" class="text-muted text-center py-3">Click "Fab Users" tab to load.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div><!-- /tab-fab-users -->
+
                   </div>
                 </div>
               </div>
@@ -590,6 +632,55 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn btn-primary" onclick="saveElevType()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fab User Modal -->
+    <div class="modal modal-blur fade" id="fabUserModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="fabUserModalTitle">Add Fab User</h5>
+            <button type="button" class="btn-close" onclick="closeFabUserModal()"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="fabUserId">
+            <div class="row g-3 mb-3">
+              <div class="col-md-8">
+                <label class="form-label required">Name</label>
+                <input type="text" class="form-control" id="fabUserName" placeholder="Full name">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Initials</label>
+                <input type="text" class="form-control" id="fabUserInitials" placeholder="e.g. JD" maxlength="4">
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label required">Role</label>
+                <select class="form-select" id="fabUserRole">
+                  <option value="worker">Worker</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" id="fabUserEmail" placeholder="optional">
+              </div>
+            </div>
+            <div class="mb-0">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" id="fabUserActive" checked>
+                <span class="form-check-label">Active</span>
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost-secondary" onclick="closeFabUserModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveFabUser()">Save</button>
           </div>
         </div>
       </div>
@@ -1990,6 +2081,148 @@
         const hex = document.getElementById('elevTypeColorHex');
         if (picker && hex) picker.addEventListener('input', () => hex.value = picker.value);
       });
+
+      // ============================================================
+      // Fab Users admin
+      // ============================================================
+      const fabUserAPI = (path, opts = {}) => fetch('/api/v1' + path, {
+        ...opts,
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), ...(opts.headers || {}) },
+      });
+
+      async function loadFabUsersAdmin() {
+        document.getElementById('fab-users-loading').style.display = 'block';
+        try {
+          const r = await fabUserAPI('/fab-users?all=1');
+          const data = await r.json();
+          renderFabUsers(data.users || []);
+        } catch (e) {
+          console.error(e);
+          alert('Failed to load fab users');
+        } finally {
+          document.getElementById('fab-users-loading').style.display = 'none';
+        }
+      }
+
+      function renderFabUsers(users) {
+        const tbody = document.getElementById('fab-users-tbody');
+        if (!users.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3">No fab users yet.</td></tr>';
+          return;
+        }
+        const roleLabel = { worker: 'Worker', manager: 'Manager', admin: 'Admin' };
+        tbody.innerHTML = users.map(u => `
+          <tr>
+            <td><strong>${escAdmin(u.name)}</strong></td>
+            <td><span class="badge bg-secondary-lt text-secondary">${escAdmin(u.initials || '—')}</span></td>
+            <td>${escAdmin(roleLabel[u.role] || u.role)}</td>
+            <td class="text-muted small">${escAdmin(u.email || '—')}</td>
+            <td>${u.active
+              ? '<span class="badge bg-success-lt text-success">Active</span>'
+              : '<span class="badge bg-secondary-lt text-secondary">Inactive</span>'}</td>
+            <td>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-ghost-secondary" onclick="openEditFabUser(${u.id})" title="Edit"><i class="ti ti-pencil"></i></button>
+                ${u.active
+                  ? `<button class="btn btn-ghost-danger" onclick="deactivateFabUser(${u.id})" title="Deactivate"><i class="ti ti-user-off"></i></button>`
+                  : `<button class="btn btn-ghost-success" onclick="reactivateFabUser(${u.id})" title="Reactivate"><i class="ti ti-user-check"></i></button>`}
+              </div>
+            </td>
+          </tr>`).join('');
+      }
+
+      function escAdmin(str) {
+        if (str == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(str);
+        return d.innerHTML;
+      }
+
+      function openAddFabUser() {
+        document.getElementById('fabUserModalTitle').textContent = 'Add Fab User';
+        document.getElementById('fabUserId').value = '';
+        document.getElementById('fabUserName').value = '';
+        document.getElementById('fabUserInitials').value = '';
+        document.getElementById('fabUserRole').value = 'worker';
+        document.getElementById('fabUserEmail').value = '';
+        document.getElementById('fabUserActive').checked = true;
+        showFabUserModal();
+      }
+
+      async function openEditFabUser(id) {
+        try {
+          const r = await fabUserAPI('/fab-users?all=1');
+          const data = await r.json();
+          const u = (data.users || []).find(x => x.id === id);
+          if (!u) return;
+          document.getElementById('fabUserModalTitle').textContent = 'Edit Fab User';
+          document.getElementById('fabUserId').value = u.id;
+          document.getElementById('fabUserName').value = u.name;
+          document.getElementById('fabUserInitials').value = u.initials || '';
+          document.getElementById('fabUserRole').value = u.role;
+          document.getElementById('fabUserEmail').value = u.email || '';
+          document.getElementById('fabUserActive').checked = u.active;
+          showFabUserModal();
+        } catch (e) { console.error(e); }
+      }
+
+      async function saveFabUser() {
+        const name = document.getElementById('fabUserName').value.trim();
+        if (!name) { alert('Name is required.'); return; }
+        const id = document.getElementById('fabUserId').value;
+        const body = {
+          name,
+          initials:  document.getElementById('fabUserInitials').value.trim() || null,
+          role:      document.getElementById('fabUserRole').value,
+          email:     document.getElementById('fabUserEmail').value.trim() || null,
+          active:    document.getElementById('fabUserActive').checked,
+        };
+        try {
+          const url  = id ? `/fab-users/${id}` : '/fab-users';
+          const method = id ? 'PUT' : 'POST';
+          const r = await fabUserAPI(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) throw new Error('Save failed');
+          closeFabUserModal();
+          await loadFabUsersAdmin();
+        } catch (e) {
+          console.error(e);
+          alert('Failed to save fab user');
+        }
+      }
+
+      async function deactivateFabUser(id) {
+        if (!confirm('Deactivate this fab user? They will no longer appear in assignment dropdowns.')) return;
+        try {
+          await fabUserAPI(`/fab-users/${id}`, { method: 'DELETE' });
+          await loadFabUsersAdmin();
+        } catch (e) { console.error(e); alert('Failed to deactivate'); }
+      }
+
+      async function reactivateFabUser(id) {
+        try {
+          await fabUserAPI(`/fab-users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: true }),
+          });
+          await loadFabUsersAdmin();
+        } catch (e) { console.error(e); alert('Failed to reactivate'); }
+      }
+
+      function showFabUserModal() {
+        const m = document.getElementById('fabUserModal');
+        m.classList.add('show'); m.style.display = 'block';
+        document.body.classList.add('modal-open');
+      }
+      function closeFabUserModal() {
+        const m = document.getElementById('fabUserModal');
+        m.classList.remove('show'); m.style.display = '';
+        document.body.classList.remove('modal-open');
+      }
 
     </script>
 
