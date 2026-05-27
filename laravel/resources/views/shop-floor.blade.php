@@ -21,8 +21,9 @@
     .sf-logo .accent { color: var(--tblr-primary); }
     .sf-logo .sub { font-weight: 400; color: var(--tblr-secondary); font-size: .88rem; margin-left: .3rem; }
 
-    /* ── Filter bar ── */
+    /* ── Filter bar — sticky directly below header ── */
     .sf-filters {
+      position: sticky; top: 0; z-index: 90;   /* JS sets real top after measuring header */
       padding: .45rem 1rem;
       display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
       border-bottom: 1px solid var(--tblr-border-color);
@@ -48,7 +49,7 @@
       padding: .45rem .9rem;
       border-bottom: 2px solid var(--tblr-border-color);
       background: var(--tblr-bg-surface);
-      position: sticky; top: 53px; z-index: 10;
+      position: sticky; top: 0; z-index: 10; /* JS sets real top after measuring */
     }
 
     /* ── WO summary row ── */
@@ -170,7 +171,7 @@
 
 <!-- ── Table ── -->
 <div id="sf-content" style="display:none">
-  <div class="table-responsive">
+  <div style="overflow-x:auto">
     <table class="sf-table">
       <thead>
         <tr>
@@ -211,6 +212,25 @@ function updateClock() {
     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 updateClock(); setInterval(updateClock, 10000);
+
+// ── Sticky offset calibration ──────────────────────────────────────────────
+// Measure actual rendered heights of the header and filter bar, then set
+// the correct `top` on both the filter bar and table column headers so
+// nothing overlaps during scroll.
+function calibrateSticky() {
+  const header  = document.querySelector('.sf-header');
+  const filters = document.querySelector('.sf-filters');
+  if (!header || !filters) return;
+  const hH = header.getBoundingClientRect().height;
+  filters.style.top = hH + 'px';
+  const fH = filters.getBoundingClientRect().height;
+  document.querySelectorAll('.sf-table th').forEach(th => {
+    th.style.top = (hH + fH) + 'px';
+  });
+}
+// Run after fonts/layout settle, and on resize
+window.addEventListener('load',   calibrateSticky);
+window.addEventListener('resize', calibrateSticky);
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -313,6 +333,7 @@ function render() {
     document.getElementById('sf-empty').style.display = 'none';
     tbody.innerHTML = rows.join('');
   }
+  calibrateSticky();
 }
 
 function elevBlock(e) {
