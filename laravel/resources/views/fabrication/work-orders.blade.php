@@ -191,7 +191,7 @@
           <button class="btn btn-outline-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
             <i class="ti ti-door me-1"></i>Door Schedule
           </button>
-          <button class="btn btn-outline-primary" onclick="openAddElev()">
+          <button class="btn btn-outline-primary" onclick="openBulkElev()">
             <i class="ti ti-plus me-1"></i>Add Elevation
           </button>
         </div>
@@ -305,6 +305,45 @@
     </div>
   </div>
 </div>
+<!-- ============================================================
+     Bulk Add Elevations Modal
+     ============================================================ -->
+<div class="modal fade" id="bulkElevModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Elevations</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('bulkElevModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="width:25%">Tag</th>
+                <th style="width:25%">Type</th>
+                <th style="width:12%">Qty</th>
+                <th style="width:22%">Date Requested</th>
+                <th style="width:16%"></th>
+              </tr>
+            </thead>
+            <tbody id="bulk-elev-body"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="addBulkElevRow()">
+          <i class="ti ti-plus me-1"></i>Add Row
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('bulkElevModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveBulkElev()" id="bulk-elev-save">
+          Create Elevations
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ============================================================
      Door / Frame Schedule Modal
      ============================================================ -->
@@ -961,6 +1000,97 @@ function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// ============================================================
+// Bulk Add Elevations
+// ============================================================
+let bulkElevRowId = 0;
+
+function openBulkElev() {
+    document.getElementById('bulk-elev-body').innerHTML = '';
+    bulkElevRowId = 0;
+    addBulkElevRow();
+    showModal(document.getElementById('bulkElevModal'));
+}
+
+function addBulkElevRow() {
+    const id = ++bulkElevRowId;
+    const typeOptions = elevTypes.map(t =>
+        `<option value="${t.id}">${esc(t.name)}</option>`
+    ).join('');
+
+    const tr = document.createElement('tr');
+    tr.id = `bulk-elev-row-${id}`;
+    tr.innerHTML = `
+        <td>
+            <input type="text" class="form-control form-control-sm bulk-tag"
+                placeholder="e.g. A1" autocomplete="off">
+        </td>
+        <td>
+            <select class="form-select form-select-sm bulk-type">
+                <option value="">— None —</option>
+                ${typeOptions}
+            </select>
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm bulk-qty"
+                value="1" min="1" style="width:70px">
+        </td>
+        <td>
+            <input type="date" class="form-control form-control-sm bulk-date">
+        </td>
+        <td>
+            <button class="btn btn-sm btn-ghost-danger"
+                onclick="document.getElementById('bulk-elev-row-${id}').remove()">
+                <i class="ti ti-x"></i>
+            </button>
+        </td>`;
+    document.getElementById('bulk-elev-body').appendChild(tr);
+}
+
+async function saveBulkElev() {
+    if (!currentWO) return;
+    const rows = document.querySelectorAll('#bulk-elev-body tr');
+    if (!rows.length) return;
+
+    const btn = document.getElementById('bulk-elev-save');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    const creates = [];
+    rows.forEach(row => {
+        const tag = row.querySelector('.bulk-tag')?.value.trim();
+        if (!tag) return;
+        creates.push({
+            elevation_tag:     tag,
+            elevation_type_id: row.querySelector('.bulk-type')?.value || null,
+            quantity:          parseInt(row.querySelector('.bulk-qty')?.value) || 1,
+            date_requested:    row.querySelector('.bulk-date')?.value || null,
+        });
+    });
+
+    try {
+        for (const body of creates) {
+            await API(`/work-orders/${currentWO.id}/elevations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        }
+        hideModal(document.getElementById('bulkElevModal'));
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to create some elevations');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Elevations';
+    }
 }
 
 // ============================================================
