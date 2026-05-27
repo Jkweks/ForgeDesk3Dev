@@ -212,43 +212,117 @@
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:1040;"></div>
 
 <!-- ============================================================
-     Create WO Modal
+     Create WO Wizard Modal (3-step)
      ============================================================ -->
 <div class="modal modal-blur fade" id="createWoModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">New Work Order</h5>
-        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('createWoModal'))"></button>
+
+      <!-- Header -->
+      <div class="modal-header border-bottom-0 pb-0">
+        <div>
+          <h5 class="modal-title mb-0" id="wo-wizard-title">New Work Order</h5>
+          <div class="text-muted small" id="wo-wizard-subtitle">Step 1 of 3 — Work order details</div>
+        </div>
+        <button type="button" class="btn-close" onclick="closeWoWizard()"></button>
       </div>
+
+      <!-- Step indicators -->
+      <div class="px-3 pt-2">
+        <ul class="steps steps-green">
+          <li class="step-item active" id="wiz-ind-1">Work Order</li>
+          <li class="step-item" id="wiz-ind-2">Elevations</li>
+          <li class="step-item" id="wiz-ind-3">Doors &amp; Frames</li>
+        </ul>
+      </div>
+
       <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label required">Job</label>
-          <select class="form-select" id="new-wo-job" required>
-            <option value="">— Select a job —</option>
-          </select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Date Issued</label>
-          <input type="date" class="form-control" id="new-wo-date">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Material Delivery</label>
-          <div class="input-group">
-            <input type="text" class="form-control" id="new-wo-material" placeholder="Date, In Shop, or SOF">
-            <button type="button" class="btn btn-ghost-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
-            <button type="button" class="btn btn-ghost-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
+
+        <!-- ── Step 1: WO Details ── -->
+        <div id="wiz-step-1">
+          <div class="mb-3">
+            <label class="form-label required">Job</label>
+            <select class="form-select" id="new-wo-job" required>
+              <option value="">— Select a job —</option>
+            </select>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Date Issued</label>
+              <input type="date" class="form-control" id="new-wo-date">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Material Delivery</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="new-wo-material" placeholder="Date, In Shop, or SOF">
+                <button type="button" class="btn btn-ghost-success" onclick="document.getElementById('new-wo-material').value='In Shop'">In Shop</button>
+                <button type="button" class="btn btn-ghost-warning" onclick="document.getElementById('new-wo-material').value='SOF'">SOF</button>
+              </div>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="new-wo-notes" rows="2"></textarea>
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Notes</label>
-          <textarea class="form-control" id="new-wo-notes" rows="2"></textarea>
+
+        <!-- ── Step 2: Bulk Elevations ── -->
+        <div id="wiz-step-2" style="display:none">
+          <p class="text-muted small mb-2">Add any elevations for this work order. Leave the table empty and click Skip to proceed without elevations.</p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width:22%">Tag</th>
+                  <th style="width:22%">Type</th>
+                  <th style="width:10%">Qty</th>
+                  <th style="width:20%">Date Requested</th>
+                  <th style="width:14%" title="Checked = Assemble, Unchecked = Kit">Assemble</th>
+                  <th style="width:12%"></th>
+                </tr>
+              </thead>
+              <tbody id="wiz-bulk-body"></tbody>
+            </table>
+          </div>
+          <button class="btn btn-sm btn-ghost-secondary" onclick="addWizardBulkRow()">
+            <i class="ti ti-plus me-1"></i>Add Row
+          </button>
         </div>
-      </div>
+
+        <!-- ── Step 3: Door / Frame Schedule ── -->
+        <div id="wiz-step-3" style="display:none">
+          <p class="text-muted small mb-2">
+            Each row creates Door and/or Frame elevations with <strong>Programmed → CNC → Assembled</strong> stages.
+            Leave the table empty and click Skip to finish without doors or frames.
+          </p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width:30%">Tag</th>
+                  <th style="width:30%">Leaves</th>
+                  <th style="width:25%">Include Frame</th>
+                  <th style="width:15%"></th>
+                </tr>
+              </thead>
+              <tbody id="wiz-door-body"></tbody>
+            </table>
+          </div>
+          <button class="btn btn-sm btn-ghost-secondary" onclick="addWizardDoorRow()">
+            <i class="ti ti-plus me-1"></i>Add Row
+          </button>
+        </div>
+
+      </div><!-- /.modal-body -->
+
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('createWoModal'))">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="saveNewWO()">Create</button>
+        <span class="text-muted small me-auto" id="wo-wizard-status"></span>
+        <button type="button" class="btn btn-ghost-secondary" id="wo-wizard-skip"
+                style="display:none" onclick="wizardSkip()">Skip this step</button>
+        <button type="button" class="btn btn-primary" id="wo-wizard-next"
+                onclick="wizardNext()">Create Work Order →</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -949,10 +1023,22 @@ async function deleteElev(elevId) {
 }
 
 // ============================================================
-// Create New WO Modal
+// Create WO Wizard
 // ============================================================
+let wizardStep = 1;
+let wizardWoId = null;
+let wizardWoLabel = '';
+let wizardBulkRowId = 0;
+let wizardDoorRowId = 0;
+
 async function openCreateWO() {
-    // Populate job selector
+    wizardStep = 1;
+    wizardWoId = null;
+    wizardWoLabel = '';
+    wizardBulkRowId = 0;
+    wizardDoorRowId = 0;
+
+    // Reset step 1
     const sel = document.getElementById('new-wo-job');
     sel.innerHTML = '<option value="">— Select a job —</option>';
     try {
@@ -964,40 +1050,223 @@ async function openCreateWO() {
             opt.textContent = `${j.job_number} – ${j.job_name}`;
             sel.appendChild(opt);
         });
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
     document.getElementById('new-wo-date').value = '';
     document.getElementById('new-wo-material').value = '';
     document.getElementById('new-wo-notes').value = '';
+
+    // Seed step 2 with one blank row
+    document.getElementById('wiz-bulk-body').innerHTML = '';
+    addWizardBulkRow();
+
+    // Seed step 3 with one blank row
+    document.getElementById('wiz-door-body').innerHTML = '';
+    addWizardDoorRow();
+
+    showWizardStep(1);
     showModal(document.getElementById('createWoModal'));
 }
 
-async function saveNewWO() {
+function showWizardStep(step) {
+    wizardStep = step;
+    [1, 2, 3].forEach(s => {
+        document.getElementById(`wiz-step-${s}`).style.display = s === step ? '' : 'none';
+        const ind = document.getElementById(`wiz-ind-${s}`);
+        ind.classList.toggle('active', s <= step);
+    });
+    const titles    = ['New Work Order', 'Add Elevations', 'Door & Frame Schedule'];
+    const subtitles = ['Step 1 of 3 — Work order details', 'Step 2 of 3 — Optional', 'Step 3 of 3 — Optional'];
+    document.getElementById('wo-wizard-title').textContent    = titles[step - 1];
+    document.getElementById('wo-wizard-subtitle').textContent = subtitles[step - 1];
+
+    const skipBtn = document.getElementById('wo-wizard-skip');
+    const nextBtn = document.getElementById('wo-wizard-next');
+    skipBtn.style.display = step > 1 ? '' : 'none';
+    skipBtn.textContent   = 'Skip this step';
+    if (step === 1) { nextBtn.textContent = 'Create Work Order →'; }
+    else if (step === 2) { nextBtn.textContent = 'Save Elevations →'; }
+    else { nextBtn.textContent = 'Finish'; }
+
+    document.getElementById('wo-wizard-status').textContent = wizardWoLabel
+        ? `Work order ${wizardWoLabel} created`
+        : '';
+}
+
+async function wizardNext() {
+    if (wizardStep === 1) await wizardCreateWO();
+    else if (wizardStep === 2) await wizardSaveElevations();
+    else await wizardFinishDoors();
+}
+
+function wizardSkip() {
+    if (wizardStep === 2) showWizardStep(3);
+    else if (wizardStep === 3) wizardComplete();
+}
+
+function closeWoWizard() {
+    hideModal(document.getElementById('createWoModal'));
+    if (wizardWoId) { loadWorkOrders(); openWODetail(wizardWoId); }
+}
+
+async function wizardCreateWO() {
     const jobId = document.getElementById('new-wo-job').value;
     if (!jobId) { alert('Please select a job.'); return; }
 
-    const body = {
-        business_job_id: parseInt(jobId),
-        date_issued: document.getElementById('new-wo-date').value || null,
-        material_delivery: document.getElementById('new-wo-material').value || null,
-        notes: document.getElementById('new-wo-notes').value || null,
-    };
-
+    const btn = document.getElementById('wo-wizard-next');
+    btn.disabled = true; btn.textContent = 'Creating…';
     try {
         const r = await API('/work-orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+                business_job_id: parseInt(jobId),
+                date_issued:       document.getElementById('new-wo-date').value || null,
+                material_delivery: document.getElementById('new-wo-material').value || null,
+                notes:             document.getElementById('new-wo-notes').value || null,
+            }),
         });
         if (!r.ok) throw new Error('Failed to create');
         const data = await r.json();
-        hideModal(document.getElementById('createWoModal'));
-        await loadWorkOrders();
-        openWODetail(data.id);
+        wizardWoId    = data.id;
+        wizardWoLabel = data.release_label || `#${data.id}`;
+        loadWorkOrders();
+        showWizardStep(2);
     } catch (e) {
         console.error(e);
         alert('Failed to create work order');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function wizardSaveElevations() {
+    const rows = [...document.querySelectorAll('#wiz-bulk-body tr')];
+    const creates = [];
+    rows.forEach(row => {
+        const tag = row.querySelector('.wiz-bulk-tag')?.value.trim();
+        if (!tag) return;
+        creates.push({
+            elevation_tag:     tag,
+            elevation_type_id: row.querySelector('.wiz-bulk-type')?.value || null,
+            quantity:          parseInt(row.querySelector('.wiz-bulk-qty')?.value) || 1,
+            date_requested:    row.querySelector('.wiz-bulk-date')?.value || null,
+            scope:             row.querySelector('.wiz-bulk-scope')?.checked ? 'assemble' : 'kit',
+        });
+    });
+
+    if (!creates.length) { showWizardStep(3); return; }
+
+    const btn = document.getElementById('wo-wizard-next');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+        for (const body of creates) {
+            await API(`/work-orders/${wizardWoId}/elevations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        }
+        showWizardStep(3);
+    } catch (e) {
+        console.error(e);
+        alert('Failed to save some elevations');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function wizardFinishDoors() {
+    const doorTypeId  = elevTypes.find(t => t.name === 'Door')?.id;
+    const frameTypeId = elevTypes.find(t => t.name === 'Frame')?.id;
+
+    const creates = [];
+    document.querySelectorAll('#wiz-door-body tr').forEach(row => {
+        const tag        = row.querySelector('.wiz-door-tag')?.value.trim();
+        const leaves     = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
+        const frameChk   = row.querySelector('.wiz-door-frame')?.checked ?? false;
+        const frameOnly  = leaves === 0;
+        if (!tag) return;
+        if (!frameOnly && doorTypeId)              creates.push({ elevation_tag: tag, elevation_type_id: doorTypeId,  quantity: leaves });
+        if ((frameOnly || frameChk) && frameTypeId) creates.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
+    });
+
+    if (!creates.length) { wizardComplete(); return; }
+
+    const btn = document.getElementById('wo-wizard-next');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+        for (const body of creates) {
+            await API(`/work-orders/${wizardWoId}/elevations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Failed to save some door/frame elevations');
+    } finally {
+        btn.disabled = false;
+        wizardComplete();
+    }
+}
+
+function wizardComplete() {
+    hideModal(document.getElementById('createWoModal'));
+    loadWorkOrders();
+    if (wizardWoId) openWODetail(wizardWoId);
+}
+
+// ── Wizard step 2: bulk elevation row builder ──
+function addWizardBulkRow() {
+    const id = ++wizardBulkRowId;
+    const typeOptions = elevTypes.map(t =>
+        `<option value="${t.id}">${esc(t.name)}</option>`
+    ).join('');
+    const tr = document.createElement('tr');
+    tr.id = `wiz-bulk-row-${id}`;
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm wiz-bulk-tag" placeholder="e.g. A1" autocomplete="off"></td>
+        <td><select class="form-select form-select-sm wiz-bulk-type"><option value="">— None —</option>${typeOptions}</select></td>
+        <td><input type="number" class="form-control form-control-sm wiz-bulk-qty" value="1" min="1" style="width:70px"></td>
+        <td><input type="date" class="form-control form-control-sm wiz-bulk-date"></td>
+        <td class="text-center"><input type="checkbox" class="form-check-input wiz-bulk-scope" checked title="Checked = Assemble, Unchecked = Kit"></td>
+        <td><button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('wiz-bulk-row-${id}').remove()"><i class="ti ti-x"></i></button></td>`;
+    document.getElementById('wiz-bulk-body').appendChild(tr);
+}
+
+// ── Wizard step 3: door/frame row builder ──
+function addWizardDoorRow() {
+    const id = ++wizardDoorRowId;
+    const tr = document.createElement('tr');
+    tr.id = `wiz-door-row-${id}`;
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm wiz-door-tag" placeholder="e.g. 101A" autocomplete="off"></td>
+        <td>
+          <select class="form-select form-select-sm wiz-door-leaves" onchange="updateWizardDoorRow(${id})">
+            <option value="1">Single (1 leaf)</option>
+            <option value="2">Pair (2 leaves)</option>
+            <option value="0">Frame Only</option>
+          </select>
+        </td>
+        <td class="text-center wiz-door-frame-cell-${id}">
+          <div class="form-check d-inline-flex align-items-center gap-2 mb-0">
+            <input class="form-check-input wiz-door-frame mt-0" type="checkbox" checked>
+          </div>
+        </td>
+        <td><button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('wiz-door-row-${id}').remove()"><i class="ti ti-x"></i></button></td>`;
+    document.getElementById('wiz-door-body').appendChild(tr);
+}
+
+function updateWizardDoorRow(id) {
+    const row = document.getElementById(`wiz-door-row-${id}`);
+    const leaves = row.querySelector('.wiz-door-leaves').value;
+    const cell   = row.querySelector(`.wiz-door-frame-cell-${id}`);
+    if (leaves === '0') {
+        cell.innerHTML = '<span class="text-muted small">—</span>';
+    } else if (!row.querySelector('.wiz-door-frame')) {
+        cell.innerHTML = `<div class="form-check d-inline-flex align-items-center gap-2 mb-0">
+            <input class="form-check-input wiz-door-frame mt-0" type="checkbox" checked></div>`;
     }
 }
 
