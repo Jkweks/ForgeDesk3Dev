@@ -436,7 +436,7 @@ class EzEstimateController extends Controller
     }
 
     /**
-     * Update pricing for Accessory products (P, S)
+     * Update pricing for Accessory products (P, S, CP)
      * Formula: price per unit * category multiplier = net cost
      */
     private function updateAccessoryPricing($partData, $multipliers)
@@ -451,7 +451,8 @@ class EzEstimateController extends Controller
             ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
             ->where(function($query) {
                 $query->where('products.sku', 'LIKE', 'P%')
-                      ->orWhere('products.sku', 'LIKE', 'S%');
+                      ->orWhere('products.sku', 'LIKE', 'S%')
+                      ->orWhere('products.sku', 'LIKE', 'CP%');
             })
             ->select('products.*')
             ->get();

@@ -292,7 +292,7 @@
                             <div class="card-body">
                               <div class="subheader">Accessories</div>
                               <div class="h1 mb-3" id="statAccessories">-</div>
-                              <div>P, S parts</div>
+                              <div>P, S, CP parts</div>
                             </div>
                           </div>
                         </div>
