@@ -3,8 +3,9 @@
 @section('title', 'Vendor Replenishment - ForgeDesk')
 
 @section('styles')
-.status-pill { transition: opacity .15s; }
-.status-pill[data-status=""].active { background: var(--tblr-secondary); color: #fff; border-color: var(--tblr-secondary); opacity: 1; }
+.status-pill { transition: opacity .15s; opacity: .55; }
+.status-pill.active { opacity: 1; }
+.status-pill[data-status=""].active { background: var(--tblr-secondary); color: #fff; border-color: var(--tblr-secondary); }
 @endsection
 
 @section('content')
@@ -92,12 +93,12 @@
             <div>
               <div class="form-label mb-1">Status</div>
               <div class="d-flex flex-wrap gap-1" id="statusPills">
-                <button class="btn btn-sm status-pill active" data-status="" onclick="setStatusPill(this)" style="opacity:1">All</button>
-                <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40);opacity:.55">Out of Stock</button>
-                <button class="btn btn-sm status-pill" data-status="critical"     onclick="setStatusPill(this)" style="background:var(--tblr-danger);color:#fff;border-color:var(--tblr-danger);opacity:.55">Critical</button>
-                <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning);opacity:.55">Very Low</button>
-                <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info);opacity:.55">Low</button>
-                <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success);opacity:.55">In Stock</button>
+                <button class="btn btn-sm status-pill active" data-status="" onclick="setStatusPill(this)">All</button>
+                <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40)">Out of Stock</button>
+                <button class="btn btn-sm status-pill" data-status="critical"     onclick="setStatusPill(this)" style="background:var(--tblr-danger);color:#fff;border-color:var(--tblr-danger)">Critical</button>
+                <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning)">Very Low</button>
+                <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info)">Low</button>
+                <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success)">In Stock</button>
               </div>
             </div>
             <div style="min-width:180px">
@@ -253,6 +254,7 @@ async function loadReplenishmentItems() {
     allInStockItems = []; // Reset so in-stock list is re-fetched on next request
     buildVendorFilter(allItems);
     applyFilters();
+    syncStatusPills();
   } catch (err) {
     console.error('Error loading replenishment items:', err);
     showNotification('Failed to load replenishment items', 'danger');
@@ -296,21 +298,13 @@ async function loadInStockItems() {
 
 function setStatusPill(btn) {
   activeStatusFilter = btn.dataset.status;
-  document.querySelectorAll('.status-pill').forEach(p => {
-    const isActive = p === btn;
-    p.classList.toggle('active', isActive);
-    p.style.opacity = isActive ? '1' : '.55';
-  });
-  // Ensure the active pill is fully opaque with no dimming
-  btn.style.opacity = '1';
+  syncStatusPills();
   applyFilters();
 }
 
 function syncStatusPills() {
   document.querySelectorAll('.status-pill').forEach(p => {
-    const isActive = p.dataset.status === activeStatusFilter;
-    p.classList.toggle('active', isActive);
-    p.style.opacity = isActive ? '1' : '.55';
+    p.classList.toggle('active', p.dataset.status === activeStatusFilter);
   });
 }
 
@@ -434,8 +428,8 @@ function compareItems(a, b) {
       aVal = (a.net_cost ?? a.unit_cost ?? 0); bVal = (b.net_cost ?? b.unit_cost ?? 0);
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     case 'line_total':
-      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.net_cost ?? a.unit_cost || 0);
-      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.net_cost ?? b.unit_cost || 0);
+      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.net_cost ?? a.unit_cost ?? 0);
+      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.net_cost ?? b.unit_cost ?? 0);
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     default: // 'status' — urgency order, then days
       const urgencyDiff = (URGENCY_ORDER[a.status] ?? 99) - (URGENCY_ORDER[b.status] ?? 99);
