@@ -417,12 +417,13 @@ class EzEstimateController extends Controller
             $categoryMultiplier = $multipliers[$categoryKey] ?? 1.0;
 
             // Calculate net cost
-            $netCost = $pricePerLength * $finishMultiplier * $categoryMultiplier;
+            $pricePerLengthWithFinish = $pricePerLength * $finishMultiplier;
+            $netCost = $pricePerLengthWithFinish * $categoryMultiplier;
 
             // Update product
             $product->update([
-                'price_per_length' => $pricePerLength,
-                'unit_cost' => round($pricePerLength, 2),
+                'price_per_length' => $pricePerLengthWithFinish,
+                'unit_cost' => round($pricePerLengthWithFinish, 2),
                 'pricing_category' => $pricingCategory,
                 'finish_multiplier' => $finishMultiplier,
                 'category_multiplier' => $categoryMultiplier,
