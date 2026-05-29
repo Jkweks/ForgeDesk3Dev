@@ -468,4 +468,20 @@ class ProductController extends Controller
 
         return response()->json(['message' => 'Photo deleted']);
     }
+
+    public function refreshAllStatuses()
+    {
+        $count = 0;
+        Product::withoutTrashed()->chunkById(100, function ($products) use (&$count) {
+            foreach ($products as $product) {
+                $product->recalculateQuantitiesFromLocations();
+                $count++;
+            }
+        });
+
+        return response()->json([
+            'refreshed' => $count,
+            'message'   => "Status recalculated for {$count} products.",
+        ]);
+    }
 }

@@ -251,6 +251,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Products
         Route::apiResource('products', ProductController::class);
+        Route::post('/products/refresh-statuses', [ProductController::class, 'refreshAllStatuses']);
         Route::post('/products/{product}/adjust', [ProductController::class, 'adjustInventory']);
         Route::post('/products/{product}/issue-to-job', [ProductController::class, 'issueToJob']);
         Route::get('/products/{product}/transactions', [ProductController::class, 'getTransactions']);

@@ -298,6 +298,24 @@
                         </div>
                       </div>
 
+                      <!-- Inventory Status Refresh -->
+                      <div class="card mb-4">
+                        <div class="card-header">
+                          <h4 class="card-title">Inventory Status</h4>
+                        </div>
+                        <div class="card-body">
+                          <p class="text-muted mb-3">
+                            Recalculates <code>quantity_on_hand</code> and <code>quantity_committed</code> from inventory locations for every product, then re-evaluates each product's status (In Stock / Low / Critical / Out of Stock). Run this if statuses appear out of sync.
+                          </p>
+                          <div class="d-flex align-items-center gap-3">
+                            <button class="btn btn-warning" id="btn-refresh-statuses" onclick="refreshInventoryStatuses()">
+                              <i class="ti ti-refresh me-1"></i>Refresh All Statuses
+                            </button>
+                            <span id="refresh-status-result" class="text-muted small"></span>
+                          </div>
+                        </div>
+                      </div>
+
                       <!-- EZ Estimate Upload Section -->
                       <div class="row">
                         <div class="col-md-6">
@@ -1501,6 +1519,30 @@
       document.getElementById('searchUsers')?.addEventListener('input', loadUsers);
 
       // Inventory Management Functions
+      async function refreshInventoryStatuses() {
+        const btn = document.getElementById('btn-refresh-statuses');
+        const result = document.getElementById('refresh-status-result');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Refreshing…';
+        result.textContent = '';
+        try {
+          const r = await fetch('/api/v1/products/refresh-statuses', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken },
+          });
+          const data = await r.json();
+          result.className = 'text-success small';
+          result.textContent = data.message || `Done — ${data.refreshed} products updated.`;
+        } catch (e) {
+          result.className = 'text-danger small';
+          result.textContent = 'Refresh failed. Check the console.';
+          console.error(e);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Refresh All Statuses';
+        }
+      }
+
       function loadPricingStats() {
         fetch('/api/v1/ez-estimate/stats')
           .then(response => response.json())
