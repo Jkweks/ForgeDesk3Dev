@@ -308,6 +308,16 @@ function syncStatusPills() {
   });
 }
 
+function snapshotSelections() {
+  const state = {};
+  document.querySelectorAll('[data-product-id][type="checkbox"]:not([id^="selectAll"])').forEach(cb => {
+    const pid = cb.dataset.productId;
+    const qtyEl = document.getElementById(`qty-${pid}`);
+    state[pid] = { checked: cb.checked, qty: qtyEl ? qtyEl.value : '' };
+  });
+  return state;
+}
+
 async function applyFilters() {
   const status = activeStatusFilter;
   const vendor = document.getElementById('filterVendor').value;
@@ -338,7 +348,8 @@ async function applyFilters() {
   });
 
   updateStats(filteredItems);
-  renderVendorSections(filteredItems);
+  const savedSelections = snapshotSelections();
+  renderVendorSections(filteredItems, savedSelections);
   updateGlobalEstimate();
 }
 
@@ -364,7 +375,7 @@ function updateStats(items) {
 
 // ─── Vendor Section Rendering ─────────────────────────────────────────────────
 
-function renderVendorSections(items) {
+function renderVendorSections(items, savedSelections = {}) {
   const container = document.getElementById('vendorSections');
   container.innerHTML = '';
 
@@ -387,7 +398,7 @@ function renderVendorSections(items) {
     (a.supplier?.name || '').localeCompare(b.supplier?.name || '')
   );
 
-  sorted.forEach(group => renderVendorCard(container, group));
+  sorted.forEach(group => renderVendorCard(container, group, savedSelections));
 }
 
 function sortHeaderHtml(label, col, extraClass = '') {
@@ -445,10 +456,10 @@ function sortColumn(col) {
     currentSortBy = col;
     currentSortDir = 'asc';
   }
-  renderVendorSections(filteredItems);
+  renderVendorSections(filteredItems, snapshotSelections());
 }
 
-function renderVendorCard(container, group) {
+function renderVendorCard(container, group, savedSelections = {}) {
   const supplier = group.supplier;
   const sid = supplier.id;
 
@@ -513,18 +524,32 @@ function renderVendorCard(container, group) {
     }
   });
 
-  // Auto-select urgent items that have a suggested qty > 0; never pre-check in_stock items
+  // Apply selection state: restore user's prior choices if available, otherwise auto-select urgent items
   items.forEach(p => {
-    if (p.status === 'in_stock') return;
-    const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
-    const displayQty = packSize > 1
-      ? Math.ceil((p.suggested_order_qty || 0) / packSize)  // ceiling: always order whole packs
-      : (p.suggested_order_qty || 0);
-    if (displayQty > 0) {
-      const cb = document.getElementById(`check-${p.id}`);
-      if (cb) { cb.checked = true; onCheckChange(p.id, sid); }
+    const cb    = document.getElementById(`check-${p.id}`);
+    const qtyEl = document.getElementById(`qty-${p.id}`);
+    const saved = savedSelections[String(p.id)];
+
+    if (saved !== undefined) {
+      // User had previously interacted with this item — restore their state exactly
+      if (cb) cb.checked = saved.checked;
+      if (qtyEl && saved.qty !== '') qtyEl.value = saved.qty;
+    } else if (p.status !== 'in_stock') {
+      // New item in view — auto-select if it has a suggested qty
+      const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
+      const displayQty = packSize > 1
+        ? Math.ceil((p.suggested_order_qty || 0) / packSize)
+        : (p.suggested_order_qty || 0);
+      if (displayQty > 0 && cb) cb.checked = true;
     }
+
+    // Always recalculate line total to reflect current state
+    updateLineTotal(p.id);
   });
+
+  updateVendorTotal(sid);
+  updateVendorButtonState(sid);
+  syncSelectAllCheckbox(sid);
 }
 
 function renderItemRow(p, sid) {
