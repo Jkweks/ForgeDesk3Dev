@@ -225,7 +225,8 @@ let pendingPOSupplier = null;  // Supplier being confirmed
 let searchTimeout = null;
 let currentSortBy  = 'status';  // Default sort: urgency
 let currentSortDir = 'asc';
-let activeStatusFilter = '';   // Persists across renders; '' = all urgent
+const URGENT_STATUSES  = ['out_of_stock', 'critical', 'very_low', 'low'];
+let activeStatuses = new Set(URGENT_STATUSES);  // multi-select; all urgent active by default
 
 const URGENCY_ORDER = { out_of_stock: 0, critical: 1, very_low: 2, low: 3 };
 
@@ -296,15 +297,39 @@ async function loadInStockItems() {
   }
 }
 
-function setStatusPill(btn) {
-  activeStatusFilter = btn.dataset.status;
+async function setStatusPill(btn) {
+  const status = btn.dataset.status;
+  if (status === '') {
+    // "All" — reset to every loaded category
+    activeStatuses = new Set(URGENT_STATUSES);
+    if (allInStockItems.length > 0) activeStatuses.add('in_stock');
+  } else {
+    if (activeStatuses.has(status)) {
+      activeStatuses.delete(status);
+    } else {
+      activeStatuses.add(status);
+      // Lazy-load in_stock items on first activation
+      if (status === 'in_stock' && allInStockItems.length === 0) {
+        await loadInStockItems();
+      }
+    }
+  }
   syncStatusPills();
   applyFilters();
 }
 
 function syncStatusPills() {
+  // "All" is active when every urgent pill is on (and in_stock if loaded)
+  const urgentAllOn = URGENT_STATUSES.every(s => activeStatuses.has(s));
+  const inStockAllOn = allInStockItems.length === 0 || activeStatuses.has('in_stock');
+  const allOn = urgentAllOn && inStockAllOn;
+
   document.querySelectorAll('.status-pill').forEach(p => {
-    p.classList.toggle('active', p.dataset.status === activeStatusFilter);
+    if (p.dataset.status === '') {
+      p.classList.toggle('active', allOn);
+    } else {
+      p.classList.toggle('active', activeStatuses.has(p.dataset.status));
+    }
   });
 }
 
@@ -319,26 +344,19 @@ function snapshotSelections() {
 }
 
 async function applyFilters() {
-  const status = activeStatusFilter;
   const vendor = document.getElementById('filterVendor').value;
   const search = document.getElementById('filterSearch').value.toLowerCase().trim();
 
-  // Determine the source array; lazy-load in-stock items on first request
-  let sourceItems;
-  if (status === 'in_stock') {
-    if (allInStockItems.length === 0) {
-      await loadInStockItems();
-    }
-    sourceItems = allInStockItems;
-  } else {
-    sourceItems = allItems;
+  // Merge sources based on active statuses
+  let sourceItems = allItems.filter(p => activeStatuses.has(p.status));
+  if (activeStatuses.has('in_stock')) {
+    sourceItems = sourceItems.concat(allInStockItems);
   }
 
   // Rebuild vendor dropdown for the active source so vendors match what's visible
   buildVendorFilter(sourceItems);
 
   filteredItems = sourceItems.filter(p => {
-    if (status && p.status !== status) return false;
     if (vendor && String(p.supplier_id) !== vendor) return false;
     if (search) {
       const haystack = `${p.sku} ${p.description} ${p.part_number || ''}`.toLowerCase();
@@ -359,7 +377,8 @@ function debounceSearch() {
 }
 
 function clearFilters() {
-  activeStatusFilter = '';
+  activeStatuses = new Set(URGENT_STATUSES);
+  if (allInStockItems.length > 0) activeStatuses.add('in_stock');
   syncStatusPills();
   document.getElementById('filterVendor').value = '';
   document.getElementById('filterSearch').value = '';
