@@ -187,7 +187,7 @@
                 <th>SKU</th>
                 <th>Description</th>
                 <th class="text-end">Qty</th>
-                <th class="text-end">List Price</th>
+                <th class="text-end">Net Price</th>
                 <th class="text-end">Total</th>
                 <th>Status</th>
               </tr>
@@ -431,11 +431,11 @@ function compareItems(a, b) {
       aVal = a.days_until_stockout ?? 9999; bVal = b.days_until_stockout ?? 9999;
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     case 'unit_cost':
-      aVal = a.unit_cost ?? 0; bVal = b.unit_cost ?? 0;
+      aVal = (a.net_cost ?? a.unit_cost ?? 0); bVal = (b.net_cost ?? b.unit_cost ?? 0);
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     case 'line_total':
-      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.unit_cost || 0);
-      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.unit_cost || 0);
+      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.net_cost ?? a.unit_cost || 0);
+      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.net_cost ?? b.unit_cost || 0);
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     default: // 'status' — urgency order, then days
       const urgencyDiff = (URGENCY_ORDER[a.status] ?? 99) - (URGENCY_ORDER[b.status] ?? 99);
@@ -493,7 +493,7 @@ function renderVendorCard(container, group) {
             <th class="text-end">On Order</th>
             ${sortHeaderHtml('Days Left', 'days_until_stockout', 'text-end')}
             <th class="text-end" style="width:140px">Order Qty</th>
-            ${sortHeaderHtml('Pack Cost', 'unit_cost', 'text-end')}
+            ${sortHeaderHtml('Net Price', 'unit_cost', 'text-end')}
             ${sortHeaderHtml('Line Total', 'line_total', 'text-end')}
             ${sortHeaderHtml('Status', 'status', '')}
           </tr>
@@ -543,7 +543,7 @@ function renderItemRow(p, sid) {
   const available    = p.quantity_available ?? 0;
   const onOrder      = p.on_order_qty ?? 0;
   const reorderPt    = p.reorder_point ?? '-';
-  const unitCost     = p.unit_cost ?? 0;  // unit_cost = pack cost for pack products
+  const unitCost     = p.net_cost ?? p.unit_cost ?? 0;  // prefer net_cost; fall back to unit_cost
   const packLabel    = isPack ? (p.purchase_uom || 'packs') : (p.stock_uom || 'EA');
 
   const daysDisplay = p.days_until_stockout != null && p.days_until_stockout > 0
