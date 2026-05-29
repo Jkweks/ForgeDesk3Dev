@@ -183,7 +183,7 @@
                 <th>SKU</th>
                 <th>Description</th>
                 <th class="text-end">Qty</th>
-                <th class="text-end">Unit Cost</th>
+                <th class="text-end">List Price</th>
                 <th class="text-end">Total</th>
                 <th>Status</th>
               </tr>

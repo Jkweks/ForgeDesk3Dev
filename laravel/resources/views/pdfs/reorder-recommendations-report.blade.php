@@ -150,7 +150,7 @@
                 <th style="width: 7%;" class="text-right">Reorder Pt</th>
                 <th style="width: 7%;" class="text-right">Target</th>
                 <th style="width: 7%;" class="text-right">Suggested</th>
-                <th style="width: 7%;" class="text-right">Unit Cost</th>
+                <th style="width: 7%;" class="text-right">List Price</th>
                 <th style="width: 8%;" class="text-right">Est. Value</th>
                 <th style="width: 7%;" class="text-center">Priority</th>
             </tr>

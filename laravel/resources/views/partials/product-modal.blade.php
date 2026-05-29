@@ -887,11 +887,11 @@
                 <div class="card-body py-2">
                   <div class="row g-2">
                     <div class="col-6">
-                      <div class="text-muted small">Unit Cost</div>
+                      <div class="text-muted small">List Price</div>
                       <div><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.unit_cost ? `data-actual-value="${product.unit_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${formatPrice(product.unit_cost)}</span></div>
                     </div>
                     <div class="col-6">
-                      <div class="text-muted small">Net Cost</div>
+                      <div class="text-muted small">Net Price</div>
                       <div><span class="${canViewPricing() ? 'price-visible' : 'price-masked'}" ${!canViewPricing() && product.net_cost ? `data-actual-value="${product.net_cost}"` : ''} aria-label="${canViewPricing() ? '' : 'Price hidden'}">${product.net_cost ? formatPrice(product.net_cost) : (canViewPricing() ? 'Not set' : formatPrice(null))}</span></div>
                     </div>
                   </div>
@@ -1173,14 +1173,14 @@
                 <div class="card-body py-2">
                   <div class="row g-2">
                     <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Unit Cost</label>
+                      <label class="form-label small text-muted mb-1">List Price</label>
                       <div class="input-group input-group-sm">
                         <span class="input-group-text">$</span>
                         <input type="number" class="form-control" name="unit_cost" value="${product.unit_cost || ''}" step="0.01" min="0" placeholder="0.00">
                       </div>
                     </div>
                     <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Net Cost</label>
+                      <label class="form-label small text-muted mb-1">Net Price</label>
                       <div class="input-group input-group-sm">
                         <span class="input-group-text">$</span>
                         <input type="number" class="form-control" name="net_cost" value="${product.net_cost || ''}" step="0.01" min="0" placeholder="0.00">

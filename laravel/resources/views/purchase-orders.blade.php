@@ -197,7 +197,7 @@
                 <tr>
                   <th style="width: 35%">Product</th>
                   <th style="width: 15%">Quantity</th>
-                  <th style="width: 15%">Unit Cost</th>
+                  <th style="width: 15%">List Price</th>
                   <th style="width: 15%">Total</th>
                   <th style="width: 15%">Location</th>
                   <th style="width: 5%"></th>
@@ -293,7 +293,7 @@
                 <th class="text-end">Ordered</th>
                 <th class="text-end">Received</th>
                 <th class="text-end">Remaining</th>
-                <th class="text-end">Unit Cost</th>
+                <th class="text-end">List Price</th>
                 <th class="text-end">Total</th>
                 <th>Progress</th>
                 <th id="viewPOItemsActionCol" style="display:none"></th>
