@@ -88,9 +88,9 @@
       <!-- Filters -->
       <div class="card mb-3">
         <div class="card-body py-2">
-          <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-auto">
-              <label class="form-label mb-1">Status</label>
+          <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+              <div class="form-label mb-1">Status</div>
               <div class="d-flex flex-wrap gap-1" id="statusPills">
                 <button class="btn btn-sm status-pill active" data-status="" onclick="setStatusPill(this)" style="opacity:1">All</button>
                 <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40);opacity:.55">Out of Stock</button>
@@ -100,19 +100,18 @@
                 <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success);opacity:.55">In Stock</button>
               </div>
             </div>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label mb-1">Vendor</label>
+            <div style="min-width:180px">
+              <div class="form-label mb-1">Vendor</div>
               <select class="form-select form-select-sm" id="filterVendor" onchange="applyFilters()">
                 <option value="">All Vendors</option>
               </select>
             </div>
-            <div class="col-md-4">
-              <label class="form-label mb-1">Search</label>
+            <div style="flex:1;min-width:200px">
+              <div class="form-label mb-1">Search</div>
               <input type="text" class="form-control form-control-sm" id="filterSearch" placeholder="SKU, description..." oninput="debounceSearch()">
             </div>
-            <div class="col-md-2">
-              <button class="btn btn-sm btn-secondary w-100" onclick="clearFilters()">
+            <div>
+              <button class="btn btn-sm btn-secondary" onclick="clearFilters()">
                 <i class="ti ti-x me-1"></i>Clear
               </button>
             </div>
