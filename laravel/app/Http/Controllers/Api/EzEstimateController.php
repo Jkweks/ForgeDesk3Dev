@@ -422,12 +422,12 @@ class EzEstimateController extends Controller
 
             // Update product
             $product->update([
-                'price_per_length' => $pricePerLengthWithFinish,
+                'price_per_length' => round($pricePerLengthWithFinish, 4),
                 'unit_cost' => round($pricePerLengthWithFinish, 2),
                 'pricing_category' => $pricingCategory,
                 'finish_multiplier' => $finishMultiplier,
                 'category_multiplier' => $categoryMultiplier,
-                'net_cost' => round($netCost, 2),
+                'net_cost' => round($netCost, 4),
             ]);
 
             $updatedCount++;
@@ -474,11 +474,11 @@ class EzEstimateController extends Controller
 
             // Update product
             $product->update([
-                'price_per_package' => $pricePerPackage,
+                'price_per_package' => round($pricePerPackage, 4),
                 'unit_cost' => round($pricePerPackage, 2),
                 'pricing_category' => $pricingCategory,
                 'category_multiplier' => $categoryMultiplier,
-                'net_cost' => round($netCost, 2),
+                'net_cost' => round($netCost, 4),
             ]);
 
             $updatedCount++;
@@ -601,7 +601,7 @@ class EzEstimateController extends Controller
                             'pricing_category' => $slData['pricing_category'],
                             'category_multiplier' => $categoryMultiplier,
                             'calculation' => "{$slData['price_per_length']} × {$finishMultiplier} × {$categoryMultiplier}",
-                            'net_cost' => round($netCost, 2),
+                            'net_cost' => round($netCost, 4),
                         ];
                     }
                 }
@@ -644,7 +644,7 @@ class EzEstimateController extends Controller
                             'pricing_category' => $pData['pricing_category'],
                             'category_multiplier' => $categoryMultiplier,
                             'calculation' => "{$pData['price_per_package']} × {$categoryMultiplier}",
-                            'net_cost' => round($netCost, 2),
+                            'net_cost' => round($netCost, 4),
                         ];
                     }
                 }
