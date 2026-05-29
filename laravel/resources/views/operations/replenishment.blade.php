@@ -2,6 +2,11 @@
 
 @section('title', 'Vendor Replenishment - ForgeDesk')
 
+@section('styles')
+.status-pill { transition: opacity .15s; }
+.status-pill[data-status=""].active { background: var(--tblr-secondary); color: #fff; border-color: var(--tblr-secondary); opacity: 1; }
+@endsection
+
 @section('content')
 <div class="page-wrapper">
   <div class="page-header d-print-none">
@@ -84,17 +89,17 @@
       <div class="card mb-3">
         <div class="card-body py-2">
           <div class="row g-2 align-items-end">
-            <div class="col-md-3">
-              <label class="form-label mb-1">Status Filter</label>
-              <select class="form-select form-select-sm" id="filterStatus" onchange="applyFilters()">
-                <option value="">All Urgent Statuses</option>
-                <option value="out_of_stock">Out of Stock Only</option>
-                <option value="critical">Critical Only</option>
-                <option value="very_low">Very Low Only</option>
-                <option value="low">Low Only</option>
-                <option disabled>──────────</option>
-                <option value="in_stock">In Stock</option>
-              </select>
+            <div class="col-12 col-md-auto">
+              <label class="form-label mb-1">Status</label>
+              <div class="d-flex flex-wrap gap-1" id="statusPills">
+                <button class="btn btn-sm status-pill active" data-status="" onclick="setStatusPill(this)" style="opacity:1">All</button>
+                <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40);opacity:.55">Out of Stock</button>
+                <button class="btn btn-sm status-pill" data-status="critical"     onclick="setStatusPill(this)" style="background:var(--tblr-danger);color:#fff;border-color:var(--tblr-danger);opacity:.55">Critical</button>
+                <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning);opacity:.55">Very Low</button>
+                <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info);opacity:.55">Low</button>
+                <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success);opacity:.55">In Stock</button>
+              </div>
+            </div>
             </div>
             <div class="col-md-3">
               <label class="form-label mb-1">Vendor</label>
@@ -220,6 +225,7 @@ let pendingPOSupplier = null;  // Supplier being confirmed
 let searchTimeout = null;
 let currentSortBy  = 'status';  // Default sort: urgency
 let currentSortDir = 'asc';
+let activeStatusFilter = '';   // Persists across renders; '' = all urgent
 
 const URGENCY_ORDER = { out_of_stock: 0, critical: 1, very_low: 2, low: 3 };
 
@@ -243,12 +249,7 @@ async function loadReplenishmentItems() {
 
   try {
     const data = await authenticatedFetch('/products?status=critical,very_low,low,out_of_stock&per_page=500&with_supplier=1');
-    allItems = (data.data || data).filter(p => {
-      if (!p.supplier_id) return false;
-      // Only include out_of_stock items that have a maximum_quantity set
-      if (p.status === 'out_of_stock' && !(p.maximum_quantity > 0)) return false;
-      return true;
-    });
+    allItems = (data.data || data).filter(p => p.supplier_id);
 
     allInStockItems = []; // Reset so in-stock list is re-fetched on next request
     buildVendorFilter(allItems);
@@ -294,8 +295,28 @@ async function loadInStockItems() {
   }
 }
 
+function setStatusPill(btn) {
+  activeStatusFilter = btn.dataset.status;
+  document.querySelectorAll('.status-pill').forEach(p => {
+    const isActive = p === btn;
+    p.classList.toggle('active', isActive);
+    p.style.opacity = isActive ? '1' : '.55';
+  });
+  // Ensure the active pill is fully opaque with no dimming
+  btn.style.opacity = '1';
+  applyFilters();
+}
+
+function syncStatusPills() {
+  document.querySelectorAll('.status-pill').forEach(p => {
+    const isActive = p.dataset.status === activeStatusFilter;
+    p.classList.toggle('active', isActive);
+    p.style.opacity = isActive ? '1' : '.55';
+  });
+}
+
 async function applyFilters() {
-  const status = document.getElementById('filterStatus').value;
+  const status = activeStatusFilter;
   const vendor = document.getElementById('filterVendor').value;
   const search = document.getElementById('filterSearch').value.toLowerCase().trim();
 
@@ -334,7 +355,8 @@ function debounceSearch() {
 }
 
 function clearFilters() {
-  document.getElementById('filterStatus').value = '';
+  activeStatusFilter = '';
+  syncStatusPills();
   document.getElementById('filterVendor').value = '';
   document.getElementById('filterSearch').value = '';
   applyFilters();
