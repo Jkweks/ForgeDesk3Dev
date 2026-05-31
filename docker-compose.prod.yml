@@ -4,7 +4,7 @@
 #   1. Copy .env.prod.example → .env and fill in APP_KEY, DB_PASSWORD, APP_URL
 #   2. docker compose -f docker-compose.prod.yml up -d
 #   3. In Nginx Proxy Manager: add a Proxy Host for your domain → forward to
-#      http://127.0.0.1:8080  (HTTP, not HTTPS — NPM handles SSL termination)
+#      http://<VPS_PUBLIC_IP>:80  (HTTP — NPM handles SSL termination off-site)
 #      Enable "Websockets Support" if needed; no other special settings required.
 #
 # Credentials are read from a .env file in this directory (Docker Compose
@@ -85,9 +85,9 @@ services:
     container_name: forgedesk_nginx
     restart: unless-stopped
     ports:
-      # Localhost-only — NPM owns 80/443; it proxies to this port.
-      # Configure NPM upstream as http://127.0.0.1:8080
-      - "127.0.0.1:8080:80"
+      # NPM off-site proxies to this server's public IP — bind on all interfaces.
+      # Keep a firewall rule limiting port 80 to your NPM host IP if desired.
+      - "80:80"
     volumes:
       # Compiled public assets synced from app container on startup
       - app_public:/var/www/html/public:ro
