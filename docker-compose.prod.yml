@@ -48,6 +48,9 @@ services:
 
   app:
     image: ghcr.io/jkweks/forgedesk-web:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: forgedesk_app
     restart: unless-stopped
     working_dir: /var/www/html
@@ -103,6 +106,9 @@ services:
 
   queue:
     image: ghcr.io/jkweks/forgedesk-web:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: forgedesk_queue
     restart: unless-stopped
     working_dir: /var/www/html
