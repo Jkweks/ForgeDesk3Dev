@@ -94,7 +94,7 @@
                   </a>
                   <div class="dropdown-menu">
                     <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">Documents</a>
-                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Schedule <span class="badge bg-secondary ms-auto">Soon</span></a>
+                    <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders</a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">

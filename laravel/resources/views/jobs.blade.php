@@ -164,9 +164,15 @@
                     </div>
                   </div>
 
-                  <div class="mb-3">
-                    <label class="form-label">Customer Name</label>
-                    <input type="text" class="form-control" id="customerName">
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <label class="form-label">Customer Name</label>
+                      <input type="text" class="form-control" id="customerName">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Project Manager</label>
+                      <input type="text" class="form-control" id="projectManager" placeholder="PM name">
+                    </div>
                   </div>
 
                   <div class="mb-3">
@@ -263,11 +269,15 @@
                     <div class="subheader">Job Name</div>
                     <div class="h3 mb-0" id="detailJobName">-</div>
                   </div>
-                  <div class="col-md-3">
+                  <div class="col-md-2">
                     <div class="subheader">Customer</div>
                     <div class="h4 mb-0 text-muted" id="detailCustomer">-</div>
                   </div>
                   <div class="col-md-2">
+                    <div class="subheader">Project Manager</div>
+                    <div class="h4 mb-0 text-muted" id="detailPM">-</div>
+                  </div>
+                  <div class="col-md-1">
                     <div class="subheader">Status</div>
                     <div id="detailStatus"></div>
                   </div>
@@ -373,23 +383,92 @@
                 </div>
               </div>
 
-              <!-- Work Orders Tab (Placeholder) -->
+              <!-- Work Orders Tab -->
               <div class="tab-pane fade" id="work-orders" role="tabpanel">
-                <div class="empty">
-                  <div class="empty-icon">
-                    <i class="ti ti-tool" style="font-size: 3rem; opacity: 0.5;"></i>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <div>
+                    <h3 class="mb-0">Work Orders</h3>
+                    <p class="text-muted mb-0">Production releases for this job</p>
                   </div>
-                  <p class="empty-title">Work Orders</p>
-                  <p class="empty-subtitle text-muted">
-                    Work order tracking system will be integrated here.<br>
-                    Manage production tasks and track progress.
-                  </p>
+                  <button class="btn btn-primary btn-sm" onclick="openNewWOForJob()" data-permission="fabrication.work-orders.create">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>
+                    New Work Order
+                  </button>
+                </div>
+                <div id="woLoading" class="text-center text-muted py-4" style="display:none;">
+                  <div class="spinner-border spinner-border-sm" role="status"></div>
+                  <p class="mt-2 mb-0">Loading work orders…</p>
+                </div>
+                <div id="woContent" style="display:none;">
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table table-striped">
+                      <thead>
+                        <tr>
+                          <th>Release</th>
+                          <th>Date Issued</th>
+                          <th>Material</th>
+                          <th>Elevations</th>
+                          <th class="w-1"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="woTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div id="woEmpty" style="display:none;" class="empty">
+                  <div class="empty-icon">
+                    <i class="ti ti-tool" style="font-size: 2rem; opacity: 0.4;"></i>
+                  </div>
+                  <p class="empty-title">No work orders yet</p>
+                  <p class="empty-subtitle text-muted">Create the first production release for this job</p>
+                  <div class="empty-action">
+                    <button class="btn btn-primary" onclick="openNewWOForJob()">New Work Order</button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick New Work Order Modal (from Job Details) -->
+    <div class="modal fade" id="quickWoModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">New Work Order</h5>
+            <button type="button" class="btn-close" onclick="hideModal(document.getElementById('quickWoModal'))"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="quickWoJobId">
+            <div class="mb-3">
+              <label class="form-label">Job</label>
+              <input type="text" class="form-control" id="quickWoJobLabel" readonly>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Date Issued</label>
+              <input type="date" class="form-control" id="quickWoDateIssued">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Material Delivery</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="quickWoMaterial" placeholder="Date, In Shop, or SOF">
+                <button type="button" class="btn btn-outline-success" onclick="document.getElementById('quickWoMaterial').value='In Shop'">In Shop</button>
+                <button type="button" class="btn btn-outline-warning" onclick="document.getElementById('quickWoMaterial').value='SOF'">SOF</button>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" id="quickWoNotes" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('quickWoModal'))">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveQuickWO()">Create Work Order</button>
           </div>
         </div>
       </div>
@@ -1029,6 +1108,7 @@
                 document.getElementById('contactName').value = currentJob.contact_name || '';
                 document.getElementById('contactPhone').value = currentJob.contact_phone || '';
                 document.getElementById('contactEmail').value = currentJob.contact_email || '';
+                document.getElementById('projectManager').value = currentJob.project_manager || '';
                 document.getElementById('status').value = currentJob.status;
                 document.getElementById('startDate').value = currentJob.start_date || '';
                 document.getElementById('targetCompletionDate').value = currentJob.target_completion_date || '';
@@ -1049,6 +1129,7 @@
                 job_number: document.getElementById('jobNumber').value,
                 job_name: document.getElementById('jobName').value,
                 customer_name: document.getElementById('customerName').value || null,
+                project_manager: document.getElementById('projectManager').value || null,
                 site_address: document.getElementById('siteAddress').value || null,
                 contact_name: document.getElementById('contactName').value || null,
                 contact_phone: document.getElementById('contactPhone').value || null,
@@ -1161,6 +1242,7 @@
             document.getElementById('detailJobNumber').textContent = currentJobForReservations.job_number;
             document.getElementById('detailJobName').textContent = currentJobForReservations.job_name;
             document.getElementById('detailCustomer').textContent = currentJobForReservations.customer_name || 'N/A';
+            document.getElementById('detailPM').textContent = currentJobForReservations.project_manager || 'N/A';
             document.getElementById('detailStatus').innerHTML =
                 `<span class="badge bg-${getStatusColor(currentJobForReservations.status)}">${currentJobForReservations.status_label}</span>`;
 
@@ -1186,6 +1268,98 @@
 
             // Load reservations
             await loadJobReservations(jobId);
+
+            // Wire work-orders tab to lazy-load on first click
+            const woTab = document.getElementById('work-orders-tab');
+            woTab.onclick = () => loadJobWorkOrders(currentJobForReservations.id);
+        }
+
+        // ===== WORK ORDERS IN JOB DETAILS =====
+        let jobWorkOrders = [];
+
+        async function loadJobWorkOrders(jobId) {
+            document.getElementById('woLoading').style.display = 'block';
+            document.getElementById('woContent').style.display = 'none';
+            document.getElementById('woEmpty').style.display = 'none';
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/work-orders`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                jobWorkOrders = data.work_orders || [];
+                document.getElementById('workOrdersCount').textContent = jobWorkOrders.length;
+                displayJobWorkOrders();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('woLoading').style.display = 'none';
+            }
+        }
+
+        function displayJobWorkOrders() {
+            document.getElementById('woLoading').style.display = 'none';
+            if (jobWorkOrders.length === 0) {
+                document.getElementById('woEmpty').style.display = 'block';
+                return;
+            }
+            document.getElementById('woContent').style.display = 'block';
+            const tbody = document.getElementById('woTableBody');
+            tbody.innerHTML = jobWorkOrders.map(wo => {
+                const mat = wo.material_delivery;
+                let matBadge = '<span class="badge bg-secondary">Pending</span>';
+                if (mat === 'In Shop') matBadge = '<span class="badge bg-success">In Shop</span>';
+                else if (mat === 'SOF') matBadge = '<span class="badge bg-warning text-dark">SOF</span>';
+                else if (mat) matBadge = `<span class="badge bg-info">${escapeHtml(mat)}</span>`;
+                const progress = wo.elevation_count > 0
+                    ? `${wo.elevations_complete}/${wo.elevation_count}`
+                    : '<span class="text-muted">—</span>';
+                return `<tr>
+                    <td><strong>${escapeHtml(wo.release_label)}</strong></td>
+                    <td>${wo.date_issued || '—'}</td>
+                    <td>${matBadge}</td>
+                    <td>${progress}</td>
+                    <td>
+                        <a href="/fabrication/work-orders?wo=${wo.id}" class="btn btn-sm btn-outline-secondary">Open</a>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function openNewWOForJob() {
+            if (!currentJobForReservations) return;
+            document.getElementById('quickWoJobId').value = currentJobForReservations.id;
+            document.getElementById('quickWoJobLabel').value =
+                `${currentJobForReservations.job_number} – ${currentJobForReservations.job_name}`;
+            document.getElementById('quickWoDateIssued').value = '';
+            document.getElementById('quickWoMaterial').value = '';
+            document.getElementById('quickWoNotes').value = '';
+            showModal(document.getElementById('quickWoModal'));
+        }
+
+        async function saveQuickWO() {
+            const jobId = document.getElementById('quickWoJobId').value;
+            const body = {
+                business_job_id: parseInt(jobId),
+                date_issued: document.getElementById('quickWoDateIssued').value || null,
+                material_delivery: document.getElementById('quickWoMaterial').value || null,
+                notes: document.getElementById('quickWoNotes').value || null,
+            };
+            try {
+                const r = await fetch('/api/v1/work-orders', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+                    },
+                    body: JSON.stringify(body),
+                });
+                if (!r.ok) throw new Error('Failed to create work order');
+                hideModal(document.getElementById('quickWoModal'));
+                await loadJobWorkOrders(jobId);
+            } catch (e) {
+                console.error(e);
+                alert('Failed to create work order');
+            }
         }
 
         async function loadJobReservations(jobId) {

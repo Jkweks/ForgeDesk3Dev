@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             StorageLocationSeeder::class,
             InventoryLocationSeeder::class,
             JobReservationSeeder::class,
+            FabricationSeeder::class,
         ]);
     }
 }

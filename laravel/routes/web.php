@@ -76,6 +76,10 @@ Route::get('/fabrication/documents', function () {
     return view('fabrication.documents');
 });
 
+Route::get('/fabrication/work-orders', function () {
+    return view('fabrication.work-orders');
+});
+
 // System Status
 Route::get('/status', function () {
     return view('status');
@@ -88,4 +92,9 @@ Route::get('/admin', function () {
 
 Route::get('/admin/location-assignment', function () {
     return view('admin.location-assignment');
+});
+
+// Shop floor — no auth required (tablet kiosk view)
+Route::get('/shop', function () {
+    return view('shop-floor');
 });

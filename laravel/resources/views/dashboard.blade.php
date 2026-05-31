@@ -213,14 +213,14 @@
             <h5 class="mb-3"><i class="ti ti-currency-dollar me-2"></i>Pricing</h5>
             <div class="row mb-3">
               <div class="col-lg-6">
-                <label class="form-label required">Unit Cost</label>
+                <label class="form-label required">List Price</label>
                 <div class="input-group">
                   <span class="input-group-text">$</span>
                   <input type="number" class="form-control" name="unit_cost" id="productUnitCost" placeholder="0.00" step="0.01" min="0" required>
                 </div>
               </div>
               <div class="col-lg-6">
-                <label class="form-label">Net Cost</label>
+                <label class="form-label">Net Price</label>
                 <div class="input-group">
                   <span class="input-group-text">$</span>
                   <input type="number" class="form-control" name="net_cost" id="productNetCost" placeholder="0.00" step="0.01" min="0">

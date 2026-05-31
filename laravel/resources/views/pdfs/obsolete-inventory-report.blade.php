@@ -126,7 +126,7 @@
                 <th style="width: 28%;">Description</th>
                 <th style="width: 12%;">Category</th>
                 <th style="width: 8%;" class="text-right">On Hand</th>
-                <th style="width: 8%;" class="text-right">Unit Cost</th>
+                <th style="width: 8%;" class="text-right">List Price</th>
                 <th style="width: 10%;" class="text-right">Total Value</th>
                 <th style="width: 12%;">Last Activity</th>
                 <th style="width: 8%;" class="text-right">Days Inactive</th>

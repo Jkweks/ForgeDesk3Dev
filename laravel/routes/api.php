@@ -159,6 +159,13 @@ Route::post('/password/verify-token', [PasswordResetController::class, 'verifyTo
 
 // Fulfillment routes (public for internal use)
 Route::prefix('v1')->group(function () {
+    // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
+    Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
+    Route::get('/shop/fab-users',   [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
+    Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
+    Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
+    // ─────────────────────────────────────────────────────────────────────────
+
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
     Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials']);
     Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials']);
@@ -244,6 +251,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Products
         Route::apiResource('products', ProductController::class);
+        Route::post('/products/refresh-statuses', [ProductController::class, 'refreshAllStatuses']);
         Route::post('/products/{product}/adjust', [ProductController::class, 'adjustInventory']);
         Route::post('/products/{product}/issue-to-job', [ProductController::class, 'issueToJob']);
         Route::get('/products/{product}/transactions', [ProductController::class, 'getTransactions']);
@@ -397,6 +405,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Business Jobs (Project Management)
         Route::apiResource('business-jobs', BusinessJobController::class);
 
+        // Job-specific Work Orders (Fabrication)
+        Route::get('/business-jobs/{jobId}/work-orders', [BusinessJobController::class, 'getWorkOrders']);
+
         // Job-specific Reservations
         Route::get('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'getReservations']);
         Route::post('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'createReservation']);
@@ -413,6 +424,45 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/door-frame-configurations/{id}/frame-parts', [DoorFrameConfigurationController::class, 'updateFrameParts']);
         Route::put('/door-frame-configurations/{id}/door-config', [DoorFrameConfigurationController::class, 'updateDoorConfig']);
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release']);
+
+        // Fabrication Work Orders
+        Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
+        Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store']);
+        Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);
+        Route::put('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
+        Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
+        Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy']);
+        Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments']);
+
+        // Work Order Drawings (shop drawings file uploads)
+        Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
+        Route::post('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'store']);
+        Route::get('/work-orders/{id}/drawings/{drawing}/download', [\App\Http\Controllers\Api\WoDrawingController::class, 'download']);
+        Route::delete('/work-orders/{id}/drawings/{drawing}', [\App\Http\Controllers\Api\WoDrawingController::class, 'destroy']);
+
+        // Elevations (per work order)
+        Route::get('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'index']);
+        Route::post('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'store']);
+        Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update']);
+        Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy']);
+
+        // Elevation Stage cycling (reuse existing stage controller)
+        Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
+        Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store']);
+        Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update']);
+        Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy']);
+
+        // Elevation Types (admin-managed list)
+        Route::get('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'index']);
+        Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store']);
+        Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update']);
+        Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy']);
+        Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate']);
+
+        Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
+        Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);
+        Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update']);
+        Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy']);
 
         // Fabrication Documents
         Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions']);

@@ -128,7 +128,7 @@
                 <th style="width: 8%;" class="text-right">On Hand</th>
                 <th style="width: 8%;" class="text-right">Committed</th>
                 <th style="width: 8%;" class="text-right">Available</th>
-                <th style="width: 8%;" class="text-right">Unit Cost</th>
+                <th style="width: 8%;" class="text-right">List Price</th>
                 <th style="width: 10%;" class="text-right">Total Value</th>
             </tr>
         </thead>

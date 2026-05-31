@@ -417,16 +417,17 @@ class EzEstimateController extends Controller
             $categoryMultiplier = $multipliers[$categoryKey] ?? 1.0;
 
             // Calculate net cost
-            $netCost = $pricePerLength * $finishMultiplier * $categoryMultiplier;
+            $pricePerLengthWithFinish = $pricePerLength * $finishMultiplier;
+            $netCost = $pricePerLengthWithFinish * $categoryMultiplier;
 
             // Update product
             $product->update([
-                'price_per_length' => $pricePerLength,
-                'unit_cost' => round($pricePerLength, 2),
+                'price_per_length' => round($pricePerLengthWithFinish, 4),
+                'unit_cost' => round($pricePerLengthWithFinish, 2),
                 'pricing_category' => $pricingCategory,
                 'finish_multiplier' => $finishMultiplier,
                 'category_multiplier' => $categoryMultiplier,
-                'net_cost' => round($netCost, 2),
+                'net_cost' => round($netCost, 4),
             ]);
 
             $updatedCount++;
@@ -436,7 +437,7 @@ class EzEstimateController extends Controller
     }
 
     /**
-     * Update pricing for Accessory products (P, S)
+     * Update pricing for Accessory products (P, S, CP)
      * Formula: price per unit * category multiplier = net cost
      */
     private function updateAccessoryPricing($partData, $multipliers)
@@ -451,7 +452,8 @@ class EzEstimateController extends Controller
             ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
             ->where(function($query) {
                 $query->where('products.sku', 'LIKE', 'P%')
-                      ->orWhere('products.sku', 'LIKE', 'S%');
+                      ->orWhere('products.sku', 'LIKE', 'S%')
+                      ->orWhere('products.sku', 'LIKE', 'CP%');
             })
             ->select('products.*')
             ->get();
@@ -472,11 +474,11 @@ class EzEstimateController extends Controller
 
             // Update product
             $product->update([
-                'price_per_package' => $pricePerPackage,
+                'price_per_package' => round($pricePerPackage, 4),
                 'unit_cost' => round($pricePerPackage, 2),
                 'pricing_category' => $pricingCategory,
                 'category_multiplier' => $categoryMultiplier,
-                'net_cost' => round($netCost, 2),
+                'net_cost' => round($netCost, 4),
             ]);
 
             $updatedCount++;
@@ -599,7 +601,7 @@ class EzEstimateController extends Controller
                             'pricing_category' => $slData['pricing_category'],
                             'category_multiplier' => $categoryMultiplier,
                             'calculation' => "{$slData['price_per_length']} × {$finishMultiplier} × {$categoryMultiplier}",
-                            'net_cost' => round($netCost, 2),
+                            'net_cost' => round($netCost, 4),
                         ];
                     }
                 }
@@ -642,7 +644,7 @@ class EzEstimateController extends Controller
                             'pricing_category' => $pData['pricing_category'],
                             'category_multiplier' => $categoryMultiplier,
                             'calculation' => "{$pData['price_per_package']} × {$categoryMultiplier}",
-                            'net_cost' => round($netCost, 2),
+                            'net_cost' => round($netCost, 4),
                         ];
                     }
                 }

@@ -125,8 +125,8 @@
                 <th style="width: 8%;">Part #</th>
                 <th style="width: 5%;">Finish</th>
                 <th style="width: 18%;">Description</th>
-                <th style="width: 6%;" class="text-right">Unit Cost</th>
-                <th style="width: 6%;" class="text-right">Net Cost</th>
+                <th style="width: 6%;" class="text-right">List Price</th>
+                <th style="width: 6%;" class="text-right">Net Price</th>
                 <th style="width: 5%;" class="text-right">Pack</th>
                 <th style="width: 6%;" class="text-right">On Hand</th>
                 <th style="width: 6%;" class="text-right">Commit</th>

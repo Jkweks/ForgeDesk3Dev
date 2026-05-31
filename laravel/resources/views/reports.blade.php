@@ -470,7 +470,7 @@
                       <th class="sortable-report" data-sort="description" data-report="obsolete" style="cursor: pointer;">Description <span class="sort-icon"></span></th>
                       <th class="sortable-report" data-sort="category" data-report="obsolete" style="cursor: pointer;">Category <span class="sort-icon"></span></th>
                       <th class="text-end sortable-report" data-sort="on_hand" data-report="obsolete" style="cursor: pointer;">On Hand <span class="sort-icon"></span></th>
-                      <th class="text-end sortable-report" data-sort="unit_cost" data-report="obsolete" style="cursor: pointer;">Unit Cost <span class="sort-icon"></span></th>
+                      <th class="text-end sortable-report" data-sort="unit_cost" data-report="obsolete" style="cursor: pointer;">List Price <span class="sort-icon"></span></th>
                       <th class="text-end sortable-report" data-sort="total_value" data-report="obsolete" style="cursor: pointer;">Total Value <span class="sort-icon"></span></th>
                       <th class="sortable-report" data-sort="last_shipment_date" data-report="obsolete" style="cursor: pointer;">Last Used <span class="sort-icon"></span></th>
                       <th class="text-end sortable-report" data-sort="days_since_last_use" data-report="obsolete" style="cursor: pointer;">Days Inactive <span class="sort-icon"></span></th>
@@ -778,8 +778,8 @@
                       <th class="sortable-report" data-report="inventory" data-sort="part_number" style="cursor: pointer;">Part # <span class="sort-icon"></span></th>
                       <th class="sortable-report" data-report="inventory" data-sort="finish" style="cursor: pointer;">Finish <span class="sort-icon"></span></th>
                       <th class="sortable-report" data-report="inventory" data-sort="description" style="cursor: pointer;">Description <span class="sort-icon"></span></th>
-                      <th class="text-end sortable-report" data-report="inventory" data-sort="unit_cost" style="cursor: pointer;">Unit Cost <span class="sort-icon"></span></th>
-                      <th class="text-end sortable-report" data-report="inventory" data-sort="net_cost" style="cursor: pointer;">Net Cost <span class="sort-icon"></span></th>
+                      <th class="text-end sortable-report" data-report="inventory" data-sort="unit_cost" style="cursor: pointer;">List Price <span class="sort-icon"></span></th>
+                      <th class="text-end sortable-report" data-report="inventory" data-sort="net_cost" style="cursor: pointer;">Net Price <span class="sort-icon"></span></th>
                       <th class="text-end sortable-report" data-report="inventory" data-sort="pack_size" style="cursor: pointer;">Pack <span class="sort-icon"></span></th>
                       <th class="text-end sortable-report" data-report="inventory" data-sort="on_hand" style="cursor: pointer;">On Hand <span class="sort-icon"></span></th>
                       <th class="text-end sortable-report" data-report="inventory" data-sort="committed" style="cursor: pointer;">Commit <span class="sort-icon"></span></th>

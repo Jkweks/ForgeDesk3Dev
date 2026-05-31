@@ -2,6 +2,12 @@
 
 @section('title', 'Vendor Replenishment - ForgeDesk')
 
+@section('styles')
+.status-pill { transition: opacity .15s; opacity: .55; }
+.status-pill.active { opacity: 1; }
+.status-pill[data-status=""].active { background: var(--tblr-secondary); color: #fff; border-color: var(--tblr-secondary); }
+@endsection
+
 @section('content')
 <div class="page-wrapper">
   <div class="page-header d-print-none">
@@ -83,31 +89,30 @@
       <!-- Filters -->
       <div class="card mb-3">
         <div class="card-body py-2">
-          <div class="row g-2 align-items-end">
-            <div class="col-md-3">
-              <label class="form-label mb-1">Status Filter</label>
-              <select class="form-select form-select-sm" id="filterStatus" onchange="applyFilters()">
-                <option value="">All Urgent Statuses</option>
-                <option value="out_of_stock">Out of Stock Only</option>
-                <option value="critical">Critical Only</option>
-                <option value="very_low">Very Low Only</option>
-                <option value="low">Low Only</option>
-                <option disabled>──────────</option>
-                <option value="in_stock">In Stock</option>
-              </select>
+          <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+              <div class="form-label mb-1">Status</div>
+              <div class="d-flex flex-wrap gap-1" id="statusPills">
+                <button class="btn btn-sm status-pill active" data-status="" onclick="setStatusPill(this)">All</button>
+                <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40)">Out of Stock</button>
+                <button class="btn btn-sm status-pill" data-status="critical"     onclick="setStatusPill(this)" style="background:var(--tblr-danger);color:#fff;border-color:var(--tblr-danger)">Critical</button>
+                <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning)">Very Low</button>
+                <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info)">Low</button>
+                <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success)">In Stock</button>
+              </div>
             </div>
-            <div class="col-md-3">
-              <label class="form-label mb-1">Vendor</label>
+            <div style="min-width:180px">
+              <div class="form-label mb-1">Vendor</div>
               <select class="form-select form-select-sm" id="filterVendor" onchange="applyFilters()">
                 <option value="">All Vendors</option>
               </select>
             </div>
-            <div class="col-md-4">
-              <label class="form-label mb-1">Search</label>
+            <div style="flex:1;min-width:200px">
+              <div class="form-label mb-1">Search</div>
               <input type="text" class="form-control form-control-sm" id="filterSearch" placeholder="SKU, description..." oninput="debounceSearch()">
             </div>
-            <div class="col-md-2">
-              <button class="btn btn-sm btn-secondary w-100" onclick="clearFilters()">
+            <div>
+              <button class="btn btn-sm btn-secondary" onclick="clearFilters()">
                 <i class="ti ti-x me-1"></i>Clear
               </button>
             </div>
@@ -183,7 +188,7 @@
                 <th>SKU</th>
                 <th>Description</th>
                 <th class="text-end">Qty</th>
-                <th class="text-end">Unit Cost</th>
+                <th class="text-end">Net Price</th>
                 <th class="text-end">Total</th>
                 <th>Status</th>
               </tr>
@@ -220,6 +225,8 @@ let pendingPOSupplier = null;  // Supplier being confirmed
 let searchTimeout = null;
 let currentSortBy  = 'status';  // Default sort: urgency
 let currentSortDir = 'asc';
+const URGENT_STATUSES  = ['out_of_stock', 'critical', 'very_low', 'low'];
+let activeStatuses = new Set(URGENT_STATUSES);  // multi-select; all urgent active by default
 
 const URGENCY_ORDER = { out_of_stock: 0, critical: 1, very_low: 2, low: 3 };
 
@@ -243,16 +250,12 @@ async function loadReplenishmentItems() {
 
   try {
     const data = await authenticatedFetch('/products?status=critical,very_low,low,out_of_stock&per_page=500&with_supplier=1');
-    allItems = (data.data || data).filter(p => {
-      if (!p.supplier_id) return false;
-      // Only include out_of_stock items that have a maximum_quantity set
-      if (p.status === 'out_of_stock' && !(p.maximum_quantity > 0)) return false;
-      return true;
-    });
+    allItems = (data.data || data).filter(p => p.supplier_id);
 
     allInStockItems = []; // Reset so in-stock list is re-fetched on next request
     buildVendorFilter(allItems);
     applyFilters();
+    syncStatusPills();
   } catch (err) {
     console.error('Error loading replenishment items:', err);
     showNotification('Failed to load replenishment items', 'danger');
@@ -294,27 +297,66 @@ async function loadInStockItems() {
   }
 }
 
+async function setStatusPill(btn) {
+  const status = btn.dataset.status;
+  if (status === '') {
+    // "All" — reset to every loaded category
+    activeStatuses = new Set(URGENT_STATUSES);
+    if (allInStockItems.length > 0) activeStatuses.add('in_stock');
+  } else {
+    if (activeStatuses.has(status)) {
+      activeStatuses.delete(status);
+    } else {
+      activeStatuses.add(status);
+      // Lazy-load in_stock items on first activation
+      if (status === 'in_stock' && allInStockItems.length === 0) {
+        await loadInStockItems();
+      }
+    }
+  }
+  syncStatusPills();
+  applyFilters();
+}
+
+function syncStatusPills() {
+  // "All" is active when every urgent pill is on (and in_stock if loaded)
+  const urgentAllOn = URGENT_STATUSES.every(s => activeStatuses.has(s));
+  const inStockAllOn = allInStockItems.length === 0 || activeStatuses.has('in_stock');
+  const allOn = urgentAllOn && inStockAllOn;
+
+  document.querySelectorAll('.status-pill').forEach(p => {
+    if (p.dataset.status === '') {
+      p.classList.toggle('active', allOn);
+    } else {
+      p.classList.toggle('active', activeStatuses.has(p.dataset.status));
+    }
+  });
+}
+
+function snapshotSelections() {
+  const state = {};
+  document.querySelectorAll('[data-product-id][type="checkbox"]:not([id^="selectAll"])').forEach(cb => {
+    const pid = cb.dataset.productId;
+    const qtyEl = document.getElementById(`qty-${pid}`);
+    state[pid] = { checked: cb.checked, qty: qtyEl ? qtyEl.value : '' };
+  });
+  return state;
+}
+
 async function applyFilters() {
-  const status = document.getElementById('filterStatus').value;
   const vendor = document.getElementById('filterVendor').value;
   const search = document.getElementById('filterSearch').value.toLowerCase().trim();
 
-  // Determine the source array; lazy-load in-stock items on first request
-  let sourceItems;
-  if (status === 'in_stock') {
-    if (allInStockItems.length === 0) {
-      await loadInStockItems();
-    }
-    sourceItems = allInStockItems;
-  } else {
-    sourceItems = allItems;
+  // Merge sources based on active statuses
+  let sourceItems = allItems.filter(p => activeStatuses.has(p.status));
+  if (activeStatuses.has('in_stock')) {
+    sourceItems = sourceItems.concat(allInStockItems);
   }
 
   // Rebuild vendor dropdown for the active source so vendors match what's visible
   buildVendorFilter(sourceItems);
 
   filteredItems = sourceItems.filter(p => {
-    if (status && p.status !== status) return false;
     if (vendor && String(p.supplier_id) !== vendor) return false;
     if (search) {
       const haystack = `${p.sku} ${p.description} ${p.part_number || ''}`.toLowerCase();
@@ -324,7 +366,8 @@ async function applyFilters() {
   });
 
   updateStats(filteredItems);
-  renderVendorSections(filteredItems);
+  const savedSelections = snapshotSelections();
+  renderVendorSections(filteredItems, savedSelections);
   updateGlobalEstimate();
 }
 
@@ -334,7 +377,9 @@ function debounceSearch() {
 }
 
 function clearFilters() {
-  document.getElementById('filterStatus').value = '';
+  activeStatuses = new Set(URGENT_STATUSES);
+  if (allInStockItems.length > 0) activeStatuses.add('in_stock');
+  syncStatusPills();
   document.getElementById('filterVendor').value = '';
   document.getElementById('filterSearch').value = '';
   applyFilters();
@@ -349,7 +394,7 @@ function updateStats(items) {
 
 // ─── Vendor Section Rendering ─────────────────────────────────────────────────
 
-function renderVendorSections(items) {
+function renderVendorSections(items, savedSelections = {}) {
   const container = document.getElementById('vendorSections');
   container.innerHTML = '';
 
@@ -372,7 +417,7 @@ function renderVendorSections(items) {
     (a.supplier?.name || '').localeCompare(b.supplier?.name || '')
   );
 
-  sorted.forEach(group => renderVendorCard(container, group));
+  sorted.forEach(group => renderVendorCard(container, group, savedSelections));
 }
 
 function sortHeaderHtml(label, col, extraClass = '') {
@@ -410,11 +455,11 @@ function compareItems(a, b) {
       aVal = a.days_until_stockout ?? 9999; bVal = b.days_until_stockout ?? 9999;
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     case 'unit_cost':
-      aVal = a.unit_cost ?? 0; bVal = b.unit_cost ?? 0;
+      aVal = (a.net_cost ?? a.unit_cost ?? 0); bVal = (b.net_cost ?? b.unit_cost ?? 0);
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     case 'line_total':
-      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.unit_cost || 0);
-      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.unit_cost || 0);
+      aVal = Math.ceil((a.suggested_order_qty || 0) / Math.max((a.pack_size || 1), 1)) * (a.net_cost ?? a.unit_cost ?? 0);
+      bVal = Math.ceil((b.suggested_order_qty || 0) / Math.max((b.pack_size || 1), 1)) * (b.net_cost ?? b.unit_cost ?? 0);
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     default: // 'status' — urgency order, then days
       const urgencyDiff = (URGENCY_ORDER[a.status] ?? 99) - (URGENCY_ORDER[b.status] ?? 99);
@@ -430,10 +475,10 @@ function sortColumn(col) {
     currentSortBy = col;
     currentSortDir = 'asc';
   }
-  renderVendorSections(filteredItems);
+  renderVendorSections(filteredItems, snapshotSelections());
 }
 
-function renderVendorCard(container, group) {
+function renderVendorCard(container, group, savedSelections = {}) {
   const supplier = group.supplier;
   const sid = supplier.id;
 
@@ -472,7 +517,7 @@ function renderVendorCard(container, group) {
             <th class="text-end">On Order</th>
             ${sortHeaderHtml('Days Left', 'days_until_stockout', 'text-end')}
             <th class="text-end" style="width:140px">Order Qty</th>
-            ${sortHeaderHtml('Pack Cost', 'unit_cost', 'text-end')}
+            ${sortHeaderHtml('Net Price', 'unit_cost', 'text-end')}
             ${sortHeaderHtml('Line Total', 'line_total', 'text-end')}
             ${sortHeaderHtml('Status', 'status', '')}
           </tr>
@@ -498,18 +543,32 @@ function renderVendorCard(container, group) {
     }
   });
 
-  // Auto-select urgent items that have a suggested qty > 0; never pre-check in_stock items
+  // Apply selection state: restore user's prior choices if available, otherwise auto-select urgent items
   items.forEach(p => {
-    if (p.status === 'in_stock') return;
-    const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
-    const displayQty = packSize > 1
-      ? Math.ceil((p.suggested_order_qty || 0) / packSize)  // ceiling: always order whole packs
-      : (p.suggested_order_qty || 0);
-    if (displayQty > 0) {
-      const cb = document.getElementById(`check-${p.id}`);
-      if (cb) { cb.checked = true; onCheckChange(p.id, sid); }
+    const cb    = document.getElementById(`check-${p.id}`);
+    const qtyEl = document.getElementById(`qty-${p.id}`);
+    const saved = savedSelections[String(p.id)];
+
+    if (saved !== undefined) {
+      // User had previously interacted with this item — restore their state exactly
+      if (cb) cb.checked = saved.checked;
+      if (qtyEl && saved.qty !== '') qtyEl.value = saved.qty;
+    } else if (p.status !== 'in_stock') {
+      // New item in view — auto-select if it has a suggested qty
+      const packSize = (p.pack_size && p.pack_size > 1) ? p.pack_size : 1;
+      const displayQty = packSize > 1
+        ? Math.ceil((p.suggested_order_qty || 0) / packSize)
+        : (p.suggested_order_qty || 0);
+      if (displayQty > 0 && cb) cb.checked = true;
     }
+
+    // Always recalculate line total to reflect current state
+    updateLineTotal(p.id);
   });
+
+  updateVendorTotal(sid);
+  updateVendorButtonState(sid);
+  syncSelectAllCheckbox(sid);
 }
 
 function renderItemRow(p, sid) {
@@ -522,7 +581,7 @@ function renderItemRow(p, sid) {
   const available    = p.quantity_available ?? 0;
   const onOrder      = p.on_order_qty ?? 0;
   const reorderPt    = p.reorder_point ?? '-';
-  const unitCost     = p.unit_cost ?? 0;  // unit_cost = pack cost for pack products
+  const unitCost     = p.net_cost ?? p.unit_cost ?? 0;  // prefer net_cost; fall back to unit_cost
   const packLabel    = isPack ? (p.purchase_uom || 'packs') : (p.stock_uom || 'EA');
 
   const daysDisplay = p.days_until_stockout != null && p.days_until_stockout > 0
