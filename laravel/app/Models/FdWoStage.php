@@ -20,6 +20,18 @@ class FdWoStage extends Model
         'completed_at' => 'datetime',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::updated(function ($stage) {
+            if ($stage->isDirty('status')) {
+                $stage->workOrder->load('elevations.stages');
+                $stage->workOrder->businessJob?->syncAutoStatus();
+            }
+        });
+    }
+
     public function workOrder(): BelongsTo
     {
         return $this->belongsTo(FdWorkOrder::class, 'work_order_id');

@@ -266,6 +266,11 @@
             <select class="form-select" id="new-wo-job" required>
               <option value="">— Select a job —</option>
             </select>
+            <div class="mt-1">
+              <button type="button" class="btn btn-sm btn-ghost-primary" onclick="openQuickJobCreate()">
+                <i class="ti ti-plus me-1"></i>Create New Job
+              </button>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label">Material Delivery</label>
@@ -1660,5 +1665,121 @@ async function saveDoorSchedule() {
         btn.textContent = 'Create Elevations';
     }
 }
+
+function openQuickJobCreate() {
+    document.getElementById('qj-number').value = '';
+    document.getElementById('qj-name').value = '';
+    document.getElementById('qj-customer').value = '';
+    document.getElementById('qj-pm').value = '';
+    document.getElementById('qj-start').value = '';
+    document.getElementById('qj-target').value = '';
+    document.getElementById('qj-status').value = 'active';
+    document.getElementById('qj-notes').value = '';
+    const m = new bootstrap.Modal(document.getElementById('quickJobModal'));
+    m.show();
+}
+
+async function saveQuickJob() {
+    const jobNumber = document.getElementById('qj-number').value.trim();
+    const jobName = document.getElementById('qj-name').value.trim();
+    if (!jobNumber || !jobName) { alert('Job Number and Job Name are required'); return; }
+
+    try {
+        const r = await fetch('/api/v1/business-jobs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+            },
+            body: JSON.stringify({
+                job_number: jobNumber,
+                job_name: jobName,
+                customer_name: document.getElementById('qj-customer').value || null,
+                project_manager: document.getElementById('qj-pm').value || null,
+                start_date: document.getElementById('qj-start').value || null,
+                target_completion_date: document.getElementById('qj-target').value || null,
+                status: document.getElementById('qj-status').value,
+                notes: document.getElementById('qj-notes').value || null,
+            }),
+        });
+        if (!r.ok) {
+            const err = await r.json();
+            throw new Error(err.message || 'Failed to create job');
+        }
+        const data = await r.json();
+        bootstrap.Modal.getInstance(document.getElementById('quickJobModal')).hide();
+
+        // Reload job list and select the new job
+        const sel = document.getElementById('new-wo-job');
+        if (sel) {
+            const opt = document.createElement('option');
+            opt.value = data.job.id;
+            opt.textContent = `${data.job.job_number} — ${data.job.job_name}`;
+            sel.appendChild(opt);
+            sel.value = data.job.id;
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
 </script>
+
+<!-- Quick Create Job Modal (from Work Orders wizard) -->
+<div class="modal fade" id="quickJobModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create New Job</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label required">Job Number</label>
+            <input type="text" class="form-control" id="qj-number" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required">Job Name</label>
+            <input type="text" class="form-control" id="qj-name" required>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Customer Name</label>
+            <input type="text" class="form-control" id="qj-customer">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Project Manager</label>
+            <input type="text" class="form-control" id="qj-pm">
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Start Date</label>
+            <input type="date" class="form-control" id="qj-start">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Target Completion</label>
+            <input type="date" class="form-control" id="qj-target">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="qj-status">
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" id="qj-notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveQuickJob()">Create Job</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endpush

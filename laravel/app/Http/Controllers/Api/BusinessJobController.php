@@ -39,7 +39,7 @@ class BusinessJobController extends Controller
 
             $jobs = $query
                 ->with('createdBy')
-                ->withCount('jobReservations')
+                ->withCount(['jobReservations', 'workOrders'])
                 ->orderByRaw("CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END")
                 ->orderBy('created_at', 'desc')
                 ->get()
@@ -57,6 +57,7 @@ class BusinessJobController extends Controller
                         'target_completion_date' => $job->target_completion_date?->format('Y-m-d'),
                         'days_until_completion' => $job->days_until_completion,
                         'reservations_count' => $job->job_reservations_count,
+                        'work_orders_count' => $job->work_orders_count,
                         'created_by' => $job->createdBy ? [
                             'id' => $job->createdBy->id,
                             'name' => $job->createdBy->name,
@@ -475,7 +476,7 @@ class BusinessJobController extends Controller
                 'requested_by' => $request->requested_by,
                 'needed_by' => $request->needed_by,
                 'notes' => $request->notes,
-                'status' => 'draft',
+                'status' => 'active',
                 // release_number auto-assigned by JobReservation::creating() boot hook
             ]);
 
@@ -554,7 +555,7 @@ class BusinessJobController extends Controller
                 ->firstOrFail();
 
             $validator = Validator::make($request->all(), [
-                'status' => 'required|in:draft,active,in_progress,fulfilled,on_hold,cancelled',
+                'status' => 'required|in:active,in_progress,fulfilled,on_hold,cancelled',
             ]);
 
             if ($validator->fails()) {
@@ -570,6 +571,7 @@ class BusinessJobController extends Controller
             // Update status (the model will handle inventory updates via boot method)
             $reservation->status = $newStatus;
             $reservation->save();
+            $reservation->businessJob?->syncAutoStatus();
 
             Log::info('Reservation status updated', [
                 'job_id' => $jobId,

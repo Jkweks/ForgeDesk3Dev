@@ -106,6 +106,32 @@ class BusinessJob extends Model
     }
 
     /**
+     * Auto-sync job status based on open reservations and work orders
+     */
+    public function syncAutoStatus(): void
+    {
+        // Don't override manually set terminal/hold statuses
+        if (in_array($this->status, ['cancelled', 'on_hold'])) {
+            return;
+        }
+
+        $openReservations = $this->jobReservations()
+            ->whereNotIn('status', ['fulfilled', 'cancelled'])
+            ->count();
+
+        $nonArchivedWOs = $this->workOrders()->where('archived', false)->with('elevations.stages')->get();
+        $openWorkOrders = $nonArchivedWOs->filter(fn($wo) => !$wo->isComplete())->count();
+
+        $totalItems = $this->jobReservations()->count() + $this->workOrders()->count();
+
+        if ($totalItems > 0 && $openReservations === 0 && $openWorkOrders === 0) {
+            $this->updateQuietly(['status' => 'completed']);
+        } elseif ($openReservations > 0 || $openWorkOrders > 0) {
+            $this->updateQuietly(['status' => 'active']);
+        }
+    }
+
+    /**
      * Get days until target completion
      */
     public function getDaysUntilCompletionAttribute()
