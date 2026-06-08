@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Log;
 
 class FdWoStage extends Model
 {
@@ -25,9 +26,16 @@ class FdWoStage extends Model
         parent::boot();
 
         static::updated(function ($stage) {
-            if ($stage->isDirty('status')) {
-                $stage->workOrder->load('elevations.stages');
-                $stage->workOrder->businessJob?->syncAutoStatus();
+            if ($stage->wasChanged('status')) {
+                try {
+                    $workOrder = $stage->workOrder()->with('elevations.stages')->first();
+                    $workOrder?->businessJob?->syncAutoStatus();
+                } catch (\Exception $e) {
+                    Log::warning('FdWoStage: syncAutoStatus failed', [
+                        'stage_id' => $stage->id,
+                        'message'  => $e->getMessage(),
+                    ]);
+                }
             }
         });
     }

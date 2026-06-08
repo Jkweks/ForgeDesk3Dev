@@ -24,6 +24,7 @@ class ElevationTypeController extends Controller
                     ->map(fn($t) => [
                         'id'              => $t->id,
                         'name'            => $t->name,
+                        'description'     => $t->description,
                         'sort_order'      => $t->sort_order,
                         'default_user_id' => $t->default_user_id,
                         'default_user'    => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
@@ -68,13 +69,68 @@ class ElevationTypeController extends Controller
         return response()->json(['deactivated' => $id]);
     }
 
+    /** Update a stage template (name, description, sort_order, default_user_id) */
     public function updateTemplate(Request $request, int $id)
     {
         $template = FdStageTemplate::findOrFail($id);
+
         if ($request->has('default_user_id')) {
             $template->default_user_id = $request->default_user_id ?: null;
-            $template->save();
         }
-        return response()->json(['updated' => $id]);
+        if ($request->has('name')) {
+            $template->name = $request->name;
+        }
+        if ($request->has('description')) {
+            $template->description = $request->description ?: null;
+        }
+        if ($request->has('sort_order')) {
+            $template->sort_order = (int) $request->sort_order;
+        }
+
+        $template->save();
+
+        return response()->json(['updated' => $id, 'template' => [
+            'id'          => $template->id,
+            'name'        => $template->name,
+            'description' => $template->description,
+            'sort_order'  => $template->sort_order,
+        ]]);
+    }
+
+    /** Create a new stage template for an elevation type */
+    public function storeTemplate(Request $request)
+    {
+        $request->validate([
+            'elevation_type_id' => 'required|integer|exists:fd_elevation_types,id',
+            'name'              => 'required|string|max:255',
+        ]);
+
+        $maxOrder = FdStageTemplate::where('elevation_type_id', $request->elevation_type_id)
+            ->max('sort_order') ?? 0;
+
+        $template = FdStageTemplate::create([
+            'elevation_type_id' => $request->elevation_type_id,
+            'name'              => $request->name,
+            'description'       => $request->description ?? null,
+            'sort_order'        => $maxOrder + 1,
+            'default_user_id'   => $request->default_user_id ?? null,
+        ]);
+
+        return response()->json(['id' => $template->id, 'template' => [
+            'id'              => $template->id,
+            'name'            => $template->name,
+            'description'     => $template->description,
+            'sort_order'      => $template->sort_order,
+            'default_user_id' => $template->default_user_id,
+            'default_user'    => null,
+        ]], 201);
+    }
+
+    /** Delete a stage template */
+    public function destroyTemplate(int $id)
+    {
+        $template = FdStageTemplate::findOrFail($id);
+        $template->delete();
+        return response()->json(['deleted' => $id]);
     }
 }

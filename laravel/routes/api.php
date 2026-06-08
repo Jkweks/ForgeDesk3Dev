@@ -457,7 +457,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store']);
         Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update']);
         Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy']);
+        Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate']);
         Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate']);
+        Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate']);
 
         Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
         Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);
