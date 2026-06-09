@@ -11,7 +11,7 @@ class InventoryTransaction extends Model
 
     protected $fillable = [
         'product_id', 'type', 'quantity', 'quantity_before', 'quantity_after',
-        'reference_number', 'reference_type', 'reference_id', 'notes',
+        'reference_number', 'reference_type', 'reference_id', 'business_job_id', 'notes',
         'user_id', 'transaction_date',
     ];
 
@@ -27,5 +27,10 @@ class InventoryTransaction extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function businessJob()
+    {
+        return $this->belongsTo(\App\Models\BusinessJob::class, 'business_job_id');
     }
 }

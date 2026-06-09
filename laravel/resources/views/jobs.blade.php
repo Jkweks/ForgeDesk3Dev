@@ -870,49 +870,92 @@
                 detailTr.style.display = 'none';
                 detailTr.innerHTML = `
                     <td colspan="10" id="job-detail-cell-${job.id}" class="p-0">
-                        <div class="border-top border-bottom bg-light px-3 py-2">
+                        <div class="border-top border-bottom bg-light">
                             <!-- Job header bar -->
-                            <div class="d-flex align-items-center gap-3 mb-2">
+                            <div class="d-flex align-items-center gap-3 px-3 pt-2 pb-1">
                                 <span class="text-muted small">${escapeHtml(job.customer_name || '')}${job.project_manager ? ' · PM: ' + escapeHtml(job.project_manager) : ''}</span>
-                                <div class="ms-auto btn-list">
-                                    <button class="btn btn-sm btn-success" onclick="currentJobForReservations = allJobs.find(j=>j.id===${job.id}); showMaterialCheckModal()">
-                                        <i class="ti ti-clipboard-check me-1"></i>Material Check
-                                    </button>
-                                    <button class="btn btn-sm btn-primary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${job.id}); showAddReservationModal()">
-                                        <i class="ti ti-plus me-1"></i>Reservation
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${job.id}); openNewWOForJob()" data-permission="fabrication.work-orders.create">
-                                        <i class="ti ti-tool me-1"></i>Work Order
-                                    </button>
-                                </div>
+                                <div class="ms-auto btn-list" id="job-tab-actions-${job.id}"></div>
                             </div>
-                            <div class="row g-2">
-                                <!-- Reservations panel -->
-                                <div class="col-lg-7">
-                                    <div class="card card-sm mb-0">
-                                        <div class="card-header py-1">
-                                            <h4 class="card-title mb-0"><i class="ti ti-clipboard-list me-1"></i>Reservations</h4>
-                                        </div>
-                                        <div class="card-body p-2">
-                                            <div id="detail-res-loading-${job.id}" class="text-muted small">
-                                                <span class="spinner-border spinner-border-sm me-1"></span>Loading…
-                                            </div>
-                                            <div id="detail-res-content-${job.id}" style="display:none;"></div>
-                                        </div>
+                            <!-- Tabs -->
+                            <ul class="nav nav-tabs px-3" id="job-tabs-${job.id}" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="job-tab-wo-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'wo')" type="button">
+                                        <i class="ti ti-tool me-1"></i>Work Orders
+                                        <span class="badge bg-secondary ms-1" id="job-wo-badge-${job.id}">${job.work_orders_count || 0}</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="job-tab-res-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'res')" type="button">
+                                        <i class="ti ti-clipboard-list me-1"></i>Reservations
+                                        <span class="badge bg-secondary ms-1" id="job-res-badge-${job.id}">${job.reservations_count || 0}</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="job-tab-tx-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'tx')" type="button">
+                                        <i class="ti ti-receipt me-1"></i>Transactions
+                                        <span class="badge bg-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
+                                    </button>
+                                </li>
+                            </ul>
+                            <!-- Tab panes -->
+                            <div class="px-3 py-2">
+                                <!-- Work Orders pane (default active) -->
+                                <div id="job-pane-wo-${job.id}">
+                                    <div id="detail-wo-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
                                     </div>
+                                    <div id="detail-wo-content-${job.id}" style="display:none;"></div>
                                 </div>
-                                <!-- Work Orders panel -->
-                                <div class="col-lg-5">
-                                    <div class="card card-sm mb-0">
-                                        <div class="card-header py-1">
-                                            <h4 class="card-title mb-0"><i class="ti ti-tool me-1"></i>Work Orders</h4>
-                                        </div>
-                                        <div class="card-body p-2">
-                                            <div id="detail-wo-loading-${job.id}" class="text-muted small">
-                                                <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                <!-- Reservations pane -->
+                                <div id="job-pane-res-${job.id}" style="display:none;">
+                                    <div id="detail-res-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-res-content-${job.id}" style="display:none;"></div>
+                                </div>
+                                <!-- Transactions pane -->
+                                <div id="job-pane-tx-${job.id}" style="display:none;">
+                                    <div id="detail-tx-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-tx-content-${job.id}" style="display:none;"></div>
+                                    <!-- Add transaction inline form -->
+                                    <div id="job-tx-form-${job.id}" style="display:none;" class="mt-2 p-2 border rounded bg-white">
+                                        <h6 class="mb-2">New Transaction</h6>
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-md-4">
+                                                <label class="form-label form-label-sm mb-1">Product</label>
+                                                <input type="text" class="form-control form-control-sm" id="job-tx-product-search-${job.id}"
+                                                    placeholder="Search SKU, Part#…" autocomplete="off">
+                                                <input type="hidden" id="job-tx-product-id-${job.id}">
+                                                <div id="job-tx-product-results-${job.id}" class="list-group mt-1" style="display:none; max-height:160px; overflow-y:auto; position:absolute; z-index:100; min-width:320px;"></div>
+                                                <div id="job-tx-product-selected-${job.id}" class="text-success small mt-1" style="display:none;"></div>
                                             </div>
-                                            <div id="detail-wo-content-${job.id}" style="display:none;"></div>
+                                            <div class="col-md-2">
+                                                <label class="form-label form-label-sm mb-1">Type</label>
+                                                <select class="form-select form-select-sm" id="job-tx-type-${job.id}">
+                                                    <option value="job_issue">Issue (remove)</option>
+                                                    <option value="receipt">Receipt (add)</option>
+                                                    <option value="adjustment">Adjustment</option>
+                                                    <option value="job_material_transfer">Return</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label form-label-sm mb-1">Quantity</label>
+                                                <input type="number" class="form-control form-control-sm" id="job-tx-qty-${job.id}" min="1" value="1">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label form-label-sm mb-1">Notes</label>
+                                                <input type="text" class="form-control form-control-sm" id="job-tx-notes-${job.id}" placeholder="Optional">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button class="btn btn-primary btn-sm w-100" onclick="submitJobTransaction(${job.id})">Save</button>
+                                            </div>
                                         </div>
+                                        <button class="btn btn-link btn-sm text-muted mt-1 p-0" onclick="hideJobTxForm(${job.id})">Cancel</button>
                                     </div>
                                 </div>
                             </div>
@@ -942,6 +985,279 @@
             }
 
             displayJobs(filtered);
+        }
+
+        // ===== TABBED DETAIL HELPERS =====
+
+        function switchJobTab(jobId, tab) {
+            // Update button active states
+            ['wo', 'res', 'tx'].forEach(t => {
+                const btn = document.getElementById(`job-tab-${t}-btn-${jobId}`);
+                const pane = document.getElementById(`job-pane-${t}-${jobId}`);
+                if (btn) btn.classList.toggle('active', t === tab);
+                if (pane) pane.style.display = t === tab ? '' : 'none';
+            });
+
+            updateJobTabActions(jobId, tab);
+
+            const key = `${jobId}-${tab}`;
+            if (!jobTabLoaded[key]) {
+                jobTabLoaded[key] = true;
+                if (tab === 'wo') loadJobWorkOrders(jobId);
+                else if (tab === 'res') loadJobReservationsInline(jobId);
+                else if (tab === 'tx') loadJobTransactions(jobId);
+            }
+        }
+
+        function updateJobTabActions(jobId, tab) {
+            const actionsEl = document.getElementById(`job-tab-actions-${jobId}`);
+            if (!actionsEl) return;
+
+            if (tab === 'wo') {
+                actionsEl.innerHTML = typeof openNewWOForJob === 'function' ? `
+                    <button class="btn btn-sm btn-outline-secondary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); openNewWOForJob()" data-permission="fabrication.work-orders.create">
+                        <i class="ti ti-tool me-1"></i>New Work Order
+                    </button>` : '';
+            } else if (tab === 'res') {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-sm btn-success" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showMaterialCheckModal()">
+                        <i class="ti ti-clipboard-check me-1"></i>Material Check
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showAddReservationModal()">
+                        <i class="ti ti-plus me-1"></i>New Reservation
+                    </button>`;
+            } else if (tab === 'tx') {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-sm btn-primary" onclick="showJobTxForm(${jobId})">
+                        <i class="ti ti-plus me-1"></i>Add Transaction
+                    </button>`;
+            }
+        }
+
+        async function loadJobReservationsInline(jobId) {
+            const loadingEl = document.getElementById(`detail-res-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-res-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            if (contentEl) contentEl.style.display = 'none';
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                const reservations = data.reservations || [];
+
+                const badge = document.getElementById(`job-res-badge-${jobId}`);
+                if (badge) badge.textContent = reservations.length;
+
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (!contentEl) return;
+                contentEl.style.display = 'block';
+
+                if (reservations.length === 0) {
+                    contentEl.innerHTML = '<p class="text-muted small mb-0">No reservations yet.</p>';
+                    return;
+                }
+
+                contentEl.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-vcenter mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Status</th><th>Requested By</th>
+                                    <th>Needed By</th><th>Items</th><th>Committed</th><th>Consumed</th>
+                                    <th class="w-1"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${reservations.map(res => `
+                                    <tr>
+                                        <td><strong>#${res.reservation_id}</strong></td>
+                                        <td><span class="badge bg-${getReservationStatusColor(res.status)}">${res.status_label}</span></td>
+                                        <td>${escapeHtml(res.requested_by)}</td>
+                                        <td>${res.needed_by || '-'}</td>
+                                        <td>${res.items_count}</td>
+                                        <td>${res.total_committed}</td>
+                                        <td>${res.total_consumed}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info" onclick="viewReservationDetails(${res.id})" title="View">
+                                                <i class="ti ti-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } catch (e) {
+                console.error(e);
+                if (loadingEl) loadingEl.style.display = 'none';
+            }
+        }
+
+        async function loadJobTransactions(jobId) {
+            const loadingEl = document.getElementById(`detail-tx-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-tx-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            if (contentEl) contentEl.style.display = 'none';
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/transactions`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                const txs = data.transactions || [];
+
+                const badge = document.getElementById(`job-tx-badge-${jobId}`);
+                if (badge) badge.textContent = txs.length;
+
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (!contentEl) return;
+                contentEl.style.display = 'block';
+
+                if (txs.length === 0) {
+                    contentEl.innerHTML = '<p class="text-muted small mb-0">No transactions recorded for this job yet.</p>';
+                    return;
+                }
+
+                contentEl.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-vcenter mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th><th>Type</th><th>Product</th>
+                                    <th class="text-end">Qty</th><th class="text-end">Before</th><th class="text-end">After</th>
+                                    <th>Notes</th><th>By</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${txs.map(tx => {
+                                    const qtyClass = tx.quantity >= 0 ? 'text-success' : 'text-danger';
+                                    const qtySign  = tx.quantity >= 0 ? '+' : '';
+                                    const typeColor = {
+                                        job_issue: 'danger', receipt: 'success', adjustment: 'warning',
+                                        job_material_transfer: 'info'
+                                    }[tx.type] || 'secondary';
+                                    return `<tr>
+                                        <td class="text-muted small">${tx.transaction_date}</td>
+                                        <td><span class="badge bg-${typeColor}">${escapeHtml(tx.type_label)}</span></td>
+                                        <td>
+                                            ${tx.product
+                                                ? `<code>${escapeHtml(tx.product.sku)}</code> ${escapeHtml(tx.product.part_number || '')} ${escapeHtml(tx.product.finish || '')}`
+                                                : '<span class="text-muted">—</span>'}
+                                        </td>
+                                        <td class="text-end fw-bold ${qtyClass}">${qtySign}${tx.quantity}</td>
+                                        <td class="text-end text-muted small">${tx.quantity_before}</td>
+                                        <td class="text-end text-muted small">${tx.quantity_after}</td>
+                                        <td class="text-muted small">${escapeHtml(tx.notes || '')}</td>
+                                        <td class="text-muted small">${escapeHtml(tx.user_name || '—')}</td>
+                                    </tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } catch (e) {
+                console.error(e);
+                if (loadingEl) loadingEl.style.display = 'none';
+            }
+        }
+
+        function showJobTxForm(jobId) {
+            document.getElementById(`job-tx-form-${jobId}`).style.display = 'block';
+        }
+        function hideJobTxForm(jobId) {
+            document.getElementById(`job-tx-form-${jobId}`).style.display = 'none';
+            document.getElementById(`job-tx-product-id-${jobId}`).value = '';
+            document.getElementById(`job-tx-product-search-${jobId}`).value = '';
+            document.getElementById(`job-tx-product-selected-${jobId}`).style.display = 'none';
+            document.getElementById(`job-tx-qty-${jobId}`).value = 1;
+            document.getElementById(`job-tx-notes-${jobId}`).value = '';
+        }
+
+        function wireJobTxProductSearch(jobId) {
+            const searchInput = document.getElementById(`job-tx-product-search-${jobId}`);
+            if (!searchInput || searchInput._wired) return;
+            searchInput._wired = true;
+            let timeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => searchJobTxProduct(jobId, this.value), 300);
+            });
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest(`#job-tx-product-results-${jobId}`) && !e.target.closest(`#job-tx-product-search-${jobId}`)) {
+                    const r = document.getElementById(`job-tx-product-results-${jobId}`);
+                    if (r) r.style.display = 'none';
+                }
+            });
+        }
+
+        async function searchJobTxProduct(jobId, query) {
+            const resultsEl = document.getElementById(`job-tx-product-results-${jobId}`);
+            if (!query || query.length < 2) { if (resultsEl) resultsEl.style.display = 'none'; return; }
+            try {
+                const r = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=8`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                const products = data.data || [];
+                if (!resultsEl) return;
+                if (!products.length) { resultsEl.innerHTML = '<div class="list-group-item">No results</div>'; resultsEl.style.display = 'block'; return; }
+                resultsEl.innerHTML = products.map(p => `
+                    <button type="button" class="list-group-item list-group-item-action py-1 px-2"
+                        onclick="selectJobTxProduct(${jobId}, ${p.id}, '${escapeHtml(p.sku)}', '${escapeHtml(p.part_number || '')}', '${escapeHtml(p.finish || '')}', ${p.quantity_available})">
+                        <div class="d-flex justify-content-between">
+                            <strong class="small">${escapeHtml(p.sku)}</strong>
+                            <span class="badge bg-${p.quantity_available > 0 ? 'success' : 'warning'} ms-2">${p.quantity_available} avail</span>
+                        </div>
+                        <small class="text-muted">${escapeHtml(p.part_number || '')} ${escapeHtml(p.finish || '')} — ${escapeHtml(p.description || '')}</small>
+                    </button>`).join('');
+                resultsEl.style.display = 'block';
+            } catch (e) { console.error(e); }
+        }
+
+        function selectJobTxProduct(jobId, productId, sku, partNumber, finish, available) {
+            document.getElementById(`job-tx-product-id-${jobId}`).value = productId;
+            document.getElementById(`job-tx-product-search-${jobId}`).value = sku;
+            const resultsEl = document.getElementById(`job-tx-product-results-${jobId}`);
+            if (resultsEl) resultsEl.style.display = 'none';
+            const selectedEl = document.getElementById(`job-tx-product-selected-${jobId}`);
+            if (selectedEl) {
+                selectedEl.textContent = `${sku} — ${partNumber} ${finish} (${available} available)`;
+                selectedEl.style.display = 'block';
+            }
+        }
+
+        async function submitJobTransaction(jobId) {
+            const productId = document.getElementById(`job-tx-product-id-${jobId}`).value;
+            const type      = document.getElementById(`job-tx-type-${jobId}`).value;
+            const qty       = parseInt(document.getElementById(`job-tx-qty-${jobId}`).value);
+            const notes     = document.getElementById(`job-tx-notes-${jobId}`).value;
+
+            if (!productId) { alert('Please select a product'); return; }
+            if (!qty || qty < 1) { alert('Quantity must be at least 1'); return; }
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/transactions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+                    },
+                    body: JSON.stringify({ product_id: productId, type, quantity: qty, notes: notes || null }),
+                });
+                if (!r.ok) {
+                    const err = await r.json();
+                    throw new Error(err.message || 'Failed to create transaction');
+                }
+                hideJobTxForm(jobId);
+                // Reload the transactions tab (force reload)
+                const key = `${jobId}-tx`;
+                delete jobTabLoaded[key];
+                jobTabLoaded[key] = true;
+                await loadJobTransactions(jobId);
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
         }
 
         function showAddJobModal() {
@@ -1099,6 +1415,7 @@
 
         // ===== INLINE JOB EXPAND =====
         let expandedJobId = null;
+        let jobTabLoaded = {};
         let currentJobForReservations = null;
         let jobReservations = [];
         let jobWorkOrders = [];
@@ -1114,6 +1431,8 @@
                 expandedJobId = null;
                 const chevron = document.getElementById(`chevron-${jobId}`);
                 if (chevron) chevron.style.transform = '';
+                // Clean up loaded state so it reloads fresh next time
+                Object.keys(jobTabLoaded).forEach(k => { if (k.startsWith(jobId + '-')) delete jobTabLoaded[k]; });
                 return;
             }
 
@@ -1123,6 +1442,7 @@
                 if (prev) prev.style.display = 'none';
                 const prevChevron = document.getElementById(`chevron-${expandedJobId}`);
                 if (prevChevron) prevChevron.style.transform = '';
+                Object.keys(jobTabLoaded).forEach(k => { if (k.startsWith(expandedJobId + '-')) delete jobTabLoaded[k]; });
             }
 
             expandedJobId = jobId;
@@ -1135,18 +1455,16 @@
         }
 
         async function loadJobDetail(jobId) {
-            const detailCell = document.getElementById(`job-detail-cell-${jobId}`);
-            if (!detailCell) return;
-
-            detailCell.querySelector('#detail-res-loading-' + jobId).style.display = 'block';
-            detailCell.querySelector('#detail-res-content-' + jobId).style.display = 'none';
-            detailCell.querySelector('#detail-wo-loading-' + jobId).style.display = 'block';
-            detailCell.querySelector('#detail-wo-content-' + jobId).style.display = 'none';
-
-            await Promise.all([
-                loadJobReservations(jobId),
-                loadJobWorkOrders(jobId),
-            ]);
+            currentJobForReservations = allJobs.find(j => j.id === jobId);
+            updateJobTabActions(jobId, 'wo');
+            // Load work orders (default active tab)
+            const woKey = `${jobId}-wo`;
+            if (!jobTabLoaded[woKey]) {
+                jobTabLoaded[woKey] = true;
+                await loadJobWorkOrders(jobId);
+            }
+            // Wire product search for transaction form
+            wireJobTxProductSearch(jobId);
         }
 
         async function loadJobReservations(jobId) {

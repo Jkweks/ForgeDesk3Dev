@@ -408,6 +408,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Job-specific Work Orders (Fabrication)
         Route::get('/business-jobs/{jobId}/work-orders', [BusinessJobController::class, 'getWorkOrders']);
 
+        // Job-specific Transactions
+        Route::get('/business-jobs/{jobId}/transactions', [BusinessJobController::class, 'getTransactions']);
+        Route::post('/business-jobs/{jobId}/transactions', [BusinessJobController::class, 'createTransaction']);
+
         // Job-specific Reservations
         Route::get('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'getReservations']);
         Route::post('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'createReservation']);

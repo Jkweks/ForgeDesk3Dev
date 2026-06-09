@@ -673,4 +673,130 @@ class BusinessJobController extends Controller
 
         return response()->json(['work_orders' => $workOrders]);
     }
+
+    /**
+     * List inventory transactions for a job
+     */
+    public function getTransactions($jobId)
+    {
+        try {
+            $job = BusinessJob::findOrFail($jobId);
+
+            $transactions = \App\Models\InventoryTransaction::with(['product', 'user'])
+                ->where('business_job_id', $jobId)
+                ->orderBy('transaction_date', 'desc')
+                ->get()
+                ->map(fn($t) => [
+                    'id'               => $t->id,
+                    'type'             => $t->type,
+                    'type_label'       => ucwords(str_replace('_', ' ', $t->type)),
+                    'quantity'         => $t->quantity,
+                    'quantity_before'  => $t->quantity_before,
+                    'quantity_after'   => $t->quantity_after,
+                    'notes'            => $t->notes,
+                    'reference_number' => $t->reference_number,
+                    'transaction_date' => $t->transaction_date->format('Y-m-d H:i'),
+                    'product'          => $t->product ? [
+                        'id'          => $t->product->id,
+                        'sku'         => $t->product->sku,
+                        'part_number' => $t->product->part_number,
+                        'finish'      => $t->product->finish,
+                        'description' => $t->product->description,
+                    ] : null,
+                    'user_name' => $t->user?->name,
+                ]);
+
+            return response()->json([
+                'job'          => ['id' => $job->id, 'job_number' => $job->job_number],
+                'transactions' => $transactions,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch job transactions', ['job_id' => $jobId, 'message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to fetch transactions', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Create a manual inventory transaction for a job
+     */
+    public function createTransaction(Request $request, $jobId)
+    {
+        try {
+            $job = BusinessJob::findOrFail($jobId);
+
+            $validator = Validator::make($request->all(), [
+                'product_id'  => 'required|integer|exists:products,id',
+                'type'        => 'required|in:job_issue,receipt,adjustment,job_material_transfer',
+                'quantity'    => 'required|integer|min:1',
+                'notes'       => 'nullable|string|max:500',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+            }
+
+            $product = \App\Models\Product::findOrFail($request->product_id);
+
+            // Determine signed quantity based on type
+            $qty = abs((int) $request->quantity);
+            if (in_array($request->type, ['job_issue'])) {
+                $qty = -$qty;  // Issues reduce stock
+            }
+
+            $qtyBefore = $product->quantity_on_hand;
+            $qtyAfter  = $qtyBefore + $qty;
+
+            DB::beginTransaction();
+
+            $transaction = \App\Models\InventoryTransaction::create([
+                'product_id'       => $product->id,
+                'type'             => $request->type,
+                'quantity'         => $qty,
+                'quantity_before'  => $qtyBefore,
+                'quantity_after'   => $qtyAfter,
+                'business_job_id'  => $job->id,
+                'reference_number' => $job->job_number,
+                'reference_type'   => 'business_job',
+                'reference_id'     => $job->id,
+                'notes'            => $request->notes,
+                'user_id'          => auth()->id(),
+                'transaction_date' => now(),
+            ]);
+
+            // Update product quantity via inventory locations canonical path
+            $location = \App\Models\InventoryLocation::where('product_id', $product->id)->first();
+            if ($location) {
+                $location->quantity = max(0, $location->quantity + $qty);
+                $location->save();
+                $product->recalculateQuantitiesFromLocations();
+            } else {
+                $product->quantity_on_hand = max(0, $qtyAfter);
+                $product->save();
+                $product->updateStatus();
+            }
+
+            DB::commit();
+
+            Log::info('Job transaction created', [
+                'job_id'         => $job->id,
+                'transaction_id' => $transaction->id,
+                'product_id'     => $product->id,
+                'type'           => $request->type,
+                'quantity'       => $qty,
+            ]);
+
+            return response()->json([
+                'message'     => 'Transaction created successfully',
+                'transaction' => [
+                    'id'       => $transaction->id,
+                    'type'     => $transaction->type,
+                    'quantity' => $transaction->quantity,
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to create job transaction', ['job_id' => $jobId, 'message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to create transaction', 'message' => $e->getMessage()], 500);
+        }
+    }
 }

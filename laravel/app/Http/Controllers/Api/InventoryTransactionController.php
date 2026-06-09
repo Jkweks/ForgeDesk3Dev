@@ -42,6 +42,11 @@ class InventoryTransactionController extends Controller
             $query->where('user_id', $request->user_id);
         }
 
+        // Filter by job
+        if ($request->filled('job_id')) {
+            $query->where('business_job_id', $request->job_id);
+        }
+
         // Search by reference number or notes
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
