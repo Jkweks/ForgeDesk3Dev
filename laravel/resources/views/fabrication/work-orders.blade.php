@@ -1025,9 +1025,105 @@ async function setStageStatus(stageId, status) {
         renderElevations(wo.elevations || []);
         restoreExpandedElevations(expanded);
         loadWorkOrders();
+        checkElevationCompletion(stageId, status);
     } catch (e) {
         console.error(e);
     }
+}
+
+// ── Elevation completion prompts ──────────────────────────────────────────
+let _elevPromptId = null;
+
+function findElevForStage(stageId) {
+    for (const e of currentWO?.elevations || []) {
+        if ((e.stages || []).some(s => s.id === stageId)) return e;
+    }
+    return null;
+}
+
+function checkElevationCompletion(stageId, newStatus) {
+    const elev = findElevForStage(stageId);
+    if (!elev || !(elev.stages || []).length) return;
+    const TERMINAL = ['complete', 'not_required'];
+    const allTerminal = elev.stages.every(s => TERMINAL.includes(s.status));
+
+    if (allTerminal && !elev.date_completed) {
+        showElevCompletePrompt(elev);
+    } else if (elev.date_completed && !TERMINAL.includes(newStatus)) {
+        showElevReopenPrompt(elev);
+    }
+}
+
+function showElevCompletePrompt(elev) {
+    _elevPromptId = elev.id;
+    document.getElementById('elev-cp-msg').textContent =
+        `All stages for "${elev.elevation_tag}" are done — mark elevation as complete?`;
+    // Populate completed-by with fab users
+    const sel = document.getElementById('elev-cp-user');
+    sel.innerHTML = '<option value="">— select —</option>';
+    fabUsers.forEach(u => {
+        const o = document.createElement('option');
+        o.value = u.id; o.textContent = u.name;
+        sel.appendChild(o);
+    });
+    const prompt = document.getElementById('elev-complete-prompt');
+    prompt.style.display = 'flex';
+}
+
+function showElevReopenPrompt(elev) {
+    _elevPromptId = elev.id;
+    document.getElementById('elev-rp-msg').textContent =
+        `Elevation "${elev.elevation_tag}" was marked complete. Reopen it as in-progress?`;
+    document.getElementById('elev-reopen-prompt').style.display = 'flex';
+}
+
+function dismissElevPrompt(which) {
+    document.getElementById(which === 'complete' ? 'elev-complete-prompt' : 'elev-reopen-prompt').style.display = 'none';
+    _elevPromptId = null;
+}
+
+async function confirmElevComplete() {
+    if (!_elevPromptId) return;
+    const completedById = document.getElementById('elev-cp-user').value || null;
+    try {
+        await API(`/elevations/${_elevPromptId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                date_completed:  new Date().toISOString().slice(0, 10),
+                completed_by_id: completedById,
+            }),
+        });
+        document.getElementById('elev-complete-prompt').style.display = 'none';
+        _elevPromptId = null;
+        const expanded = getExpandedElevationIds();
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        restoreExpandedElevations(expanded);
+        loadWorkOrders();
+    } catch (e) { console.error(e); }
+}
+
+async function confirmElevReopen() {
+    if (!_elevPromptId) return;
+    try {
+        await API(`/elevations/${_elevPromptId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_completed: null, completed_by_id: null }),
+        });
+        document.getElementById('elev-reopen-prompt').style.display = 'none';
+        _elevPromptId = null;
+        const expanded = getExpandedElevationIds();
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        restoreExpandedElevations(expanded);
+        loadWorkOrders();
+    } catch (e) { console.error(e); }
 }
 
 function stageContextMenu(stageId, currentStatus, event) {
@@ -1788,6 +1884,43 @@ async function saveQuickJob() {
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveQuickJob()">Create Job</button>
       </div>
+    </div>
+  </div>
+</div>
+<!-- ── Elevation completion prompt ── -->
+<div id="elev-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(400px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-circle-check text-success me-2"></i>Elevation Complete?</h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-3" id="elev-cp-msg">All stages are done — mark this elevation as complete?</p>
+      <div class="mb-0">
+        <label class="form-label form-label-sm mb-1">Completed by</label>
+        <select class="form-select form-select-sm" id="elev-cp-user">
+          <option value="">— select —</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissElevPrompt('complete')">Not Yet</button>
+      <button class="btn btn-success" onclick="confirmElevComplete()">Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Elevation reopen prompt ── -->
+<div id="elev-reopen-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(380px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-arrow-back-up text-warning me-2"></i>Reopen Elevation?</h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-0" id="elev-rp-msg">This elevation was marked complete. Reopen it as in-progress?</p>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissElevPrompt('reopen')">Keep Complete</button>
+      <button class="btn btn-warning" onclick="confirmElevReopen()">Yes, Reopen</button>
     </div>
   </div>
 </div>

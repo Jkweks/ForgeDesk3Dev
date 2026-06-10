@@ -28,7 +28,9 @@ class ShopFloorController extends Controller
                 'businessJob',
                 'assignedUsers',
                 'elevations.elevationType',
+                'elevations.completedBy',
                 'elevations.stages.assignedTo',
+                'elevations.stages.completedBy',
             ])
             ->where('archived', false)
             ->orderByRaw('priority IS NULL, priority ASC')
@@ -127,7 +129,9 @@ class ShopFloorController extends Controller
                 'elevation_tag'  => $e->elevation_tag,
                 'scope'          => $e->scope,
                 'date_requested' => $e->date_requested?->format('Y-m-d'),
-                'date_completed' => $e->date_completed?->format('Y-m-d'),
+                'date_completed'    => $e->date_completed?->format('Y-m-d'),
+                'completed_by_id'   => $e->completed_by_id,
+                'completed_by_name' => $e->completedBy?->name,
                 'elevation_type' => $e->elevationType ? [
                     'id'    => $e->elevationType->id,
                     'name'  => $e->elevationType->name,
@@ -139,10 +143,12 @@ class ShopFloorController extends Controller
                     'status'         => $s->status,
                     'sort_order'     => $s->sort_order,
                     'assigned_to_id' => $s->assigned_to_id,
-                    'assigned_name'  => $s->assignedTo?->name,
+                    'assigned_name'     => $s->assignedTo?->name,
                     'assigned_initials' => $s->assignedTo?->initials,
-                    'started_at'     => $s->started_at?->toIso8601String(),
-                    'completed_at'   => $s->completed_at?->toIso8601String(),
+                    'completed_by_id'   => $s->completed_by_id,
+                    'completed_by_name' => $s->completedBy?->name,
+                    'started_at'        => $s->started_at?->toIso8601String(),
+                    'completed_at'      => $s->completed_at?->toIso8601String(),
                 ])->values(),
             ])->values(),
         ];

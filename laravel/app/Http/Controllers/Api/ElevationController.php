@@ -87,7 +87,7 @@ class ElevationController extends Controller
             ]));
             $elevation->save();
 
-            $elevation->load(['elevationType', 'completedBy', 'stages.assignedTo']);
+            $elevation->load(['elevationType', 'completedBy', 'stages.assignedTo', 'stages.completedBy']);
             return response()->json($this->formatElevation($elevation));
         } catch (\Exception $e) {
             Log::error('ElevationController@update failed', ['id' => $id, 'message' => $e->getMessage()]);
@@ -104,10 +104,10 @@ class ElevationController extends Controller
 
     private function formatElevation(FdWoElevation $e): array
     {
-        $stages = $e->relationLoaded('stages') ? $e->stages : $e->stages()->with('assignedTo')->get();
-        $stageCount  = $stages->count();
-        $stagesDone  = $stages->where('status', 'complete')->count();
-        $stagesActive = $stages->where('status', 'in_progress')->count();
+        $stages = $e->relationLoaded('stages') ? $e->stages : $e->stages()->with(['assignedTo', 'completedBy'])->get();
+        $stageCount    = $stages->count();
+        $stagesDone    = $stages->whereIn('status', ['complete', 'not_required'])->count();
+        $stagesActive  = $stages->where('status', 'in_progress')->count();
         $stagesBlocked = $stages->where('status', 'blocked')->count();
 
         return [
@@ -132,13 +132,15 @@ class ElevationController extends Controller
             'stages_active'     => $stagesActive,
             'stages_blocked'    => $stagesBlocked,
             'stages'            => $stages->map(fn($s) => [
-                'id'           => $s->id,
-                'name'         => $s->name,
-                'status'       => $s->status,
-                'sort_order'   => $s->sort_order,
-                'assigned_name'=> $s->assignedTo?->name,
-                'started_at'   => $s->started_at?->toIso8601String(),
-                'completed_at' => $s->completed_at?->toIso8601String(),
+                'id'                => $s->id,
+                'name'              => $s->name,
+                'status'            => $s->status,
+                'sort_order'        => $s->sort_order,
+                'assigned_name'     => $s->assignedTo?->name,
+                'completed_by_id'   => $s->completed_by_id,
+                'completed_by_name' => $s->completedBy?->name,
+                'started_at'        => $s->started_at?->toIso8601String(),
+                'completed_at'      => $s->completed_at?->toIso8601String(),
             ])->values(),
             'created_at'        => $e->created_at->toIso8601String(),
             'updated_at'        => $e->updated_at->toIso8601String(),

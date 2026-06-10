@@ -181,6 +181,37 @@
   </div>
 </div>
 
+<!-- ── Elevation complete prompt ── -->
+<div id="sf-elev-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
+  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">✅</div>
+    <h4 style="margin-bottom:.5rem">All stages done!</h4>
+    <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
+      Mark <strong id="sf-elev-cp-tag"></strong> as complete?
+      <br><small id="sf-elev-cp-user" style="font-size:.8rem"></small>
+    </p>
+    <div class="d-flex gap-2 justify-content-center">
+      <button class="btn btn-ghost-secondary" onclick="sfDismissElevComplete()">Not Yet</button>
+      <button class="btn btn-success" onclick="sfConfirmElevComplete()">Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Elevation reopen prompt ── -->
+<div id="sf-elev-reopen-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
+  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">⚠️</div>
+    <h4 style="margin-bottom:.5rem">Elevation is complete</h4>
+    <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
+      <strong id="sf-elev-rp-tag"></strong> is already marked complete.<br>Do you want to reopen it?
+    </p>
+    <div class="d-flex gap-2 justify-content-center">
+      <button class="btn btn-ghost-secondary" onclick="sfDismissElevReopen()">Cancel</button>
+      <button class="btn btn-warning" onclick="sfConfirmElevReopen()">Yes, Reopen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Header ── -->
 <div class="sf-header">
   <div class="sf-logo">Forge<span class="accent">Desk</span><span class="sub">Shop Floor</span></div>
@@ -505,22 +536,116 @@ function toggleWO(woId) {
 }
 
 // ── Stage cycling ──────────────────────────────────────────────────────────
+let _sfLastCycledStageId = null;
+let _sfLastCycledStatus  = null;
+
 async function cycleStage(event, stageId) {
   event.stopPropagation();
   const btn = event.currentTarget;
+
+  // Find the elevation for this stage to check if it's complete
+  const elev = sfFindElevForStage(stageId);
+  if (elev && elev.date_completed) {
+    // Elevation is marked complete — confirm intent to reopen
+    const ok = await sfElevReopenPrompt(elev);
+    if (!ok) return;
+    // Clear elevation completion before cycling stage
+    await API(`/elevations/${elev.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date_completed: null, completed_by_id: null }),
+    });
+  }
+
   btn.disabled = true; btn.style.opacity = '.55';
   try {
     const body = sfFabUser ? JSON.stringify({ fab_user_id: sfFabUser.user_id }) : '{}';
-    await API(`/shop/stages/${stageId}`, {
+    const r = await API(`/shop/stages/${stageId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body,
     });
+    const result = await r.json();
+    _sfLastCycledStageId = stageId;
+    _sfLastCycledStatus  = result.status;
     await reload();
+    sfCheckElevationCompletion();
   } catch (e) {
     console.error(e);
     btn.disabled = false; btn.style.opacity = '';
   }
+}
+
+// ── Elevation helpers ──────────────────────────────────────────────────────
+function sfFindElevForStage(stageId) {
+  for (const wo of sfWOs) {
+    for (const e of wo.elevations || []) {
+      if ((e.stages || []).some(s => s.id === stageId)) return e;
+    }
+  }
+  return null;
+}
+
+function sfCheckElevationCompletion() {
+  if (!_sfLastCycledStageId) return;
+  const elev = sfFindElevForStage(_sfLastCycledStageId);
+  if (!elev || !(elev.stages || []).length) return;
+  const TERMINAL = ['complete', 'not_required'];
+  const allTerminal = elev.stages.every(s => TERMINAL.includes(s.status));
+  if (allTerminal && !elev.date_completed) {
+    sfShowElevCompletePrompt(elev);
+  }
+}
+
+// ── Elevation complete/reopen overlays ─────────────────────────────────────
+let _sfElevPromptId     = null;
+let _sfElevReopenResolve = null;
+
+function sfShowElevCompletePrompt(elev) {
+  _sfElevPromptId = elev.id;
+  document.getElementById('sf-elev-cp-tag').textContent = elev.elevation_tag;
+  document.getElementById('sf-elev-cp-user').textContent =
+    sfFabUser ? `Logged in as: ${sfFabUser.name}` : '';
+  document.getElementById('sf-elev-complete-prompt').style.display = 'flex';
+}
+
+async function sfElevReopenPrompt(elev) {
+  document.getElementById('sf-elev-rp-tag').textContent = elev.elevation_tag;
+  document.getElementById('sf-elev-reopen-prompt').style.display = 'flex';
+  return new Promise(resolve => { _sfElevReopenResolve = resolve; });
+}
+
+async function sfConfirmElevComplete() {
+  if (!_sfElevPromptId) return;
+  const fabId = sfFabUser?.user_id || null;
+  try {
+    await API(`/elevations/${_sfElevPromptId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date_completed:  new Date().toISOString().slice(0, 10),
+        completed_by_id: fabId,
+      }),
+    });
+  } catch (e) { console.error(e); }
+  document.getElementById('sf-elev-complete-prompt').style.display = 'none';
+  _sfElevPromptId = null;
+  await reload();
+}
+
+function sfDismissElevComplete() {
+  document.getElementById('sf-elev-complete-prompt').style.display = 'none';
+  _sfElevPromptId = null;
+}
+
+function sfConfirmElevReopen() {
+  document.getElementById('sf-elev-reopen-prompt').style.display = 'none';
+  if (_sfElevReopenResolve) { _sfElevReopenResolve(true); _sfElevReopenResolve = null; }
+}
+
+function sfDismissElevReopen() {
+  document.getElementById('sf-elev-reopen-prompt').style.display = 'none';
+  if (_sfElevReopenResolve) { _sfElevReopenResolve(false); _sfElevReopenResolve = null; }
 }
 
 async function reload() {
