@@ -657,10 +657,10 @@
 
     <!-- Stage Templates Default-User Modal -->
     <div class="modal modal-blur fade" id="tplModal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="tplModalTypeName">Stage Defaults</h5>
+            <h5 class="modal-title" id="tplModalTypeName">Stage Templates</h5>
             <button type="button" class="btn-close" onclick="closeTplModal()"></button>
           </div>
           <div class="modal-body" id="tplModalBody">
@@ -706,6 +706,18 @@
               <div class="col-md-6">
                 <label class="form-label">Email</label>
                 <input type="email" class="form-control" id="fabUserEmail" placeholder="optional">
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Shop Floor PIN <span class="text-muted small">(4–8 digits)</span></label>
+                <input type="password" class="form-control" id="fabUserPin" placeholder="Leave blank to keep / clear"
+                  inputmode="numeric" maxlength="8" autocomplete="new-password">
+                <div class="form-text" id="fabUserPinHint">Set a PIN to allow this user to log in on the shop floor tablet.</div>
+              </div>
+              <div class="col-md-6 d-flex align-items-end">
+                <button type="button" class="btn btn-ghost-danger btn-sm" id="fabUserClearPinBtn" style="display:none"
+                  onclick="clearFabPin()">Clear existing PIN</button>
               </div>
             </div>
             <div class="mb-0">
@@ -2202,6 +2214,9 @@
         return d.innerHTML;
       }
 
+      let _fabUserHasPin = false; // tracks if edit target already has a pin set
+      let _fabUserClearPin = false; // user clicked "Clear existing PIN"
+
       function openAddFabUser() {
         document.getElementById('fabUserModalTitle').textContent = 'Add Fab User';
         document.getElementById('fabUserId').value = '';
@@ -2210,6 +2225,9 @@
         document.getElementById('fabUserRole').value = 'worker';
         document.getElementById('fabUserEmail').value = '';
         document.getElementById('fabUserActive').checked = true;
+        document.getElementById('fabUserPin').value = '';
+        document.getElementById('fabUserClearPinBtn').style.display = 'none';
+        _fabUserHasPin = false; _fabUserClearPin = false;
         showFabUserModal();
       }
 
@@ -2226,14 +2244,30 @@
           document.getElementById('fabUserRole').value = u.role;
           document.getElementById('fabUserEmail').value = u.email || '';
           document.getElementById('fabUserActive').checked = u.active;
+          document.getElementById('fabUserPin').value = '';
+          _fabUserHasPin = !!u.has_pin;
+          _fabUserClearPin = false;
+          document.getElementById('fabUserClearPinBtn').style.display = _fabUserHasPin ? '' : 'none';
+          document.getElementById('fabUserPinHint').textContent = _fabUserHasPin
+            ? 'PIN is set. Enter a new value to replace it, or click "Clear existing PIN".'
+            : 'Set a PIN to allow this user to log in on the shop floor tablet.';
           showFabUserModal();
         } catch (e) { console.error(e); }
+      }
+
+      function clearFabPin() {
+        if (!confirm('Remove this user\'s shop floor PIN?')) return;
+        _fabUserClearPin = true;
+        document.getElementById('fabUserPin').value = '';
+        document.getElementById('fabUserClearPinBtn').style.display = 'none';
+        document.getElementById('fabUserPinHint').textContent = 'PIN will be cleared on save.';
       }
 
       async function saveFabUser() {
         const name = document.getElementById('fabUserName').value.trim();
         if (!name) { alert('Name is required.'); return; }
-        const id = document.getElementById('fabUserId').value;
+        const id  = document.getElementById('fabUserId').value;
+        const pin = document.getElementById('fabUserPin').value.trim();
         const body = {
           name,
           initials:  document.getElementById('fabUserInitials').value.trim() || null,
@@ -2242,7 +2276,7 @@
           active:    document.getElementById('fabUserActive').checked,
         };
         try {
-          const url  = id ? `/fab-users/${id}` : '/fab-users';
+          const url    = id ? `/fab-users/${id}` : '/fab-users';
           const method = id ? 'PUT' : 'POST';
           const r = await fabUserAPI(url, {
             method,
@@ -2250,6 +2284,23 @@
             body: JSON.stringify(body),
           });
           if (!r.ok) throw new Error('Save failed');
+          const saved = await r.json();
+          const userId = id || saved.id;
+          // Handle PIN separately
+          if (pin) {
+            if (pin.length < 4) { alert('PIN must be at least 4 digits.'); return; }
+            await fabUserAPI(`/fab-users/${userId}/set-pin`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pin }),
+            });
+          } else if (_fabUserClearPin) {
+            await fabUserAPI(`/fab-users/${userId}/set-pin`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pin: null }),
+            });
+          }
           closeFabUserModal();
           await loadFabUsersAdmin();
         } catch (e) {
@@ -2289,17 +2340,27 @@
       }
 
       // ============================================================
-      // Stage template default-user management
+      // Stage template CRUD management
       // ============================================================
       function escT(str) {
         if (!str) return '';
         const d = document.createElement('div'); d.textContent = String(str); return d.innerHTML;
       }
 
+      let tplCurrentTypeId = null;
+      let tplCurrentTypeName = '';
+      let tplUsers = [];
+
       async function openTypeTemplates(typeId, typeName) {
-        document.getElementById('tplModalTypeName').textContent = typeName + ' — Stage Defaults';
+        tplCurrentTypeId = typeId;
+        tplCurrentTypeName = typeName;
+        document.getElementById('tplModalTypeName').textContent = typeName + ' — Stage Templates';
         document.getElementById('tplModalBody').innerHTML = '<p class="text-muted">Loading…</p>';
         showTplModal();
+        await reloadTplModal();
+      }
+
+      async function reloadTplModal() {
         try {
           const [tplRes, uRes] = await Promise.all([
             fetch('/api/v1/elevation-types?with_templates=1', {
@@ -2309,65 +2370,168 @@
               headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
             }),
           ]);
-          const typeData = ((await tplRes.json()).elevation_types || []).find(t => t.id === typeId);
-          const users    = (await uRes.json()).users || [];
+          const typeData  = ((await tplRes.json()).elevation_types || []).find(t => t.id === tplCurrentTypeId);
+          tplUsers        = (await uRes.json()).users || [];
           const templates = typeData?.stage_templates || [];
-
-          const userOpts = '<option value="">— No default —</option>' +
-            users.map(u => `<option value="${u.id}">${escT(u.name)}</option>`).join('');
-
-          if (!templates.length) {
-            document.getElementById('tplModalBody').innerHTML =
-              '<p class="text-muted text-center py-3">No stage templates defined for this type.</p>';
-            return;
-          }
-
-          document.getElementById('tplModalBody').innerHTML = `
-            <p class="text-muted small mb-3">
-              Set a default assignee per stage. New elevations of this type will auto-assign stages to these users.
-            </p>
-            <table class="table table-sm table-vcenter">
-              <thead>
-                <tr>
-                  <th style="width:36px">#</th>
-                  <th>Stage</th>
-                  <th>Default Assignee</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${templates.map(t => `
-                  <tr>
-                    <td class="text-muted small">${t.sort_order}</td>
-                    <td class="fw-semibold">${escT(t.name)}</td>
-                    <td>
-                      <select class="form-select form-select-sm" style="width:180px"
-                          onchange="saveTemplateUser(${t.id}, this.value)">
-                        ${userOpts.replace(
-                          `value="${t.default_user_id || ''}"`,
-                          `value="${t.default_user_id || ''}" selected`
-                        )}
-                      </select>
-                    </td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>`;
+          renderTplModal(templates);
         } catch (e) {
           console.error(e);
           document.getElementById('tplModalBody').innerHTML = '<p class="text-danger">Failed to load templates.</p>';
         }
       }
 
-      async function saveTemplateUser(templateId, userId) {
+      function renderTplModal(templates) {
+        const userOpts = '<option value="">— No default —</option>' +
+          tplUsers.map(u => `<option value="${u.id}">${escT(u.name)}</option>`).join('');
+
+        const rows = templates.map((t, idx) => `
+          <tr id="tpl-row-${t.id}">
+            <td style="width:52px">
+              <div class="d-flex flex-column gap-1">
+                <button class="btn btn-xs btn-ghost-secondary p-0 px-1" title="Move up"
+                    onclick="moveTpl(${t.id}, 'up')" ${idx === 0 ? 'disabled' : ''}>
+                  <i class="ti ti-chevron-up"></i>
+                </button>
+                <button class="btn btn-xs btn-ghost-secondary p-0 px-1" title="Move down"
+                    onclick="moveTpl(${t.id}, 'down')" ${idx === templates.length - 1 ? 'disabled' : ''}>
+                  <i class="ti ti-chevron-down"></i>
+                </button>
+              </div>
+            </td>
+            <td style="width:36px" class="text-muted small">${t.sort_order}</td>
+            <td>
+              <input type="text" class="form-control form-control-sm" value="${escT(t.name)}"
+                style="min-width:140px"
+                onblur="saveTplField(${t.id}, 'name', this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </td>
+            <td>
+              <input type="text" class="form-control form-control-sm text-muted" value="${escT(t.description || '')}"
+                placeholder="Description…" style="min-width:180px"
+                onblur="saveTplField(${t.id}, 'description', this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </td>
+            <td>
+              <select class="form-select form-select-sm" style="min-width:160px"
+                  onchange="saveTplField(${t.id}, 'default_user_id', this.value || null)">
+                ${userOpts.replace(`value="${t.default_user_id || ''}"`, `value="${t.default_user_id || ''}" selected`)}
+              </select>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-ghost-danger" onclick="deleteTpl(${t.id})" title="Delete stage">
+                <i class="ti ti-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('');
+
+        document.getElementById('tplModalBody').innerHTML = `
+          <p class="text-muted small mb-2">
+            Edit stage names, descriptions, and default assignees. Use arrows to reorder.
+            Changes to names and descriptions save on blur (click away or press Enter).
+          </p>
+          <div class="table-responsive">
+            <table class="table table-sm table-vcenter align-middle mb-2">
+              <thead>
+                <tr>
+                  <th style="width:52px"></th>
+                  <th style="width:36px">#</th>
+                  <th>Stage Name</th>
+                  <th>Description</th>
+                  <th>Default Assignee</th>
+                  <th style="width:48px"></th>
+                </tr>
+              </thead>
+              <tbody>${rows || '<tr><td colspan="6" class="text-muted text-center py-3">No stages yet. Add one below.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="border-top pt-3">
+            <div class="d-flex gap-2 align-items-end">
+              <div class="flex-grow-1">
+                <label class="form-label mb-1 small">New Stage Name</label>
+                <input type="text" class="form-control form-control-sm" id="tpl-new-name" placeholder="e.g. Frame Fab">
+              </div>
+              <div style="min-width:200px">
+                <label class="form-label mb-1 small">Description (optional)</label>
+                <input type="text" class="form-control form-control-sm" id="tpl-new-desc" placeholder="Brief description">
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="addTpl()">
+                <i class="ti ti-plus me-1"></i>Add Stage
+              </button>
+            </div>
+          </div>`;
+      }
+
+      async function saveTplField(id, field, value) {
         try {
-          await fetch(`/api/v1/stage-templates/${templateId}`, {
+          await fetch(`/api/v1/stage-templates/${id}`, {
             method: 'PATCH',
             headers: {
               'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ default_user_id: userId || null }),
+            body: JSON.stringify({ [field]: value || null }),
           });
-        } catch (e) { console.error(e); alert('Failed to save default user'); }
+        } catch (e) { console.error(e); alert('Failed to save'); }
+      }
+
+      async function moveTpl(id, direction) {
+        try {
+          const r = await fetch('/api/v1/elevation-types?with_templates=1', {
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+          });
+          const typeData  = ((await r.json()).elevation_types || []).find(t => t.id === tplCurrentTypeId);
+          const templates = typeData?.stage_templates || [];
+          const idx = templates.findIndex(t => t.id === id);
+          if (idx < 0) return;
+
+          const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+          if (swapIdx < 0 || swapIdx >= templates.length) return;
+
+          // Swap sort_orders
+          const a = templates[idx];
+          const b = templates[swapIdx];
+          await Promise.all([
+            fetch(`/api/v1/stage-templates/${a.id}`, {
+              method: 'PATCH',
+              headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sort_order: b.sort_order }),
+            }),
+            fetch(`/api/v1/stage-templates/${b.id}`, {
+              method: 'PATCH',
+              headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sort_order: a.sort_order }),
+            }),
+          ]);
+          await reloadTplModal();
+        } catch (e) { console.error(e); alert('Failed to reorder'); }
+      }
+
+      async function addTpl() {
+        const name = document.getElementById('tpl-new-name').value.trim();
+        const desc = document.getElementById('tpl-new-desc').value.trim();
+        if (!name) { alert('Stage name is required'); return; }
+        try {
+          await fetch('/api/v1/stage-templates', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ elevation_type_id: tplCurrentTypeId, name, description: desc || null }),
+          });
+          await reloadTplModal();
+        } catch (e) { console.error(e); alert('Failed to add stage'); }
+      }
+
+      async function deleteTpl(id) {
+        if (!confirm('Delete this stage template? Existing work order stages are not affected.')) return;
+        try {
+          await fetch(`/api/v1/stage-templates/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+          });
+          await reloadTplModal();
+        } catch (e) { console.error(e); alert('Failed to delete stage'); }
       }
 
       function showTplModal() {

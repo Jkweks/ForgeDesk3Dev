@@ -69,6 +69,7 @@ class WorkOrderController extends Controller
                 'elevations.elevationType',
                 'elevations.completedBy',
                 'elevations.stages.assignedTo',
+                'elevations.stages.completedBy',
             ])->findOrFail($id);
 
             $data = $this->formatWo($wo);
@@ -212,17 +213,19 @@ class WorkOrderController extends Controller
             'notes'             => $e->notes,
             'scope'             => $e->scope ?? 'assemble',
             'stage_count'       => $stages->count(),
-            'stages_done'       => $stages->where('status', 'complete')->count(),
+            'stages_done'       => $stages->whereIn('status', ['complete', 'not_required'])->count(),
             'stages_active'     => $stages->where('status', 'in_progress')->count(),
             'stages_blocked'    => $stages->where('status', 'blocked')->count(),
             'stages'            => $stages->map(fn($s) => [
-                'id'           => $s->id,
-                'name'         => $s->name,
-                'status'       => $s->status,
-                'sort_order'   => $s->sort_order,
-                'assigned_name'=> $s->assignedTo?->name,
-                'started_at'   => $s->started_at?->toIso8601String(),
-                'completed_at' => $s->completed_at?->toIso8601String(),
+                'id'                => $s->id,
+                'name'              => $s->name,
+                'status'            => $s->status,
+                'sort_order'        => $s->sort_order,
+                'assigned_name'     => $s->assignedTo?->name,
+                'completed_by_id'   => $s->completed_by_id,
+                'completed_by_name' => $s->completedBy?->name,
+                'started_at'        => $s->started_at?->toIso8601String(),
+                'completed_at'      => $s->completed_at?->toIso8601String(),
             ])->values(),
         ];
     }

@@ -8,15 +8,17 @@ use App\Models\FdWoStage;
 use App\Models\FdUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
 class ShopFloorController extends Controller
 {
     private const CYCLE = [
-        'pending'     => 'in_progress',
-        'in_progress' => 'complete',
-        'complete'    => 'pending',
-        'blocked'     => 'pending',
+        'pending'      => 'in_progress',
+        'in_progress'  => 'complete',
+        'complete'     => 'pending',
+        'blocked'      => 'pending',
+        'not_required' => 'pending',
     ];
 
     public function workOrders(Request $request)
@@ -26,7 +28,9 @@ class ShopFloorController extends Controller
                 'businessJob',
                 'assignedUsers',
                 'elevations.elevationType',
+                'elevations.completedBy',
                 'elevations.stages.assignedTo',
+                'elevations.stages.completedBy',
             ])
             ->where('archived', false)
             ->orderByRaw('priority IS NULL, priority ASC')
@@ -48,33 +52,40 @@ class ShopFloorController extends Controller
         ]);
     }
 
-    public function cycleStage(int $id)
+    public function pinLogin(Request $request)
+    {
+        $request->validate(['pin' => 'required|string']);
+        $users = FdUser::where('active', true)->whereNotNull('fab_pin')->get();
+        foreach ($users as $user) {
+            if (Hash::check($request->pin, $user->fab_pin)) {
+                return response()->json([
+                    'user_id'  => $user->id,
+                    'name'     => $user->name,
+                    'initials' => $user->initials,
+                ]);
+            }
+        }
+        return response()->json(['error' => 'Invalid PIN'], 401);
+    }
+
+    public function cycleStage(Request $request, int $id)
     {
         try {
-            $stage = FdWoStage::with('elevation.stages')->findOrFail($id);
+            $stage = FdWoStage::findOrFail($id);
             $next  = self::CYCLE[$stage->status] ?? 'pending';
-
-            // Cascade: completing a stage completes all preceding incomplete stages
-            if ($next === 'complete' && $stage->elevation) {
-                $preceding = $stage->elevation->stages
-                    ->where('sort_order', '<', $stage->sort_order)
-                    ->where('status', '!=', 'complete');
-                foreach ($preceding as $prev) {
-                    $prev->status       = 'complete';
-                    $prev->completed_at = now();
-                    $prev->save();
-                }
-            }
 
             $stage->status = $next;
             if ($next === 'in_progress') {
-                $stage->started_at   = now();
-                $stage->completed_at = null;
+                $stage->started_at    = now();
+                $stage->completed_at  = null;
+                $stage->completed_by_id = null;
             } elseif ($next === 'complete') {
-                $stage->completed_at = now();
+                $stage->completed_at  = now();
+                $stage->completed_by_id = $request->input('fab_user_id') ?: null;
             } else {
-                $stage->started_at   = null;
-                $stage->completed_at = null;
+                $stage->started_at    = null;
+                $stage->completed_at  = null;
+                $stage->completed_by_id = null;
             }
             $stage->save();
 
@@ -82,6 +93,22 @@ class ShopFloorController extends Controller
         } catch (\Exception $e) {
             Log::error('ShopFloorController@cycleStage failed', ['id' => $id, 'message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to update stage'], 500);
+        }
+    }
+
+    public function updateElevation(Request $request, int $id)
+    {
+        try {
+            $elevation = \App\Models\FdWoElevation::findOrFail($id);
+            // Only allow completion fields from the public shop route
+            if ($request->has('date_completed')) {
+                $elevation->date_completed  = $request->date_completed ?: null;
+                $elevation->completed_by_id = $request->input('completed_by_id') ?: null;
+            }
+            $elevation->save();
+            return response()->json(['updated' => $id]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update elevation'], 500);
         }
     }
 
@@ -118,7 +145,9 @@ class ShopFloorController extends Controller
                 'elevation_tag'  => $e->elevation_tag,
                 'scope'          => $e->scope,
                 'date_requested' => $e->date_requested?->format('Y-m-d'),
-                'date_completed' => $e->date_completed?->format('Y-m-d'),
+                'date_completed'    => $e->date_completed?->format('Y-m-d'),
+                'completed_by_id'   => $e->completed_by_id,
+                'completed_by_name' => $e->completedBy?->name,
                 'elevation_type' => $e->elevationType ? [
                     'id'    => $e->elevationType->id,
                     'name'  => $e->elevationType->name,
@@ -130,10 +159,12 @@ class ShopFloorController extends Controller
                     'status'         => $s->status,
                     'sort_order'     => $s->sort_order,
                     'assigned_to_id' => $s->assigned_to_id,
-                    'assigned_name'  => $s->assignedTo?->name,
+                    'assigned_name'     => $s->assignedTo?->name,
                     'assigned_initials' => $s->assignedTo?->initials,
-                    'started_at'     => $s->started_at?->toIso8601String(),
-                    'completed_at'   => $s->completed_at?->toIso8601String(),
+                    'completed_by_id'   => $s->completed_by_id,
+                    'completed_by_name' => $s->completedBy?->name,
+                    'started_at'        => $s->started_at?->toIso8601String(),
+                    'completed_at'      => $s->completed_at?->toIso8601String(),
                 ])->values(),
             ])->values(),
         ];

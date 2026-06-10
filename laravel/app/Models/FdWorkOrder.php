@@ -53,7 +53,7 @@ class FdWorkOrder extends Model
     {
         foreach ($this->elevations as $elev) {
             foreach ($elev->stages as $stage) {
-                if ($stage->status !== 'complete') return false;
+                if (!in_array($stage->status, ['complete', 'not_required'])) return false;
             }
         }
         return true;

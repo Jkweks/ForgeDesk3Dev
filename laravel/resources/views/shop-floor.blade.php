@@ -132,6 +132,32 @@
     [data-bs-theme="dark"] .sf-chip.in_progress { background: #3d2e00; color: #ffc107; }
     [data-bs-theme="dark"] .sf-chip.blocked     { background: #2c0b0e; color: #ea868f; }
 
+    /* ── not_required stage ── */
+    .stage-btn.not_required { background: var(--tblr-blue-lt, #dce7f9); color: var(--tblr-blue, #2c5fc3); }
+    [data-bs-theme="dark"] .stage-btn.not_required { background: #0d1f3c; color: #7aa7e9; }
+
+    /* ── PIN overlay ── */
+    .sf-pin-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sf-pin-card {
+      background: var(--tblr-bg-surface);
+      border-radius: 12px; padding: 2rem 2.5rem;
+      width: min(380px, 90vw); text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,.25);
+    }
+    .sf-pin-card h3 { margin-bottom: 1.25rem; font-size: 1.2rem; }
+    .sf-pin-input {
+      width: 100%; font-size: 1.5rem; letter-spacing: .3em; text-align: center;
+      border: 2px solid var(--tblr-border-color); border-radius: 8px;
+      padding: .6rem 1rem; background: var(--tblr-bg-surface);
+      color: var(--tblr-body-color); outline: none; margin-bottom: 1rem;
+    }
+    .sf-pin-input:focus { border-color: var(--tblr-primary); }
+    .sf-pin-error { color: var(--tblr-danger); font-size: .85rem; min-height: 1.2em; margin-top: .5rem; }
+
     /* ── Misc ── */
     .sf-loading { text-align: center; padding: 5rem; }
     .sf-empty   { text-align: center; padding: 4rem; color: var(--tblr-secondary); }
@@ -143,12 +169,61 @@
 <body>
 <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
 
+<!-- ── PIN login overlay ── -->
+<div class="sf-pin-overlay" id="sf-pin-overlay">
+  <div class="sf-pin-card">
+    <h3>Shop Floor Login</h3>
+    <input class="sf-pin-input" type="password" id="sf-pin-input" inputmode="numeric"
+      maxlength="8" placeholder="••••" autocomplete="off"
+      onkeydown="if(event.key==='Enter')pinLogin()">
+    <button class="btn btn-primary w-100" onclick="pinLogin()">Login</button>
+    <div class="sf-pin-error" id="sf-pin-error"></div>
+  </div>
+</div>
+
+<!-- ── Elevation complete prompt ── -->
+<div id="sf-elev-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
+  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">✅</div>
+    <h4 style="margin-bottom:.5rem">All stages done!</h4>
+    <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
+      Mark <strong id="sf-elev-cp-tag"></strong> as complete?
+      <br><small id="sf-elev-cp-user" style="font-size:.8rem"></small>
+    </p>
+    <div class="d-flex gap-2 justify-content-center">
+      <button class="btn btn-ghost-secondary" onclick="sfDismissElevComplete()">Not Yet</button>
+      <button class="btn btn-success" onclick="sfConfirmElevComplete()">Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Elevation reopen prompt ── -->
+<div id="sf-elev-reopen-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
+  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">⚠️</div>
+    <h4 style="margin-bottom:.5rem">Elevation is complete</h4>
+    <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
+      <strong id="sf-elev-rp-tag"></strong> is already marked complete.<br>Do you want to reopen it?
+    </p>
+    <div class="d-flex gap-2 justify-content-center">
+      <button class="btn btn-ghost-secondary" onclick="sfDismissElevReopen()">Cancel</button>
+      <button class="btn btn-warning" onclick="sfConfirmElevReopen()">Yes, Reopen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Header ── -->
 <div class="sf-header">
   <div class="sf-logo">Forge<span class="accent">Desk</span><span class="sub">Shop Floor</span></div>
   <div class="ms-auto d-flex align-items-center gap-3">
     <span class="text-muted small" id="sf-clock"></span>
     <span class="text-muted small" id="sf-wo-count"></span>
+    <span id="sf-user-badge" style="display:none" class="d-flex align-items-center gap-2">
+      <span class="badge bg-blue-lt text-blue" id="sf-user-name"></span>
+      <button class="btn btn-sm btn-ghost-secondary" onclick="sfLogout()" title="Log out">
+        <i class="ti ti-logout"></i>
+      </button>
+    </span>
   </div>
 </div>
 
@@ -198,9 +273,10 @@ let sfWOs      = [];
 let sfUsers    = [];
 let activeUser = '';
 let hideDone   = false;
+let sfFabUser  = null;  // { user_id, name, initials }
 const expandedWOs = new Set();
 
-const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked' };
+const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked', not_required: 'N/R' };
 
 const API = (path, opts = {}) =>
   fetch('/api/v1' + path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
@@ -231,8 +307,63 @@ function calibrateSticky() {
 window.addEventListener('load',   calibrateSticky);
 window.addEventListener('resize', calibrateSticky);
 
+// ── PIN auth ───────────────────────────────────────────────────────────────
+function sfLoadSession() {
+  try {
+    const stored = sessionStorage.getItem('sf_fab_user');
+    if (stored) sfFabUser = JSON.parse(stored);
+  } catch {}
+}
+
+function sfApplySession() {
+  const overlay = document.getElementById('sf-pin-overlay');
+  const badge   = document.getElementById('sf-user-badge');
+  const nameEl  = document.getElementById('sf-user-name');
+  if (sfFabUser) {
+    overlay.style.display = 'none';
+    badge.style.display   = '';
+    nameEl.textContent    = sfFabUser.initials || sfFabUser.name;
+  } else {
+    overlay.style.display = '';
+    badge.style.display   = 'none';
+    document.getElementById('sf-pin-input').focus();
+  }
+}
+
+async function pinLogin() {
+  const pin  = document.getElementById('sf-pin-input').value.trim();
+  const errEl = document.getElementById('sf-pin-error');
+  errEl.textContent = '';
+  if (!pin) return;
+  const btn = document.querySelector('.sf-pin-card .btn-primary');
+  btn.disabled = true;
+  try {
+    const r = await API('/shop/fab-pin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    if (!r.ok) { errEl.textContent = 'Invalid PIN. Try again.'; document.getElementById('sf-pin-input').value = ''; return; }
+    sfFabUser = await r.json();
+    sessionStorage.setItem('sf_fab_user', JSON.stringify(sfFabUser));
+    sfApplySession();
+  } catch (e) {
+    errEl.textContent = 'Login failed. Try again.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function sfLogout() {
+  sfFabUser = null;
+  sessionStorage.removeItem('sf_fab_user');
+  sfApplySession();
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
+  sfLoadSession();
+  sfApplySession();
   const [woRes, userRes] = await Promise.all([API('/shop/work-orders'), API('/shop/fab-users')]);
   sfWOs   = (await woRes.json()).work_orders || [];
   sfUsers = (await userRes.json()).users      || [];
@@ -288,12 +419,12 @@ function render() {
     }
     if (!woVisible) return;
 
-    const visStages = allStages.filter(s => !(hideDone && s.status === 'complete'));
-    if (!visStages.length && hideDone) return; // skip WO if all stages are done and hiding complete
+    const visStages = allStages.filter(s => !(hideDone && ['complete','not_required'].includes(s.status)));
+    if (!visStages.length && hideDone) return;
 
     woCount++;
     const totalStages = allStages.length;
-    const doneStages  = allStages.filter(s => s.status === 'complete').length;
+    const doneStages  = allStages.filter(s => ['complete','not_required'].includes(s.status)).length;
     const inProg      = allStages.filter(s => s.status === 'in_progress').length;
     const blocked     = allStages.filter(s => s.status === 'blocked').length;
     const pct         = totalStages ? Math.round((doneStages / totalStages) * 100) : 0;
@@ -359,12 +490,17 @@ function elevBlock(e) {
     ? `<span class="small ${isPast(e.date_requested) ? 'text-danger' : 'text-muted'}">${e.date_requested}</span>` : '';
 
   const stagesBtns = (e.stages || []).map(s => {
-    const assignTip = s.assigned_name ? `Assigned: ${s.assigned_name}` : 'Unassigned';
+    const who = s.completed_by_name || s.assigned_name || '';
+    const tip  = who ? `${who} · tap to advance` : 'tap to advance';
+    const byLine = s.completed_by_name
+      ? `<span style="font-size:.6rem;opacity:.7">${esc(s.completed_by_name)}</span>`
+      : '';
     return `<button class="stage-btn ${s.status}"
         onclick="cycleStage(event, ${s.id})"
-        title="${esc(assignTip)} · tap to advance">
+        title="${esc(tip)}">
       <span class="sname">${esc(s.name)}</span>
       <span class="sstatus">${STATUS_LABEL[s.status] || s.status}</span>
+      ${byLine}
     </button>`;
   }).join('');
 
@@ -400,17 +536,116 @@ function toggleWO(woId) {
 }
 
 // ── Stage cycling ──────────────────────────────────────────────────────────
+let _sfLastCycledStageId = null;
+let _sfLastCycledStatus  = null;
+
 async function cycleStage(event, stageId) {
-  event.stopPropagation(); // don't toggle the WO row
+  event.stopPropagation();
   const btn = event.currentTarget;
+
+  // Find the elevation for this stage to check if it's complete
+  const elev = sfFindElevForStage(stageId);
+  if (elev && elev.date_completed) {
+    // Elevation is marked complete — confirm intent to reopen
+    const ok = await sfElevReopenPrompt(elev);
+    if (!ok) return;
+    // Clear elevation completion before cycling stage
+    await API(`/shop/elevations/${elev.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date_completed: null, completed_by_id: null }),
+    });
+  }
+
   btn.disabled = true; btn.style.opacity = '.55';
   try {
-    await API(`/shop/stages/${stageId}`, { method: 'PATCH' });
+    const body = sfFabUser ? JSON.stringify({ fab_user_id: sfFabUser.user_id }) : '{}';
+    const r = await API(`/shop/stages/${stageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    const result = await r.json();
+    _sfLastCycledStageId = stageId;
+    _sfLastCycledStatus  = result.status;
     await reload();
+    sfCheckElevationCompletion();
   } catch (e) {
     console.error(e);
     btn.disabled = false; btn.style.opacity = '';
   }
+}
+
+// ── Elevation helpers ──────────────────────────────────────────────────────
+function sfFindElevForStage(stageId) {
+  for (const wo of sfWOs) {
+    for (const e of wo.elevations || []) {
+      if ((e.stages || []).some(s => s.id === stageId)) return e;
+    }
+  }
+  return null;
+}
+
+function sfCheckElevationCompletion() {
+  if (!_sfLastCycledStageId) return;
+  const elev = sfFindElevForStage(_sfLastCycledStageId);
+  if (!elev || !(elev.stages || []).length) return;
+  const TERMINAL = ['complete', 'not_required'];
+  const allTerminal = elev.stages.every(s => TERMINAL.includes(s.status));
+  if (allTerminal && !elev.date_completed) {
+    sfShowElevCompletePrompt(elev);
+  }
+}
+
+// ── Elevation complete/reopen overlays ─────────────────────────────────────
+let _sfElevPromptId     = null;
+let _sfElevReopenResolve = null;
+
+function sfShowElevCompletePrompt(elev) {
+  _sfElevPromptId = elev.id;
+  document.getElementById('sf-elev-cp-tag').textContent = elev.elevation_tag;
+  document.getElementById('sf-elev-cp-user').textContent =
+    sfFabUser ? `Logged in as: ${sfFabUser.name}` : '';
+  document.getElementById('sf-elev-complete-prompt').style.display = 'flex';
+}
+
+async function sfElevReopenPrompt(elev) {
+  document.getElementById('sf-elev-rp-tag').textContent = elev.elevation_tag;
+  document.getElementById('sf-elev-reopen-prompt').style.display = 'flex';
+  return new Promise(resolve => { _sfElevReopenResolve = resolve; });
+}
+
+async function sfConfirmElevComplete() {
+  if (!_sfElevPromptId) return;
+  const fabId = sfFabUser?.user_id || null;
+  try {
+    await API(`/shop/elevations/${_sfElevPromptId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date_completed:  new Date().toISOString().slice(0, 10),
+        completed_by_id: fabId,
+      }),
+    });
+  } catch (e) { console.error(e); }
+  document.getElementById('sf-elev-complete-prompt').style.display = 'none';
+  _sfElevPromptId = null;
+  await reload();
+}
+
+function sfDismissElevComplete() {
+  document.getElementById('sf-elev-complete-prompt').style.display = 'none';
+  _sfElevPromptId = null;
+}
+
+function sfConfirmElevReopen() {
+  document.getElementById('sf-elev-reopen-prompt').style.display = 'none';
+  if (_sfElevReopenResolve) { _sfElevReopenResolve(true); _sfElevReopenResolve = null; }
+}
+
+function sfDismissElevReopen() {
+  document.getElementById('sf-elev-reopen-prompt').style.display = 'none';
+  if (_sfElevReopenResolve) { _sfElevReopenResolve(false); _sfElevReopenResolve = null; }
 }
 
 async function reload() {

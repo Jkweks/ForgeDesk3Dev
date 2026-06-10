@@ -53,15 +53,16 @@ class JobReservation extends Model
 
         // When reservation status changes, recalculate committed quantities for all products
         static::updated(function ($reservation) {
-            // If status changed, sync all products in this reservation
             if ($reservation->isDirty('status')) {
                 $reservation->syncAllProductCommittedQuantities();
+                $reservation->businessJob?->syncAutoStatus();
             }
         });
 
-        // When reservation is deleted, sync all products
+        // When reservation is deleted, sync all products and job status
         static::deleted(function ($reservation) {
             $reservation->syncAllProductCommittedQuantities();
+            $reservation->businessJob?->syncAutoStatus();
         });
     }
 
@@ -137,7 +138,6 @@ class JobReservation extends Model
     public static function statusLabels(): array
     {
         return [
-            'draft' => 'Draft - Details still being gathered',
             'active' => 'Active - Inventory committed, waiting to be pulled',
             'in_progress' => 'In Progress - Work started, team consuming inventory',
             'fulfilled' => 'Fulfilled - All inventory reconciled',

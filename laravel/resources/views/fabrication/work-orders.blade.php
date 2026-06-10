@@ -7,10 +7,12 @@
 .pip-pending     { background: var(--tblr-secondary, #adb5bd); }
 .pip-in_progress { background: var(--tblr-warning, #f59f00); }
 .pip-complete    { background: var(--tblr-success, #2fb344); }
-.pip-blocked     { background: var(--tblr-danger, #d63939); }
+.pip-blocked      { background: var(--tblr-danger, #d63939); }
+.pip-not_required { background: var(--tblr-blue-lt, #e9f0fb); border: 1px solid var(--tblr-blue, #206bc4); }
 .wo-offcanvas    { width: 700px !important; }
 .elev-row td     { vertical-align: middle; }
 .wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
+.card.bg-light, table.bg-light { background: var(--tblr-bg-surface-secondary) !important; }
 @endsection
 
 @section('content')
@@ -266,6 +268,11 @@
             <select class="form-select" id="new-wo-job" required>
               <option value="">— Select a job —</option>
             </select>
+            <div class="mt-1">
+              <button type="button" class="btn btn-sm btn-ghost-primary" onclick="openQuickJobCreate()">
+                <i class="ti ti-plus me-1"></i>Create New Job
+              </button>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label">Material Delivery</label>
@@ -524,7 +531,7 @@ let elevTypes = [];
 let fabUsers = [];
 let filterTimer = null;
 
-const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending' };
+const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending', not_required: 'pending' };
 
 const API = (path, opts = {}) => fetch('/api/v1' + path, {
     ...opts,
@@ -857,12 +864,13 @@ function elevRow(e) {
         ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')}">${esc(e.elevation_type.name)}</span>`
         : '<span class="text-muted">—</span>';
 
-    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset' };
+    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset' };
     const stages = e.stages || [];
     const pips = stages.map(s =>
         `<span class="pip pip-${s.status}" style="cursor:pointer"
-            title="${s.name}: ${s.status} → click to ${nextLabels[s.status] || 'advance'}"
-            onclick="cycleStage(${s.id},'${s.status}',event)"></span>`
+            title="${s.name}: ${s.status} → left-click to ${nextLabels[s.status] || 'advance'}, right-click for options"
+            onclick="cycleStage(${s.id},'${s.status}',event)"
+            oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)"></span>`
     ).join('');
 
     const completedInfo = e.date_completed
@@ -876,20 +884,21 @@ function elevRow(e) {
            </button>`
         : '';
 
-    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger' };
-    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked' };
+    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger', not_required: 'blue-lt' };
+    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked', not_required: 'N/R' };
     const stageDetailRows = stages.map(s => `
         <tr>
             <td style="padding-left:2rem" class="text-muted small">${esc(s.name)}</td>
             <td>
                 <span class="badge bg-${stageColors[s.status] || 'secondary'}" style="cursor:pointer"
-                    onclick="cycleStage(${s.id},'${s.status}',event)">
+                    onclick="cycleStage(${s.id},'${s.status}',event)"
+                    oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)">
                     ${stageLabels[s.status] || s.status}
                 </span>
             </td>
             <td class="text-muted small">${s.assigned_name ? esc(s.assigned_name) : '—'}</td>
             <td class="text-muted small">${s.started_at ? new Date(s.started_at).toLocaleDateString() : '—'}</td>
-            <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}</td>
+            <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}${s.completed_by_name ? `<br><span class="text-muted" style="font-size:.7rem">${esc(s.completed_by_name)}</span>` : ''}</td>
         </tr>`).join('');
 
     const stageDetailBlock = hasStages ? `
@@ -999,27 +1008,15 @@ function findElevationForStage(stageId) {
 async function cycleStage(stageId, currentStatus, event) {
     event.stopPropagation();
     const nextStatus = STAGE_CYCLE[currentStatus] || 'pending';
+    await setStageStatus(stageId, nextStatus);
+}
+
+async function setStageStatus(stageId, status) {
     try {
-        // Completing a stage cascades completion to all preceding incomplete stages
-        if (nextStatus === 'complete') {
-            const found = findElevationForStage(stageId);
-            if (found) {
-                const preceding = found.elevation.stages
-                    .slice(0, found.index)
-                    .filter(s => s.status !== 'complete');
-                for (const s of preceding) {
-                    await API(`/work-order-stages/${s.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'complete' }),
-                    });
-                }
-            }
-        }
         await API(`/work-order-stages/${stageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus }),
+            body: JSON.stringify({ status }),
         });
         const expanded = getExpandedElevationIds();
         const r = await API(`/work-orders/${currentWO.id}`);
@@ -1028,9 +1025,122 @@ async function cycleStage(stageId, currentStatus, event) {
         renderElevations(wo.elevations || []);
         restoreExpandedElevations(expanded);
         loadWorkOrders();
+        checkElevationCompletion(stageId, status);
     } catch (e) {
         console.error(e);
     }
+}
+
+// ── Elevation completion prompts ──────────────────────────────────────────
+let _elevPromptId = null;
+
+function findElevForStage(stageId) {
+    for (const e of currentWO?.elevations || []) {
+        if ((e.stages || []).some(s => s.id === stageId)) return e;
+    }
+    return null;
+}
+
+function checkElevationCompletion(stageId, newStatus) {
+    const elev = findElevForStage(stageId);
+    if (!elev || !(elev.stages || []).length) return;
+    const TERMINAL = ['complete', 'not_required'];
+    const allTerminal = elev.stages.every(s => TERMINAL.includes(s.status));
+
+    if (allTerminal && !elev.date_completed) {
+        showElevCompletePrompt(elev);
+    } else if (elev.date_completed && !TERMINAL.includes(newStatus)) {
+        showElevReopenPrompt(elev);
+    }
+}
+
+function showElevCompletePrompt(elev) {
+    _elevPromptId = elev.id;
+    document.getElementById('elev-cp-msg').textContent =
+        `All stages for "${elev.elevation_tag}" are done — mark elevation as complete?`;
+    // Populate completed-by with fab users
+    const sel = document.getElementById('elev-cp-user');
+    sel.innerHTML = '<option value="">— select —</option>';
+    fabUsers.forEach(u => {
+        const o = document.createElement('option');
+        o.value = u.id; o.textContent = u.name;
+        sel.appendChild(o);
+    });
+    const prompt = document.getElementById('elev-complete-prompt');
+    prompt.style.display = 'flex';
+}
+
+function showElevReopenPrompt(elev) {
+    _elevPromptId = elev.id;
+    document.getElementById('elev-rp-msg').textContent =
+        `Elevation "${elev.elevation_tag}" was marked complete. Reopen it as in-progress?`;
+    document.getElementById('elev-reopen-prompt').style.display = 'flex';
+}
+
+function dismissElevPrompt(which) {
+    document.getElementById(which === 'complete' ? 'elev-complete-prompt' : 'elev-reopen-prompt').style.display = 'none';
+    _elevPromptId = null;
+}
+
+async function confirmElevComplete() {
+    if (!_elevPromptId) return;
+    const completedById = document.getElementById('elev-cp-user').value || null;
+    try {
+        await API(`/elevations/${_elevPromptId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                date_completed:  new Date().toISOString().slice(0, 10),
+                completed_by_id: completedById,
+            }),
+        });
+        document.getElementById('elev-complete-prompt').style.display = 'none';
+        _elevPromptId = null;
+        const expanded = getExpandedElevationIds();
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        restoreExpandedElevations(expanded);
+        loadWorkOrders();
+    } catch (e) { console.error(e); }
+}
+
+async function confirmElevReopen() {
+    if (!_elevPromptId) return;
+    try {
+        await API(`/elevations/${_elevPromptId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_completed: null, completed_by_id: null }),
+        });
+        document.getElementById('elev-reopen-prompt').style.display = 'none';
+        _elevPromptId = null;
+        const expanded = getExpandedElevationIds();
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        restoreExpandedElevations(expanded);
+        loadWorkOrders();
+    } catch (e) { console.error(e); }
+}
+
+function stageContextMenu(stageId, currentStatus, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('stage-ctx-menu')?.remove();
+    const isNR = currentStatus === 'not_required';
+    const menu = document.createElement('div');
+    menu.id = 'stage-ctx-menu';
+    menu.className = 'dropdown-menu show';
+    menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
+    menu.innerHTML = isNR
+        ? `<button class="dropdown-item" onclick="setStageStatus(${stageId},'pending');this.closest('#stage-ctx-menu').remove()">Reset to Pending</button>`
+        : `<button class="dropdown-item text-muted" onclick="setStageStatus(${stageId},'not_required');this.closest('#stage-ctx-menu').remove()">Mark Not Required</button>`;
+    document.body.appendChild(menu);
+    const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
 }
 
 function getExpandedElevationIds() {
@@ -1660,5 +1770,158 @@ async function saveDoorSchedule() {
         btn.textContent = 'Create Elevations';
     }
 }
+
+function openQuickJobCreate() {
+    document.getElementById('qj-number').value = '';
+    document.getElementById('qj-name').value = '';
+    document.getElementById('qj-customer').value = '';
+    document.getElementById('qj-pm').value = '';
+    document.getElementById('qj-start').value = '';
+    document.getElementById('qj-target').value = '';
+    document.getElementById('qj-status').value = 'active';
+    document.getElementById('qj-notes').value = '';
+    const m = new bootstrap.Modal(document.getElementById('quickJobModal'));
+    m.show();
+}
+
+async function saveQuickJob() {
+    const jobNumber = document.getElementById('qj-number').value.trim();
+    const jobName = document.getElementById('qj-name').value.trim();
+    if (!jobNumber || !jobName) { alert('Job Number and Job Name are required'); return; }
+
+    try {
+        const r = await fetch('/api/v1/business-jobs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+            },
+            body: JSON.stringify({
+                job_number: jobNumber,
+                job_name: jobName,
+                customer_name: document.getElementById('qj-customer').value || null,
+                project_manager: document.getElementById('qj-pm').value || null,
+                start_date: document.getElementById('qj-start').value || null,
+                target_completion_date: document.getElementById('qj-target').value || null,
+                status: document.getElementById('qj-status').value,
+                notes: document.getElementById('qj-notes').value || null,
+            }),
+        });
+        if (!r.ok) {
+            const err = await r.json();
+            throw new Error(err.message || 'Failed to create job');
+        }
+        const data = await r.json();
+        bootstrap.Modal.getInstance(document.getElementById('quickJobModal')).hide();
+
+        // Reload job list and select the new job
+        const sel = document.getElementById('new-wo-job');
+        if (sel) {
+            const opt = document.createElement('option');
+            opt.value = data.job.id;
+            opt.textContent = `${data.job.job_number} — ${data.job.job_name}`;
+            sel.appendChild(opt);
+            sel.value = data.job.id;
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
 </script>
+
+<!-- Quick Create Job Modal (from Work Orders wizard) -->
+<div class="modal fade" id="quickJobModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create New Job</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label required">Job Number</label>
+            <input type="text" class="form-control" id="qj-number" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label required">Job Name</label>
+            <input type="text" class="form-control" id="qj-name" required>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Customer Name</label>
+            <input type="text" class="form-control" id="qj-customer">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Project Manager</label>
+            <input type="text" class="form-control" id="qj-pm">
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Start Date</label>
+            <input type="date" class="form-control" id="qj-start">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Target Completion</label>
+            <input type="date" class="form-control" id="qj-target">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="qj-status">
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" id="qj-notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveQuickJob()">Create Job</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ── Elevation completion prompt ── -->
+<div id="elev-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(400px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-circle-check text-success me-2"></i>Elevation Complete?</h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-3" id="elev-cp-msg">All stages are done — mark this elevation as complete?</p>
+      <div class="mb-0">
+        <label class="form-label form-label-sm mb-1">Completed by</label>
+        <select class="form-select form-select-sm" id="elev-cp-user">
+          <option value="">— select —</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissElevPrompt('complete')">Not Yet</button>
+      <button class="btn btn-success" onclick="confirmElevComplete()">Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Elevation reopen prompt ── -->
+<div id="elev-reopen-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(380px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-arrow-back-up text-warning me-2"></i>Reopen Elevation?</h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-0" id="elev-rp-msg">This elevation was marked complete. Reopen it as in-progress?</p>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissElevPrompt('reopen')">Keep Complete</button>
+      <button class="btn btn-warning" onclick="confirmElevReopen()">Yes, Reopen</button>
+    </div>
+  </div>
+</div>
 @endpush

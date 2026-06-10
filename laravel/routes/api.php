@@ -162,8 +162,10 @@ Route::prefix('v1')->group(function () {
     // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
     Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
     Route::get('/shop/fab-users',   [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
+    Route::post('/shop/fab-pin-login', [\App\Http\Controllers\Api\ShopFloorController::class, 'pinLogin']);
     Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
     Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
+    Route::patch('/shop/elevations/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'updateElevation']);
     // ─────────────────────────────────────────────────────────────────────────
 
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
@@ -408,6 +410,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Job-specific Work Orders (Fabrication)
         Route::get('/business-jobs/{jobId}/work-orders', [BusinessJobController::class, 'getWorkOrders']);
 
+        // Job-specific Transactions
+        Route::get('/business-jobs/{jobId}/transactions', [BusinessJobController::class, 'getTransactions']);
+        Route::post('/business-jobs/{jobId}/transactions', [BusinessJobController::class, 'createTransaction']);
+
         // Job-specific Reservations
         Route::get('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'getReservations']);
         Route::post('/business-jobs/{jobId}/reservations', [BusinessJobController::class, 'createReservation']);
@@ -457,12 +463,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store']);
         Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update']);
         Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy']);
+        Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate']);
         Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate']);
+        Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate']);
 
         Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
         Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);
         Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update']);
         Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy']);
+        Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin']);
+
+        Route::get('/business-jobs/{jobId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
+        Route::post('/job-steps', [\App\Http\Controllers\Api\JobStepController::class, 'store']);
+        Route::patch('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'update']);
+        Route::delete('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'destroy']);
 
         // Fabrication Documents
         Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions']);

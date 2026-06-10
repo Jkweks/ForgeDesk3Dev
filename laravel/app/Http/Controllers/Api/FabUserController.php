@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\FdUser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class FabUserController extends Controller
 {
@@ -16,7 +17,8 @@ class FabUserController extends Controller
             $query->where('active', true);
         }
 
-        $users = $query->get(['id', 'name', 'initials', 'role', 'email', 'active']);
+        $users = $query->get(['id', 'name', 'initials', 'role', 'email', 'active', 'fab_pin'])
+            ->map(fn($u) => array_merge($u->makeHidden('fab_pin')->toArray(), ['has_pin' => !is_null($u->fab_pin)]));
 
         return response()->json(['users' => $users]);
     }
@@ -49,5 +51,15 @@ class FabUserController extends Controller
         $user->save();
 
         return response()->json(['deactivated' => $id]);
+    }
+
+    public function setPin(Request $request, int $id)
+    {
+        $request->validate(['pin' => 'nullable|digits_between:4,8']);
+        $user          = FdUser::findOrFail($id);
+        $user->fab_pin = $request->pin ? Hash::make($request->pin) : null;
+        $user->save();
+
+        return response()->json(['updated' => $id]);
     }
 }

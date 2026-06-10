@@ -15,7 +15,7 @@ class WorkOrderStageController extends Controller
         $request->validate(['wo_id' => 'required|integer']);
 
         try {
-            $stages = FdWoStage::with(['assignedTo', 'log'])
+            $stages = FdWoStage::with(['assignedTo', 'completedBy', 'log'])
                 ->where('work_order_id', $request->wo_id)
                 ->orderBy('sort_order')
                 ->get()
@@ -60,7 +60,7 @@ class WorkOrderStageController extends Controller
         try {
             $stage = FdWoStage::findOrFail($id);
 
-            $allowed = ['name', 'description', 'status', 'sort_order', 'assigned_to_id', 'notes', 'started_at', 'completed_at'];
+            $allowed = ['name', 'description', 'status', 'sort_order', 'assigned_to_id', 'completed_by_id', 'notes', 'started_at', 'completed_at'];
             $stage->fill($request->only($allowed));
 
             // Auto-timestamp on status transitions
@@ -68,12 +68,14 @@ class WorkOrderStageController extends Controller
                 if ($request->status === 'in_progress' && is_null($stage->started_at)) {
                     $stage->started_at = now();
                 }
-                if ($request->status === 'complete' && is_null($stage->completed_at)) {
-                    $stage->completed_at = now();
+                if ($request->status === 'complete') {
+                    if (is_null($stage->completed_at)) $stage->completed_at = now();
+                    if (!$request->has('completed_by_id')) {} // leave existing if not sent
                 }
-                if ($request->status === 'pending') {
-                    $stage->started_at   = null;
-                    $stage->completed_at = null;
+                if (in_array($request->status, ['pending', 'not_required'])) {
+                    $stage->started_at    = null;
+                    $stage->completed_at  = null;
+                    $stage->completed_by_id = null;
                 }
             }
 
@@ -111,18 +113,20 @@ class WorkOrderStageController extends Controller
     private function formatStage(FdWoStage $s): array
     {
         return [
-            'id'             => $s->id,
-            'work_order_id'  => $s->work_order_id,
-            'template_id'    => $s->template_id,
-            'name'           => $s->name,
-            'description'    => $s->description,
-            'sort_order'     => $s->sort_order,
-            'status'         => $s->status,
-            'assigned_to_id' => $s->assigned_to_id,
-            'assigned_name'  => $s->assignedTo?->name,
-            'started_at'     => $s->started_at?->toIso8601String(),
-            'completed_at'   => $s->completed_at?->toIso8601String(),
-            'notes'          => $s->notes,
+            'id'                => $s->id,
+            'work_order_id'     => $s->work_order_id,
+            'template_id'       => $s->template_id,
+            'name'              => $s->name,
+            'description'       => $s->description,
+            'sort_order'        => $s->sort_order,
+            'status'            => $s->status,
+            'assigned_to_id'    => $s->assigned_to_id,
+            'assigned_name'     => $s->assignedTo?->name,
+            'completed_by_id'   => $s->completed_by_id,
+            'completed_by_name' => $s->completedBy?->name,
+            'started_at'        => $s->started_at?->toIso8601String(),
+            'completed_at'      => $s->completed_at?->toIso8601String(),
+            'notes'             => $s->notes,
             'log'            => $s->log->map(fn($l) => [
                 'id'         => $l->id,
                 'user_id'    => $l->user_id,

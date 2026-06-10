@@ -2,6 +2,10 @@
 
 @section('title', 'Job Reservations - ForgeDesk')
 
+@section('styles')
+.card.bg-light { background: var(--tblr-bg-surface-secondary) !important; }
+@endsection
+
 @section('content')
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -76,7 +80,6 @@
                       <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="Search..." onkeyup="filterReservations()">
                       <select class="form-select form-select-sm" id="statusFilter" onchange="filterReservations()">
                         <option value="">All Status</option>
-                        <option value="draft">Draft</option>
                         <option value="active">Active</option>
                         <option value="in_progress">In Progress</option>
                         <option value="fulfilled">Fulfilled</option>
@@ -149,7 +152,6 @@
             <div class="mb-3">
               <label class="form-label">New Status</label>
               <select class="form-select" id="newStatus">
-                <option value="draft">Draft</option>
                 <option value="active">Active</option>
                 <option value="in_progress">In Progress</option>
                 <option value="fulfilled">Fulfilled</option>

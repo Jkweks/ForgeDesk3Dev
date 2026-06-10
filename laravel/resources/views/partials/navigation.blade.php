@@ -94,7 +94,7 @@
                   </a>
                   <div class="dropdown-menu">
                     <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">Documents</a>
-                    <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders</a>
+                    <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders <span class="badge bg-blue-lt text-blue ms-1" style="font-size:.65rem;vertical-align:middle">Beta</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">

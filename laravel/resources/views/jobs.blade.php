@@ -2,6 +2,19 @@
 
 @section('title', 'Jobs Management - ForgeDesk')
 
+@section('styles')
+.job-expand-wrap {
+    background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+}
+.job-tx-form-wrap {
+    background: var(--tblr-bg-surface, var(--tblr-body-bg));
+    border: 1px solid var(--tblr-border-color);
+}
+.card.bg-light {
+    background: var(--tblr-bg-surface-secondary) !important;
+}
+@endsection
+
 @section('content')
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -97,6 +110,7 @@
                             <th>Customer</th>
                             <th>Status</th>
                             <th>Reservations</th>
+                            <th>Work Orders</th>
                             <th>Start Date</th>
                             <th>Target Completion</th>
                             <th>Days Remaining</th>
@@ -243,193 +257,6 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn btn-primary" onclick="saveJob()">Save Job</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Job Details Modal -->
-    <div class="modal modal-blur fade" id="jobDetailsModal" tabindex="-1" role="dialog" aria-hidden="true">
-      <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="jobDetailsModalTitle">Job Details</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <!-- Job Header Info -->
-            <div class="card mb-3">
-              <div class="card-body">
-                <div class="row">
-                  <div class="col-md-3">
-                    <div class="subheader">Job Number</div>
-                    <div class="h3 mb-0" id="detailJobNumber">-</div>
-                  </div>
-                  <div class="col-md-4">
-                    <div class="subheader">Job Name</div>
-                    <div class="h3 mb-0" id="detailJobName">-</div>
-                  </div>
-                  <div class="col-md-2">
-                    <div class="subheader">Customer</div>
-                    <div class="h4 mb-0 text-muted" id="detailCustomer">-</div>
-                  </div>
-                  <div class="col-md-2">
-                    <div class="subheader">Project Manager</div>
-                    <div class="h4 mb-0 text-muted" id="detailPM">-</div>
-                  </div>
-                  <div class="col-md-1">
-                    <div class="subheader">Status</div>
-                    <div id="detailStatus"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tabs -->
-            <ul class="nav nav-tabs mb-3" id="jobTabs" role="tablist">
-              <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="reservations-tab" data-bs-toggle="tab" data-bs-target="#reservations" type="button" role="tab">
-                  <i class="ti ti-clipboard-check me-1"></i>Reservations <span class="badge bg-info ms-1" id="reservationsCount">0</span>
-                </button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="door-configs-tab" data-bs-toggle="tab" data-bs-target="#door-configs" type="button" role="tab">
-                  <i class="ti ti-door me-1"></i>Door Configurations <span class="badge bg-secondary ms-1" id="doorConfigsCount">0</span>
-                </button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="work-orders-tab" data-bs-toggle="tab" data-bs-target="#work-orders" type="button" role="tab">
-                  <i class="ti ti-tool me-1"></i>Work Orders <span class="badge bg-secondary ms-1" id="workOrdersCount">0</span>
-                </button>
-              </li>
-            </ul>
-
-            <!-- Tab Content -->
-            <div class="tab-content" id="jobTabContent">
-              <!-- Reservations Tab -->
-              <div class="tab-pane fade show active" id="reservations" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <div>
-                    <h3 class="mb-0">Material Reservations</h3>
-                    <p class="text-muted mb-0">Manage inventory reservations for this job</p>
-                  </div>
-                  <div class="btn-group">
-                    <button class="btn btn-success" onclick="showMaterialCheckModal()">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
-                      Material Check
-                    </button>
-                    <button class="btn btn-primary" onclick="showAddReservationModal()">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
-                      Manual Reservation
-                    </button>
-                  </div>
-                </div>
-
-                <div id="reservationsLoading" class="text-center text-muted py-5">
-                  <div class="spinner-border" role="status"></div>
-                  <p class="mt-2">Loading reservations...</p>
-                </div>
-
-                <div id="reservationsContent" style="display: none;">
-                  <div class="table-responsive">
-                    <table class="table table-vcenter card-table table-striped">
-                      <thead>
-                        <tr>
-                          <th>Res #</th>
-                          <th>Status</th>
-                          <th>Requested By</th>
-                          <th>Needed By</th>
-                          <th>Items</th>
-                          <th>Committed</th>
-                          <th>Consumed</th>
-                          <th>Created</th>
-                          <th class="w-1">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody id="reservationsTableBody">
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div id="reservationsEmpty" style="display: none;" class="empty">
-                  <div class="empty-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /></svg>
-                  </div>
-                  <p class="empty-title">No reservations yet</p>
-                  <p class="empty-subtitle text-muted">
-                    Create your first reservation for this job
-                  </p>
-                  <div class="empty-action">
-                    <button class="btn btn-primary" onclick="showAddReservationModal()">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
-                      New Reservation
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Door Configurations Tab (Placeholder) -->
-              <div class="tab-pane fade" id="door-configs" role="tabpanel">
-                <div class="empty">
-                  <div class="empty-icon">
-                    <i class="ti ti-door" style="font-size: 3rem; opacity: 0.5;"></i>
-                  </div>
-                  <p class="empty-title">Door Configurations</p>
-                  <p class="empty-subtitle text-muted">
-                    Door configuration system will be integrated here.<br>
-                    This will connect with the new configurator tool.
-                  </p>
-                </div>
-              </div>
-
-              <!-- Work Orders Tab -->
-              <div class="tab-pane fade" id="work-orders" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <div>
-                    <h3 class="mb-0">Work Orders</h3>
-                    <p class="text-muted mb-0">Production releases for this job</p>
-                  </div>
-                  <button class="btn btn-primary btn-sm" onclick="openNewWOForJob()" data-permission="fabrication.work-orders.create">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>
-                    New Work Order
-                  </button>
-                </div>
-                <div id="woLoading" class="text-center text-muted py-4" style="display:none;">
-                  <div class="spinner-border spinner-border-sm" role="status"></div>
-                  <p class="mt-2 mb-0">Loading work orders…</p>
-                </div>
-                <div id="woContent" style="display:none;">
-                  <div class="table-responsive">
-                    <table class="table table-vcenter card-table table-striped">
-                      <thead>
-                        <tr>
-                          <th>Release</th>
-                          <th>Date Issued</th>
-                          <th>Material</th>
-                          <th>Elevations</th>
-                          <th class="w-1"></th>
-                        </tr>
-                      </thead>
-                      <tbody id="woTableBody"></tbody>
-                    </table>
-                  </div>
-                </div>
-                <div id="woEmpty" style="display:none;" class="empty">
-                  <div class="empty-icon">
-                    <i class="ti ti-tool" style="font-size: 2rem; opacity: 0.4;"></i>
-                  </div>
-                  <p class="empty-title">No work orders yet</p>
-                  <p class="empty-subtitle text-muted">Create the first production release for this job</p>
-                  <div class="empty-action">
-                    <button class="btn btn-primary" onclick="openNewWOForJob()">New Work Order</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
@@ -742,7 +569,6 @@
             <div class="mb-3">
               <label class="form-label">New Status</label>
               <select class="form-select" id="resNewStatus">
-                <option value="draft">Draft</option>
                 <option value="active">Active</option>
                 <option value="in_progress">In Progress</option>
                 <option value="fulfilled">Fulfilled</option>
@@ -1013,28 +839,28 @@
             tbody.innerHTML = '';
 
             jobs.forEach(job => {
-                const tr = document.createElement('tr');
-                const reservationCount = job.reservations_count || 0;
+                const resCount = job.reservations_count || 0;
+                const woCount = job.work_orders_count || 0;
 
-                // Make entire row clickable to open job details
+                // Main row
+                const tr = document.createElement('tr');
                 tr.style.cursor = 'pointer';
+                tr.dataset.jobId = job.id;
                 tr.onclick = function(e) {
-                    // Don't open modal if clicking on action buttons
                     if (!e.target.closest('.action-buttons')) {
-                        viewJobDetails(job.id);
+                        toggleJobRow(job.id);
                     }
                 };
-
                 tr.innerHTML = `
-                    <td><strong>${escapeHtml(job.job_number)}</strong></td>
+                    <td>
+                        <i id="chevron-${job.id}" class="ti ti-chevron-right me-1" style="transition:transform .2s; font-size:.8rem;"></i>
+                        <strong>${escapeHtml(job.job_number)}</strong>
+                    </td>
                     <td>${escapeHtml(job.job_name)}</td>
                     <td>${escapeHtml(job.customer_name || '-')}</td>
                     <td><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
-                    <td>
-                        <span class="badge ${reservationCount > 0 ? 'bg-info' : 'bg-secondary'}">
-                            ${reservationCount}
-                        </span>
-                    </td>
+                    <td><span class="badge ${resCount > 0 ? 'bg-info' : 'bg-secondary'}">${resCount}</span></td>
+                    <td><span class="badge ${woCount > 0 ? 'bg-purple' : 'bg-secondary'}">${woCount}</span></td>
                     <td>${job.start_date || '-'}</td>
                     <td>${job.target_completion_date || '-'}</td>
                     <td>${getDaysRemaining(job.days_until_completion)}</td>
@@ -1050,6 +876,110 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
+
+                // Detail expand row
+                const detailTr = document.createElement('tr');
+                detailTr.id = `job-detail-${job.id}`;
+                detailTr.style.display = 'none';
+                detailTr.innerHTML = `
+                    <td colspan="10" id="job-detail-cell-${job.id}" class="p-0">
+                        <div class="border-top border-bottom job-expand-wrap">
+                            <!-- Job header bar -->
+                            <div class="d-flex align-items-center gap-3 px-3 pt-2 pb-1">
+                                <span class="text-muted small">${escapeHtml(job.customer_name || '')}${job.project_manager ? ' · PM: ' + escapeHtml(job.project_manager) : ''}</span>
+                                <div class="ms-auto btn-list" id="job-tab-actions-${job.id}"></div>
+                            </div>
+                            <!-- Job Steps strip -->
+                            <div class="d-flex align-items-center gap-1 flex-wrap px-3 py-2 border-bottom" id="job-steps-${job.id}">
+                                <span class="text-muted small">Loading steps…</span>
+                            </div>
+                            <!-- Tabs -->
+                            <ul class="nav nav-tabs px-3" id="job-tabs-${job.id}" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="job-tab-wo-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'wo')" type="button">
+                                        <i class="ti ti-tool me-1"></i>Work Orders
+                                        <span class="badge bg-secondary ms-1" id="job-wo-badge-${job.id}">${job.work_orders_count || 0}</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="job-tab-res-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'res')" type="button">
+                                        <i class="ti ti-clipboard-list me-1"></i>Reservations
+                                        <span class="badge bg-secondary ms-1" id="job-res-badge-${job.id}">${job.reservations_count || 0}</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="job-tab-tx-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'tx')" type="button">
+                                        <i class="ti ti-receipt me-1"></i>Transactions
+                                        <span class="badge bg-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
+                                    </button>
+                                </li>
+                            </ul>
+                            <!-- Tab panes -->
+                            <div class="px-3 py-2">
+                                <!-- Work Orders pane (default active) -->
+                                <div id="job-pane-wo-${job.id}">
+                                    <div id="detail-wo-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-wo-content-${job.id}" style="display:none;"></div>
+                                </div>
+                                <!-- Reservations pane -->
+                                <div id="job-pane-res-${job.id}" style="display:none;">
+                                    <div id="detail-res-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-res-content-${job.id}" style="display:none;"></div>
+                                </div>
+                                <!-- Transactions pane -->
+                                <div id="job-pane-tx-${job.id}" style="display:none;">
+                                    <div id="detail-tx-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-tx-content-${job.id}" style="display:none;"></div>
+                                    <!-- Add transaction inline form -->
+                                    <div id="job-tx-form-${job.id}" style="display:none;" class="mt-2 p-2 rounded job-tx-form-wrap">
+                                        <h6 class="mb-2">New Transaction</h6>
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-md-4">
+                                                <label class="form-label form-label-sm mb-1">Product</label>
+                                                <input type="text" class="form-control form-control-sm" id="job-tx-product-search-${job.id}"
+                                                    placeholder="Search SKU, Part#…" autocomplete="off">
+                                                <input type="hidden" id="job-tx-product-id-${job.id}">
+                                                <div id="job-tx-product-results-${job.id}" class="list-group mt-1" style="display:none; max-height:160px; overflow-y:auto; position:absolute; z-index:100; min-width:320px;"></div>
+                                                <div id="job-tx-product-selected-${job.id}" class="text-success small mt-1" style="display:none;"></div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label form-label-sm mb-1">Type</label>
+                                                <select class="form-select form-select-sm" id="job-tx-type-${job.id}">
+                                                    <option value="job_issue">Issue (remove)</option>
+                                                    <option value="receipt">Receipt (add)</option>
+                                                    <option value="adjustment">Adjustment</option>
+                                                    <option value="job_material_transfer">Return</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label form-label-sm mb-1">Quantity</label>
+                                                <input type="number" class="form-control form-control-sm" id="job-tx-qty-${job.id}" min="1" value="1">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label form-label-sm mb-1">Notes</label>
+                                                <input type="text" class="form-control form-control-sm" id="job-tx-notes-${job.id}" placeholder="Optional">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button class="btn btn-primary btn-sm w-100" onclick="submitJobTransaction(${job.id})">Save</button>
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-link btn-sm text-muted mt-1 p-0" onclick="hideJobTxForm(${job.id})">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailTr);
             });
         }
 
@@ -1072,6 +1002,279 @@
             }
 
             displayJobs(filtered);
+        }
+
+        // ===== TABBED DETAIL HELPERS =====
+
+        function switchJobTab(jobId, tab) {
+            // Update button active states
+            ['wo', 'res', 'tx'].forEach(t => {
+                const btn = document.getElementById(`job-tab-${t}-btn-${jobId}`);
+                const pane = document.getElementById(`job-pane-${t}-${jobId}`);
+                if (btn) btn.classList.toggle('active', t === tab);
+                if (pane) pane.style.display = t === tab ? '' : 'none';
+            });
+
+            updateJobTabActions(jobId, tab);
+
+            const key = `${jobId}-${tab}`;
+            if (!jobTabLoaded[key]) {
+                jobTabLoaded[key] = true;
+                if (tab === 'wo') loadJobWorkOrders(jobId);
+                else if (tab === 'res') loadJobReservationsInline(jobId);
+                else if (tab === 'tx') loadJobTransactions(jobId);
+            }
+        }
+
+        function updateJobTabActions(jobId, tab) {
+            const actionsEl = document.getElementById(`job-tab-actions-${jobId}`);
+            if (!actionsEl) return;
+
+            if (tab === 'wo') {
+                actionsEl.innerHTML = typeof openNewWOForJob === 'function' ? `
+                    <button class="btn btn-sm btn-outline-secondary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); openNewWOForJob()" data-permission="fabrication.work-orders.create">
+                        <i class="ti ti-tool me-1"></i>New Work Order
+                    </button>` : '';
+            } else if (tab === 'res') {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-sm btn-success" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showMaterialCheckModal()">
+                        <i class="ti ti-clipboard-check me-1"></i>Material Check
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showAddReservationModal()">
+                        <i class="ti ti-plus me-1"></i>New Reservation
+                    </button>`;
+            } else if (tab === 'tx') {
+                actionsEl.innerHTML = `
+                    <button class="btn btn-sm btn-primary" onclick="showJobTxForm(${jobId})">
+                        <i class="ti ti-plus me-1"></i>Add Transaction
+                    </button>`;
+            }
+        }
+
+        async function loadJobReservationsInline(jobId) {
+            const loadingEl = document.getElementById(`detail-res-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-res-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            if (contentEl) contentEl.style.display = 'none';
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                const reservations = data.reservations || [];
+
+                const badge = document.getElementById(`job-res-badge-${jobId}`);
+                if (badge) badge.textContent = reservations.length;
+
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (!contentEl) return;
+                contentEl.style.display = 'block';
+
+                if (reservations.length === 0) {
+                    contentEl.innerHTML = '<p class="text-muted small mb-0">No reservations yet.</p>';
+                    return;
+                }
+
+                contentEl.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-vcenter mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Status</th><th>Requested By</th>
+                                    <th>Needed By</th><th>Items</th><th>Committed</th><th>Consumed</th>
+                                    <th class="w-1"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${reservations.map(res => `
+                                    <tr>
+                                        <td><strong>#${res.reservation_id}</strong></td>
+                                        <td><span class="badge bg-${getReservationStatusColor(res.status)}">${res.status_label}</span></td>
+                                        <td>${escapeHtml(res.requested_by)}</td>
+                                        <td>${res.needed_by || '-'}</td>
+                                        <td>${res.items_count}</td>
+                                        <td>${res.total_committed}</td>
+                                        <td>${res.total_consumed}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info" onclick="viewReservationDetails(${res.id})" title="View">
+                                                <i class="ti ti-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } catch (e) {
+                console.error(e);
+                if (loadingEl) loadingEl.style.display = 'none';
+            }
+        }
+
+        async function loadJobTransactions(jobId) {
+            const loadingEl = document.getElementById(`detail-tx-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-tx-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            if (contentEl) contentEl.style.display = 'none';
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/transactions`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                const txs = data.transactions || [];
+
+                const badge = document.getElementById(`job-tx-badge-${jobId}`);
+                if (badge) badge.textContent = txs.length;
+
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (!contentEl) return;
+                contentEl.style.display = 'block';
+
+                if (txs.length === 0) {
+                    contentEl.innerHTML = '<p class="text-muted small mb-0">No transactions recorded for this job yet.</p>';
+                    return;
+                }
+
+                contentEl.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-vcenter mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th><th>Type</th><th>Product</th>
+                                    <th class="text-end">Qty</th><th class="text-end">Before</th><th class="text-end">After</th>
+                                    <th>Notes</th><th>By</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${txs.map(tx => {
+                                    const qtyClass = tx.quantity >= 0 ? 'text-success' : 'text-danger';
+                                    const qtySign  = tx.quantity >= 0 ? '+' : '';
+                                    const typeColor = {
+                                        job_issue: 'danger', receipt: 'success', adjustment: 'warning',
+                                        job_material_transfer: 'info'
+                                    }[tx.type] || 'secondary';
+                                    return `<tr>
+                                        <td class="text-muted small">${tx.transaction_date}</td>
+                                        <td><span class="badge bg-${typeColor}">${escapeHtml(tx.type_label)}</span></td>
+                                        <td>
+                                            ${tx.product
+                                                ? `<code>${escapeHtml(tx.product.sku)}</code> ${escapeHtml(tx.product.part_number || '')} ${escapeHtml(tx.product.finish || '')}`
+                                                : '<span class="text-muted">—</span>'}
+                                        </td>
+                                        <td class="text-end fw-bold ${qtyClass}">${qtySign}${tx.quantity}</td>
+                                        <td class="text-end text-muted small">${tx.quantity_before}</td>
+                                        <td class="text-end text-muted small">${tx.quantity_after}</td>
+                                        <td class="text-muted small">${escapeHtml(tx.notes || '')}</td>
+                                        <td class="text-muted small">${escapeHtml(tx.user_name || '—')}</td>
+                                    </tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } catch (e) {
+                console.error(e);
+                if (loadingEl) loadingEl.style.display = 'none';
+            }
+        }
+
+        function showJobTxForm(jobId) {
+            document.getElementById(`job-tx-form-${jobId}`).style.display = 'block';
+        }
+        function hideJobTxForm(jobId) {
+            document.getElementById(`job-tx-form-${jobId}`).style.display = 'none';
+            document.getElementById(`job-tx-product-id-${jobId}`).value = '';
+            document.getElementById(`job-tx-product-search-${jobId}`).value = '';
+            document.getElementById(`job-tx-product-selected-${jobId}`).style.display = 'none';
+            document.getElementById(`job-tx-qty-${jobId}`).value = 1;
+            document.getElementById(`job-tx-notes-${jobId}`).value = '';
+        }
+
+        function wireJobTxProductSearch(jobId) {
+            const searchInput = document.getElementById(`job-tx-product-search-${jobId}`);
+            if (!searchInput || searchInput._wired) return;
+            searchInput._wired = true;
+            let timeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => searchJobTxProduct(jobId, this.value), 300);
+            });
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest(`#job-tx-product-results-${jobId}`) && !e.target.closest(`#job-tx-product-search-${jobId}`)) {
+                    const r = document.getElementById(`job-tx-product-results-${jobId}`);
+                    if (r) r.style.display = 'none';
+                }
+            });
+        }
+
+        async function searchJobTxProduct(jobId, query) {
+            const resultsEl = document.getElementById(`job-tx-product-results-${jobId}`);
+            if (!query || query.length < 2) { if (resultsEl) resultsEl.style.display = 'none'; return; }
+            try {
+                const r = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=8`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                const products = data.data || [];
+                if (!resultsEl) return;
+                if (!products.length) { resultsEl.innerHTML = '<div class="list-group-item">No results</div>'; resultsEl.style.display = 'block'; return; }
+                resultsEl.innerHTML = products.map(p => `
+                    <button type="button" class="list-group-item list-group-item-action py-1 px-2"
+                        onclick="selectJobTxProduct(${jobId}, ${p.id}, '${escapeHtml(p.sku)}', '${escapeHtml(p.part_number || '')}', '${escapeHtml(p.finish || '')}', ${p.quantity_available})">
+                        <div class="d-flex justify-content-between">
+                            <strong class="small">${escapeHtml(p.sku)}</strong>
+                            <span class="badge bg-${p.quantity_available > 0 ? 'success' : 'warning'} ms-2">${p.quantity_available} avail</span>
+                        </div>
+                        <small class="text-muted">${escapeHtml(p.part_number || '')} ${escapeHtml(p.finish || '')} — ${escapeHtml(p.description || '')}</small>
+                    </button>`).join('');
+                resultsEl.style.display = 'block';
+            } catch (e) { console.error(e); }
+        }
+
+        function selectJobTxProduct(jobId, productId, sku, partNumber, finish, available) {
+            document.getElementById(`job-tx-product-id-${jobId}`).value = productId;
+            document.getElementById(`job-tx-product-search-${jobId}`).value = sku;
+            const resultsEl = document.getElementById(`job-tx-product-results-${jobId}`);
+            if (resultsEl) resultsEl.style.display = 'none';
+            const selectedEl = document.getElementById(`job-tx-product-selected-${jobId}`);
+            if (selectedEl) {
+                selectedEl.textContent = `${sku} — ${partNumber} ${finish} (${available} available)`;
+                selectedEl.style.display = 'block';
+            }
+        }
+
+        async function submitJobTransaction(jobId) {
+            const productId = document.getElementById(`job-tx-product-id-${jobId}`).value;
+            const type      = document.getElementById(`job-tx-type-${jobId}`).value;
+            const qty       = parseInt(document.getElementById(`job-tx-qty-${jobId}`).value);
+            const notes     = document.getElementById(`job-tx-notes-${jobId}`).value;
+
+            if (!productId) { alert('Please select a product'); return; }
+            if (!qty || qty < 1) { alert('Quantity must be at least 1'); return; }
+
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/transactions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+                    },
+                    body: JSON.stringify({ product_id: productId, type, quantity: qty, notes: notes || null }),
+                });
+                if (!r.ok) {
+                    const err = await r.json();
+                    throw new Error(err.message || 'Failed to create transaction');
+                }
+                hideJobTxForm(jobId);
+                // Reload the transactions tab (force reload)
+                const key = `${jobId}-tx`;
+                delete jobTabLoaded[key];
+                jobTabLoaded[key] = true;
+                await loadJobTransactions(jobId);
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
         }
 
         function showAddJobModal() {
@@ -1227,102 +1430,284 @@
             return div.innerHTML;
         }
 
-        // ===== JOB DETAILS MODAL FUNCTIONS =====
+        // ===== INLINE JOB EXPAND =====
+        let expandedJobId = null;
+        let jobTabLoaded = {};
         let currentJobForReservations = null;
         let jobReservations = [];
+        let jobWorkOrders = [];
         let reservationItems = [];
 
-        async function viewJobDetails(jobId) {
+        function toggleJobRow(jobId) {
+            const detailRow = document.getElementById(`job-detail-${jobId}`);
+            if (!detailRow) return;
+
+            if (expandedJobId === jobId) {
+                // Collapse
+                detailRow.style.display = 'none';
+                expandedJobId = null;
+                const chevron = document.getElementById(`chevron-${jobId}`);
+                if (chevron) chevron.style.transform = '';
+                // Clean up loaded state so it reloads fresh next time
+                Object.keys(jobTabLoaded).forEach(k => { if (k.startsWith(jobId + '-')) delete jobTabLoaded[k]; });
+                return;
+            }
+
+            // Collapse previously expanded
+            if (expandedJobId) {
+                const prev = document.getElementById(`job-detail-${expandedJobId}`);
+                if (prev) prev.style.display = 'none';
+                const prevChevron = document.getElementById(`chevron-${expandedJobId}`);
+                if (prevChevron) prevChevron.style.transform = '';
+                Object.keys(jobTabLoaded).forEach(k => { if (k.startsWith(expandedJobId + '-')) delete jobTabLoaded[k]; });
+            }
+
+            expandedJobId = jobId;
             currentJobForReservations = allJobs.find(j => j.id === jobId);
-            if (!currentJobForReservations) return;
+            detailRow.style.display = '';
+            const chevron = document.getElementById(`chevron-${jobId}`);
+            if (chevron) chevron.style.transform = 'rotate(90deg)';
 
-            // Populate job header
-            document.getElementById('jobDetailsModalTitle').textContent =
-                `${currentJobForReservations.job_number} - ${currentJobForReservations.job_name}`;
-            document.getElementById('detailJobNumber').textContent = currentJobForReservations.job_number;
-            document.getElementById('detailJobName').textContent = currentJobForReservations.job_name;
-            document.getElementById('detailCustomer').textContent = currentJobForReservations.customer_name || 'N/A';
-            document.getElementById('detailPM').textContent = currentJobForReservations.project_manager || 'N/A';
-            document.getElementById('detailStatus').innerHTML =
-                `<span class="badge bg-${getStatusColor(currentJobForReservations.status)}">${currentJobForReservations.status_label}</span>`;
-
-            // Show modal
-            const modal = document.getElementById('jobDetailsModal');
-            showModal(modal);
-
-            // Reset to reservations tab (activate first tab)
-            const reservationsTab = document.getElementById('reservations-tab');
-            const reservationsPane = document.getElementById('reservations');
-
-            // Remove active from all tabs
-            document.querySelectorAll('#jobTabs .nav-link').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('#jobTabContent .tab-pane').forEach(pane => {
-                pane.classList.remove('show', 'active');
-            });
-
-            // Activate reservations tab
-            reservationsTab.classList.add('active');
-            reservationsPane.classList.add('show', 'active');
-
-            // Load reservations
-            await loadJobReservations(jobId);
-
-            // Wire work-orders tab to lazy-load on first click
-            const woTab = document.getElementById('work-orders-tab');
-            woTab.onclick = () => loadJobWorkOrders(currentJobForReservations.id);
+            loadJobDetail(jobId);
         }
 
-        // ===== WORK ORDERS IN JOB DETAILS =====
-        let jobWorkOrders = [];
+        async function loadJobDetail(jobId) {
+            currentJobForReservations = allJobs.find(j => j.id === jobId);
+            updateJobTabActions(jobId, 'wo');
+            // Load job steps
+            loadJobSteps(jobId);
+            // Load work orders (default active tab)
+            const woKey = `${jobId}-wo`;
+            if (!jobTabLoaded[woKey]) {
+                jobTabLoaded[woKey] = true;
+                await loadJobWorkOrders(jobId);
+            }
+            // Wire product search for transaction form
+            wireJobTxProductSearch(jobId);
+        }
+
+        async function loadJobSteps(jobId) {
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/steps`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                renderJobSteps(jobId, data.steps || []);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderJobSteps(jobId, steps) {
+            const container = document.getElementById(`job-steps-${jobId}`);
+            if (!container) return;
+            const statusColor = { pending: 'secondary', complete: 'success', not_required: 'info' };
+            const statusIcon  = { pending: '', complete: '✓', not_required: '—' };
+            const html = steps.map(s => {
+                const color = statusColor[s.status] || 'secondary';
+                return `<span class="badge bg-${color}-lt text-${color} step-badge" style="cursor:pointer;font-size:.78rem;padding:.28rem .6rem"
+                    title="${escapeHtml(s.status === 'complete' && s.completed_by_name ? 'By: ' + s.completed_by_name : s.status)}"
+                    onclick="cycleJobStep(${s.id}, '${s.status}', ${jobId})"
+                    oncontextmenu="jobStepContextMenu(${s.id}, '${s.status}', ${jobId}, event)">
+                    ${statusIcon[s.status] ? statusIcon[s.status] + ' ' : ''}${escapeHtml(s.name)}
+                </span>`;
+            }).join('');
+            container.innerHTML = `<span class="text-muted small me-2" style="white-space:nowrap">Job Steps:</span>${html}
+                <button class="btn btn-ghost-secondary btn-sm ms-1 px-1 py-0" style="font-size:.72rem"
+                    onclick="addJobStep(${jobId})" title="Add step"><i class="ti ti-plus"></i></button>`;
+        }
+
+        async function cycleJobStep(stepId, currentStatus, jobId) {
+            const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
+            try {
+                await fetch(`/api/v1/job-steps/${stepId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: nextStatus }),
+                });
+                loadJobSteps(jobId);
+            } catch (e) { console.error(e); }
+        }
+
+        function jobStepContextMenu(stepId, currentStatus, jobId, event) {
+            event.preventDefault();
+            document.getElementById('job-step-ctx')?.remove();
+            const isNR = currentStatus === 'not_required';
+            const menu = document.createElement('div');
+            menu.id = 'job-step-ctx';
+            menu.className = 'dropdown-menu show';
+            menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
+            menu.innerHTML = isNR
+                ? `<button class="dropdown-item" onclick="setJobStepStatus(${stepId},'pending',${jobId});this.closest('#job-step-ctx').remove()">Reset to Pending</button>`
+                : `<button class="dropdown-item text-muted" onclick="setJobStepStatus(${stepId},'not_required',${jobId});this.closest('#job-step-ctx').remove()">Mark Not Required</button>
+                   <button class="dropdown-item text-danger" onclick="deleteJobStep(${stepId},${jobId});this.closest('#job-step-ctx').remove()">Delete Step</button>`;
+            document.body.appendChild(menu);
+            const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
+            setTimeout(() => document.addEventListener('click', close), 0);
+        }
+
+        async function setJobStepStatus(stepId, status, jobId) {
+            try {
+                await fetch(`/api/v1/job-steps/${stepId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status }),
+                });
+                loadJobSteps(jobId);
+            } catch (e) { console.error(e); }
+        }
+
+        async function deleteJobStep(stepId, jobId) {
+            if (!confirm('Delete this step?')) return;
+            try {
+                await fetch(`/api/v1/job-steps/${stepId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                loadJobSteps(jobId);
+            } catch (e) { console.error(e); }
+        }
+
+        async function addJobStep(jobId) {
+            const name = prompt('Step name:');
+            if (!name) return;
+            try {
+                await fetch('/api/v1/job-steps', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ business_job_id: jobId, name: name.trim() }),
+                });
+                loadJobSteps(jobId);
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadJobReservations(jobId) {
+            try {
+                const r = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
+                });
+                const data = await r.json();
+                jobReservations = data.reservations || [];
+                displayJobReservations(jobId);
+            } catch (e) {
+                console.error(e);
+            }
+        }
 
         async function loadJobWorkOrders(jobId) {
-            document.getElementById('woLoading').style.display = 'block';
-            document.getElementById('woContent').style.display = 'none';
-            document.getElementById('woEmpty').style.display = 'none';
-
             try {
                 const r = await fetch(`/api/v1/business-jobs/${jobId}/work-orders`, {
                     headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
                 });
                 const data = await r.json();
                 jobWorkOrders = data.work_orders || [];
-                document.getElementById('workOrdersCount').textContent = jobWorkOrders.length;
-                displayJobWorkOrders();
+                displayJobWorkOrders(jobId);
             } catch (e) {
                 console.error(e);
-                document.getElementById('woLoading').style.display = 'none';
             }
         }
 
-        function displayJobWorkOrders() {
-            document.getElementById('woLoading').style.display = 'none';
-            if (jobWorkOrders.length === 0) {
-                document.getElementById('woEmpty').style.display = 'block';
+        function displayJobReservations(jobId) {
+            const loadingEl = document.getElementById(`detail-res-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-res-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (!contentEl) return;
+            contentEl.style.display = 'block';
+
+            if (jobReservations.length === 0) {
+                contentEl.innerHTML = '<p class="text-muted small mb-0">No reservations yet.</p>';
                 return;
             }
-            document.getElementById('woContent').style.display = 'block';
-            const tbody = document.getElementById('woTableBody');
-            tbody.innerHTML = jobWorkOrders.map(wo => {
-                const mat = wo.material_delivery;
-                let matBadge = '<span class="badge bg-secondary">Pending</span>';
-                if (mat === 'In Shop') matBadge = '<span class="badge bg-success">In Shop</span>';
-                else if (mat === 'SOF') matBadge = '<span class="badge bg-warning text-dark">SOF</span>';
-                else if (mat) matBadge = `<span class="badge bg-info">${escapeHtml(mat)}</span>`;
-                const progress = wo.elevation_count > 0
-                    ? `${wo.elevations_complete}/${wo.elevation_count}`
-                    : '<span class="text-muted">—</span>';
-                return `<tr>
-                    <td><strong>${escapeHtml(wo.release_label)}</strong></td>
-                    <td>${wo.date_issued || '—'}</td>
-                    <td>${matBadge}</td>
-                    <td>${progress}</td>
-                    <td>
-                        <a href="/fabrication/work-orders?wo=${wo.id}" class="btn btn-sm btn-outline-secondary">Open</a>
-                    </td>
-                </tr>`;
-            }).join('');
+
+            contentEl.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-vcenter mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th><th>Status</th><th>Requested By</th>
+                                <th>Needed By</th><th>Items</th><th>Committed</th><th>Consumed</th>
+                                <th class="w-1"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${jobReservations.map(res => `
+                                <tr>
+                                    <td><strong>#${res.reservation_id}</strong></td>
+                                    <td><span class="badge bg-${getReservationStatusColor(res.status)}">${res.status_label}</span></td>
+                                    <td>${escapeHtml(res.requested_by)}</td>
+                                    <td>${res.needed_by || '-'}</td>
+                                    <td>${res.items_count}</td>
+                                    <td>${res.total_committed}</td>
+                                    <td>${res.total_consumed}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-sm btn-info" onclick="viewReservationDetails(${res.id})" title="View">
+                                                <i class="ti ti-eye"></i>
+                                            </button>
+                                            ${res.status !== 'fulfilled' && res.status !== 'cancelled' ? `
+                                                <button class="btn btn-sm btn-primary" onclick="openEditReservationModal(${res.id})" title="Edit">
+                                                    <i class="ti ti-edit"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-secondary" onclick="showReservationStatusModal(${res.id}, '${res.status}')" title="Status">
+                                                    <i class="ti ti-arrows-exchange"></i>
+                                                </button>
+                                                ${res.status === 'in_progress' ? `
+                                                    <button class="btn btn-sm btn-success" onclick="showReservationCompleteModal(${res.id})" title="Complete">
+                                                        <i class="ti ti-check"></i>
+                                                    </button>
+                                                ` : ''}
+                                                <button class="btn btn-sm btn-danger" onclick="deleteReservation(${res.reservation_id})" title="Delete">
+                                                    <i class="ti ti-trash"></i>
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function displayJobWorkOrders(jobId) {
+            const loadingEl = document.getElementById(`detail-wo-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-wo-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (!contentEl) return;
+            contentEl.style.display = 'block';
+
+            if (jobWorkOrders.length === 0) {
+                contentEl.innerHTML = '<p class="text-muted small mb-0">No work orders yet.</p>';
+                return;
+            }
+
+            contentEl.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-vcenter mb-0">
+                        <thead>
+                            <tr><th>Release</th><th>Date Issued</th><th>Material</th><th>Progress</th><th class="w-1"></th></tr>
+                        </thead>
+                        <tbody>
+                            ${jobWorkOrders.map(wo => {
+                                const mat = wo.material_delivery;
+                                let matBadge = '<span class="badge bg-secondary">Pending</span>';
+                                if (mat === 'In Shop') matBadge = '<span class="badge bg-success">In Shop</span>';
+                                else if (mat === 'SOF') matBadge = '<span class="badge bg-warning text-dark">SOF</span>';
+                                else if (mat) matBadge = `<span class="badge bg-info">${escapeHtml(mat)}</span>`;
+                                const progress = wo.elevation_count > 0
+                                    ? `${wo.elevations_complete}/${wo.elevation_count}`
+                                    : '<span class="text-muted">—</span>';
+                                return `<tr>
+                                    <td><strong>${escapeHtml(wo.release_label)}</strong></td>
+                                    <td>${wo.date_issued || '—'}</td>
+                                    <td>${matBadge}</td>
+                                    <td>${progress}</td>
+                                    <td><a href="/fabrication/work-orders?wo=${wo.id}" class="btn btn-sm btn-outline-secondary">Open</a></td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
 
         function openNewWOForJob() {
@@ -1356,88 +1741,10 @@
                 if (!r.ok) throw new Error('Failed to create work order');
                 hideModal(document.getElementById('quickWoModal'));
                 await loadJobWorkOrders(jobId);
+                await loadJobs();
             } catch (e) {
-                console.error(e);
                 alert('Failed to create work order');
             }
-        }
-
-        async function loadJobReservations(jobId) {
-            document.getElementById('reservationsLoading').style.display = 'block';
-            document.getElementById('reservationsContent').style.display = 'none';
-            document.getElementById('reservationsEmpty').style.display = 'none';
-
-            try {
-                const response = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to load reservations');
-                }
-
-                const data = await response.json();
-                jobReservations = data.reservations;
-
-                // Update count badge
-                document.getElementById('reservationsCount').textContent = jobReservations.length;
-
-                displayJobReservations();
-            } catch (error) {
-                console.error('Error loading reservations:', error);
-                alert('Failed to load reservations');
-                document.getElementById('reservationsLoading').style.display = 'none';
-            }
-        }
-
-        function displayJobReservations() {
-            document.getElementById('reservationsLoading').style.display = 'none';
-
-            if (jobReservations.length === 0) {
-                document.getElementById('reservationsEmpty').style.display = 'block';
-                return;
-            }
-
-            document.getElementById('reservationsContent').style.display = 'block';
-
-            const tbody = document.getElementById('reservationsTableBody');
-            tbody.innerHTML = jobReservations.map(res => `
-                <tr>
-                    <td><strong>#${res.reservation_id}</strong></td>
-                    <td><span class="badge bg-${getReservationStatusColor(res.status)}">${res.status_label}</span></td>
-                    <td>${escapeHtml(res.requested_by)}</td>
-                    <td>${res.needed_by || '-'}</td>
-                    <td>${res.items_count}</td>
-                    <td>${res.total_committed}</td>
-                    <td>${res.total_consumed}</td>
-                    <td>${new Date(res.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-sm btn-info" onclick="viewReservationDetails(${res.id})" title="View Details">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
-                            </button>
-                            ${res.status !== 'fulfilled' && res.status !== 'cancelled' ? `
-                                <button class="btn btn-sm btn-primary" onclick="openEditReservationModal(${res.id})" title="Edit">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
-                                </button>
-                                <button class="btn btn-sm btn-secondary" onclick="showReservationStatusModal(${res.id}, '${res.status}')" title="Change Status">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /><path d="M9 12l2 2l4 -4" /></svg>
-                                </button>
-                                ${res.status === 'in_progress' ? `
-                                    <button class="btn btn-sm btn-success" onclick="showReservationCompleteModal(${res.id})" title="Complete">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-                                    </button>
-                                ` : ''}
-                                <button class="btn btn-sm btn-danger" onclick="deleteReservation(${res.reservation_id})" title="Delete">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
-                                </button>
-                            ` : ''}
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
         }
 
         function getReservationStatusColor(status) {
@@ -1657,7 +1964,7 @@
                 const data = await response.json();
 
                 hideModal(document.getElementById('addReservationModal'));
-                await loadJobReservations(jobId);
+                await loadJobReservations(currentJobForReservations.id);
                 await loadJobs();
 
                 alert(`Reservation #${data.reservation.reservation_id} created successfully!`);
@@ -1850,7 +2157,7 @@
                     }
 
                     hideModal(document.getElementById('reservationStatusModal'));
-                    await loadJobReservations(currentJobForReservations.id);
+                    if (currentJobForReservations) await loadJobReservations(currentJobForReservations.id);
                     await loadJobs();
                     alert(`Status updated to: ${data.reservation.new_status}`);
                 } else {
@@ -1962,7 +2269,7 @@
                 if (response.ok) {
                     const data = await response.json();
                     hideModal(document.getElementById('reservationCompleteModal'));
-                    await loadJobReservations(currentJobForReservations.id);
+                    if (currentJobForReservations) await loadJobReservations(currentJobForReservations.id);
                     await loadJobs();
 
                     const summary = data.items.map(item =>
@@ -2210,7 +2517,7 @@
                 }
 
                 hideModal(document.getElementById('editReservationModal'));
-                await loadJobReservations(currentJobForReservations.id);
+                if (currentJobForReservations) await loadJobReservations(currentJobForReservations.id);
                 await loadJobs();
                 alert('Reservation updated successfully');
             } catch (error) {
@@ -2609,7 +2916,7 @@
                 hideModal(document.getElementById('materialCheckModal'));
 
                 // Refresh reservations list
-                await loadJobReservations(currentJobForReservations.id);
+                if (currentJobForReservations) await loadJobReservations(currentJobForReservations.id);
                 await loadJobs(); // Update counts
 
                 alert(`✅ Reservation #${data.reservation.reservation_id} created successfully from material check!\n\nTotal items: ${items.length}`);
