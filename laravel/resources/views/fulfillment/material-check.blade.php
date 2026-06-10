@@ -247,18 +247,23 @@
                     filteredResults = [...checkResults];
                     displayResults(data.results, data.summary);
                 } else {
+                    // Read body once as text, then try to parse as JSON
                     let errorMsg = `Server error (HTTP ${response.status})`;
                     try {
-                        const error = await response.json();
-                        errorMsg = error.error || error.message || errorMsg;
-                    } catch {
-                        const text = await response.text().catch(() => '');
-                        console.error('Non-JSON error response:', response.status, text.substring(0, 1000));
-                        if (response.status === 413) {
-                            errorMsg = 'File too large. If using Nginx Proxy Manager, set client_max_body_size to 50M in the proxy host\'s Advanced configuration.';
-                        } else if (response.status === 502 || response.status === 503) {
-                            errorMsg = `Gateway error (HTTP ${response.status}). The server may be out of memory or overloaded. Check the application logs.`;
+                        const text = await response.text();
+                        try {
+                            const error = JSON.parse(text);
+                            errorMsg = error.error || error.message || errorMsg;
+                        } catch {
+                            console.error('Non-JSON error response:', response.status, text.substring(0, 500));
+                            if (response.status === 413) {
+                                errorMsg = 'File too large — the reverse proxy rejected the upload. Add "client_max_body_size 50M;" to Nginx Proxy Manager\'s Advanced configuration for this host.';
+                            } else if (response.status === 502 || response.status === 503) {
+                                errorMsg = `Gateway error (HTTP ${response.status}) — server may be out of memory. Check application logs.`;
+                            }
                         }
+                    } catch (e) {
+                        console.error('Failed to read error response:', e);
                     }
                     alert('Error checking materials: ' + errorMsg);
                 }
