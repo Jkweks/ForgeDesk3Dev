@@ -186,9 +186,20 @@ class DashboardController extends Controller
         $committedByProduct = $this->getCommittedByProduct();
 
         // 'low_stock' is the dashboard tab identifier covering both 'low' and 'very_low'
-        $statusFilter = $status === 'low_stock' ? ['low', 'very_low'] : [$status];
-        $query = Product::whereIn('status', $statusFilter)
-            ->where('is_active', true)
+        if ($status === 'boneyard') {
+            $query = Product::where('nonsof', true)
+                ->where('is_active', true);
+        } elseif ($status === 'special_order') {
+            $query = Product::whereHas('inventoryLocations.storageLocation', function ($q) {
+                $q->whereRaw("LOWER(name) = 'special order'");
+            })->where('is_active', true);
+        } else {
+            $statusFilter = $status === 'low_stock' ? ['low', 'very_low'] : [$status];
+            $query = Product::whereIn('status', $statusFilter)
+                ->where('is_active', true);
+        }
+
+        $query
             ->when($categoryId, function ($q) use ($categoryId) {
                 return $q->whereHas('categories', function ($sq) use ($categoryId) {
                     $sq->where('categories.id', $categoryId);

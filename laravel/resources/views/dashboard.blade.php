@@ -97,6 +97,12 @@
                     <li class="nav-item">
                       <a href="#" class="nav-link" data-tab="critical">Critical <span class="badge text-bg-danger ms-2" id="badgeCritical">0</span></a>
                     </li>
+                    <li class="nav-item">
+                      <a href="#" class="nav-link" data-tab="boneyard">Boneyard (No Cost)</a>
+                    </li>
+                    <li class="nav-item">
+                      <a href="#" class="nav-link" data-tab="special_order">Special Order</a>
+                    </li>
                   </ul>
 
                   <div class="loading" id="loadingIndicator">
