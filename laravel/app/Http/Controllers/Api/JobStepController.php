@@ -3,16 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\BusinessJob;
 use App\Models\FdJobStep;
+use App\Models\FdWorkOrder;
 use Illuminate\Http\Request;
 
 class JobStepController extends Controller
 {
-    public function index(int $jobId)
+    public function index(int $workOrderId)
     {
-        $job   = BusinessJob::findOrFail($jobId);
-        $steps = $job->steps()->with('completedBy')->get();
+        $wo    = FdWorkOrder::findOrFail($workOrderId);
+        $steps = $wo->steps()->with('completedBy')->get();
 
         return response()->json(['steps' => $steps->map(fn($s) => $this->fmt($s))]);
     }
@@ -20,16 +20,16 @@ class JobStepController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'business_job_id' => 'required|integer|exists:business_jobs,id',
-            'name'            => 'required|string|max:255',
+            'work_order_id' => 'required|integer|exists:fd_work_orders,id',
+            'name'          => 'required|string|max:255',
         ]);
 
-        $max  = FdJobStep::where('business_job_id', $request->business_job_id)->max('sort_order') ?? 0;
+        $max  = FdJobStep::where('work_order_id', $request->work_order_id)->max('sort_order') ?? 0;
         $step = FdJobStep::create([
-            'business_job_id' => $request->business_job_id,
-            'name'            => $request->name,
-            'sort_order'      => $max + 1,
-            'status'          => 'pending',
+            'work_order_id' => $request->work_order_id,
+            'name'          => $request->name,
+            'sort_order'    => $max + 1,
+            'status'        => 'pending',
         ]);
 
         return response()->json(['step' => $this->fmt($step)], 201);
@@ -68,7 +68,7 @@ class JobStepController extends Controller
     {
         return [
             'id'                => $s->id,
-            'business_job_id'   => $s->business_job_id,
+            'work_order_id'     => $s->work_order_id,
             'name'              => $s->name,
             'sort_order'        => $s->sort_order,
             'status'            => $s->status,

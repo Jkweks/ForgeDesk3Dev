@@ -656,6 +656,7 @@ class BusinessJobController extends Controller
     {
         $job = BusinessJob::findOrFail($jobId);
         $workOrders = $job->workOrders()
+            ->with(['steps.completedBy'])
             ->withCount(['elevations', 'elevations as elevations_complete' => fn($q) => $q->whereNotNull('date_completed')])
             ->get()
             ->map(fn($wo) => [
@@ -669,6 +670,14 @@ class BusinessJobController extends Controller
                 'elevation_count'     => $wo->elevations_count ?? 0,
                 'elevations_complete' => $wo->elevations_complete ?? 0,
                 'created_at'          => $wo->created_at->toIso8601String(),
+                'steps'               => $wo->steps->map(fn($s) => [
+                    'id'                => $s->id,
+                    'name'              => $s->name,
+                    'sort_order'        => $s->sort_order,
+                    'status'            => $s->status,
+                    'completed_by_name' => $s->completedBy?->name,
+                    'completed_at'      => $s->completed_at?->toIso8601String(),
+                ])->values(),
             ]);
 
         return response()->json(['work_orders' => $workOrders]);
