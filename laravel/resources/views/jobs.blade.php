@@ -859,8 +859,8 @@
                     <td>${escapeHtml(job.job_name)}</td>
                     <td>${escapeHtml(job.customer_name || '-')}</td>
                     <td><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
-                    <td><span class="badge ${resCount > 0 ? 'bg-info' : 'bg-secondary'}">${resCount}</span></td>
-                    <td><span class="badge ${woCount > 0 ? 'bg-purple' : 'bg-secondary'}">${woCount}</span></td>
+                    <td><span class="badge ${resCount > 0 ? 'bg-info' : 'bg-secondary-lt text-secondary'}">${resCount}</span></td>
+                    <td><span class="badge ${woCount > 0 ? 'bg-purple' : 'bg-secondary-lt text-secondary'}">${woCount}</span></td>
                     <td>${job.start_date || '-'}</td>
                     <td>${job.target_completion_date || '-'}</td>
                     <td>${getDaysRemaining(job.days_until_completion)}</td>
@@ -899,21 +899,21 @@
                                     <button class="nav-link active" id="job-tab-wo-btn-${job.id}"
                                         onclick="switchJobTab(${job.id}, 'wo')" type="button">
                                         <i class="ti ti-tool me-1"></i>Work Orders
-                                        <span class="badge bg-secondary ms-1" id="job-wo-badge-${job.id}">${job.work_orders_count || 0}</span>
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-wo-badge-${job.id}">${job.work_orders_count || 0}</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="job-tab-res-btn-${job.id}"
                                         onclick="switchJobTab(${job.id}, 'res')" type="button">
                                         <i class="ti ti-clipboard-list me-1"></i>Reservations
-                                        <span class="badge bg-secondary ms-1" id="job-res-badge-${job.id}">${job.reservations_count || 0}</span>
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-res-badge-${job.id}">${job.reservations_count || 0}</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="job-tab-tx-btn-${job.id}"
                                         onclick="switchJobTab(${job.id}, 'tx')" type="button">
                                         <i class="ti ti-receipt me-1"></i>Transactions
-                                        <span class="badge bg-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
                                     </button>
                                 </li>
                             </ul>
