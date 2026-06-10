@@ -13,10 +13,11 @@ use Illuminate\Support\Facades\Log;
 class ShopFloorController extends Controller
 {
     private const CYCLE = [
-        'pending'     => 'in_progress',
-        'in_progress' => 'complete',
-        'complete'    => 'pending',
-        'blocked'     => 'pending',
+        'pending'      => 'in_progress',
+        'in_progress'  => 'complete',
+        'complete'     => 'pending',
+        'blocked'      => 'pending',
+        'not_required' => 'pending',
     ];
 
     public function workOrders(Request $request)
@@ -51,20 +52,8 @@ class ShopFloorController extends Controller
     public function cycleStage(int $id)
     {
         try {
-            $stage = FdWoStage::with('elevation.stages')->findOrFail($id);
+            $stage = FdWoStage::findOrFail($id);
             $next  = self::CYCLE[$stage->status] ?? 'pending';
-
-            // Cascade: completing a stage completes all preceding incomplete stages
-            if ($next === 'complete' && $stage->elevation) {
-                $preceding = $stage->elevation->stages
-                    ->where('sort_order', '<', $stage->sort_order)
-                    ->where('status', '!=', 'complete');
-                foreach ($preceding as $prev) {
-                    $prev->status       = 'complete';
-                    $prev->completed_at = now();
-                    $prev->save();
-                }
-            }
 
             $stage->status = $next;
             if ($next === 'in_progress') {

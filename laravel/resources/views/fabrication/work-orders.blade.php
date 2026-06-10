@@ -7,7 +7,8 @@
 .pip-pending     { background: var(--tblr-secondary, #adb5bd); }
 .pip-in_progress { background: var(--tblr-warning, #f59f00); }
 .pip-complete    { background: var(--tblr-success, #2fb344); }
-.pip-blocked     { background: var(--tblr-danger, #d63939); }
+.pip-blocked      { background: var(--tblr-danger, #d63939); }
+.pip-not_required { background: var(--tblr-blue-lt, #e9f0fb); border: 1px solid var(--tblr-blue, #206bc4); }
 .wo-offcanvas    { width: 700px !important; }
 .elev-row td     { vertical-align: middle; }
 .wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
@@ -530,7 +531,7 @@ let elevTypes = [];
 let fabUsers = [];
 let filterTimer = null;
 
-const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending' };
+const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending', not_required: 'pending' };
 
 const API = (path, opts = {}) => fetch('/api/v1' + path, {
     ...opts,
@@ -863,12 +864,13 @@ function elevRow(e) {
         ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')}">${esc(e.elevation_type.name)}</span>`
         : '<span class="text-muted">—</span>';
 
-    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset' };
+    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset' };
     const stages = e.stages || [];
     const pips = stages.map(s =>
         `<span class="pip pip-${s.status}" style="cursor:pointer"
-            title="${s.name}: ${s.status} → click to ${nextLabels[s.status] || 'advance'}"
-            onclick="cycleStage(${s.id},'${s.status}',event)"></span>`
+            title="${s.name}: ${s.status} → left-click to ${nextLabels[s.status] || 'advance'}, right-click for options"
+            onclick="cycleStage(${s.id},'${s.status}',event)"
+            oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)"></span>`
     ).join('');
 
     const completedInfo = e.date_completed
@@ -882,14 +884,15 @@ function elevRow(e) {
            </button>`
         : '';
 
-    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger' };
-    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked' };
+    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger', not_required: 'blue-lt' };
+    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked', not_required: 'N/R' };
     const stageDetailRows = stages.map(s => `
         <tr>
             <td style="padding-left:2rem" class="text-muted small">${esc(s.name)}</td>
             <td>
                 <span class="badge bg-${stageColors[s.status] || 'secondary'}" style="cursor:pointer"
-                    onclick="cycleStage(${s.id},'${s.status}',event)">
+                    onclick="cycleStage(${s.id},'${s.status}',event)"
+                    oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)">
                     ${stageLabels[s.status] || s.status}
                 </span>
             </td>
@@ -1005,27 +1008,15 @@ function findElevationForStage(stageId) {
 async function cycleStage(stageId, currentStatus, event) {
     event.stopPropagation();
     const nextStatus = STAGE_CYCLE[currentStatus] || 'pending';
+    await setStageStatus(stageId, nextStatus);
+}
+
+async function setStageStatus(stageId, status) {
     try {
-        // Completing a stage cascades completion to all preceding incomplete stages
-        if (nextStatus === 'complete') {
-            const found = findElevationForStage(stageId);
-            if (found) {
-                const preceding = found.elevation.stages
-                    .slice(0, found.index)
-                    .filter(s => s.status !== 'complete');
-                for (const s of preceding) {
-                    await API(`/work-order-stages/${s.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'complete' }),
-                    });
-                }
-            }
-        }
         await API(`/work-order-stages/${stageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus }),
+            body: JSON.stringify({ status }),
         });
         const expanded = getExpandedElevationIds();
         const r = await API(`/work-orders/${currentWO.id}`);
@@ -1037,6 +1028,23 @@ async function cycleStage(stageId, currentStatus, event) {
     } catch (e) {
         console.error(e);
     }
+}
+
+function stageContextMenu(stageId, currentStatus, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('stage-ctx-menu')?.remove();
+    const isNR = currentStatus === 'not_required';
+    const menu = document.createElement('div');
+    menu.id = 'stage-ctx-menu';
+    menu.className = 'dropdown-menu show';
+    menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
+    menu.innerHTML = isNR
+        ? `<button class="dropdown-item" onclick="setStageStatus(${stageId},'pending');this.closest('#stage-ctx-menu').remove()">Reset to Pending</button>`
+        : `<button class="dropdown-item text-muted" onclick="setStageStatus(${stageId},'not_required');this.closest('#stage-ctx-menu').remove()">Mark Not Required</button>`;
+    document.body.appendChild(menu);
+    const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
 }
 
 function getExpandedElevationIds() {

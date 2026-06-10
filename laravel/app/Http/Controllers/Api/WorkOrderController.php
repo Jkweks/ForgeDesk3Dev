@@ -212,7 +212,7 @@ class WorkOrderController extends Controller
             'notes'             => $e->notes,
             'scope'             => $e->scope ?? 'assemble',
             'stage_count'       => $stages->count(),
-            'stages_done'       => $stages->where('status', 'complete')->count(),
+            'stages_done'       => $stages->whereIn('status', ['complete', 'not_required'])->count(),
             'stages_active'     => $stages->where('status', 'in_progress')->count(),
             'stages_blocked'    => $stages->where('status', 'blocked')->count(),
             'stages'            => $stages->map(fn($s) => [
