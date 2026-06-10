@@ -247,8 +247,20 @@
                     filteredResults = [...checkResults];
                     displayResults(data.results, data.summary);
                 } else {
-                    const error = await response.json();
-                    alert('Error checking materials: ' + (error.error || error.message || 'Unknown error'));
+                    let errorMsg = `Server error (HTTP ${response.status})`;
+                    try {
+                        const error = await response.json();
+                        errorMsg = error.error || error.message || errorMsg;
+                    } catch {
+                        const text = await response.text().catch(() => '');
+                        console.error('Non-JSON error response:', response.status, text.substring(0, 1000));
+                        if (response.status === 413) {
+                            errorMsg = 'File too large. If using Nginx Proxy Manager, set client_max_body_size to 50M in the proxy host\'s Advanced configuration.';
+                        } else if (response.status === 502 || response.status === 503) {
+                            errorMsg = `Gateway error (HTTP ${response.status}). The server may be out of memory or overloaded. Check the application logs.`;
+                        }
+                    }
+                    alert('Error checking materials: ' + errorMsg);
                 }
             } catch (error) {
                 console.error('Error checking materials:', error);
