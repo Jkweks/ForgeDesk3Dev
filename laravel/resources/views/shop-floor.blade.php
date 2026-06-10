@@ -550,7 +550,7 @@ async function cycleStage(event, stageId) {
     const ok = await sfElevReopenPrompt(elev);
     if (!ok) return;
     // Clear elevation completion before cycling stage
-    await API(`/elevations/${elev.id}`, {
+    await API(`/shop/elevations/${elev.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date_completed: null, completed_by_id: null }),
@@ -619,7 +619,7 @@ async function sfConfirmElevComplete() {
   if (!_sfElevPromptId) return;
   const fabId = sfFabUser?.user_id || null;
   try {
-    await API(`/elevations/${_sfElevPromptId}`, {
+    await API(`/shop/elevations/${_sfElevPromptId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

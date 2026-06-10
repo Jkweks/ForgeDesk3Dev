@@ -96,6 +96,22 @@ class ShopFloorController extends Controller
         }
     }
 
+    public function updateElevation(Request $request, int $id)
+    {
+        try {
+            $elevation = \App\Models\FdWoElevation::findOrFail($id);
+            // Only allow completion fields from the public shop route
+            if ($request->has('date_completed')) {
+                $elevation->date_completed  = $request->date_completed ?: null;
+                $elevation->completed_by_id = $request->input('completed_by_id') ?: null;
+            }
+            $elevation->save();
+            return response()->json(['updated' => $id]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update elevation'], 500);
+        }
+    }
+
     public function assignStage(Request $request, int $id)
     {
         try {
