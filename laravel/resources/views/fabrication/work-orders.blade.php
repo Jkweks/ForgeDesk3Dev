@@ -898,7 +898,7 @@ function elevRow(e) {
             </td>
             <td class="text-muted small">${s.assigned_name ? esc(s.assigned_name) : '—'}</td>
             <td class="text-muted small">${s.started_at ? new Date(s.started_at).toLocaleDateString() : '—'}</td>
-            <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}</td>
+            <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}${s.completed_by_name ? `<br><span class="text-muted" style="font-size:.7rem">${esc(s.completed_by_name)}</span>` : ''}</td>
         </tr>`).join('');
 
     const stageDetailBlock = hasStages ? `

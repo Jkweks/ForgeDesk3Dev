@@ -12,7 +12,7 @@ class FdWoStage extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_id', 'template_id', 'name', 'description',
-        'sort_order', 'status', 'assigned_to_id', 'started_at', 'completed_at', 'notes',
+        'sort_order', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
     ];
 
     protected $casts = [
@@ -33,6 +33,11 @@ class FdWoStage extends Model
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(FdUser::class, 'assigned_to_id');
+    }
+
+    public function completedBy(): BelongsTo
+    {
+        return $this->belongsTo(FdUser::class, 'completed_by_id');
     }
 
     public function log(): HasMany

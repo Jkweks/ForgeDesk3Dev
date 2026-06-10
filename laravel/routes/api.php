@@ -162,6 +162,7 @@ Route::prefix('v1')->group(function () {
     // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
     Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
     Route::get('/shop/fab-users',   [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
+    Route::post('/shop/fab-pin-login', [\App\Http\Controllers\Api\ShopFloorController::class, 'pinLogin']);
     Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
     Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
     // ─────────────────────────────────────────────────────────────────────────
@@ -469,6 +470,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);
         Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update']);
         Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy']);
+        Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin']);
+
+        Route::get('/business-jobs/{jobId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
+        Route::post('/job-steps', [\App\Http\Controllers\Api\JobStepController::class, 'store']);
+        Route::patch('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'update']);
+        Route::delete('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'destroy']);
 
         // Fabrication Documents
         Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions']);

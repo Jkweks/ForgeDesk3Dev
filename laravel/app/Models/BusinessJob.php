@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BusinessJob extends Model
@@ -32,6 +33,23 @@ class BusinessJob extends Model
         'target_completion_date' => 'date',
         'actual_completion_date' => 'date',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::created(function ($job) {
+            $defaults = ['Cut List Prepared', 'Cut List Reviewed', 'Dropbox Uploaded', 'Kanban Entered'];
+            foreach ($defaults as $i => $name) {
+                FdJobStep::create([
+                    'business_job_id' => $job->id,
+                    'name'            => $name,
+                    'sort_order'      => $i + 1,
+                    'status'          => 'pending',
+                ]);
+            }
+        });
+    }
 
     // Status configuration
     public static $statuses = [
@@ -63,6 +81,11 @@ class BusinessJob extends Model
     public function jobReservations()
     {
         return $this->hasMany(JobReservation::class, 'business_job_id');
+    }
+
+    public function steps(): HasMany
+    {
+        return $this->hasMany(FdJobStep::class, 'business_job_id')->orderBy('sort_order');
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\FdWoStage;
 use App\Models\FdUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
 class ShopFloorController extends Controller
@@ -49,7 +50,23 @@ class ShopFloorController extends Controller
         ]);
     }
 
-    public function cycleStage(int $id)
+    public function pinLogin(Request $request)
+    {
+        $request->validate(['pin' => 'required|string']);
+        $users = FdUser::where('active', true)->whereNotNull('fab_pin')->get();
+        foreach ($users as $user) {
+            if (Hash::check($request->pin, $user->fab_pin)) {
+                return response()->json([
+                    'user_id'  => $user->id,
+                    'name'     => $user->name,
+                    'initials' => $user->initials,
+                ]);
+            }
+        }
+        return response()->json(['error' => 'Invalid PIN'], 401);
+    }
+
+    public function cycleStage(Request $request, int $id)
     {
         try {
             $stage = FdWoStage::findOrFail($id);
@@ -57,13 +74,16 @@ class ShopFloorController extends Controller
 
             $stage->status = $next;
             if ($next === 'in_progress') {
-                $stage->started_at   = now();
-                $stage->completed_at = null;
+                $stage->started_at    = now();
+                $stage->completed_at  = null;
+                $stage->completed_by_id = null;
             } elseif ($next === 'complete') {
-                $stage->completed_at = now();
+                $stage->completed_at  = now();
+                $stage->completed_by_id = $request->input('fab_user_id') ?: null;
             } else {
-                $stage->started_at   = null;
-                $stage->completed_at = null;
+                $stage->started_at    = null;
+                $stage->completed_at  = null;
+                $stage->completed_by_id = null;
             }
             $stage->save();
 

@@ -708,6 +708,18 @@
                 <input type="email" class="form-control" id="fabUserEmail" placeholder="optional">
               </div>
             </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Shop Floor PIN <span class="text-muted small">(4–8 digits)</span></label>
+                <input type="password" class="form-control" id="fabUserPin" placeholder="Leave blank to keep / clear"
+                  inputmode="numeric" maxlength="8" autocomplete="new-password">
+                <div class="form-text" id="fabUserPinHint">Set a PIN to allow this user to log in on the shop floor tablet.</div>
+              </div>
+              <div class="col-md-6 d-flex align-items-end">
+                <button type="button" class="btn btn-ghost-danger btn-sm" id="fabUserClearPinBtn" style="display:none"
+                  onclick="clearFabPin()">Clear existing PIN</button>
+              </div>
+            </div>
             <div class="mb-0">
               <label class="form-check">
                 <input class="form-check-input" type="checkbox" id="fabUserActive" checked>
@@ -2202,6 +2214,9 @@
         return d.innerHTML;
       }
 
+      let _fabUserHasPin = false; // tracks if edit target already has a pin set
+      let _fabUserClearPin = false; // user clicked "Clear existing PIN"
+
       function openAddFabUser() {
         document.getElementById('fabUserModalTitle').textContent = 'Add Fab User';
         document.getElementById('fabUserId').value = '';
@@ -2210,6 +2225,9 @@
         document.getElementById('fabUserRole').value = 'worker';
         document.getElementById('fabUserEmail').value = '';
         document.getElementById('fabUserActive').checked = true;
+        document.getElementById('fabUserPin').value = '';
+        document.getElementById('fabUserClearPinBtn').style.display = 'none';
+        _fabUserHasPin = false; _fabUserClearPin = false;
         showFabUserModal();
       }
 
@@ -2226,14 +2244,30 @@
           document.getElementById('fabUserRole').value = u.role;
           document.getElementById('fabUserEmail').value = u.email || '';
           document.getElementById('fabUserActive').checked = u.active;
+          document.getElementById('fabUserPin').value = '';
+          _fabUserHasPin = !!u.has_pin;
+          _fabUserClearPin = false;
+          document.getElementById('fabUserClearPinBtn').style.display = _fabUserHasPin ? '' : 'none';
+          document.getElementById('fabUserPinHint').textContent = _fabUserHasPin
+            ? 'PIN is set. Enter a new value to replace it, or click "Clear existing PIN".'
+            : 'Set a PIN to allow this user to log in on the shop floor tablet.';
           showFabUserModal();
         } catch (e) { console.error(e); }
+      }
+
+      function clearFabPin() {
+        if (!confirm('Remove this user\'s shop floor PIN?')) return;
+        _fabUserClearPin = true;
+        document.getElementById('fabUserPin').value = '';
+        document.getElementById('fabUserClearPinBtn').style.display = 'none';
+        document.getElementById('fabUserPinHint').textContent = 'PIN will be cleared on save.';
       }
 
       async function saveFabUser() {
         const name = document.getElementById('fabUserName').value.trim();
         if (!name) { alert('Name is required.'); return; }
-        const id = document.getElementById('fabUserId').value;
+        const id  = document.getElementById('fabUserId').value;
+        const pin = document.getElementById('fabUserPin').value.trim();
         const body = {
           name,
           initials:  document.getElementById('fabUserInitials').value.trim() || null,
@@ -2242,7 +2276,7 @@
           active:    document.getElementById('fabUserActive').checked,
         };
         try {
-          const url  = id ? `/fab-users/${id}` : '/fab-users';
+          const url    = id ? `/fab-users/${id}` : '/fab-users';
           const method = id ? 'PUT' : 'POST';
           const r = await fabUserAPI(url, {
             method,
@@ -2250,6 +2284,23 @@
             body: JSON.stringify(body),
           });
           if (!r.ok) throw new Error('Save failed');
+          const saved = await r.json();
+          const userId = id || saved.id;
+          // Handle PIN separately
+          if (pin) {
+            if (pin.length < 4) { alert('PIN must be at least 4 digits.'); return; }
+            await fabUserAPI(`/fab-users/${userId}/set-pin`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pin }),
+            });
+          } else if (_fabUserClearPin) {
+            await fabUserAPI(`/fab-users/${userId}/set-pin`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pin: null }),
+            });
+          }
           closeFabUserModal();
           await loadFabUsersAdmin();
         } catch (e) {
