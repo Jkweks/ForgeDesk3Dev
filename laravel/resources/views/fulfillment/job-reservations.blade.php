@@ -2,6 +2,10 @@
 
 @section('title', 'Job Reservations - ForgeDesk')
 
+@section('styles')
+.card.bg-light { background: var(--tblr-bg-surface-secondary) !important; }
+@endsection
+
 @section('content')
     <div class="page-wrapper">
       <div class="page-header d-print-none">

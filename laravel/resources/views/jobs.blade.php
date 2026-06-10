@@ -2,6 +2,19 @@
 
 @section('title', 'Jobs Management - ForgeDesk')
 
+@section('styles')
+.job-expand-wrap {
+    background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+}
+.job-tx-form-wrap {
+    background: var(--tblr-bg-surface, var(--tblr-body-bg));
+    border: 1px solid var(--tblr-border-color);
+}
+.card.bg-light {
+    background: var(--tblr-bg-surface-secondary) !important;
+}
+@endsection
+
 @section('content')
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -870,7 +883,7 @@
                 detailTr.style.display = 'none';
                 detailTr.innerHTML = `
                     <td colspan="10" id="job-detail-cell-${job.id}" class="p-0">
-                        <div class="border-top border-bottom bg-light">
+                        <div class="border-top border-bottom job-expand-wrap">
                             <!-- Job header bar -->
                             <div class="d-flex align-items-center gap-3 px-3 pt-2 pb-1">
                                 <span class="text-muted small">${escapeHtml(job.customer_name || '')}${job.project_manager ? ' · PM: ' + escapeHtml(job.project_manager) : ''}</span>
@@ -923,7 +936,7 @@
                                     </div>
                                     <div id="detail-tx-content-${job.id}" style="display:none;"></div>
                                     <!-- Add transaction inline form -->
-                                    <div id="job-tx-form-${job.id}" style="display:none;" class="mt-2 p-2 border rounded bg-white">
+                                    <div id="job-tx-form-${job.id}" style="display:none;" class="mt-2 p-2 rounded job-tx-form-wrap">
                                         <h6 class="mb-2">New Transaction</h6>
                                         <div class="row g-2 align-items-end">
                                             <div class="col-md-4">

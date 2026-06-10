@@ -11,6 +11,7 @@
 .wo-offcanvas    { width: 700px !important; }
 .elev-row td     { vertical-align: middle; }
 .wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
+.card.bg-light, table.bg-light { background: var(--tblr-bg-surface-secondary) !important; }
 @endsection
 
 @section('content')
