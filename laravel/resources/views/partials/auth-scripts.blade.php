@@ -453,6 +453,17 @@
   // Logout
   document.getElementById('logoutBtn')?.addEventListener('click', async (e) => {
     e.preventDefault();
+    try {
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        }
+      });
+    } catch (_) { /* best-effort — clear local state regardless */ }
+    if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
     localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
     localStorage.removeItem('tokenExpiresAt');
@@ -515,53 +526,40 @@
   }
 
   function startTokenRefreshTimer() {
-    // Clear existing timer
-    if (tokenRefreshTimer) {
-      clearInterval(tokenRefreshTimer);
-    }
+    if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
 
-    const tokenExpiresIn = parseInt(localStorage.getItem('tokenExpiresIn') || '0');
+    const expiresAt = localStorage.getItem('tokenExpiresAt');
+    if (!expiresAt) return;
 
-    if (tokenExpiresIn > 0) {
-      // Refresh token when it has 5 minutes left (or 1/10th of lifetime, whichever is less)
-      const refreshThreshold = Math.min(300, tokenExpiresIn / 10); // 5 minutes or 10% of lifetime
-      const checkInterval = Math.max(60000, refreshThreshold * 1000 / 2); // Check every minute or half the threshold
+    // Always derive remaining seconds from the stored ISO timestamp (not the stale tokenExpiresIn)
+    const secsLeft = Math.max(0, (new Date(expiresAt) - Date.now()) / 1000);
+    if (secsLeft === 0) return;
 
-      console.log(`Token refresh timer started. Will check every ${checkInterval / 1000} seconds.`);
+    const refreshThreshold = Math.min(300, secsLeft / 10); // 5 min or 10% of remaining life
+    const checkInterval    = Math.max(60000, refreshThreshold * 500); // min 1 min
 
-      tokenRefreshTimer = setInterval(async () => {
-        const expiresAt = localStorage.getItem('tokenExpiresAt');
-        if (!expiresAt) {
-          return;
-        }
+    tokenRefreshTimer = setInterval(async () => {
+      const current = localStorage.getItem('tokenExpiresAt');
+      if (!current) return;
 
-        const expiresAtDate = new Date(expiresAt);
-        const now = new Date();
-        const timeUntilExpiry = (expiresAtDate - now) / 1000; // in seconds
+      const timeUntilExpiry = (new Date(current) - Date.now()) / 1000;
 
-        // Refresh if less than threshold seconds remaining
-        if (timeUntilExpiry < refreshThreshold && timeUntilExpiry > 0) {
-          console.log(`Token expiring in ${Math.floor(timeUntilExpiry)} seconds. Refreshing...`);
-          const refreshed = await refreshToken();
-          if (refreshed) {
-            startTokenRefreshTimer(); // Restart timer with new expiration
-          }
-        } else if (timeUntilExpiry <= 0) {
-          // Token already expired
-          console.log('Token expired. Logging out...');
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('userData');
-          localStorage.removeItem('tokenExpiresAt');
-          localStorage.removeItem('tokenExpiresIn');
-          localStorage.removeItem('rememberMe');
-          authToken = null;
-          currentUser = null;
-          showLogin();
-          showNotification('Session expired. Please login again.', 'warning');
-          clearInterval(tokenRefreshTimer);
-        }
-      }, checkInterval);
-    }
+      if (timeUntilExpiry < refreshThreshold && timeUntilExpiry > 0) {
+        const refreshed = await refreshToken();
+        if (refreshed) startTokenRefreshTimer();
+      } else if (timeUntilExpiry <= 0) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+        localStorage.removeItem('tokenExpiresAt');
+        localStorage.removeItem('tokenExpiresIn');
+        localStorage.removeItem('rememberMe');
+        authToken = null;
+        currentUser = null;
+        showLogin();
+        showNotification('Session expired. Please login again.', 'warning');
+        clearInterval(tokenRefreshTimer);
+      }
+    }, checkInterval);
   }
 
   // Validate session on page load
@@ -569,6 +567,18 @@
     if (!authToken) {
       showLogin();
       return;
+    }
+
+    // Show app immediately — avoids flash of login page while the /user call is in-flight
+    showApp();
+
+    // Proactively refresh if token expires within 24 hours so it never silently expires
+    const expiresAt = localStorage.getItem('tokenExpiresAt');
+    if (expiresAt) {
+      const secsLeft = (new Date(expiresAt) - Date.now()) / 1000;
+      if (secsLeft > 0 && secsLeft < 86400) {
+        await refreshToken();
+      }
     }
 
     try {
@@ -587,12 +597,10 @@
         }
         return;
       }
-      showApp();
-      startTokenRefreshTimer(); // Start automatic token refresh
+      startTokenRefreshTimer();
     } catch (error) {
-      // Network error - show app optimistically (API calls will handle 401s)
-      showApp();
-      startTokenRefreshTimer(); // Start automatic token refresh even on network error
+      // Network error — stay optimistic, API calls will handle 401s
+      startTokenRefreshTimer();
     }
   }
 

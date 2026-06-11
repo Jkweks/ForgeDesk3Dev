@@ -189,6 +189,9 @@ class DashboardController extends Controller
         if ($status === 'boneyard') {
             $query = Product::where('nonsof', true)
                 ->where('is_active', true);
+        } elseif ($status === 'door_shims') {
+            $query = Product::where('cp_part', true)
+                ->where('is_active', true);
         } elseif ($status === 'special_order') {
             $query = Product::whereHas('inventoryLocations.storageLocation', function ($q) {
                 $q->whereRaw("LOWER(name) = 'special order'");
