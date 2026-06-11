@@ -496,7 +496,7 @@ function renderVendorCard(container, group, savedSelections = {}) {
         <h3 class="card-title mb-0">
           <i class="ti ti-truck me-2 text-primary"></i>${escapeHtml(supplier.name)}
         </h3>
-        <span class="badge bg-secondary ms-1" id="vendorCount-${sid}">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+        <span class="badge bg-secondary-lt text-secondary ms-1" id="vendorCount-${sid}">${items.length} item${items.length !== 1 ? 's' : ''}</span>
       </div>
       <div class="card-options">
         <span class="text-muted small me-3">Est: <strong id="vendorTotal-${sid}">$0.00</strong></span>
@@ -934,10 +934,10 @@ function statusBadgeHtml(status) {
     critical:  ['bg-danger',  'Critical'],
     very_low:  ['bg-warning', 'Very Low'],
     low:       ['bg-info',    'Low'],
-    out_of_stock: ['bg-dark', 'Out of Stock'],
+    out_of_stock: ['text-bg-dark', 'Out of Stock'],
     in_stock:  ['bg-success', 'In Stock'],
   };
-  const [cls, label] = map[status] || ['bg-secondary', status];
+  const [cls, label] = map[status] || ['text-bg-secondary', status];
   return `<span class="badge ${cls}">${label}</span>`;
 }
 

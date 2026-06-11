@@ -1253,7 +1253,7 @@ function calculatePOProgress(po) {
   const totalReceived = po.items ? po.items.reduce((sum, item) => sum + item.quantity_received, 0) : 0;
 
   const percentage = totalOrdered > 0 ? Math.round((totalReceived / totalOrdered) * 100) : 0;
-  let color = 'bg-secondary';
+  let color = 'text-bg-secondary';
 
   if (percentage > 0 && percentage < 100) color = 'bg-warning';
   else if (percentage === 100) color = 'bg-success';

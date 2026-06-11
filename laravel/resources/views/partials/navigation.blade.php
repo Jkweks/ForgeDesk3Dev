@@ -58,7 +58,7 @@
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Door Configurator <span class="badge bg-secondary ms-auto">Soon</span></a>
+                    <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Door Configurator <span class="badge bg-secondary-lt text-secondary ms-auto">Soon</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">

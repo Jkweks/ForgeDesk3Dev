@@ -2696,7 +2696,7 @@
                     statusClass = 'table-danger';
                     canCommit = true;
                 } else if (item.status === 'not_found') {
-                    statusBadge = '<span class="badge bg-secondary">Not Found</span>';
+                    statusBadge = '<span class="badge bg-secondary-lt text-secondary">Not Found</span>';
                     statusClass = 'table-secondary';
                 }
 

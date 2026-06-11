@@ -1756,7 +1756,7 @@ function renderStorageLocationAccordion(locations) {
             <span class="fw-bold me-2">${escapeHtml(loc.name)}</span>
             ${meta ? `<span class="text-muted small me-2">${escapeHtml(meta)}</span>` : ''}
             ${address ? `<span class="text-muted small me-2">— ${escapeHtml(address)}</span>` : ''}
-            <span class="ms-auto me-3 badge bg-secondary">${loc.item_count} item${loc.item_count !== 1 ? 's' : ''}</span>
+            <span class="ms-auto me-3 badge bg-secondary-lt text-secondary">${loc.item_count} item${loc.item_count !== 1 ? 's' : ''}</span>
             <span class="badge bg-teal-lt text-teal me-2">Qty: ${loc.total_qty.toLocaleString()}</span>
             <span class="badge bg-azure-lt text-azure">ID: ${loc.id}</span>
           </button>
