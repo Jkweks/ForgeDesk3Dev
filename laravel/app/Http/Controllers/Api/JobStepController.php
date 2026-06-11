@@ -43,7 +43,7 @@ class JobStepController extends Controller
             $step->status = $request->status;
             if ($request->status === 'complete') {
                 $step->completed_at    = now();
-                $step->completed_by_id = $request->completed_by_id ?? null;
+                $step->completed_by_id = $request->completed_by_id ?? auth()->id();
             } else {
                 $step->completed_at    = null;
                 $step->completed_by_id = null;

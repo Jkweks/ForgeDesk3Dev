@@ -131,7 +131,7 @@
     .badge.bg-info, .badge.bg-purple, .badge.bg-azure,
     .badge.bg-teal, .badge.bg-green, .badge.bg-red,
     .badge.bg-blue, .badge.bg-pink, .badge.bg-indigo,
-    .badge.bg-cyan { color: #fff !important; }
+    .badge.bg-cyan, .badge.bg-dark { color: #fff !important; }
     .badge.bg-warning, .badge.bg-orange,
     .badge.bg-yellow, .badge.bg-lime { color: #1a202c !important; }
 

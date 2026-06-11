@@ -585,7 +585,7 @@ function renderItemRow(p, sid) {
   const packLabel    = isPack ? (p.purchase_uom || 'packs') : (p.stock_uom || 'EA');
 
   const daysDisplay = p.days_until_stockout != null && p.days_until_stockout > 0
-    ? `<span class="badge ${p.days_until_stockout <= 3 ? 'bg-danger-lt text-danger' : p.days_until_stockout <= 7 ? 'bg-warning-lt text-warning' : 'bg-secondary-lt'}">${p.days_until_stockout}d</span>`
+    ? `<span class="badge ${p.days_until_stockout <= 3 ? 'bg-danger-lt text-danger' : p.days_until_stockout <= 7 ? 'bg-warning-lt text-warning' : 'bg-secondary-lt text-secondary'}">${p.days_until_stockout}d</span>`
     : '<span class="text-muted">—</span>';
 
   const statusBadge = statusBadgeHtml(p.status);
