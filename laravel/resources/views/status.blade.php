@@ -382,9 +382,9 @@
       'connected': '<span class="badge bg-success">Connected</span>',
       'degraded': '<span class="badge bg-warning">Degraded</span>',
       'error': '<span class="badge bg-danger">Error</span>',
-      'unknown': '<span class="badge bg-secondary">Unknown</span>',
+      'unknown': '<span class="badge text-bg-secondary">Unknown</span>',
     };
-    return map[status] || '<span class="badge bg-secondary">' + status + '</span>';
+    return map[status] || '<span class="badge text-bg-secondary">' + status + '</span>';
   }
 
   function num(v) {

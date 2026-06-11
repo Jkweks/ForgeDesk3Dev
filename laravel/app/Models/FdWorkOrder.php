@@ -6,10 +6,28 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\FdJobStep;
 
 class FdWorkOrder extends Model
 {
     protected $table = 'fd_work_orders';
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::created(function (FdWorkOrder $wo) {
+            $defaults = ['Cut List Prepared', 'Cut List Reviewed', 'Dropbox Uploaded', 'Kanban Entered'];
+            foreach ($defaults as $i => $name) {
+                FdJobStep::create([
+                    'work_order_id' => $wo->id,
+                    'name'          => $name,
+                    'sort_order'    => $i + 1,
+                    'status'        => 'pending',
+                ]);
+            }
+        });
+    }
 
     protected $fillable = [
         'business_job_id', 'release_number', 'date_issued',
@@ -57,6 +75,11 @@ class FdWorkOrder extends Model
             }
         }
         return true;
+    }
+
+    public function steps(): HasMany
+    {
+        return $this->hasMany(FdJobStep::class, 'work_order_id')->orderBy('sort_order');
     }
 
     public function scopeActive($query)

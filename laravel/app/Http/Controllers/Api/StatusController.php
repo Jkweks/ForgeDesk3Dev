@@ -190,13 +190,18 @@ class StatusController extends Controller
 
         // Storage
         $storagePath = storage_path();
+        $diskFree = @disk_free_space($storagePath);
+        $diskTotal = @disk_total_space($storagePath);
+        $diskFree = ($diskFree !== false) ? $diskFree : 0;
+        $diskTotal = ($diskTotal !== false) ? $diskTotal : 0;
+        $diskUsedPercent = ($diskTotal > 0) ? round((1 - $diskFree / $diskTotal) * 100, 1) : 0;
         $services['storage'] = [
             'status' => is_writable($storagePath) ? 'operational' : 'error',
-            'disk_free' => disk_free_space($storagePath),
-            'disk_free_human' => $this->formatBytes(disk_free_space($storagePath)),
-            'disk_total' => disk_total_space($storagePath),
-            'disk_total_human' => $this->formatBytes(disk_total_space($storagePath)),
-            'disk_used_percent' => round((1 - disk_free_space($storagePath) / disk_total_space($storagePath)) * 100, 1),
+            'disk_free' => $diskFree,
+            'disk_free_human' => $this->formatBytes($diskFree),
+            'disk_total' => $diskTotal,
+            'disk_total_human' => $this->formatBytes($diskTotal),
+            'disk_used_percent' => $diskUsedPercent,
         ];
 
         return $services;

@@ -496,7 +496,7 @@ function renderVendorCard(container, group, savedSelections = {}) {
         <h3 class="card-title mb-0">
           <i class="ti ti-truck me-2 text-primary"></i>${escapeHtml(supplier.name)}
         </h3>
-        <span class="badge bg-secondary ms-1" id="vendorCount-${sid}">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+        <span class="badge bg-secondary-lt text-secondary ms-1" id="vendorCount-${sid}">${items.length} item${items.length !== 1 ? 's' : ''}</span>
       </div>
       <div class="card-options">
         <span class="text-muted small me-3">Est: <strong id="vendorTotal-${sid}">$0.00</strong></span>
@@ -585,7 +585,7 @@ function renderItemRow(p, sid) {
   const packLabel    = isPack ? (p.purchase_uom || 'packs') : (p.stock_uom || 'EA');
 
   const daysDisplay = p.days_until_stockout != null && p.days_until_stockout > 0
-    ? `<span class="badge ${p.days_until_stockout <= 3 ? 'bg-danger-lt text-danger' : p.days_until_stockout <= 7 ? 'bg-warning-lt text-warning' : 'bg-secondary-lt'}">${p.days_until_stockout}d</span>`
+    ? `<span class="badge ${p.days_until_stockout <= 3 ? 'bg-danger-lt text-danger' : p.days_until_stockout <= 7 ? 'bg-warning-lt text-warning' : 'bg-secondary-lt text-secondary'}">${p.days_until_stockout}d</span>`
     : '<span class="text-muted">—</span>';
 
   const statusBadge = statusBadgeHtml(p.status);
@@ -934,10 +934,10 @@ function statusBadgeHtml(status) {
     critical:  ['bg-danger',  'Critical'],
     very_low:  ['bg-warning', 'Very Low'],
     low:       ['bg-info',    'Low'],
-    out_of_stock: ['bg-dark', 'Out of Stock'],
+    out_of_stock: ['text-bg-dark', 'Out of Stock'],
     in_stock:  ['bg-success', 'In Stock'],
   };
-  const [cls, label] = map[status] || ['bg-secondary', status];
+  const [cls, label] = map[status] || ['text-bg-secondary', status];
   return `<span class="badge ${cls}">${label}</span>`;
 }
 

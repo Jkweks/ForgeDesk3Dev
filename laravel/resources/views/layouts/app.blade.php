@@ -126,6 +126,15 @@
       }
     }
 
+    /* Light mode badge text — bg-* utilities don't set text color in Tabler */
+    .badge.bg-primary, .badge.bg-success, .badge.bg-danger,
+    .badge.bg-info, .badge.bg-purple, .badge.bg-azure,
+    .badge.bg-teal, .badge.bg-green, .badge.bg-red,
+    .badge.bg-blue, .badge.bg-pink, .badge.bg-indigo,
+    .badge.bg-cyan, .badge.bg-dark { color: #fff !important; }
+    .badge.bg-warning, .badge.bg-orange,
+    .badge.bg-yellow, .badge.bg-lime { color: #1a202c !important; }
+
     /* Dark mode badge improvements - better contrast and visibility */
     [data-bs-theme="dark"] .badge.bg-primary {
       background-color: #4299e1 !important;

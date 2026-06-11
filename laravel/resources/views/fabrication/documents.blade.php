@@ -699,7 +699,7 @@ function fabRenderGrid(){
       <div class="fab-card-check${sel?' checked':''}">
         ${sel?`<svg viewBox="0 0 10 8" fill="none" width="10" height="10"><path d="M1 4l3 3 5-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}
       </div>
-      <div><span class="${FAB_TYPE_BADGE[d.type]} ${FAB_TYPE_BADGE[d.type]?'':'badge bg-secondary'}">${FAB_TYPE_LABELS[d.type]}</span></div>
+      <div><span class="${FAB_TYPE_BADGE[d.type]} ${FAB_TYPE_BADGE[d.type]?'':'badge text-bg-secondary'}">${FAB_TYPE_LABELS[d.type]}</span></div>
       <div class="fab-doc-title">${fabEsc(d.title)}</div>
       <div class="fab-doc-meta">${[d.hwtype,d.manufacturer].filter(Boolean).map(fabEsc).join(' · ') || '&nbsp;'}</div>
       ${d.file?`<div class="fab-file-chip"><span style="font-size:15px">${fabFileIcon(d.file.name)}</span><span>${fabEsc(d.file.name)}</span></div>`:''}
