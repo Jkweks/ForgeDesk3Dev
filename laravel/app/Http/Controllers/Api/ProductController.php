@@ -223,6 +223,7 @@ class ProductController extends Controller
 
             // Status
             'is_active' => 'nullable|boolean',
+            'nonsof'    => 'nullable|boolean',
         ]);
 
         // Auto-generate SKU if part_number changed
