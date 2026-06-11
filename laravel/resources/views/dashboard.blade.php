@@ -608,6 +608,10 @@
           url += `&search=${encodeURIComponent(currentSearch)}`;
         }
         const response = await apiCall(url);
+        if (!response.ok) {
+          if (response.status === 401) { showLogin(); return; }
+          throw new Error(`Server error: ${response.status}`);
+        }
         const data = await response.json();
 
         document.getElementById('statSkus').textContent = data.stats.skus_tracked.toLocaleString();
@@ -624,8 +628,9 @@
         document.getElementById('loadingIndicator').style.display = 'none';
         document.getElementById('inventoryTableContainer').style.display = 'block';
       } catch (error) {
+        if (!authToken) return; // session expired — login page already shown
         console.error('Error loading dashboard:', error);
-        alert('Failed to load dashboard data');
+        document.getElementById('loadingIndicator').style.display = 'none';
       }
     }
 
@@ -1273,8 +1278,9 @@
       div.textContent = text;
       return div.innerHTML;
     }
-    // Initialize dashboard if authenticated
-    if (authToken) {
+    // Initialize dashboard after session is validated
+    window.sessionReady.then(() => {
+      if (!authToken) return;
       loadDashboard();
       loadConfigurations(); // Load finish codes and UOMs
 
@@ -1287,6 +1293,6 @@
         // Clear the URL parameter
         window.history.replaceState({}, document.title, '/');
       }
-    }
+    });
   </script>
 @endpush

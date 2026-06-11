@@ -604,7 +604,7 @@
     }
   }
 
-  validateSession();
+  window.sessionReady = validateSession();
 
   // Notification helper
   function showNotification(message, type = 'info') {
