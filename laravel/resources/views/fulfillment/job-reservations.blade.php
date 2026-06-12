@@ -17,9 +17,13 @@
             </div>
             <div class="col-auto ms-auto">
               <div class="btn-list">
-                <button type="button" class="btn btn-secondary" onclick="openManualReservationModal()">
+                <button type="button" class="btn btn-secondary" onclick="openManualReservationModal()" data-permission="orders.create">
                   <i class="ti ti-edit me-1"></i>
                   Manual Reservation
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="openManualReservationModal()" data-permission="reservations.request">
+                  <i class="ti ti-send me-1"></i>
+                  Request Reservation
                 </button>
                 <a href="/fulfillment/material-check" class="btn btn-primary">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
@@ -35,7 +39,7 @@
         <div class="container-xl">
           <!-- Status Filter Cards -->
           <div class="row row-deck row-cards mb-3">
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-2">
               <div class="card card-link" onclick="filterByStatus('')">
                 <div class="card-body">
                   <div class="subheader">Total Reservations</div>
@@ -43,7 +47,15 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-2">
+              <div class="card card-link" onclick="filterByStatus('draft')">
+                <div class="card-body">
+                  <div class="subheader">Requested</div>
+                  <div class="h2 mb-0 text-secondary" id="statDraft">0</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-2">
               <div class="card card-link" onclick="filterByStatus('active')">
                 <div class="card-body">
                   <div class="subheader">Active</div>
@@ -51,7 +63,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-2">
               <div class="card card-link" onclick="filterByStatus('in_progress')">
                 <div class="card-body">
                   <div class="subheader">In Progress</div>
@@ -59,7 +71,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-2">
               <div class="card card-link" onclick="filterByStatus('fulfilled')">
                 <div class="card-body">
                   <div class="subheader">Fulfilled</div>
@@ -80,6 +92,7 @@
                       <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="Search..." onkeyup="filterReservations()">
                       <select class="form-select form-select-sm" id="statusFilter" onchange="filterReservations()">
                         <option value="">All Status</option>
+                        <option value="draft">Requested (Draft)</option>
                         <option value="active">Active</option>
                         <option value="in_progress">In Progress</option>
                         <option value="fulfilled">Fulfilled</option>
@@ -640,12 +653,17 @@
                                 <button class="btn btn-sm btn-primary" onclick="viewDetails(${res.id})" title="View Details">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
                                 </button>
+                                ${res.status === 'draft' && hasPermission('orders.edit') ? `
+                                    <button class="btn btn-sm btn-warning" onclick="activateDraftReservation(${res.id})" title="Activate Reservation">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l9 18h-18z" /></svg>
+                                    </button>
+                                ` : ''}
                                 ${res.status === 'in_progress' ? `
                                     <button class="btn btn-sm btn-success" onclick="showCompleteModal(${res.id})" title="Complete Job">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                                     </button>
                                 ` : ''}
-                                ${res.status !== 'fulfilled' && res.status !== 'cancelled' ? `
+                                ${res.status !== 'draft' && res.status !== 'fulfilled' && res.status !== 'cancelled' ? `
                                     <button class="btn btn-sm btn-secondary" onclick="showStatusModal(${res.id}, '${res.status}')" title="Change Status">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /><path d="M9 12l2 2l4 -4" /></svg>
                                     </button>
@@ -672,15 +690,42 @@
         function updateStats() {
             const stats = {
                 total: reservations.length,
+                draft: reservations.filter(r => r.status === 'draft').length,
                 active: reservations.filter(r => r.status === 'active').length,
                 in_progress: reservations.filter(r => r.status === 'in_progress').length,
                 fulfilled: reservations.filter(r => r.status === 'fulfilled').length,
             };
 
             document.getElementById('statTotal').textContent = stats.total;
+            document.getElementById('statDraft').textContent = stats.draft;
             document.getElementById('statActive').textContent = stats.active;
             document.getElementById('statInProgress').textContent = stats.in_progress;
             document.getElementById('statFulfilled').textContent = stats.fulfilled;
+        }
+
+        async function activateDraftReservation(id) {
+            if (!confirm('Activate this reservation? Inventory will be committed immediately.')) return;
+            try {
+                const response = await fetch(`/api/v1/job-reservations/${id}/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    },
+                    body: JSON.stringify({ status: 'active' }),
+                });
+                if (response.ok) {
+                    loadReservations();
+                } else {
+                    const data = await response.json();
+                    alert(data.message || 'Error activating reservation');
+                }
+            } catch (error) {
+                console.error('Error activating reservation:', error);
+                alert('Error activating reservation');
+            }
         }
 
         function filterReservations() {

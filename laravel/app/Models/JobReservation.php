@@ -138,6 +138,7 @@ class JobReservation extends Model
     public static function statusLabels(): array
     {
         return [
+            'draft' => 'Requested - Pending approval, inventory not yet committed',
             'active' => 'Active - Inventory committed, waiting to be pulled',
             'in_progress' => 'In Progress - Work started, team consuming inventory',
             'fulfilled' => 'Fulfilled - All inventory reconciled',
