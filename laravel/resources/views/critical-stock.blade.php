@@ -259,7 +259,7 @@
 
       tbody.innerHTML = sorted.map((product, index) => {
         const priorityBadge = product.status === 'out_of_stock'
-          ? '<span class="badge bg-dark">URGENT</span>'
+          ? '<span class="badge text-bg-dark">URGENT</span>'
           : `<span class="badge bg-danger">${index + 1}</span>`;
 
         return `

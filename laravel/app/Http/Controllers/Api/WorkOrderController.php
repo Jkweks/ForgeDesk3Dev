@@ -66,6 +66,7 @@ class WorkOrderController extends Controller
                 'businessJob',
                 'assignedUsers',
                 'drawings',
+                'steps.completedBy',
                 'elevations.elevationType',
                 'elevations.completedBy',
                 'elevations.stages.assignedTo',
@@ -73,6 +74,16 @@ class WorkOrderController extends Controller
             ])->findOrFail($id);
 
             $data = $this->formatWo($wo);
+            $data['steps'] = $wo->steps->map(fn($s) => [
+                'id'                => $s->id,
+                'work_order_id'     => $s->work_order_id,
+                'name'              => $s->name,
+                'sort_order'        => $s->sort_order,
+                'status'            => $s->status,
+                'completed_by_id'   => $s->completed_by_id,
+                'completed_by_name' => $s->completedBy?->name,
+                'completed_at'      => $s->completed_at?->toIso8601String(),
+            ])->values();
             $data['drawings']   = $wo->drawings->map(fn($d) => [
                 'id'            => $d->id,
                 'original_name' => $d->original_name,

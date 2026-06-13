@@ -473,7 +473,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy']);
         Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin']);
 
-        Route::get('/business-jobs/{jobId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
+        Route::get('/work-orders/{workOrderId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
         Route::post('/job-steps', [\App\Http\Controllers\Api\JobStepController::class, 'store']);
         Route::patch('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'update']);
         Route::delete('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'destroy']);

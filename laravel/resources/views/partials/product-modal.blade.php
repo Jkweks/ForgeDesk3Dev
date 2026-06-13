@@ -946,6 +946,14 @@
                       <div class="text-muted small">Avg Daily Use</div>
                       <div>${product.average_daily_use || '-'}</div>
                     </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Type</div>
+                      <div>${product.nonsof ? '<span class="badge text-bg-success">Stock</span>' : '<span class="badge text-bg-secondary">Boneyard</span>'}</div>
+                    </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Door Shim</div>
+                      <div>${product.cp_part ? '<span class="badge text-bg-info">Door Shim</span>' : '<span class="badge text-bg-secondary">No</span>'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1241,6 +1249,20 @@
                       <label class="form-label small text-muted mb-1">Avg Daily Use <span class="text-muted" style="font-size:0.7em">(auto-calculated)</span></label>
                       <input type="number" class="form-control form-control-sm bg-body-secondary" name="average_daily_use" value="${product.average_daily_use || ''}" min="0" step="0.01" readonly tabindex="-1">
                     </div>
+                    <div class="col-3 mt-2">
+                      <label class="form-label small text-muted mb-1">Type</label>
+                      <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" name="nonsof" id="editNonsof" ${product.nonsof ? 'checked' : ''}>
+                        <label class="form-check-label" for="editNonsof" id="editNonsofLabel">${product.nonsof ? 'Stock' : 'Boneyard'}</label>
+                      </div>
+                    </div>
+                    <div class="col-3 mt-2">
+                      <label class="form-label small text-muted mb-1">Door Shim</label>
+                      <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" name="cp_part" id="editCpPart" ${product.cp_part ? 'checked' : ''}>
+                        <label class="form-check-label" for="editCpPart" id="editCpPartLabel">${product.cp_part ? 'Yes' : 'No'}</label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1285,6 +1307,22 @@
       editForm.querySelector('[name="description"]').value  = product.description || '';
       editForm.querySelector('[name="long_description"]').value = product.long_description || '';
       editForm.querySelector('[name="supplier_sku"]').value = product.supplier_sku || '';
+
+      const nonsofCb = editForm.querySelector('[name="nonsof"]');
+      const nonsofLabel = document.getElementById('editNonsofLabel');
+      if (nonsofCb && nonsofLabel) {
+        nonsofCb.addEventListener('change', () => {
+          nonsofLabel.textContent = nonsofCb.checked ? 'Stock' : 'Boneyard';
+        });
+      }
+
+      const cpPartCb = editForm.querySelector('[name="cp_part"]');
+      const cpPartLabel = document.getElementById('editCpPartLabel');
+      if (cpPartCb && cpPartLabel) {
+        cpPartCb.addEventListener('change', () => {
+          cpPartLabel.textContent = cpPartCb.checked ? 'Yes' : 'No';
+        });
+      }
     }
 
     function triggerProductPhotoUpload(productId) {
@@ -1380,6 +1418,10 @@
             data[key] = value;
           }
         });
+
+        // Checkbox — unchecked values don't appear in FormData
+        data.nonsof  = !!form.querySelector('[name="nonsof"]')?.checked;
+        data.cp_part = !!form.querySelector('[name="cp_part"]')?.checked;
 
         // Handle multiple category selection
         const categorySelect = form.querySelector('[name="category_ids"]');

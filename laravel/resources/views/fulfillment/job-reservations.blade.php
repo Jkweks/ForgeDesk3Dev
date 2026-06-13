@@ -677,12 +677,12 @@
 
         function getStatusBadge(status) {
             const badges = {
-                'draft': '<span class="badge bg-secondary">Draft</span>',
+                'draft': '<span class="badge text-bg-secondary">Draft</span>',
                 'active': '<span class="badge bg-primary">Active</span>',
                 'in_progress': '<span class="badge bg-info">In Progress</span>',
                 'fulfilled': '<span class="badge bg-success">Fulfilled</span>',
                 'on_hold': '<span class="badge bg-warning">On Hold</span>',
-                'cancelled': '<span class="badge bg-dark">Cancelled</span>',
+                'cancelled': '<span class="badge text-bg-dark">Cancelled</span>',
             };
             return badges[status] || `<span class="badge">${status}</span>`;
         }

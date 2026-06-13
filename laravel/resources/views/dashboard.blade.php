@@ -101,6 +101,9 @@
                       <a href="#" class="nav-link" data-tab="boneyard">Boneyard (No Cost)</a>
                     </li>
                     <li class="nav-item">
+                      <a href="#" class="nav-link" data-tab="door_shims">Door Shims</a>
+                    </li>
+                    <li class="nav-item">
                       <a href="#" class="nav-link" data-tab="special_order">Special Order</a>
                     </li>
                   </ul>

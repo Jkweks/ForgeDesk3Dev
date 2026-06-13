@@ -193,6 +193,13 @@
       </div>
     </div>
 
+    <!-- WO Steps -->
+    <div class="px-3 py-2 border-bottom">
+      <div class="d-flex align-items-center gap-1 flex-wrap" id="wo-steps-container">
+        <span class="text-muted small">Loading steps…</span>
+      </div>
+    </div>
+
     <!-- Shop Drawings -->
     <div class="p-3 border-bottom">
       <div class="d-flex justify-content-between align-items-center mb-2">
@@ -682,6 +689,7 @@ function populateDetail(wo) {
     document.getElementById('d-notes').value = wo.notes || '';
 
     renderAssignedUsers(wo.assigned_users || []);
+    renderWoSteps(wo.id, wo.steps || []);
     renderDrawings(wo.drawings || []);
     renderElevations(wo.elevations || []);
 }
@@ -775,6 +783,99 @@ async function archiveCurrentWO() {
         console.error(e);
         alert('Failed to archive work order');
     }
+}
+
+// ============================================================
+// WO Steps
+// ============================================================
+function renderWoSteps(woId, steps) {
+    const container = document.getElementById('wo-steps-container');
+    if (!container) return;
+    const statusColor = { pending: 'secondary', complete: 'success', not_required: 'info' };
+    const statusIcon  = { pending: '', complete: '✓', not_required: '—' };
+    const html = steps.map(s => {
+        const color = statusColor[s.status] || 'secondary';
+        return `<span class="badge bg-${color}-lt text-${color}" style="cursor:pointer;font-size:.78rem;padding:.28rem .6rem"
+            title="${esc(s.status === 'complete' && s.completed_by_name ? 'By: ' + s.completed_by_name : s.status)}"
+            onclick="cycleWoStep(${s.id}, '${s.status}')"
+            oncontextmenu="woStepContextMenu(${s.id}, '${s.status}', event)">
+            ${statusIcon[s.status] ? statusIcon[s.status] + ' ' : ''}${esc(s.name)}
+        </span>`;
+    }).join('');
+    container.innerHTML = `<span class="text-muted small me-2" style="white-space:nowrap">WO Steps:</span>${html}
+        <button class="btn btn-ghost-secondary btn-sm ms-1 px-1 py-0" style="font-size:.72rem"
+            onclick="addWoStep()" title="Add step"><i class="ti ti-plus"></i></button>`;
+}
+
+async function reloadWoSteps() {
+    if (!currentWO) return;
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/steps`);
+        const data = await r.json();
+        renderWoSteps(currentWO.id, data.steps || []);
+    } catch (e) { console.error(e); }
+}
+
+async function cycleWoStep(stepId, currentStatus) {
+    const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
+    try {
+        await API(`/job-steps/${stepId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus }),
+        });
+        reloadWoSteps();
+    } catch (e) { console.error(e); }
+}
+
+function woStepContextMenu(stepId, currentStatus, event) {
+    event.preventDefault();
+    document.getElementById('wo-step-ctx')?.remove();
+    const isNR = currentStatus === 'not_required';
+    const menu = document.createElement('div');
+    menu.id = 'wo-step-ctx';
+    menu.className = 'dropdown-menu show';
+    menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
+    menu.innerHTML = isNR
+        ? `<button class="dropdown-item" onclick="setWoStepStatus(${stepId},'pending');this.closest('#wo-step-ctx').remove()">Reset to Pending</button>`
+        : `<button class="dropdown-item text-muted" onclick="setWoStepStatus(${stepId},'not_required');this.closest('#wo-step-ctx').remove()">Mark Not Required</button>
+           <button class="dropdown-item text-danger" onclick="deleteWoStep(${stepId});this.closest('#wo-step-ctx').remove()">Delete Step</button>`;
+    document.body.appendChild(menu);
+    const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+async function setWoStepStatus(stepId, status) {
+    try {
+        await API(`/job-steps/${stepId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+        });
+        reloadWoSteps();
+    } catch (e) { console.error(e); }
+}
+
+async function deleteWoStep(stepId) {
+    if (!confirm('Delete this step?')) return;
+    try {
+        await API(`/job-steps/${stepId}`, { method: 'DELETE' });
+        reloadWoSteps();
+    } catch (e) { console.error(e); }
+}
+
+async function addWoStep() {
+    if (!currentWO) return;
+    const name = prompt('Step name:');
+    if (!name) return;
+    try {
+        await API('/job-steps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ work_order_id: currentWO.id, name: name.trim() }),
+        });
+        reloadWoSteps();
+    } catch (e) { console.error(e); }
 }
 
 // ============================================================

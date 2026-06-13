@@ -1379,7 +1379,7 @@
         tbody.innerHTML = users.map(user => {
           const statusBadge = user.is_active
             ? '<span class="badge bg-success">Active</span>'
-            : '<span class="badge bg-secondary">Inactive</span>';
+            : '<span class="badge text-bg-secondary">Inactive</span>';
 
           const roleBadge = roleBadges[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
 
@@ -2002,7 +2002,7 @@
 
       // ── Shared helpers ───────────────────────────────────────────────────────
       function locStatusBadge(status) {
-        return { pending: '<span class="badge bg-secondary">Pending</span>',
+        return { pending: '<span class="badge text-bg-secondary">Pending</span>',
                  saving:  '<span class="badge bg-azure">Saving…</span>',
                  saved:   '<span class="badge bg-success">Saved</span>',
                  error:   '<span class="badge bg-danger">Error</span>' }[status] || status;
@@ -2062,7 +2062,7 @@
             <td><span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:${locEscHtml(t.color)}"></span></td>
             <td><strong>${locEscHtml(t.name)}</strong></td>
             <td>${t.sort_order}</td>
-            <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+            <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
             <td>
               <div class="btn-group btn-group-sm">
                 <button class="btn btn-ghost-secondary" onclick="openTypeTemplates(${t.id}, '${t.name.replace(/'/g, "\\'")}')" title="Stage defaults">

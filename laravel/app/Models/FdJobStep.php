@@ -10,16 +10,16 @@ class FdJobStep extends Model
     protected $table = 'fd_job_steps';
 
     protected $fillable = [
-        'business_job_id', 'name', 'sort_order', 'status', 'completed_by_id', 'completed_at',
+        'work_order_id', 'name', 'sort_order', 'status', 'completed_by_id', 'completed_at',
     ];
 
     protected $casts = [
         'completed_at' => 'datetime',
     ];
 
-    public function job(): BelongsTo
+    public function workOrder(): BelongsTo
     {
-        return $this->belongsTo(BusinessJob::class, 'business_job_id');
+        return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
     }
 
     public function completedBy(): BelongsTo

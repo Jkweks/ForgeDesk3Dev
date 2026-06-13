@@ -859,8 +859,8 @@
                     <td>${escapeHtml(job.job_name)}</td>
                     <td>${escapeHtml(job.customer_name || '-')}</td>
                     <td><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
-                    <td><span class="badge ${resCount > 0 ? 'bg-info' : 'bg-secondary'}">${resCount}</span></td>
-                    <td><span class="badge ${woCount > 0 ? 'bg-purple' : 'bg-secondary'}">${woCount}</span></td>
+                    <td><span class="badge ${resCount > 0 ? 'bg-info' : 'bg-secondary-lt text-secondary'}">${resCount}</span></td>
+                    <td><span class="badge ${woCount > 0 ? 'bg-purple' : 'bg-secondary-lt text-secondary'}">${woCount}</span></td>
                     <td>${job.start_date || '-'}</td>
                     <td>${job.target_completion_date || '-'}</td>
                     <td>${getDaysRemaining(job.days_until_completion)}</td>
@@ -889,31 +889,27 @@
                                 <span class="text-muted small">${escapeHtml(job.customer_name || '')}${job.project_manager ? ' · PM: ' + escapeHtml(job.project_manager) : ''}</span>
                                 <div class="ms-auto btn-list" id="job-tab-actions-${job.id}"></div>
                             </div>
-                            <!-- Job Steps strip -->
-                            <div class="d-flex align-items-center gap-1 flex-wrap px-3 py-2 border-bottom" id="job-steps-${job.id}">
-                                <span class="text-muted small">Loading steps…</span>
-                            </div>
                             <!-- Tabs -->
                             <ul class="nav nav-tabs px-3" id="job-tabs-${job.id}" role="tablist">
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="job-tab-wo-btn-${job.id}"
                                         onclick="switchJobTab(${job.id}, 'wo')" type="button">
                                         <i class="ti ti-tool me-1"></i>Work Orders
-                                        <span class="badge bg-secondary ms-1" id="job-wo-badge-${job.id}">${job.work_orders_count || 0}</span>
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-wo-badge-${job.id}">${job.work_orders_count || 0}</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="job-tab-res-btn-${job.id}"
                                         onclick="switchJobTab(${job.id}, 'res')" type="button">
                                         <i class="ti ti-clipboard-list me-1"></i>Reservations
-                                        <span class="badge bg-secondary ms-1" id="job-res-badge-${job.id}">${job.reservations_count || 0}</span>
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-res-badge-${job.id}">${job.reservations_count || 0}</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="job-tab-tx-btn-${job.id}"
                                         onclick="switchJobTab(${job.id}, 'tx')" type="button">
                                         <i class="ti ti-receipt me-1"></i>Transactions
-                                        <span class="badge bg-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
                                     </button>
                                 </li>
                             </ul>
@@ -1474,8 +1470,6 @@
         async function loadJobDetail(jobId) {
             currentJobForReservations = allJobs.find(j => j.id === jobId);
             updateJobTabActions(jobId, 'wo');
-            // Load job steps
-            loadJobSteps(jobId);
             // Load work orders (default active tab)
             const woKey = `${jobId}-wo`;
             if (!jobTabLoaded[woKey]) {
@@ -1484,99 +1478,6 @@
             }
             // Wire product search for transaction form
             wireJobTxProductSearch(jobId);
-        }
-
-        async function loadJobSteps(jobId) {
-            try {
-                const r = await fetch(`/api/v1/business-jobs/${jobId}/steps`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
-                const data = await r.json();
-                renderJobSteps(jobId, data.steps || []);
-            } catch (e) { console.error(e); }
-        }
-
-        function renderJobSteps(jobId, steps) {
-            const container = document.getElementById(`job-steps-${jobId}`);
-            if (!container) return;
-            const statusColor = { pending: 'secondary', complete: 'success', not_required: 'info' };
-            const statusIcon  = { pending: '', complete: '✓', not_required: '—' };
-            const html = steps.map(s => {
-                const color = statusColor[s.status] || 'secondary';
-                return `<span class="badge bg-${color}-lt text-${color} step-badge" style="cursor:pointer;font-size:.78rem;padding:.28rem .6rem"
-                    title="${escapeHtml(s.status === 'complete' && s.completed_by_name ? 'By: ' + s.completed_by_name : s.status)}"
-                    onclick="cycleJobStep(${s.id}, '${s.status}', ${jobId})"
-                    oncontextmenu="jobStepContextMenu(${s.id}, '${s.status}', ${jobId}, event)">
-                    ${statusIcon[s.status] ? statusIcon[s.status] + ' ' : ''}${escapeHtml(s.name)}
-                </span>`;
-            }).join('');
-            container.innerHTML = `<span class="text-muted small me-2" style="white-space:nowrap">Job Steps:</span>${html}
-                <button class="btn btn-ghost-secondary btn-sm ms-1 px-1 py-0" style="font-size:.72rem"
-                    onclick="addJobStep(${jobId})" title="Add step"><i class="ti ti-plus"></i></button>`;
-        }
-
-        async function cycleJobStep(stepId, currentStatus, jobId) {
-            const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
-            try {
-                await fetch(`/api/v1/job-steps/${stepId}`, {
-                    method: 'PATCH',
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: nextStatus }),
-                });
-                loadJobSteps(jobId);
-            } catch (e) { console.error(e); }
-        }
-
-        function jobStepContextMenu(stepId, currentStatus, jobId, event) {
-            event.preventDefault();
-            document.getElementById('job-step-ctx')?.remove();
-            const isNR = currentStatus === 'not_required';
-            const menu = document.createElement('div');
-            menu.id = 'job-step-ctx';
-            menu.className = 'dropdown-menu show';
-            menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
-            menu.innerHTML = isNR
-                ? `<button class="dropdown-item" onclick="setJobStepStatus(${stepId},'pending',${jobId});this.closest('#job-step-ctx').remove()">Reset to Pending</button>`
-                : `<button class="dropdown-item text-muted" onclick="setJobStepStatus(${stepId},'not_required',${jobId});this.closest('#job-step-ctx').remove()">Mark Not Required</button>
-                   <button class="dropdown-item text-danger" onclick="deleteJobStep(${stepId},${jobId});this.closest('#job-step-ctx').remove()">Delete Step</button>`;
-            document.body.appendChild(menu);
-            const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
-            setTimeout(() => document.addEventListener('click', close), 0);
-        }
-
-        async function setJobStepStatus(stepId, status, jobId) {
-            try {
-                await fetch(`/api/v1/job-steps/${stepId}`, {
-                    method: 'PATCH',
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status }),
-                });
-                loadJobSteps(jobId);
-            } catch (e) { console.error(e); }
-        }
-
-        async function deleteJobStep(stepId, jobId) {
-            if (!confirm('Delete this step?')) return;
-            try {
-                await fetch(`/api/v1/job-steps/${stepId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
-                loadJobSteps(jobId);
-            } catch (e) { console.error(e); }
-        }
-
-        async function addJobStep(jobId) {
-            const name = prompt('Step name:');
-            if (!name) return;
-            try {
-                await fetch('/api/v1/job-steps', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ business_job_id: jobId, name: name.trim() }),
-                });
-                loadJobSteps(jobId);
-            } catch (e) { console.error(e); }
         }
 
         async function loadJobReservations(jobId) {
@@ -1680,6 +1581,8 @@
                 return;
             }
 
+            const woStepColor = { pending: 'secondary', complete: 'success', not_required: 'info' };
+            const woStepIcon  = { pending: '', complete: '✓', not_required: '—' };
             contentEl.innerHTML = `
                 <div class="table-responsive">
                     <table class="table table-sm table-vcenter mb-0">
@@ -1689,25 +1592,71 @@
                         <tbody>
                             ${jobWorkOrders.map(wo => {
                                 const mat = wo.material_delivery;
-                                let matBadge = '<span class="badge bg-secondary">Pending</span>';
+                                let matBadge = '<span class="badge bg-secondary-lt text-secondary">Pending</span>';
                                 if (mat === 'In Shop') matBadge = '<span class="badge bg-success">In Shop</span>';
                                 else if (mat === 'SOF') matBadge = '<span class="badge bg-warning text-dark">SOF</span>';
                                 else if (mat) matBadge = `<span class="badge bg-info">${escapeHtml(mat)}</span>`;
                                 const progress = wo.elevation_count > 0
                                     ? `${wo.elevations_complete}/${wo.elevation_count}`
                                     : '<span class="text-muted">—</span>';
+                                const steps = wo.steps || [];
+                                const stepsHtml = steps.map(s => {
+                                    const color = woStepColor[s.status] || 'secondary';
+                                    return `<span class="badge bg-${color}-lt text-${color}" style="cursor:pointer;font-size:.72rem;padding:.22rem .5rem"
+                                        title="${escapeHtml(s.status === 'complete' && s.completed_by_name ? 'By: ' + s.completed_by_name : s.status)}"
+                                        onclick="cycleWoStepInJob(${s.id}, '${s.status}', ${jobId})">
+                                        ${woStepIcon[s.status] ? woStepIcon[s.status] + ' ' : ''}${escapeHtml(s.name)}
+                                    </span>`;
+                                }).join('');
                                 return `<tr>
                                     <td><strong>${escapeHtml(wo.release_label)}</strong></td>
                                     <td>${wo.date_issued || '—'}</td>
                                     <td>${matBadge}</td>
                                     <td>${progress}</td>
                                     <td><a href="/fabrication/work-orders?wo=${wo.id}" class="btn btn-sm btn-outline-secondary">Open</a></td>
+                                </tr>
+                                <tr class="border-0">
+                                    <td colspan="5" class="pt-0 pb-2 border-0">
+                                        <div class="d-flex align-items-center gap-1 flex-wrap ms-1">
+                                            ${stepsHtml}
+                                            <button class="btn btn-ghost-secondary btn-sm px-1 py-0 ms-1" style="font-size:.66rem"
+                                                onclick="addWoStepInJob(${wo.id}, ${jobId})" title="Add step"><i class="ti ti-plus"></i></button>
+                                        </div>
+                                    </td>
                                 </tr>`;
                             }).join('')}
                         </tbody>
                     </table>
                 </div>
             `;
+        }
+
+        async function cycleWoStepInJob(stepId, currentStatus, jobId) {
+            const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
+            try {
+                await fetch(`/api/v1/job-steps/${stepId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: nextStatus }),
+                });
+                // Force-reload the WO tab to reflect the new step status
+                delete jobTabLoaded[`${jobId}-wo`];
+                await loadJobWorkOrders(jobId);
+            } catch (e) { console.error(e); }
+        }
+
+        async function addWoStepInJob(woId, jobId) {
+            const name = prompt('Step name:');
+            if (!name) return;
+            try {
+                await fetch('/api/v1/job-steps', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ work_order_id: woId, name: name.trim() }),
+                });
+                delete jobTabLoaded[`${jobId}-wo`];
+                await loadJobWorkOrders(jobId);
+            } catch (e) { console.error(e); }
         }
 
         function openNewWOForJob() {
@@ -2747,7 +2696,7 @@
                     statusClass = 'table-danger';
                     canCommit = true;
                 } else if (item.status === 'not_found') {
-                    statusBadge = '<span class="badge bg-secondary">Not Found</span>';
+                    statusBadge = '<span class="badge bg-secondary-lt text-secondary">Not Found</span>';
                     statusClass = 'table-secondary';
                 }
 
