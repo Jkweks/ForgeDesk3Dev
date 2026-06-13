@@ -62,7 +62,6 @@ Route::post('/login', function (Request $request) {
 
     $remember = $request->boolean('remember', false);
     \Illuminate\Support\Facades\Auth::login($user, $remember);
-    $request->session()->regenerate();
 
     $permissions = [];
     if ($user->role) {
