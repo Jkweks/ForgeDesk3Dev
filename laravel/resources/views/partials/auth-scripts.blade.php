@@ -410,12 +410,17 @@
     const remember = document.getElementById('loginRemember').checked;
 
     try {
+      // Initialize Sanctum session and get a fresh XSRF token (required before first login POST)
+      await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
+      const xsrfCookie = document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='));
+      const xsrfToken = xsrfCookie ? decodeURIComponent(xsrfCookie.split('=')[1]) : '';
+
       const response = await fetch('/api/login', {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+          'X-XSRF-TOKEN': xsrfToken,
         },
         body: JSON.stringify({ email, password, remember })
       });
