@@ -13,8 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Trust proxies for X-Forwarded-* headers from nginx proxy manager
         $middleware->trustProxies(at: '*');
+        $middleware->api(prepend: [
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
         // Prune expired Sanctum tokens daily at 2 AM

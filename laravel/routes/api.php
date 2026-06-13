@@ -54,27 +54,16 @@ Route::post('/login', function (Request $request) {
         return response()->json(['message' => 'Invalid credentials'], 401);
     }
 
-    // Check if user is active
     if (!$user->is_active) {
         return response()->json(['message' => 'Your account has been deactivated. Please contact an administrator.'], 403);
     }
 
-    // Update last login timestamp
     $user->updateLastLogin();
 
-    // Token expiration based on remember me
     $remember = $request->boolean('remember', false);
-    $expirationMinutes = $remember ? 43200 : 480; // 30 days or 8 hours
-    $expiresAt = now()->addMinutes($expirationMinutes);
+    \Illuminate\Support\Facades\Auth::login($user, $remember);
+    $request->session()->regenerate();
 
-    // Use distinct token name to reliably detect remember-me on refresh
-    $tokenName = $remember ? 'auth-token-remember' : 'auth-token';
-
-    // Create token with expiration
-    $tokenResult = $user->createToken($tokenName, ['*'], $expiresAt);
-    $token = $tokenResult->plainTextToken;
-
-    // Get user permissions
     $permissions = [];
     if ($user->role) {
         $role = \App\Models\Role::where('name', $user->role)->first();
@@ -84,10 +73,6 @@ Route::post('/login', function (Request $request) {
     }
 
     return response()->json([
-        'token' => $token,
-        'expires_at' => $expiresAt->toIso8601String(),
-        'expires_in' => $expirationMinutes * 60, // in seconds
-        'remember' => $remember,
         'user' => [
             'id' => $user->id,
             'name' => $user->full_name ?: $user->name,
@@ -100,56 +85,10 @@ Route::post('/login', function (Request $request) {
 });
 
 Route::post('/logout', function (Request $request) {
-    $request->user()->currentAccessToken()->delete();
+    \Illuminate\Support\Facades\Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
     return response()->json(['message' => 'Logged out']);
-})->middleware('auth:sanctum');
-
-// Token Refresh (authenticated)
-Route::post('/token/refresh', function (Request $request) {
-    $user = $request->user();
-    $currentToken = $request->user()->currentAccessToken();
-
-    // Get current token's abilities and name
-    $abilities = $currentToken->abilities ?? ['*'];
-    $tokenName = $currentToken->name;
-
-    // Detect remember-me by token name (set reliably at login time)
-    $isRememberToken = $tokenName === 'auth-token-remember';
-
-    // Set expiration based on token type
-    $expirationMinutes = $isRememberToken ? 43200 : 480;
-    $expiresAt = now()->addMinutes($expirationMinutes);
-
-    // Delete old token
-    $currentToken->delete();
-
-    // Create new token
-    $tokenResult = $user->createToken($tokenName, $abilities, $expiresAt);
-    $token = $tokenResult->plainTextToken;
-
-    // Get user permissions
-    $permissions = [];
-    if ($user->role) {
-        $role = \App\Models\Role::where('name', $user->role)->first();
-        if ($role) {
-            $permissions = $role->permissions->pluck('name')->toArray();
-        }
-    }
-
-    return response()->json([
-        'token' => $token,
-        'expires_at' => $expiresAt->toIso8601String(),
-        'expires_in' => $expirationMinutes * 60, // in seconds
-        'remember' => $isRememberToken,
-        'user' => [
-            'id' => $user->id,
-            'name' => $user->full_name ?: $user->name,
-            'email' => $user->email,
-            'role' => $user->role,
-            'is_active' => $user->is_active,
-            'permissions' => $permissions,
-        ]
-    ]);
 })->middleware('auth:sanctum');
 
 // Password Reset routes (public)
@@ -201,7 +140,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('v1')->group(function () {
         // Current user
         Route::get('/user', function (Request $request) {
-            return $request->user();
+            $user = $request->user();
+            $permissions = [];
+            if ($user->role) {
+                $role = \App\Models\Role::where('name', $user->role)->first();
+                if ($role) {
+                    $permissions = $role->permissions->pluck('name')->toArray();
+                }
+            }
+            return [
+                'id' => $user->id,
+                'name' => $user->full_name ?: $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'is_active' => $user->is_active,
+                'permissions' => $permissions,
+            ];
         });
 
         // User Management

@@ -628,7 +628,7 @@
         document.getElementById('loadingIndicator').style.display = 'none';
         document.getElementById('inventoryTableContainer').style.display = 'block';
       } catch (error) {
-        if (!authToken) return; // session expired — login page already shown
+        if (!currentUser) return; // session expired — login page already shown
         console.error('Error loading dashboard:', error);
         document.getElementById('loadingIndicator').style.display = 'none';
       }
@@ -876,9 +876,10 @@
       try {
         const response = await fetch(`${API_BASE}/export/products`, {
           method: 'GET',
+          credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Accept': 'text/csv'
+            'Accept': 'text/csv',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
           }
         });
 
@@ -1280,7 +1281,7 @@
     }
     // Initialize dashboard after session is validated
     window.sessionReady.then(() => {
-      if (!authToken) return;
+      if (!currentUser) return;
       loadDashboard();
       loadConfigurations(); // Load finish codes and UOMs
 
