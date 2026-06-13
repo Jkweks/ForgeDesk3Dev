@@ -1,6 +1,6 @@
 <script>
   const API_BASE = '/api/v1';
-  let authToken = localStorage.getItem('authToken');
+  let authToken = null; // kept for compatibility — pages that still send `Authorization: Bearer null` gracefully fall back to session auth
   let currentUser = null;
 
   // Load user data from localStorage
@@ -349,12 +349,9 @@
       ...options.headers
     };
 
-    if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
-    }
-
     const response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
+      credentials: 'include',
       headers
     });
 
@@ -368,16 +365,8 @@
     if (!response.ok) {
       // Handle 401 Unauthorized - redirect to login
       if (response.status === 401) {
-        localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
-        localStorage.removeItem('tokenExpiresAt');
-        localStorage.removeItem('tokenExpiresIn');
-        localStorage.removeItem('rememberMe');
-        authToken = null;
         currentUser = null;
-        if (tokenRefreshTimer) {
-          clearInterval(tokenRefreshTimer);
-        }
         showLogin();
         showNotification('Session expired. Please login again.', 'warning');
         throw new Error('Session expired');
@@ -421,26 +410,29 @@
     const remember = document.getElementById('loginRemember').checked;
 
     try {
+      // Initialize Sanctum session and get a fresh XSRF token (required before first login POST)
+      await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
+      const xsrfCookie = document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='));
+      const xsrfToken = xsrfCookie ? decodeURIComponent(xsrfCookie.split('=')[1]) : '';
+
       const response = await fetch('/api/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-XSRF-TOKEN': xsrfToken,
+        },
         body: JSON.stringify({ email, password, remember })
       });
 
       if (response.ok) {
         const data = await response.json();
-        authToken = data.token;
         currentUser = data.user;
-        localStorage.setItem('authToken', authToken);
         localStorage.setItem('userData', JSON.stringify(data.user));
-        localStorage.setItem('tokenExpiresAt', data.expires_at);
-        localStorage.setItem('tokenExpiresIn', data.expires_in);
-        localStorage.setItem('rememberMe', data.remember);
-        updateUserBadge(); // Update badge before reload
-        startTokenRefreshTimer(); // Start automatic refresh
-        location.reload(); // Reload to initialize the app
+        location.reload();
       } else {
-        document.getElementById('loginError').textContent = 'Invalid credentials';
+        const err = await response.json().catch(() => ({}));
+        document.getElementById('loginError').textContent = err.message || 'Invalid credentials';
         document.getElementById('loginError').style.display = 'block';
       }
     } catch (error) {
@@ -456,140 +448,32 @@
     try {
       await fetch('/api/logout', {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
         }
       });
     } catch (_) { /* best-effort — clear local state regardless */ }
-    if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
-    localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
-    localStorage.removeItem('tokenExpiresAt');
-    localStorage.removeItem('tokenExpiresIn');
-    localStorage.removeItem('rememberMe');
-    authToken = null;
     currentUser = null;
     location.reload();
   });
 
-  // Token Refresh Mechanism
-  let tokenRefreshTimer = null;
-
-  async function refreshToken() {
-    if (!authToken) {
-      return false;
-    }
-
-    try {
-      const response = await fetch('/api/token/refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        authToken = data.token;
-        currentUser = data.user;
-        localStorage.setItem('authToken', authToken);
-        localStorage.setItem('userData', JSON.stringify(data.user));
-        localStorage.setItem('tokenExpiresAt', data.expires_at);
-        localStorage.setItem('tokenExpiresIn', data.expires_in);
-        localStorage.setItem('rememberMe', data.remember);
-        console.log('Token refreshed successfully');
-        return true;
-      } else {
-        console.error('Token refresh failed:', response.status);
-        if (response.status === 401) {
-          // Token invalid - logout
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('userData');
-          localStorage.removeItem('tokenExpiresAt');
-          localStorage.removeItem('tokenExpiresIn');
-          localStorage.removeItem('rememberMe');
-          authToken = null;
-          currentUser = null;
-          showLogin();
-          showNotification('Session expired. Please login again.', 'warning');
-        }
-        return false;
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      return false;
-    }
-  }
-
-  function startTokenRefreshTimer() {
-    if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
-
-    const expiresAt = localStorage.getItem('tokenExpiresAt');
-    if (!expiresAt) return;
-
-    // Always derive remaining seconds from the stored ISO timestamp (not the stale tokenExpiresIn)
-    const secsLeft = Math.max(0, (new Date(expiresAt) - Date.now()) / 1000);
-    if (secsLeft === 0) return;
-
-    const refreshThreshold = Math.min(300, secsLeft / 10); // 5 min or 10% of remaining life
-    const checkInterval    = Math.max(60000, refreshThreshold * 500); // min 1 min
-
-    tokenRefreshTimer = setInterval(async () => {
-      const current = localStorage.getItem('tokenExpiresAt');
-      if (!current) return;
-
-      const timeUntilExpiry = (new Date(current) - Date.now()) / 1000;
-
-      if (timeUntilExpiry < refreshThreshold && timeUntilExpiry > 0) {
-        const refreshed = await refreshToken();
-        if (refreshed) startTokenRefreshTimer();
-      } else if (timeUntilExpiry <= 0) {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userData');
-        localStorage.removeItem('tokenExpiresAt');
-        localStorage.removeItem('tokenExpiresIn');
-        localStorage.removeItem('rememberMe');
-        authToken = null;
-        currentUser = null;
-        showLogin();
-        showNotification('Session expired. Please login again.', 'warning');
-        clearInterval(tokenRefreshTimer);
-      }
-    }, checkInterval);
-  }
-
   // Validate session on page load
   async function validateSession() {
-    if (!authToken) {
+    if (!currentUser) {
       showLogin();
       return;
     }
 
-    // Show app immediately — avoids flash of login page while the /user call is in-flight
+    // Show app immediately using cached user data — avoids flash of login page
     showApp();
-
-    // Proactively refresh if token expires within 24 hours so it never silently expires
-    const expiresAt = localStorage.getItem('tokenExpiresAt');
-    if (expiresAt) {
-      const secsLeft = (new Date(expiresAt) - Date.now()) / 1000;
-      if (secsLeft > 0 && secsLeft < 86400) {
-        await refreshToken();
-      }
-    }
 
     try {
       const response = await apiCall('/user');
       if (!response.ok) {
-        localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
-        localStorage.removeItem('tokenExpiresAt');
-        localStorage.removeItem('tokenExpiresIn');
-        localStorage.removeItem('rememberMe');
-        authToken = null;
         currentUser = null;
         showLogin();
         if (response.status === 401) {
@@ -597,14 +481,17 @@
         }
         return;
       }
-      startTokenRefreshTimer();
+      // Refresh user data (permissions may have changed since last login)
+      const freshUser = await response.json();
+      currentUser = freshUser;
+      localStorage.setItem('userData', JSON.stringify(freshUser));
+      updateUserBadge();
     } catch (error) {
       // Network error — stay optimistic, API calls will handle 401s
-      startTokenRefreshTimer();
     }
   }
 
-  validateSession();
+  window.sessionReady = validateSession();
 
   // Notification helper
   function showNotification(message, type = 'info') {

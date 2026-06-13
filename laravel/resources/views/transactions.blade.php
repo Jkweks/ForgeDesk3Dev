@@ -578,7 +578,7 @@
 
     async function exportTransactions() {
       try {
-        window.location.href = `/api/v1/transactions-export?token=${authToken}`;
+        window.location.href = `/api/v1/transactions-export`;
         showNotification('Export started successfully', 'success');
       } catch (error) {
         console.error('Export failed:', error);
@@ -832,8 +832,8 @@
 
         // Handle 401 Unauthorized
         if (response.status === 401) {
-          localStorage.removeItem('authToken');
-          authToken = null;
+          localStorage.removeItem('userData');
+          currentUser = null;
           showLogin();
           showNotification('Session expired. Please login again.', 'warning');
           return;

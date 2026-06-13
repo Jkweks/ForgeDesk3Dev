@@ -948,7 +948,7 @@
                     </div>
                     <div class="col-6 mt-2">
                       <div class="text-muted small">Type</div>
-                      <div>${product.nonsof ? '<span class="badge text-bg-success">Stock</span>' : '<span class="badge text-bg-secondary">Boneyard</span>'}</div>
+                      <div>${product.nonsof ? '<span class="badge text-bg-secondary">Boneyard</span>' : '<span class="badge text-bg-success">Stock</span>'}</div>
                     </div>
                     <div class="col-6 mt-2">
                       <div class="text-muted small">Door Shim</div>
@@ -1253,7 +1253,7 @@
                       <label class="form-label small text-muted mb-1">Type</label>
                       <div class="form-check form-switch mt-1">
                         <input class="form-check-input" type="checkbox" name="nonsof" id="editNonsof" ${product.nonsof ? 'checked' : ''}>
-                        <label class="form-check-label" for="editNonsof" id="editNonsofLabel">${product.nonsof ? 'Stock' : 'Boneyard'}</label>
+                        <label class="form-check-label" for="editNonsof" id="editNonsofLabel">${product.nonsof ? 'Boneyard' : 'Stock'}</label>
                       </div>
                     </div>
                     <div class="col-3 mt-2">
@@ -1312,7 +1312,7 @@
       const nonsofLabel = document.getElementById('editNonsofLabel');
       if (nonsofCb && nonsofLabel) {
         nonsofCb.addEventListener('change', () => {
-          nonsofLabel.textContent = nonsofCb.checked ? 'Stock' : 'Boneyard';
+          nonsofLabel.textContent = nonsofCb.checked ? 'Boneyard' : 'Stock';
         });
       }
 

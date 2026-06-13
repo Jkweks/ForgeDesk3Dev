@@ -523,8 +523,8 @@
   }
 
   // Load on page init
-  if (authToken) {
-    loadStatus();
-  }
+  window.sessionReady.then(() => {
+    if (currentUser) loadStatus();
+  });
 </script>
 @endpush

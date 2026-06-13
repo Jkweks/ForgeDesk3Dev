@@ -227,25 +227,29 @@ class StatusController extends Controller
 
     private function getOperationsStats()
     {
+        $safe = function (callable $fn, $fallback = null) {
+            try { return $fn(); } catch (\Exception $e) { return $fallback; }
+        };
+
         return [
             'purchase_orders' => [
-                'total' => PurchaseOrder::count(),
-                'open' => PurchaseOrder::whereIn('status', ['draft', 'submitted', 'approved'])->count(),
+                'total' => $safe(fn() => PurchaseOrder::count(), 0),
+                'open'  => $safe(fn() => PurchaseOrder::whereIn('status', ['draft', 'submitted', 'approved'])->count(), 0),
             ],
             'job_reservations' => [
-                'total' => JobReservation::count(),
-                'active' => JobReservation::whereIn('status', ['active', 'in_progress', 'on_hold'])->count(),
+                'total'  => $safe(fn() => JobReservation::count(), 0),
+                'active' => $safe(fn() => JobReservation::whereIn('status', ['active', 'in_progress', 'on_hold'])->count(), 0),
             ],
             'cycle_counts' => [
-                'total' => CycleCountSession::count(),
-                'active' => CycleCountSession::whereIn('status', ['planned', 'in_progress'])->count(),
+                'total'  => $safe(fn() => CycleCountSession::count(), 0),
+                'active' => $safe(fn() => CycleCountSession::whereIn('status', ['planned', 'in_progress'])->count(), 0),
             ],
             'maintenance' => [
-                'machines' => Machine::count(),
-                'assets' => Asset::count(),
-                'active_tasks' => MaintenanceTask::where('status', 'active')->count(),
-                'total_records' => MaintenanceRecord::count(),
-                'last_service' => MaintenanceRecord::latest('performed_at')->value('performed_at'),
+                'machines'      => $safe(fn() => Machine::count(), 0),
+                'assets'        => $safe(fn() => Asset::count(), 0),
+                'active_tasks'  => $safe(fn() => MaintenanceTask::where('status', 'active')->count(), 0),
+                'total_records' => $safe(fn() => MaintenanceRecord::count(), 0),
+                'last_service'  => $safe(fn() => MaintenanceRecord::latest('performed_at')->value('performed_at')),
             ],
         ];
     }
