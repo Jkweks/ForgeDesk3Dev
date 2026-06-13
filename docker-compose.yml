@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: forgedesk
       POSTGRES_USER: forgedesk
-      POSTGRES_PASSWORD: forgedesk_secure_password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-forgedesk_secure_password}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
