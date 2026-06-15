@@ -72,7 +72,7 @@ class WorkOrderStageController extends Controller
                     if (is_null($stage->completed_at)) $stage->completed_at = now();
                     if (!$request->has('completed_by_id')) {} // leave existing if not sent
                 }
-                if (in_array($request->status, ['pending', 'not_required'])) {
+                if (in_array($request->status, ['pending', 'not_required', 'on_hold'])) {
                     $stage->started_at    = null;
                     $stage->completed_at  = null;
                     $stage->completed_by_id = null;
