@@ -328,10 +328,11 @@
             <table class="table table-sm align-middle">
               <thead>
                 <tr>
-                  <th style="width:30%">Tag</th>
-                  <th style="width:30%">Leaves</th>
-                  <th style="width:25%">Include Frame</th>
-                  <th style="width:15%"></th>
+                  <th style="width:25%">Tag</th>
+                  <th style="width:25%">Leaves</th>
+                  <th style="width:20%">Include Frame</th>
+                  <th style="width:20%">Date Requested</th>
+                  <th style="width:10%"></th>
                 </tr>
               </thead>
               <tbody id="wiz-door-body"></tbody>
@@ -483,10 +484,11 @@
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th style="width:30%">Tag</th>
-                <th style="width:30%">Leaves</th>
-                <th style="width:25%" id="door-frame-col-header">Include Frame</th>
-                <th style="width:15%"></th>
+                <th style="width:25%">Tag</th>
+                <th style="width:25%">Leaves</th>
+                <th style="width:20%" id="door-frame-col-header">Include Frame</th>
+                <th style="width:20%">Date Requested</th>
+                <th style="width:10%"></th>
               </tr>
             </thead>
             <tbody id="door-schedule-body"></tbody>
@@ -1619,19 +1621,20 @@ async function wizardSaveElevations() {
 
 // Shared helper: expand a door-schedule row into individual elevation records.
 // Pairs produce two separate door elevations tagged {tag}-LH and {tag}-RH.
-function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId) {
+function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId, dateRequested) {
     const out = [];
     const frameOnly = leaves === 0;
+    const dateField = dateRequested ? { date_requested: dateRequested } : {};
     if (!frameOnly && doorTypeId) {
         if (leaves === 2) {
-            out.push({ elevation_tag: `${tag}-LH`, elevation_type_id: doorTypeId, quantity: 1 });
-            out.push({ elevation_tag: `${tag}-RH`, elevation_type_id: doorTypeId, quantity: 1 });
+            out.push({ elevation_tag: `${tag}-LH`, elevation_type_id: doorTypeId, quantity: 1, ...dateField });
+            out.push({ elevation_tag: `${tag}-RH`, elevation_type_id: doorTypeId, quantity: 1, ...dateField });
         } else {
-            out.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves });
+            out.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves, ...dateField });
         }
     }
     if ((frameOnly || frameChk) && frameTypeId) {
-        out.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
+        out.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1, ...dateField });
     }
     return out;
 }
@@ -1642,11 +1645,12 @@ async function wizardFinishDoors() {
 
     const creates = [];
     document.querySelectorAll('#wiz-door-body tr').forEach(row => {
-        const tag      = row.querySelector('.wiz-door-tag')?.value.trim();
-        const leaves   = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
-        const frameChk = row.querySelector('.wiz-door-frame')?.checked ?? false;
+        const tag           = row.querySelector('.wiz-door-tag')?.value.trim();
+        const leaves        = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
+        const frameChk      = row.querySelector('.wiz-door-frame')?.checked ?? false;
+        const dateRequested = row.querySelector('.wiz-door-date')?.value || null;
         if (!tag) return;
-        creates.push(...buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId));
+        creates.push(...buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId, dateRequested));
     });
 
     if (!creates.length) { wizardComplete(); return; }
@@ -1713,6 +1717,7 @@ function addWizardDoorRow() {
             <input class="form-check-input wiz-door-frame mt-0" type="checkbox" checked>
           </div>
         </td>
+        <td><input type="date" class="form-control form-control-sm wiz-door-date"></td>
         <td><button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('wiz-door-row-${id}').remove()"><i class="ti ti-x"></i></button></td>`;
     document.getElementById('wiz-door-body').appendChild(tr);
 }
@@ -1882,6 +1887,7 @@ function addDoorRow() {
                 <input class="form-check-input door-frame mt-0" type="checkbox" checked>
             </div>
         </td>
+        <td><input type="date" class="form-control form-control-sm door-date"></td>
         <td>
             <button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('door-row-${id}').remove()">
                 <i class="ti ti-x"></i>
@@ -1926,11 +1932,12 @@ async function saveDoorSchedule() {
 
     const creates = [];
     rows.forEach(row => {
-        const tag          = row.querySelector('.door-tag')?.value.trim();
-        const leaves       = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
-        const frameChecked = row.querySelector('.door-frame')?.checked ?? false;
+        const tag           = row.querySelector('.door-tag')?.value.trim();
+        const leaves        = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
+        const frameChecked  = row.querySelector('.door-frame')?.checked ?? false;
+        const dateRequested = row.querySelector('.door-date')?.value || null;
         if (!tag) return;
-        creates.push(...buildDoorCreates(tag, leaves, frameChecked, doorTypeId, frameTypeId));
+        creates.push(...buildDoorCreates(tag, leaves, frameChecked, doorTypeId, frameTypeId, dateRequested));
     });
 
     try {
