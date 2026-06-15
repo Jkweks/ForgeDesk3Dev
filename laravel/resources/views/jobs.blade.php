@@ -775,6 +775,19 @@
     </div>
 
     <script>
+        const jobsApiToken = () => localStorage.getItem('authToken');
+        const jobsCsrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const jobsAPI = (url, opts = {}) => fetch(url, {
+            ...opts,
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': 'Bearer ' + jobsApiToken(),
+                'X-CSRF-TOKEN': jobsCsrf(),
+                ...(opts.headers || {}),
+            },
+        });
+
         let allJobs = [];
         let currentJob = null;
 
@@ -792,11 +805,7 @@
                 document.getElementById('jobsTable').style.display = 'none';
                 document.getElementById('emptyState').style.display = 'none';
 
-                const response = await fetch('/api/v1/business-jobs', {
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
-                });
+                const response = await jobsAPI('/api/v1/business-jobs');
 
                 if (!response.ok) {
                     throw new Error('Failed to load jobs');
@@ -1054,9 +1063,7 @@
             if (contentEl) contentEl.style.display = 'none';
 
             try {
-                const r = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/reservations`);
                 const data = await r.json();
                 const reservations = data.reservations || [];
 
@@ -1115,9 +1122,7 @@
             if (contentEl) contentEl.style.display = 'none';
 
             try {
-                const r = await fetch(`/api/v1/business-jobs/${jobId}/transactions`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/transactions`);
                 const data = await r.json();
                 const txs = data.transactions || [];
 
@@ -1208,9 +1213,7 @@
             const resultsEl = document.getElementById(`job-tx-product-results-${jobId}`);
             if (!query || query.length < 2) { if (resultsEl) resultsEl.style.display = 'none'; return; }
             try {
-                const r = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=8`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
+                const r = await jobsAPI(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=8`);
                 const data = await r.json();
                 const products = data.data || [];
                 if (!resultsEl) return;
@@ -1250,12 +1253,9 @@
             if (!qty || qty < 1) { alert('Quantity must be at least 1'); return; }
 
             try {
-                const r = await fetch(`/api/v1/business-jobs/${jobId}/transactions`, {
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/transactions`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ product_id: productId, type, quantity: qty, notes: notes || null }),
                 });
                 if (!r.ok) {
@@ -1285,11 +1285,7 @@
 
         async function editJob(id) {
             try {
-                const response = await fetch(`/api/v1/business-jobs/${id}`, {
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
-                });
+                const response = await jobsAPI(`/api/v1/business-jobs/${id}`);
 
                 if (!response.ok) {
                     throw new Error('Failed to load job');
@@ -1343,12 +1339,9 @@
                 const url = isEdit ? `/api/v1/business-jobs/${jobId}` : '/api/v1/business-jobs';
                 const method = isEdit ? 'PUT' : 'POST';
 
-                const response = await fetch(url, {
+                const response = await jobsAPI(url, {
                     method: method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(jobData),
                 });
 
@@ -1373,11 +1366,8 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/business-jobs/${id}`, {
+                const response = await jobsAPI(`/api/v1/business-jobs/${id}`, {
                     method: 'DELETE',
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
                 });
 
                 if (!response.ok) {
@@ -1482,9 +1472,7 @@
 
         async function loadJobReservations(jobId) {
             try {
-                const r = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/reservations`);
                 const data = await r.json();
                 jobReservations = data.reservations || [];
                 displayJobReservations(jobId);
@@ -1495,9 +1483,7 @@
 
         async function loadJobWorkOrders(jobId) {
             try {
-                const r = await fetch(`/api/v1/business-jobs/${jobId}/work-orders`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken') },
-                });
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/work-orders`);
                 const data = await r.json();
                 jobWorkOrders = data.work_orders || [];
                 displayJobWorkOrders(jobId);
@@ -1634,9 +1620,9 @@
         async function cycleWoStepInJob(stepId, currentStatus, jobId) {
             const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
             try {
-                await fetch(`/api/v1/job-steps/${stepId}`, {
+                await jobsAPI(`/api/v1/job-steps/${stepId}`, {
                     method: 'PATCH',
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: nextStatus }),
                 });
                 // Force-reload the WO tab to reflect the new step status
@@ -1649,9 +1635,9 @@
             const name = prompt('Step name:');
             if (!name) return;
             try {
-                await fetch('/api/v1/job-steps', {
+                await jobsAPI('/api/v1/job-steps', {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ work_order_id: woId, name: name.trim() }),
                 });
                 delete jobTabLoaded[`${jobId}-wo`];
@@ -1679,12 +1665,9 @@
                 notes: document.getElementById('quickWoNotes').value || null,
             };
             try {
-                const r = await fetch('/api/v1/work-orders', {
+                const r = await jobsAPI('/api/v1/work-orders', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
                 if (!r.ok) throw new Error('Failed to create work order');
@@ -1753,12 +1736,7 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=10`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
+                const response = await jobsAPI(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=10`);
 
                 if (response.ok) {
                     const data = await response.json();
@@ -1887,12 +1865,9 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/business-jobs/${jobId}/reservations`, {
+                const response = await jobsAPI(`/api/v1/business-jobs/${jobId}/reservations`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         requested_by: requestedBy,
                         needed_by: neededBy || null,
@@ -1925,12 +1900,7 @@
 
         async function viewReservationDetails(reservationId) {
             try {
-                const response = await fetch(`/api/v1/job-reservations/${reservationId}`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                    },
-                });
+                const response = await jobsAPI(`/api/v1/job-reservations/${reservationId}`);
 
                 if (!response.ok) {
                     throw new Error('Failed to load reservation details');
@@ -2038,11 +2008,8 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/business-jobs/${currentJobForReservations.id}/reservations/${reservationId}`, {
+                const response = await jobsAPI(`/api/v1/business-jobs/${currentJobForReservations.id}/reservations/${reservationId}`, {
                     method: 'DELETE',
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
                 });
 
                 if (!response.ok) {
@@ -2075,13 +2042,9 @@
             const status = document.getElementById('resNewStatus').value;
 
             try {
-                const response = await fetch(`/api/v1/job-reservations/${id}/status`, {
+                const response = await jobsAPI(`/api/v1/job-reservations/${id}/status`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status })
                 });
 
@@ -2124,12 +2087,7 @@
 
         async function showReservationCompleteModal(id) {
             try {
-                const response = await fetch(`/api/v1/job-reservations/${id}`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
+                const response = await jobsAPI(`/api/v1/job-reservations/${id}`);
 
                 if (!response.ok) { alert('Error loading reservation details'); return; }
 
@@ -2205,13 +2163,9 @@
             });
 
             try {
-                const response = await fetch(`/api/v1/job-reservations/${id}/complete`, {
+                const response = await jobsAPI(`/api/v1/job-reservations/${id}/complete`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ consumed_quantities: consumedQuantities })
                 });
 
@@ -2241,12 +2195,7 @@
 
         async function openEditReservationModal(id) {
             try {
-                const response = await fetch(`/api/v1/job-reservations/${id}`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
+                const response = await jobsAPI(`/api/v1/job-reservations/${id}`);
 
                 if (!response.ok) { alert('Error loading reservation for editing'); return; }
 
@@ -2350,12 +2299,7 @@
             if (!sku) { alert('Please enter a product SKU'); return; }
 
             try {
-                const response = await fetch(`/api/v1/job-reservations/search-product?sku=${encodeURIComponent(sku)}`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
+                const response = await jobsAPI(`/api/v1/job-reservations/search-product?sku=${encodeURIComponent(sku)}`);
 
                 if (!response.ok) { alert('Product not found'); return; }
 
@@ -2408,13 +2352,9 @@
             const notes = document.getElementById('editResNotes').value;
 
             try {
-                const headerResponse = await fetch(`/api/v1/job-reservations/${id}`, {
+                const headerResponse = await jobsAPI(`/api/v1/job-reservations/${id}`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ requested_by: requestedBy, needed_by: neededBy || null, notes: notes || null })
                 });
 
@@ -2426,13 +2366,9 @@
 
                 for (const item of editingResItems) {
                     if (item.id === null) {
-                        const addResponse = await fetch(`/api/v1/job-reservations/${id}/items`, {
+                        const addResponse = await jobsAPI(`/api/v1/job-reservations/${id}/items`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                            },
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 product_id: item.product_id,
                                 requested_qty: item.requested_qty,
@@ -2445,13 +2381,9 @@
                             return;
                         }
                     } else {
-                        const updateResponse = await fetch(`/api/v1/job-reservations/${id}/items/${item.id}`, {
+                        const updateResponse = await jobsAPI(`/api/v1/job-reservations/${id}/items/${item.id}`, {
                             method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                            },
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 requested_qty: item.requested_qty,
                                 committed_qty: item.committed_qty
@@ -2507,12 +2439,7 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=10`, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
+                const response = await jobsAPI(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(query)}&per_page=10`);
 
                 if (response.ok) {
                     const data = await response.json();
@@ -2572,13 +2499,9 @@
             const item = editingResItems[itemIndex];
 
             try {
-                const response = await fetch(`/api/v1/job-reservations/${editingResReservation.id}/items/${item.id}/replace`, {
+                const response = await jobsAPI(`/api/v1/job-reservations/${editingResReservation.id}/items/${item.id}/replace`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ new_product_id: newProductId, reason: reason })
                 });
 
@@ -2634,13 +2557,8 @@
             formData.append('mode', 'ez_estimate');
 
             try {
-                const response = await fetch('/api/v1/fulfillment/material-check', {
+                const response = await jobsAPI('/api/v1/fulfillment/material-check', {
                     method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
                     body: formData
                 });
 
@@ -2839,12 +2757,9 @@
             }
 
             try {
-                const response = await fetch(`/api/v1/business-jobs/${currentJobForReservations.id}/reservations`, {
+                const response = await jobsAPI(`/api/v1/business-jobs/${currentJobForReservations.id}/reservations`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         requested_by: requestedBy,
                         needed_by: neededBy || null,

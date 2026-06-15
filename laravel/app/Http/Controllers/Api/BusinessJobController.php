@@ -121,6 +121,8 @@ class BusinessJobController extends Controller
                     'updated_at' => $job->updated_at->format('Y-m-d H:i:s'),
                 ],
             ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Job not found'], 404);
         } catch (\Exception $e) {
             Log::error('Failed to fetch job', [
                 'job_id' => $id,
@@ -130,7 +132,7 @@ class BusinessJobController extends Controller
             return response()->json([
                 'error' => 'Failed to fetch job',
                 'message' => $e->getMessage(),
-            ], 404);
+            ], 500);
         }
     }
 
@@ -426,6 +428,8 @@ class BusinessJobController extends Controller
                 ],
                 'items' => $items,
             ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Reservation not found'], 404);
         } catch (\Exception $e) {
             Log::error('Failed to fetch reservation', [
                 'job_id' => $jobId,
@@ -436,7 +440,7 @@ class BusinessJobController extends Controller
             return response()->json([
                 'error' => 'Failed to fetch reservation',
                 'message' => $e->getMessage(),
-            ], 404);
+            ], 500);
         }
     }
 
