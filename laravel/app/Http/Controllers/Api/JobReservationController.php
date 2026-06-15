@@ -162,7 +162,7 @@ class JobReservationController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'status' => 'required|in:active,in_progress,fulfilled,on_hold,cancelled',
+                'status' => 'required|in:draft,active,in_progress,fulfilled,on_hold,cancelled',
             ]);
 
             if ($validator->fails()) {
@@ -1104,6 +1104,9 @@ class JobReservationController extends Controller
             DB::beginTransaction();
 
             try {
+                // office_staff can only request (draft); users with orders.create commit immediately (active)
+                $initialStatus = $request->user()?->hasPermission('orders.create') ? 'active' : 'draft';
+
                 // Create job reservation — release_number auto-assigned by model if not provided
                 $reservation = JobReservation::create([
                     'job_number' => $request->job_number,
@@ -1112,7 +1115,7 @@ class JobReservationController extends Controller
                     'requested_by' => $request->requested_by,
                     'needed_by' => $request->needed_by,
                     'notes' => $request->notes,
-                    'status' => 'active',
+                    'status' => $initialStatus,
                 ]);
 
                 $itemsData = [];

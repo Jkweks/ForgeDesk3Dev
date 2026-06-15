@@ -954,6 +954,10 @@
                       <div class="text-muted small">Door Shim</div>
                       <div>${product.cp_part ? '<span class="badge text-bg-info">Door Shim</span>' : '<span class="badge text-bg-secondary">No</span>'}</div>
                     </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Shared Component</div>
+                      <div>${product.is_shared ? '<span class="badge text-bg-purple">Shared</span>' : '<span class="badge text-bg-secondary">No</span>'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1263,6 +1267,13 @@
                         <label class="form-check-label" for="editCpPart" id="editCpPartLabel">${product.cp_part ? 'Yes' : 'No'}</label>
                       </div>
                     </div>
+                    <div class="col-3 mt-2">
+                      <label class="form-label small text-muted mb-1">Shared Component</label>
+                      <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" name="is_shared" id="editIsShared" ${product.is_shared ? 'checked' : ''}>
+                        <label class="form-check-label" for="editIsShared" id="editIsSharedLabel">${product.is_shared ? 'Yes' : 'No'}</label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1321,6 +1332,14 @@
       if (cpPartCb && cpPartLabel) {
         cpPartCb.addEventListener('change', () => {
           cpPartLabel.textContent = cpPartCb.checked ? 'Yes' : 'No';
+        });
+      }
+
+      const isSharedCb = editForm.querySelector('[name="is_shared"]');
+      const isSharedLabel = document.getElementById('editIsSharedLabel');
+      if (isSharedCb && isSharedLabel) {
+        isSharedCb.addEventListener('change', () => {
+          isSharedLabel.textContent = isSharedCb.checked ? 'Yes' : 'No';
         });
       }
     }
@@ -1420,8 +1439,9 @@
         });
 
         // Checkbox — unchecked values don't appear in FormData
-        data.nonsof  = !!form.querySelector('[name="nonsof"]')?.checked;
-        data.cp_part = !!form.querySelector('[name="cp_part"]')?.checked;
+        data.nonsof    = !!form.querySelector('[name="nonsof"]')?.checked;
+        data.cp_part   = !!form.querySelector('[name="cp_part"]')?.checked;
+        data.is_shared = !!form.querySelector('[name="is_shared"]')?.checked;
 
         // Handle multiple category selection
         const categorySelect = form.querySelector('[name="category_ids"]');

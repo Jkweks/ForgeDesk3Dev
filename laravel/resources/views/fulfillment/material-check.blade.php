@@ -30,6 +30,13 @@
                     <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm">
                     <small class="form-hint">Upload an EZ Estimate file to check material availability. Checks Stock Lengths and Accessories sheets automatically.</small>
                   </div>
+                  <div class="mb-3">
+                    <label class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="boneyardSharedMode">
+                      <span class="form-check-label fw-medium">Boneyard &amp; Shared Components only</span>
+                    </label>
+                    <small class="text-muted d-block mt-1">When enabled, availability is checked only against Boneyard items and Shared Components. Regular stock inventory is excluded from results.</small>
+                  </div>
                   <button id="checkMaterialsBtn" class="btn btn-primary" onclick="checkMaterials()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
                     Check Materials
@@ -99,8 +106,12 @@
                     </div>
                   </div>
                   <div class="card-body">
+                    <div id="boneyardSharedBanner" class="alert alert-warning d-flex align-items-center mb-3" style="display: none !important;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+                      <strong>Boneyard &amp; Shared mode</strong>&nbsp;— Results show only Boneyard items and Shared Components. Parts available only in regular stock are reported as Not Found.
+                    </div>
                     <div class="mb-3">
-                      <div class="row g-2">
+                      <div class="row g-2 align-items-center">
                         <div class="col-md-4">
                           <input type="text" class="form-control" id="searchInput" placeholder="Search results..." onkeyup="filterResults()">
                         </div>
@@ -224,9 +235,11 @@
             btn.classList.add('btn-warning');
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Materials…';
 
+            const boneyardSharedMode = document.getElementById('boneyardSharedMode').checked;
             const formData = new FormData();
             formData.append('file', file);
             formData.append('mode', 'ez_estimate');
+            formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
 
             try {
                 const authToken = localStorage.getItem('authToken');
@@ -245,6 +258,9 @@
                     const data = await response.json();
                     checkResults = data.results;
                     filteredResults = [...checkResults];
+                    // Show/hide the mode banner based on what the API processed
+                    const modeBanner = document.getElementById('boneyardSharedBanner');
+                    if (modeBanner) modeBanner.style.display = data.boneyard_shared_only ? '' : 'none';
                     displayResults(data.results, data.summary);
                 } else {
                     // Read body once as text, then try to parse as JSON

@@ -232,7 +232,8 @@ class MaterialCheckController extends Controller
 
             if ($mode === 'ez_estimate') {
                 @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing EZ Estimate\n", FILE_APPEND);
-                return $this->checkEzEstimate($spreadsheet);
+                $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
+                return $this->checkEzEstimate($spreadsheet, $boneyardSharedOnly);
             } else {
                 @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing generic\n", FILE_APPEND);
                 return $this->checkGenericEstimate($request, $spreadsheet);
@@ -278,7 +279,7 @@ class MaterialCheckController extends Controller
      * Check EZ Estimate file format
      * Reads from Stock Lengths and Accessories sheets
      */
-    private function checkEzEstimate($spreadsheet)
+    private function checkEzEstimate($spreadsheet, bool $boneyardSharedOnly = false)
     {
         $results = [];
         $summary = [
@@ -289,9 +290,16 @@ class MaterialCheckController extends Controller
             'not_found' => 0,
         ];
 
-        // Load ALL products into memory once (avoid N+1 query problem)
-        Log::info('Loading all products into memory cache');
-        $allProducts = Product::where('is_active', true)->get();
+        // Load products into memory once (avoid N+1 query problem)
+        Log::info('Loading products into memory cache', ['boneyard_shared_only' => $boneyardSharedOnly]);
+        $productQuery = Product::where('is_active', true);
+        if ($boneyardSharedOnly) {
+            // Only include Boneyard (nonsof=false) or Shared Component (is_shared=true)
+            $productQuery->where(function ($q) {
+                $q->where('nonsof', false)->orWhere('is_shared', true);
+            });
+        }
+        $allProducts = $productQuery->get();
 
         // Build lookup indexes for fast searching
         $this->productCache = [];
@@ -356,6 +364,7 @@ class MaterialCheckController extends Controller
             'message' => 'Material check completed',
             'summary' => $summary,
             'results' => $results,
+            'boneyard_shared_only' => $boneyardSharedOnly,
         ]);
     }
 
@@ -502,6 +511,8 @@ class MaterialCheckController extends Controller
                     'status' => $status,
                     'location' => $product->location,
                     'product_id' => $product->id,
+                    'nonsof' => (bool) $product->nonsof,
+                    'is_shared' => (bool) $product->is_shared,
                     'sheet' => $sheetName,
                     'row' => $row,
                 ];

@@ -222,9 +222,10 @@ class ProductController extends Controller
             'tool_specifications' => 'nullable|array',
 
             // Status
-            'is_active' => 'nullable|boolean',
-            'nonsof'    => 'nullable|boolean',
-            'cp_part'   => 'nullable|boolean',
+            'is_active'  => 'nullable|boolean',
+            'nonsof'     => 'nullable|boolean',
+            'cp_part'    => 'nullable|boolean',
+            'is_shared'  => 'nullable|boolean',
         ]);
 
         // Auto-generate SKU if part_number changed
