@@ -585,8 +585,10 @@ const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete:
 
 const API = (path, opts = {}) => fetch('/api/v1' + path, {
     ...opts,
+    credentials: 'include',
     headers: {
         'Authorization': 'Bearer ' + authToken,
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
         ...(opts.headers || {}),
     },
 });

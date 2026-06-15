@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Shop Floor — ForgeDesk</title>
   <link href="{{ asset('assets/tabler/css/tabler.min.css') }}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
@@ -279,7 +280,15 @@ const expandedWOs = new Set();
 const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked', not_required: 'N/R' };
 
 const API = (path, opts = {}) =>
-  fetch('/api/v1' + path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  fetch('/api/v1' + path, {
+    ...opts,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+      ...(opts.headers || {}),
+    },
+  });
 
 // ── Clock ──────────────────────────────────────────────────────────────────
 function updateClock() {
