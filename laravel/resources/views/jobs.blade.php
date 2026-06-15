@@ -1299,7 +1299,8 @@
                 const response = await jobsAPI(`/api/v1/business-jobs/${id}`);
 
                 if (!response.ok) {
-                    throw new Error('Failed to load job');
+                    const errBody = await response.json().catch(() => ({}));
+                    throw new Error(errBody.message || errBody.error || `Server error ${response.status}`);
                 }
 
                 const data = await response.json();
@@ -1323,7 +1324,7 @@
                 showModal(document.getElementById('jobModal'));
             } catch (error) {
                 console.error('Error loading job:', error);
-                alert('Failed to load job details');
+                alert('Failed to load job details: ' + error.message);
             }
         }
 
