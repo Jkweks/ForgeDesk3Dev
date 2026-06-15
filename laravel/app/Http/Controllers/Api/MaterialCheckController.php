@@ -502,6 +502,8 @@ class MaterialCheckController extends Controller
                     'status' => $status,
                     'location' => $product->location,
                     'product_id' => $product->id,
+                    'nonsof' => (bool) $product->nonsof,
+                    'is_shared' => (bool) $product->is_shared,
                     'sheet' => $sheetName,
                     'row' => $row,
                 ];

@@ -100,7 +100,7 @@
                   </div>
                   <div class="card-body">
                     <div class="mb-3">
-                      <div class="row g-2">
+                      <div class="row g-2 align-items-center">
                         <div class="col-md-4">
                           <input type="text" class="form-control" id="searchInput" placeholder="Search results..." onkeyup="filterResults()">
                         </div>
@@ -112,6 +112,12 @@
                             <option value="unavailable">Unavailable</option>
                             <option value="not_found">Not Found</option>
                           </select>
+                        </div>
+                        <div class="col-auto">
+                          <label class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="boneyardSharedFilter" onchange="filterResults()">
+                            <span class="form-check-label">Boneyard &amp; Shared only</span>
+                          </label>
                         </div>
                       </div>
                     </div>
@@ -414,6 +420,7 @@
         function filterResults() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const statusFilter = document.getElementById('statusFilter').value;
+            const boneyardSharedOnly = document.getElementById('boneyardSharedFilter').checked;
 
             filteredResults = checkResults.filter(item => {
                 const matchesSearch = !searchTerm ||
@@ -424,7 +431,11 @@
 
                 const matchesStatus = !statusFilter || item.status === statusFilter;
 
-                return matchesSearch && matchesStatus;
+                // nonsof=false means Boneyard; is_shared=true means Shared Component
+                const matchesBoneyardShared = !boneyardSharedOnly ||
+                    item.nonsof === false || item.is_shared === true;
+
+                return matchesSearch && matchesStatus && matchesBoneyardShared;
             });
 
             updateResultsTable(filteredResults);
