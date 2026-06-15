@@ -506,6 +506,49 @@
   </div>
 </div>
 
+<!-- ============================================================
+     Confirm Action Modal
+     ============================================================ -->
+<div class="modal modal-blur fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirm-modal-title">Confirm</h5>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0" id="confirm-modal-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('confirmModal'))">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-modal-btn" onclick="runConfirmModalAction()">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Add Step Modal
+     ============================================================ -->
+<div class="modal modal-blur fade" id="addStepModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Step</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('addStepModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label required">Step name</label>
+        <input type="text" class="form-control" id="add-step-name" placeholder="e.g. Cut List Prepared"
+          onkeydown="if(event.key==='Enter')saveWoStep()">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('addStepModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveWoStep()">Add Step</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Date prompt modal (wizard step 2 — all dates blank) -->
 <div class="modal modal-blur fade" id="wizDatePromptModal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
@@ -771,18 +814,46 @@ async function saveWOAssignments() {
 }
 
 // ============================================================
+// Confirmation modal helper
+// ============================================================
+let _confirmModalAction = null;
+
+function showConfirmModal(title, message, btnLabel, btnClass, action) {
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-message').textContent = message;
+    const btn = document.getElementById('confirm-modal-btn');
+    btn.textContent = btnLabel;
+    btn.className = `btn ${btnClass}`;
+    _confirmModalAction = action;
+    showModal(document.getElementById('confirmModal'));
+}
+
+function runConfirmModalAction() {
+    hideModal(document.getElementById('confirmModal'));
+    if (_confirmModalAction) { _confirmModalAction(); _confirmModalAction = null; }
+}
+
+// ============================================================
 // Archive
 // ============================================================
-async function archiveCurrentWO() {
-    if (!currentWO || !confirm('Archive this work order?')) return;
-    try {
-        await API(`/work-orders/${currentWO.id}`, { method: 'DELETE' });
-        closeOffcanvas('wo-detail');
-        await loadWorkOrders();
-    } catch (e) {
-        console.error(e);
-        alert('Failed to archive work order');
-    }
+function archiveCurrentWO() {
+    if (!currentWO) return;
+    showConfirmModal(
+        'Archive Work Order',
+        `Archive work order ${currentWO.release_label || '#' + currentWO.id}? It will no longer appear in the active list.`,
+        'Archive',
+        'btn-warning',
+        async () => {
+            try {
+                await API(`/work-orders/${currentWO.id}`, { method: 'DELETE' });
+                closeOffcanvas('wo-detail');
+                await loadWorkOrders();
+            } catch (e) {
+                console.error(e);
+                alert('Failed to archive work order');
+            }
+        }
+    );
 }
 
 // ============================================================
@@ -856,24 +927,32 @@ async function setWoStepStatus(stepId, status) {
     } catch (e) { console.error(e); }
 }
 
-async function deleteWoStep(stepId) {
-    if (!confirm('Delete this step?')) return;
-    try {
-        await API(`/job-steps/${stepId}`, { method: 'DELETE' });
-        reloadWoSteps();
-    } catch (e) { console.error(e); }
+function deleteWoStep(stepId) {
+    showConfirmModal('Delete Step', 'Delete this step?', 'Delete', 'btn-danger', async () => {
+        try {
+            await API(`/job-steps/${stepId}`, { method: 'DELETE' });
+            reloadWoSteps();
+        } catch (e) { console.error(e); }
+    });
 }
 
-async function addWoStep() {
+function addWoStep() {
     if (!currentWO) return;
-    const name = prompt('Step name:');
-    if (!name) return;
+    document.getElementById('add-step-name').value = '';
+    showModal(document.getElementById('addStepModal'));
+}
+
+async function saveWoStep() {
+    if (!currentWO) return;
+    const name = document.getElementById('add-step-name').value.trim();
+    if (!name) { alert('Step name is required.'); return; }
     try {
         await API('/job-steps', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ work_order_id: currentWO.id, name: name.trim() }),
+            body: JSON.stringify({ work_order_id: currentWO.id, name }),
         });
+        hideModal(document.getElementById('addStepModal'));
         reloadWoSteps();
     } catch (e) { console.error(e); }
 }
@@ -924,17 +1003,19 @@ async function uploadDrawings(files) {
     renderDrawings(wo.drawings || []);
 }
 
-async function deleteDrawing(drawingId) {
-    if (!currentWO || !confirm('Delete this drawing?')) return;
-    try {
-        await API(`/work-orders/${currentWO.id}/drawings/${drawingId}`, { method: 'DELETE' });
-        const r = await API(`/work-orders/${currentWO.id}`);
-        const wo = await r.json();
-        renderDrawings(wo.drawings || []);
-    } catch (e) {
-        console.error(e);
-        alert('Failed to delete drawing');
-    }
+function deleteDrawing(drawingId) {
+    if (!currentWO) return;
+    showConfirmModal('Delete Drawing', 'Delete this drawing?', 'Delete', 'btn-danger', async () => {
+        try {
+            await API(`/work-orders/${currentWO.id}/drawings/${drawingId}`, { method: 'DELETE' });
+            const r = await API(`/work-orders/${currentWO.id}`);
+            const wo = await r.json();
+            renderDrawings(wo.drawings || []);
+        } catch (e) {
+            console.error(e);
+            alert('Failed to delete drawing');
+        }
+    });
 }
 
 // ============================================================
@@ -1339,19 +1420,20 @@ async function saveElev() {
     }
 }
 
-async function deleteElev(elevId) {
-    if (!confirm('Delete this elevation and all its stages?')) return;
-    try {
-        await API(`/elevations/${elevId}`, { method: 'DELETE' });
-        const r = await API(`/work-orders/${currentWO.id}`);
-        const wo = await r.json();
-        currentWO = wo;
-        renderElevations(wo.elevations || []);
-        loadWorkOrders();
-    } catch (e) {
-        console.error(e);
-        alert('Failed to delete elevation');
-    }
+function deleteElev(elevId) {
+    showConfirmModal('Delete Elevation', 'Delete this elevation and all its stages?', 'Delete', 'btn-danger', async () => {
+        try {
+            await API(`/elevations/${elevId}`, { method: 'DELETE' });
+            const r = await API(`/work-orders/${currentWO.id}`);
+            const wo = await r.json();
+            currentWO = wo;
+            renderElevations(wo.elevations || []);
+            loadWorkOrders();
+        } catch (e) {
+            console.error(e);
+            alert('Failed to delete elevation');
+        }
+    });
 }
 
 // ============================================================

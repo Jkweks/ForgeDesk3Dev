@@ -120,7 +120,14 @@ class WorkOrderController extends Controller
                 'priority'          => $nextPriority,
             ]);
 
-            return response()->json(['id' => $wo->id, 'release_number' => $wo->release_number], 201);
+            $job = BusinessJob::find($request->business_job_id);
+            $releaseLabel = $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}";
+
+            return response()->json([
+                'id'            => $wo->id,
+                'release_number' => $wo->release_number,
+                'release_label' => $releaseLabel,
+            ], 201);
         } catch (\Exception $e) {
             Log::error('WorkOrderController@store failed', ['message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to create work order'], 500);
