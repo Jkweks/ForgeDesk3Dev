@@ -270,6 +270,26 @@
 
         <!-- ── Step 1: WO Details ── -->
         <div id="wiz-step-1">
+          <!-- Excel import -->
+          <div class="mb-3 p-3 border rounded bg-light">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="ti ti-file-spreadsheet text-success"></i>
+              <span class="fw-medium">Import from Excel</span>
+              <span class="text-muted small">Optional — upload a WO sheet to autofill elevations</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <label class="btn btn-sm btn-outline-success mb-0" for="wo-excel-upload">
+                <i class="ti ti-upload me-1"></i>Upload Excel
+                <input type="file" id="wo-excel-upload" class="d-none" accept=".xlsx,.xls"
+                  onchange="importWOExcel(this)">
+              </label>
+              <span id="wo-excel-status" class="text-muted small"></span>
+            </div>
+            <div id="wo-excel-hint" style="display:none" class="mt-2 small">
+              <span class="badge bg-blue-lt text-blue me-1">Division: <span id="wo-excel-division">—</span></span>
+              <span id="wo-excel-elev-count" class="text-muted"></span>
+            </div>
+          </div>
           <div class="mb-3">
             <label class="form-label required">Job</label>
             <select class="form-select" id="new-wo-job" required>
@@ -1439,6 +1459,53 @@ function deleteElev(elevId) {
 }
 
 // ============================================================
+// Create WO Wizard — Excel Import
+// ============================================================
+let _wizardImportedElevations = [];
+
+async function importWOExcel(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const statusEl  = document.getElementById('wo-excel-status');
+    const hintEl    = document.getElementById('wo-excel-hint');
+    statusEl.textContent = 'Parsing…';
+    hintEl.style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+        const r = await fetch('/api/v1/work-orders/parse-excel', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken },
+            body: fd,
+        });
+        const data = await r.json();
+
+        if (!r.ok) {
+            statusEl.textContent = data.error || 'Parse failed';
+            input.value = '';
+            return;
+        }
+
+        _wizardImportedElevations = data.elevations || [];
+
+        document.getElementById('wo-excel-division').textContent = data.division || '—';
+        const n = _wizardImportedElevations.length;
+        document.getElementById('wo-excel-elev-count').textContent =
+            n > 0 ? `${n} elevation${n !== 1 ? 's' : ''} ready for Step 2` : 'No elevations found';
+
+        statusEl.textContent = '✓ ' + file.name;
+        hintEl.style.display = '';
+    } catch (e) {
+        console.error(e);
+        statusEl.textContent = 'Error reading file';
+        input.value = '';
+    }
+}
+
+// ============================================================
 // Create WO Wizard
 // ============================================================
 let wizardStep = 1;
@@ -1453,6 +1520,12 @@ async function openCreateWO() {
     wizardWoLabel = '';
     wizardBulkRowId = 0;
     wizardDoorRowId = 0;
+    _wizardImportedElevations = [];
+
+    // Reset excel import UI
+    document.getElementById('wo-excel-upload').value = '';
+    document.getElementById('wo-excel-status').textContent = '';
+    document.getElementById('wo-excel-hint').style.display = 'none';
 
     // Reset step 1
     const sel = document.getElementById('new-wo-job');
@@ -1470,7 +1543,7 @@ async function openCreateWO() {
     document.getElementById('new-wo-material').value = '';
     document.getElementById('new-wo-notes').value = '';
 
-    // Seed step 2 with one blank row
+    // Seed step 2 with one blank row (will be replaced with imports when advancing)
     document.getElementById('wiz-bulk-body').innerHTML = '';
     addWizardBulkRow();
 
@@ -1546,6 +1619,16 @@ async function wizardCreateWO() {
         wizardWoId    = data.id;
         wizardWoLabel = data.release_label || `#${data.id}`;
         loadWorkOrders();
+
+        // Pre-populate step 2 from Excel import (if any)
+        document.getElementById('wiz-bulk-body').innerHTML = '';
+        wizardBulkRowId = 0;
+        if (_wizardImportedElevations.length > 0) {
+            _wizardImportedElevations.forEach(e => addWizardBulkRow(e));
+        } else {
+            addWizardBulkRow();
+        }
+
         showWizardStep(2);
     } catch (e) {
         console.error(e);
@@ -1677,7 +1760,8 @@ function wizardComplete() {
 }
 
 // ── Wizard step 2: bulk elevation row builder ──
-function addWizardBulkRow() {
+// prefill: optional { type, tag, quantity, scope } from Excel import
+function addWizardBulkRow(prefill) {
     const id = ++wizardBulkRowId;
     const typeOptions = elevTypes.map(t =>
         `<option value="${t.id}">${esc(t.name)}</option>`
@@ -1692,6 +1776,17 @@ function addWizardBulkRow() {
         <td class="text-center"><input type="checkbox" class="form-check-input wiz-bulk-scope" checked title="Checked = Assemble, Unchecked = Kit"></td>
         <td><button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('wiz-bulk-row-${id}').remove()"><i class="ti ti-x"></i></button></td>`;
     document.getElementById('wiz-bulk-body').appendChild(tr);
+
+    if (prefill) {
+        tr.querySelector('.wiz-bulk-tag').value = prefill.tag || '';
+        tr.querySelector('.wiz-bulk-qty').value = prefill.quantity || 1;
+        tr.querySelector('.wiz-bulk-scope').checked = (prefill.scope !== 'kit');
+        // Match type name to elevTypes list (case-insensitive)
+        if (prefill.type) {
+            const match = elevTypes.find(t => t.name.toLowerCase() === prefill.type.toLowerCase());
+            if (match) tr.querySelector('.wiz-bulk-type').value = match.id;
+        }
+    }
 }
 
 // ── Wizard step 3: door/frame row builder ──
