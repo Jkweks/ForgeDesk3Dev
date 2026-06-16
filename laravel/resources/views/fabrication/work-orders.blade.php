@@ -1476,15 +1476,16 @@ async function importWOExcel(input) {
     fd.append('file', file);
 
     try {
-        const r = await fetch('/api/v1/work-orders/parse-excel', {
+        const r = await API('/work-orders/parse-excel', {
             method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + authToken },
             body: fd,
         });
-        const data = await r.json();
+
+        let data;
+        try { data = await r.json(); } catch (_) { data = {}; }
 
         if (!r.ok) {
-            statusEl.textContent = data.error || 'Parse failed';
+            statusEl.textContent = data.error || `Upload failed (${r.status})`;
             input.value = '';
             return;
         }
