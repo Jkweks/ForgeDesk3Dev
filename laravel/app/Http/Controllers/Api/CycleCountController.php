@@ -19,45 +19,57 @@ class CycleCountController extends Controller
      */
     public function index(Request $request)
     {
-        $query = CycleCountSession::with(['category', 'assignedUser', 'reviewer']);
+        try {
+            $query = CycleCountSession::with(['category', 'assignedUser', 'reviewer']);
 
-        // Filter by status
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+            // Filter by status
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+
+            // Filter by location
+            if ($request->has('location')) {
+                $query->where('location', $request->location);
+            }
+
+            // Filter by date range (scheduled_date)
+            if ($request->has('date_from')) {
+                $query->where('scheduled_date', '>=', $request->date_from);
+            }
+            if ($request->has('date_to')) {
+                $query->where('scheduled_date', '<=', $request->date_to);
+            }
+
+            // Filter by how recently the session was created
+            if ($request->filled('days_ago')) {
+                $query->where('created_at', '>=', now()->subDays((int) $request->days_ago));
+            }
+
+            // Search
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('session_number', 'like', "%{$search}%")
+                      ->orWhere('location', 'like', "%{$search}%")
+                      ->orWhere('notes', 'like', "%{$search}%");
+                });
+            }
+
+            $sessions = $query->orderBy('scheduled_date', 'desc')
+                ->paginate($request->get('per_page', 20));
+
+            return response()->json($sessions);
+        } catch (\Exception $e) {
+            \Log::error('Failed to list cycle count sessions', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return response()->json([
+                'error' => 'Failed to load cycle count sessions',
+                'message' => $e->getMessage(),
+            ], 500);
         }
-
-        // Filter by location
-        if ($request->has('location')) {
-            $query->where('location', $request->location);
-        }
-
-        // Filter by date range (scheduled_date)
-        if ($request->has('date_from')) {
-            $query->where('scheduled_date', '>=', $request->date_from);
-        }
-        if ($request->has('date_to')) {
-            $query->where('scheduled_date', '<=', $request->date_to);
-        }
-
-        // Filter by how recently the session was created
-        if ($request->filled('days_ago')) {
-            $query->where('created_at', '>=', now()->subDays((int) $request->days_ago));
-        }
-
-        // Search
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('session_number', 'like', "%{$search}%")
-                  ->orWhere('location', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%");
-            });
-        }
-
-        $sessions = $query->orderBy('scheduled_date', 'desc')
-            ->paginate($request->get('per_page', 20));
-
-        return response()->json($sessions);
     }
 
     /**
@@ -481,21 +493,33 @@ class CycleCountController extends Controller
      */
     public function statistics()
     {
-        $stats = [
-            'total_sessions' => CycleCountSession::count(),
-            'planned' => CycleCountSession::where('status', 'planned')->count(),
-            'in_progress' => CycleCountSession::where('status', 'in_progress')->count(),
-            'completed' => CycleCountSession::where('status', 'completed')->count(),
-            'cancelled' => CycleCountSession::where('status', 'cancelled')->count(),
-            'active_sessions' => CycleCountSession::active()->count(),
-            'items_counted_this_month' => CycleCountItem::whereHas('session', function($q) {
-                $q->whereMonth('completed_at', date('m'))
-                  ->whereYear('completed_at', date('Y'));
-            })->whereNotNull('counted_quantity')->count(),
-            'accuracy_this_month' => $this->calculateMonthlyAccuracy(),
-        ];
+        try {
+            $stats = [
+                'total_sessions' => CycleCountSession::count(),
+                'planned' => CycleCountSession::where('status', 'planned')->count(),
+                'in_progress' => CycleCountSession::where('status', 'in_progress')->count(),
+                'completed' => CycleCountSession::where('status', 'completed')->count(),
+                'cancelled' => CycleCountSession::where('status', 'cancelled')->count(),
+                'active_sessions' => CycleCountSession::active()->count(),
+                'items_counted_this_month' => CycleCountItem::whereHas('session', function($q) {
+                    $q->whereMonth('completed_at', date('m'))
+                      ->whereYear('completed_at', date('Y'));
+                })->whereNotNull('counted_quantity')->count(),
+                'accuracy_this_month' => $this->calculateMonthlyAccuracy(),
+            ];
 
-        return response()->json($stats);
+            return response()->json($stats);
+        } catch (\Exception $e) {
+            \Log::error('Failed to load cycle count statistics', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return response()->json([
+                'error' => 'Failed to load statistics',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
