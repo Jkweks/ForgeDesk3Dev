@@ -315,6 +315,7 @@
 
   <!-- Scripts -->
   <script src="{{ asset('assets/tabler/js/tabler.min.js') }}"></script>
+  <script>window.bootstrap = window.tabler;</script>
 
   @include('partials.auth-scripts')
 

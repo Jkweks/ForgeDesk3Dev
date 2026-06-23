@@ -9,6 +9,7 @@
 .pip-complete    { background: var(--tblr-success, #2fb344); }
 .pip-blocked      { background: var(--tblr-danger, #d63939); }
 .pip-not_required { background: var(--tblr-blue-lt, #e9f0fb); border: 1px solid var(--tblr-blue, #206bc4); }
+.pip-on_hold      { background: var(--tblr-orange-lt, #fff4e6); border: 1px solid var(--tblr-orange, #f76707); }
 .wo-offcanvas    { width: 700px !important; }
 .elev-row td     { vertical-align: middle; }
 .wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
@@ -328,10 +329,11 @@
             <table class="table table-sm align-middle">
               <thead>
                 <tr>
-                  <th style="width:30%">Tag</th>
-                  <th style="width:30%">Leaves</th>
-                  <th style="width:25%">Include Frame</th>
-                  <th style="width:15%"></th>
+                  <th style="width:25%">Tag</th>
+                  <th style="width:25%">Leaves</th>
+                  <th style="width:20%">Include Frame</th>
+                  <th style="width:20%">Date Requested</th>
+                  <th style="width:10%"></th>
                 </tr>
               </thead>
               <tbody id="wiz-door-body"></tbody>
@@ -483,10 +485,11 @@
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th style="width:30%">Tag</th>
-                <th style="width:30%">Leaves</th>
-                <th style="width:25%" id="door-frame-col-header">Include Frame</th>
-                <th style="width:15%"></th>
+                <th style="width:25%">Tag</th>
+                <th style="width:25%">Leaves</th>
+                <th style="width:20%" id="door-frame-col-header">Include Frame</th>
+                <th style="width:20%">Date Requested</th>
+                <th style="width:10%"></th>
               </tr>
             </thead>
             <tbody id="door-schedule-body"></tbody>
@@ -581,7 +584,7 @@ let elevTypes = [];
 let fabUsers = [];
 let filterTimer = null;
 
-const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending', not_required: 'pending' };
+const STAGE_CYCLE = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', blocked: 'pending', not_required: 'pending', on_hold: 'pending' };
 
 const API = (path, opts = {}) => fetch('/api/v1' + path, {
     ...opts,
@@ -864,8 +867,8 @@ function archiveCurrentWO() {
 function renderWoSteps(woId, steps) {
     const container = document.getElementById('wo-steps-container');
     if (!container) return;
-    const statusColor = { pending: 'secondary', complete: 'success', not_required: 'info' };
-    const statusIcon  = { pending: '', complete: '✓', not_required: '—' };
+    const statusColor = { pending: 'secondary', complete: 'success', not_required: 'info', on_hold: 'orange' };
+    const statusIcon  = { pending: '', complete: '✓', not_required: '—', on_hold: '⏸' };
     const html = steps.map(s => {
         const color = statusColor[s.status] || 'secondary';
         return `<span class="badge bg-${color}-lt text-${color}" style="cursor:pointer;font-size:.78rem;padding:.28rem .6rem"
@@ -904,14 +907,16 @@ async function cycleWoStep(stepId, currentStatus) {
 function woStepContextMenu(stepId, currentStatus, event) {
     event.preventDefault();
     document.getElementById('wo-step-ctx')?.remove();
-    const isNR = currentStatus === 'not_required';
     const menu = document.createElement('div');
     menu.id = 'wo-step-ctx';
     menu.className = 'dropdown-menu show';
     menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
-    menu.innerHTML = isNR
-        ? `<button class="dropdown-item" onclick="setWoStepStatus(${stepId},'pending');this.closest('#wo-step-ctx').remove()">Reset to Pending</button>`
+    const isSpecial = currentStatus === 'not_required' || currentStatus === 'on_hold';
+    menu.innerHTML = isSpecial
+        ? `<button class="dropdown-item" onclick="setWoStepStatus(${stepId},'pending');this.closest('#wo-step-ctx').remove()">Reset to Pending</button>
+           <button class="dropdown-item text-danger" onclick="deleteWoStep(${stepId});this.closest('#wo-step-ctx').remove()">Delete Step</button>`
         : `<button class="dropdown-item text-muted" onclick="setWoStepStatus(${stepId},'not_required');this.closest('#wo-step-ctx').remove()">Mark Not Required</button>
+           <button class="dropdown-item text-warning" onclick="setWoStepStatus(${stepId},'on_hold');this.closest('#wo-step-ctx').remove()">Mark On Hold</button>
            <button class="dropdown-item text-danger" onclick="deleteWoStep(${stepId});this.closest('#wo-step-ctx').remove()">Delete Step</button>`;
     document.body.appendChild(menu);
     const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
@@ -1048,7 +1053,7 @@ function elevRow(e) {
         ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')}">${esc(e.elevation_type.name)}</span>`
         : '<span class="text-muted">—</span>';
 
-    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset' };
+    const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset', on_hold: 'Reset' };
     const stages = e.stages || [];
     const pips = stages.map(s =>
         `<span class="pip pip-${s.status}" style="cursor:pointer"
@@ -1068,8 +1073,8 @@ function elevRow(e) {
            </button>`
         : '';
 
-    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger', not_required: 'blue-lt' };
-    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked', not_required: 'N/R' };
+    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger', not_required: 'blue-lt', on_hold: 'orange' };
+    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked', not_required: 'N/R', on_hold: 'On Hold' };
     const stageDetailRows = stages.map(s => `
         <tr>
             <td style="padding-left:2rem" class="text-muted small">${esc(s.name)}</td>
@@ -1314,14 +1319,15 @@ function stageContextMenu(stageId, currentStatus, event) {
     event.preventDefault();
     event.stopPropagation();
     document.getElementById('stage-ctx-menu')?.remove();
-    const isNR = currentStatus === 'not_required';
     const menu = document.createElement('div');
     menu.id = 'stage-ctx-menu';
     menu.className = 'dropdown-menu show';
     menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
-    menu.innerHTML = isNR
+    const isSpecial = currentStatus === 'not_required' || currentStatus === 'on_hold';
+    menu.innerHTML = isSpecial
         ? `<button class="dropdown-item" onclick="setStageStatus(${stageId},'pending');this.closest('#stage-ctx-menu').remove()">Reset to Pending</button>`
-        : `<button class="dropdown-item text-muted" onclick="setStageStatus(${stageId},'not_required');this.closest('#stage-ctx-menu').remove()">Mark Not Required</button>`;
+        : `<button class="dropdown-item text-muted" onclick="setStageStatus(${stageId},'not_required');this.closest('#stage-ctx-menu').remove()">Mark Not Required</button>
+           <button class="dropdown-item text-warning" onclick="setStageStatus(${stageId},'on_hold');this.closest('#stage-ctx-menu').remove()">Mark On Hold</button>`;
     document.body.appendChild(menu);
     const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
     setTimeout(() => document.addEventListener('click', close), 0);
@@ -1619,19 +1625,20 @@ async function wizardSaveElevations() {
 
 // Shared helper: expand a door-schedule row into individual elevation records.
 // Pairs produce two separate door elevations tagged {tag}-LH and {tag}-RH.
-function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId) {
+function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId, dateRequested) {
     const out = [];
     const frameOnly = leaves === 0;
+    const dateField = dateRequested ? { date_requested: dateRequested } : {};
     if (!frameOnly && doorTypeId) {
         if (leaves === 2) {
-            out.push({ elevation_tag: `${tag}-LH`, elevation_type_id: doorTypeId, quantity: 1 });
-            out.push({ elevation_tag: `${tag}-RH`, elevation_type_id: doorTypeId, quantity: 1 });
+            out.push({ elevation_tag: `${tag}-LH`, elevation_type_id: doorTypeId, quantity: 1, ...dateField });
+            out.push({ elevation_tag: `${tag}-RH`, elevation_type_id: doorTypeId, quantity: 1, ...dateField });
         } else {
-            out.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves });
+            out.push({ elevation_tag: tag, elevation_type_id: doorTypeId, quantity: leaves, ...dateField });
         }
     }
     if ((frameOnly || frameChk) && frameTypeId) {
-        out.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1 });
+        out.push({ elevation_tag: tag, elevation_type_id: frameTypeId, quantity: 1, ...dateField });
     }
     return out;
 }
@@ -1642,11 +1649,12 @@ async function wizardFinishDoors() {
 
     const creates = [];
     document.querySelectorAll('#wiz-door-body tr').forEach(row => {
-        const tag      = row.querySelector('.wiz-door-tag')?.value.trim();
-        const leaves   = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
-        const frameChk = row.querySelector('.wiz-door-frame')?.checked ?? false;
+        const tag           = row.querySelector('.wiz-door-tag')?.value.trim();
+        const leaves        = parseInt(row.querySelector('.wiz-door-leaves')?.value ?? '1');
+        const frameChk      = row.querySelector('.wiz-door-frame')?.checked ?? false;
+        const dateRequested = row.querySelector('.wiz-door-date')?.value || null;
         if (!tag) return;
-        creates.push(...buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId));
+        creates.push(...buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId, dateRequested));
     });
 
     if (!creates.length) { wizardComplete(); return; }
@@ -1713,6 +1721,7 @@ function addWizardDoorRow() {
             <input class="form-check-input wiz-door-frame mt-0" type="checkbox" checked>
           </div>
         </td>
+        <td><input type="date" class="form-control form-control-sm wiz-door-date"></td>
         <td><button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('wiz-door-row-${id}').remove()"><i class="ti ti-x"></i></button></td>`;
     document.getElementById('wiz-door-body').appendChild(tr);
 }
@@ -1882,6 +1891,7 @@ function addDoorRow() {
                 <input class="form-check-input door-frame mt-0" type="checkbox" checked>
             </div>
         </td>
+        <td><input type="date" class="form-control form-control-sm door-date"></td>
         <td>
             <button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('door-row-${id}').remove()">
                 <i class="ti ti-x"></i>
@@ -1926,11 +1936,12 @@ async function saveDoorSchedule() {
 
     const creates = [];
     rows.forEach(row => {
-        const tag          = row.querySelector('.door-tag')?.value.trim();
-        const leaves       = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
-        const frameChecked = row.querySelector('.door-frame')?.checked ?? false;
+        const tag           = row.querySelector('.door-tag')?.value.trim();
+        const leaves        = parseInt(row.querySelector('.door-leaves')?.value ?? '1');
+        const frameChecked  = row.querySelector('.door-frame')?.checked ?? false;
+        const dateRequested = row.querySelector('.door-date')?.value || null;
         if (!tag) return;
-        creates.push(...buildDoorCreates(tag, leaves, frameChecked, doorTypeId, frameTypeId));
+        creates.push(...buildDoorCreates(tag, leaves, frameChecked, doorTypeId, frameTypeId, dateRequested));
     });
 
     try {

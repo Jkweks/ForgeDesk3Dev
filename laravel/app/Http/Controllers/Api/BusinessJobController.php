@@ -117,8 +117,8 @@ class BusinessJobController extends Controller
                     ] : null,
                     'configurations_count' => $job->doorFrameConfigurations->count(),
                     'reservations_count' => $job->jobReservations->count(),
-                    'created_at' => $job->created_at->format('Y-m-d H:i:s'),
-                    'updated_at' => $job->updated_at->format('Y-m-d H:i:s'),
+                    'created_at' => $job->created_at?->format('Y-m-d H:i:s'),
+                    'updated_at' => $job->updated_at?->format('Y-m-d H:i:s'),
                 ],
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
