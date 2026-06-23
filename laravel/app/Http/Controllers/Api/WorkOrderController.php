@@ -8,6 +8,7 @@ use App\Models\BusinessJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class WorkOrderController extends Controller
 {
@@ -172,6 +173,109 @@ class WorkOrderController extends Controller
         } catch (\Exception $e) {
             Log::error('WorkOrderController@updateAssignments failed', ['id' => $id, 'message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to update assignments'], 500);
+        }
+    }
+
+    public function parseExcel(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls|max:20480',
+        ]);
+
+        try {
+            $path       = $request->file('file')->getRealPath();
+            $spreadsheet = IOFactory::load($path);
+
+            $sheet = null;
+            foreach ($spreadsheet->getAllSheets() as $s) {
+                if (strtoupper(trim($s->getTitle())) === 'WO') {
+                    $sheet = $s;
+                    break;
+                }
+            }
+
+            if (!$sheet) {
+                return response()->json(['error' => 'No sheet named "WO" found in this file.'], 422);
+            }
+
+            $rows = $sheet->toArray(null, true, true, false);
+
+            // Row 1: scan for "Division" label; value is the next non-empty cell in the same row
+            $division = null;
+            $row1     = $rows[0] ?? [];
+            foreach ($row1 as $colIdx => $cell) {
+                if (strtolower(trim((string) $cell)) === 'division') {
+                    for ($next = $colIdx + 1; $next < count($row1); $next++) {
+                        $val = trim((string) ($row1[$next] ?? ''));
+                        if ($val !== '') {
+                            $division = $val;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // Find header row: look for a row containing "Type" and "Elevation" (or "Elev")
+            $headerRow   = null;
+            $typeCol     = null;
+            $tagCol      = null;
+            $qtyCol      = null;
+            $fabCol      = null;
+
+            foreach ($rows as $rowIdx => $row) {
+                $colMap = [];
+                foreach ($row as $ci => $cell) {
+                    $norm = strtolower(trim((string) $cell));
+                    if (str_starts_with($norm, 'type'))       $colMap['type']     = $ci;
+                    if (str_starts_with($norm, 'elev'))       $colMap['tag']      = $ci;
+                    if (str_starts_with($norm, 'qty') || str_starts_with($norm, 'quan')) $colMap['qty'] = $ci;
+                    if ($norm === 'fab')                       $colMap['fab']      = $ci;
+                }
+                if (isset($colMap['type'], $colMap['tag'])) {
+                    $headerRow = $rowIdx;
+                    $typeCol   = $colMap['type'];
+                    $tagCol    = $colMap['tag'];
+                    $qtyCol    = $colMap['qty']  ?? null;
+                    $fabCol    = $colMap['fab']  ?? null;
+                    break;
+                }
+            }
+
+            if ($headerRow === null) {
+                return response()->json(['error' => 'Could not find header row with "Type" and "Elevation" columns.'], 422);
+            }
+
+            // Parse data rows after the header
+            $elevations = [];
+            for ($i = $headerRow + 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $type = trim((string) ($row[$typeCol] ?? ''));
+                $tag  = trim((string) ($row[$tagCol]  ?? ''));
+                if ($type === '' && $tag === '') continue;
+
+                $qty = $qtyCol !== null ? intval($row[$qtyCol] ?? 1) : 1;
+                $qty = max(1, $qty);
+
+                $fab  = $fabCol !== null ? strtolower(trim((string) ($row[$fabCol] ?? ''))) : '';
+                $scope = ($fab === 'kit') ? 'kit' : 'assemble';
+
+                $elevations[] = [
+                    'type'     => $type ?: null,
+                    'tag'      => $tag,
+                    'quantity' => $qty,
+                    'fab'      => $fab,
+                    'scope'    => $scope,
+                ];
+            }
+
+            return response()->json([
+                'division'   => $division,
+                'elevations' => $elevations,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('WorkOrderController@parseExcel failed', ['message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to parse Excel file: ' . $e->getMessage()], 500);
         }
     }
 

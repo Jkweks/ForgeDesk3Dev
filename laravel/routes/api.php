@@ -385,6 +385,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release']);
 
         // Fabrication Work Orders
+        Route::post('/work-orders/parse-excel', [\App\Http\Controllers\Api\WorkOrderController::class, 'parseExcel']);
         Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
         Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store']);
         Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);

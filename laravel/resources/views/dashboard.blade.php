@@ -172,181 +172,207 @@
         </div>
         <form id="addProductForm">
           <div class="modal-body">
-            <!-- Basic Info -->
-            <h5 class="mb-3"><i class="ti ti-info-circle me-2"></i>Basic Information</h5>
-            <div class="row mb-3">
-              <div class="col-lg-4">
-                <label class="form-label">Part Number</label>
-                <input type="text" class="form-control" name="part_number" id="productPartNumber" placeholder="e.g., ABC-123">
-                <small class="form-hint">Optional - used for auto-SKU</small>
+
+            <!-- Identity — mirrors edit form header -->
+            <div class="mb-3">
+              <div class="row g-2 mb-2">
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Part Number</label>
+                  <input type="text" class="form-control form-control-sm" name="part_number" id="productPartNumber" placeholder="e.g., ABC-123">
+                  <small class="form-hint text-primary" id="skuPreview"></small>
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Finish</label>
+                  <select class="form-select form-select-sm" name="finish" id="productFinish">
+                    <option value="">None</option>
+                  </select>
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">SKU</label>
+                  <input type="text" class="form-control form-control-sm" name="sku" id="productSku" placeholder="Auto-generated">
+                </div>
+                <div class="col-3">
+                  <label class="form-label small text-muted mb-1">Active</label>
+                  <select class="form-select form-select-sm" name="is_active" id="productIsActive">
+                    <option value="1" selected>Active</option>
+                    <option value="0">Inactive</option>
+                  </select>
+                </div>
               </div>
-              <div class="col-lg-4">
-                <label class="form-label">Finish</label>
-                <select class="form-select" name="finish" id="productFinish">
-                  <option value="">None</option>
-                </select>
+              <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Description <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" name="description" id="productDescription" placeholder="Product description" required>
               </div>
-              <div class="col-lg-4">
-                <label class="form-label">SKU</label>
-                <input type="text" class="form-control" name="sku" id="productSku" placeholder="Auto-generated">
-                <small class="form-hint text-primary" id="skuPreview"></small>
+              <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Long Description</label>
+                <textarea class="form-control form-control-sm" name="long_description" id="productLongDescription" rows="2"></textarea>
               </div>
-            </div>
-            <div class="row mb-3">
-              <div class="col-lg-6">
-                <label class="form-label required">Description</label>
-                <input type="text" class="form-control" name="description" id="productDescription" placeholder="Product description" required>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Categories/Systems</label>
-                <select class="form-select" name="category_ids" id="productCategoryIds" multiple size="4">
+              <div>
+                <label class="form-label small text-muted mb-1">Categories</label>
+                <select class="form-select form-select-sm" name="category_ids" id="productCategoryIds" multiple size="4">
                   <!-- Options loaded dynamically -->
                 </select>
-                <small class="form-hint">Hold Ctrl/Cmd to select multiple</small>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Location</label>
-                <input type="text" class="form-control" name="location" id="productLocation" placeholder="Choose from list" list="productLocationList">
-                <datalist id="productLocationList"></datalist>
-                <small class="form-hint">Choose from existing storage locations</small>
+                <small class="form-hint">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
               </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Long Description</label>
-              <textarea class="form-control" name="long_description" id="productLongDescription" rows="2"></textarea>
-            </div>
 
-            <hr>
-
-            <!-- Pricing -->
-            <h5 class="mb-3"><i class="ti ti-currency-dollar me-2"></i>Pricing</h5>
-            <div class="row mb-3">
-              <div class="col-lg-6">
-                <label class="form-label required">List Price</label>
-                <div class="input-group">
-                  <span class="input-group-text">$</span>
-                  <input type="number" class="form-control" name="unit_cost" id="productUnitCost" placeholder="0.00" step="0.01" min="0" required>
+            <!-- Cards row 1: Pricing + Supplier -->
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card card-sm h-100">
+                  <div class="card-header py-2"><strong>Pricing</strong></div>
+                  <div class="card-body py-2">
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <label class="form-label small text-muted mb-1">List Price <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                          <span class="input-group-text">$</span>
+                          <input type="number" class="form-control" name="unit_cost" id="productUnitCost" placeholder="0.00" step="0.01" min="0" required>
+                        </div>
+                      </div>
+                      <div class="col-6">
+                        <label class="form-label small text-muted mb-1">Net Price</label>
+                        <div class="input-group input-group-sm">
+                          <span class="input-group-text">$</span>
+                          <input type="number" class="form-control" name="net_cost" id="productNetCost" placeholder="0.00" step="0.01" min="0">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="col-lg-6">
-                <label class="form-label">Net Price</label>
-                <div class="input-group">
-                  <span class="input-group-text">$</span>
-                  <input type="number" class="form-control" name="net_cost" id="productNetCost" placeholder="0.00" step="0.01" min="0">
+              <div class="col-md-6">
+                <div class="card card-sm h-100">
+                  <div class="card-header py-2"><strong>Supplier</strong></div>
+                  <div class="card-body py-2">
+                    <div class="row g-2">
+                      <div class="col-5">
+                        <label class="form-label small text-muted mb-1">Supplier</label>
+                        <select class="form-select form-select-sm" name="supplier_id" id="productSupplierId">
+                          <option value="">Select supplier…</option>
+                        </select>
+                      </div>
+                      <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Supplier SKU</label>
+                        <input type="text" class="form-control form-control-sm" name="supplier_sku" id="productSupplierSku" placeholder="">
+                      </div>
+                      <div class="col-3">
+                        <label class="form-label small text-muted mb-1">Lead Time (d)</label>
+                        <input type="number" class="form-control form-control-sm" name="lead_time_days" id="productLeadTime" placeholder="0" min="0">
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <small class="form-hint">Calculated from EZ Estimate or manually entered</small>
               </div>
             </div>
 
-            <hr>
-
-            <!-- Quantities -->
-            <h5 class="mb-3"><i class="ti ti-packages me-2"></i>Inventory Quantities</h5>
-            <div class="row mb-3">
-              <div class="col-lg-3">
-                <label class="form-label required">On Hand</label>
-                <input type="number" class="form-control" name="quantity_on_hand" id="productQuantityOnHand" placeholder="0" min="0" required>
+            <!-- Cards row 2: Initial Stock + Stock Management -->
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card card-sm h-100">
+                  <div class="card-header py-2"><strong>Initial Stock</strong></div>
+                  <div class="card-body py-2">
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <label class="form-label small text-muted mb-1">On Hand <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control form-control-sm" name="quantity_on_hand" id="productQuantityOnHand" placeholder="0" min="0" required>
+                      </div>
+                      <div class="col-6">
+                        <label class="form-label small text-muted mb-1">On Order</label>
+                        <input type="number" class="form-control form-control-sm" name="on_order_qty" id="productOnOrderQty" placeholder="0" min="0" value="0">
+                      </div>
+                      <div class="col-12 mt-2">
+                        <label class="form-label small text-muted mb-1">Storage Location</label>
+                        <input type="text" class="form-control form-control-sm" name="location" id="productLocation" placeholder="Choose from list" list="productLocationList">
+                        <datalist id="productLocationList"></datalist>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="col-lg-3">
-                <label class="form-label required">Minimum</label>
-                <input type="number" class="form-control" name="minimum_quantity" id="productMinQuantity" placeholder="0" min="0" required>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Maximum</label>
-                <input type="number" class="form-control" name="maximum_quantity" id="productMaxQuantity" placeholder="Optional" min="0">
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">On Order</label>
-                <input type="number" class="form-control" name="on_order_qty" id="productOnOrderQty" placeholder="0" min="0" value="0">
-              </div>
-            </div>
-
-            <div class="row mb-3">
-              <div class="col-lg-3">
-                <label class="form-label">Reorder Point</label>
-                <input type="number" class="form-control" name="reorder_point" id="productReorderPoint" placeholder="Auto" min="0">
-                <small class="form-hint text-success" id="reorderPreview"></small>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Safety Stock</label>
-                <input type="number" class="form-control" name="safety_stock" id="productSafetyStock" placeholder="0" min="0" value="0">
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Avg Daily Use</label>
-                <input type="number" class="form-control" name="average_daily_use" id="productAvgDailyUse" placeholder="0.00" step="0.01" min="0">
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Lead Time (Days)</label>
-                <input type="number" class="form-control" name="lead_time_days" id="productLeadTime" placeholder="0" min="0">
-              </div>
-            </div>
-
-            <hr>
-
-            <!-- UOM & Pack -->
-            <h5 class="mb-3"><i class="ti ti-ruler-measure me-2"></i>Unit of Measure & Pack</h5>
-            <div class="row mb-3">
-              <div class="col-lg-3">
-                <label class="form-label required">Stock UOM</label>
-                <select class="form-select" name="unit_of_measure" id="productUOM" required>
-                  <option value="">Select...</option>
-                </select>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Pack Size</label>
-                <input type="number" class="form-control" name="pack_size" id="productPackSize" placeholder="1" min="1" value="1">
-                <small class="form-hint">Units per pack</small>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Purchase UOM</label>
-                <select class="form-select" name="purchase_uom" id="productPurchaseUOM">
-                  <option value="">Same as stock</option>
-                </select>
-              </div>
-              <div class="col-lg-3">
-                <label class="form-label">Alternate UOM</label>
-                <select class="form-select" name="stock_uom" id="productStockUOM">
-                  <option value="">Same as main</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="row mb-3">
-              <div class="col-lg-6">
-                <label class="form-label">Min Order Qty</label>
-                <input type="number" class="form-control" name="min_order_qty" id="productMinOrderQty" placeholder="1" min="1">
-                <small class="form-hint">Minimum order quantity</small>
-              </div>
-              <div class="col-lg-6">
-                <label class="form-label">Order Multiple</label>
-                <input type="number" class="form-control" name="order_multiple" id="productOrderMultiple" placeholder="1" min="1">
-                <small class="form-hint">Must order in multiples</small>
+              <div class="col-md-6">
+                <div class="card card-sm h-100">
+                  <div class="card-header py-2"><strong>Stock Management</strong></div>
+                  <div class="card-body py-2">
+                    <div class="row g-2">
+                      <div class="col-3">
+                        <label class="form-label small text-muted mb-1">Min</label>
+                        <input type="number" class="form-control form-control-sm" name="minimum_quantity" id="productMinQuantity" placeholder="0" min="0" step="0.01">
+                      </div>
+                      <div class="col-3">
+                        <label class="form-label small text-muted mb-1">Max</label>
+                        <input type="number" class="form-control form-control-sm" name="maximum_quantity" id="productMaxQuantity" placeholder="—" min="0" step="0.01">
+                      </div>
+                      <div class="col-3">
+                        <label class="form-label small text-muted mb-1">Reorder Pt.</label>
+                        <input type="number" class="form-control form-control-sm" name="reorder_point" id="productReorderPoint" placeholder="Auto" min="0">
+                        <small class="form-hint text-success" id="reorderPreview"></small>
+                      </div>
+                      <div class="col-3">
+                        <label class="form-label small text-muted mb-1">Safety Stock</label>
+                        <input type="number" class="form-control form-control-sm" name="safety_stock" id="productSafetyStock" placeholder="0" min="0" step="0.01">
+                      </div>
+                      <div class="col-6 mt-2">
+                        <label class="form-label small text-muted mb-1">Avg Daily Use</label>
+                        <input type="number" class="form-control form-control-sm" name="average_daily_use" id="productAvgDailyUse" placeholder="0.00" step="0.01" min="0">
+                      </div>
+                      <div class="col-3 mt-2">
+                        <label class="form-label small text-muted mb-1">Type</label>
+                        <div class="form-check form-switch mt-1">
+                          <input class="form-check-input" type="checkbox" name="nonsof" id="productNonsof">
+                          <label class="form-check-label small" for="productNonsof" id="productNonsofLabel">Stock</label>
+                        </div>
+                      </div>
+                      <div class="col-3 mt-2">
+                        <label class="form-label small text-muted mb-1">Door Shim</label>
+                        <div class="form-check form-switch mt-1">
+                          <input class="form-check-input" type="checkbox" name="cp_part" id="productCpPart">
+                          <label class="form-check-label small" for="productCpPart">No</label>
+                        </div>
+                      </div>
+                      <div class="col-4 mt-2">
+                        <label class="form-label small text-muted mb-1">Shared Component</label>
+                        <div class="form-check form-switch mt-1">
+                          <input class="form-check-input" type="checkbox" name="is_shared" id="productIsShared">
+                          <label class="form-check-label small" for="productIsShared">No</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <hr>
-
-            <!-- Supplier -->
-            <h5 class="mb-3"><i class="ti ti-truck-delivery me-2"></i>Supplier</h5>
-            <div class="row mb-3">
-              <div class="col-lg-6">
-                <label class="form-label">Supplier</label>
-                <select class="form-select" name="supplier_id" id="productSupplierId">
-                  <option value="">Select supplier...</option>
-                </select>
-                <small class="form-hint">Product supplier</small>
+            <!-- Cards row 3: Unit of Measure -->
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                <div class="card card-sm">
+                  <div class="card-header py-2"><strong>Unit of Measure</strong></div>
+                  <div class="card-body py-2">
+                    <div class="row g-2">
+                      <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Stock UOM <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" name="unit_of_measure" id="productUOM" required>
+                          <option value="">Select…</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Pack Size</label>
+                        <input type="number" class="form-control form-control-sm" name="pack_size" id="productPackSize" placeholder="1" min="1" value="1">
+                        <small class="form-hint">Units per pack</small>
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Min Order Qty</label>
+                        <input type="number" class="form-control form-control-sm" name="min_order_qty" id="productMinOrderQty" placeholder="1" min="1">
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Order Multiple</label>
+                        <input type="number" class="form-control form-control-sm" name="order_multiple" id="productOrderMultiple" placeholder="1" min="1">
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="col-lg-6">
-                <label class="form-label">Supplier SKU</label>
-                <input type="text" class="form-control" name="supplier_sku" id="productSupplierSku" placeholder="Supplier's code">
-              </div>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="is_active" id="productIsActive" checked>
-                <span class="form-check-label">Active Product</span>
-              </label>
             </div>
 
             <div id="formError" class="alert alert-danger" style="display: none;"></div>
@@ -962,12 +988,11 @@
         });
 
         // Populate UOM dropdowns
-        const uomSelects = ['productUOM', 'productPurchaseUOM', 'productStockUOM'];
-        uomSelects.forEach(selectId => {
+        ['productUOM'].forEach(selectId => {
           const select = document.getElementById(selectId);
-          const firstOption = select.querySelector('option').outerHTML; // Keep first option
+          if (!select) return;
+          const firstOption = select.querySelector('option').outerHTML;
           select.innerHTML = firstOption;
-
           unitOfMeasures.forEach(uom => {
             const option = document.createElement('option');
             option.value = uom.code;
@@ -1122,6 +1147,18 @@
       document.getElementById('skuPreview').textContent = '';
       document.getElementById('reorderPreview').textContent = '';
       lastGeneratedSku = '';
+
+      // Wire toggle live-labels
+      const nonsofCb = document.getElementById('productNonsof');
+      const nonsofLabel = document.getElementById('productNonsofLabel');
+      if (nonsofCb && nonsofLabel) {
+        nonsofCb.onchange = () => { nonsofLabel.textContent = nonsofCb.checked ? 'Boneyard' : 'Stock'; };
+      }
+      const cpPartCb   = document.getElementById('productCpPart');
+      if (cpPartCb)   cpPartCb.onchange   = () => { cpPartCb.nextElementSibling.textContent   = cpPartCb.checked   ? 'Yes' : 'No'; };
+      const isSharedCb = document.getElementById('productIsShared');
+      if (isSharedCb) isSharedCb.onchange = () => { isSharedCb.nextElementSibling.textContent = isSharedCb.checked ? 'Yes' : 'No'; };
+
       showModal(document.getElementById('addProductModal'));
     }
 
@@ -1134,18 +1171,23 @@
 
       formData.forEach((value, key) => {
         if (key === 'is_active') {
-          data[key] = document.getElementById('productIsActive').checked;
+          data[key] = value === '1';
         } else if (value !== '') {
           data[key] = value;
         }
       });
+
+      // Checkboxes — unchecked values don't appear in FormData
+      data.nonsof    = !!document.getElementById('productNonsof')?.checked;
+      data.cp_part   = !!document.getElementById('productCpPart')?.checked;
+      data.is_shared = !!document.getElementById('productIsShared')?.checked;
 
       // Handle multiple category selection
       const categorySelect = document.getElementById('productCategoryIds');
       const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => parseInt(option.value));
       if (selectedCategories.length > 0) {
         data.category_ids = selectedCategories;
-        data.primary_category_id = selectedCategories[0]; // First selected is primary
+        data.primary_category_id = selectedCategories[0];
       }
       // Remove old single category_id if present
       delete data.category_id;
