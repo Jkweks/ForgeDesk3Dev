@@ -214,6 +214,50 @@
   </div>
 </div>
 
+<!-- Reservations Modal -->
+<div class="modal modal-blur fade" id="reservationsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="ti ti-clipboard-list me-2"></i>Active Reservations: <span id="reservationProductName" class="text-primary ms-1"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="reservationsLoading" class="text-center py-4">
+          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+          <div class="text-muted mt-2 small">Loading reservations...</div>
+        </div>
+        <div id="reservationsContent" style="display:none;">
+          <div class="table-responsive">
+            <table class="table table-vcenter table-sm">
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Status</th>
+                  <th class="text-end">Reserved</th>
+                  <th class="text-end">Fulfilled</th>
+                  <th class="text-end">Remaining</th>
+                  <th>Needed By</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="reservationsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="reservationsEmpty" style="display:none;" class="text-center text-muted py-3">
+          No active reservations found for this product.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -445,6 +489,12 @@ function compareItems(a, b) {
       aVal = (a.description || '').toLowerCase(); bVal = (b.description || '').toLowerCase();
       cmp = aVal.localeCompare(bVal);
       return currentSortDir === 'asc' ? cmp : -cmp;
+    case 'quantity_on_hand':
+      aVal = a.quantity_on_hand ?? 0; bVal = b.quantity_on_hand ?? 0;
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    case 'quantity_committed':
+      aVal = a.quantity_committed ?? 0; bVal = b.quantity_committed ?? 0;
+      return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     case 'quantity_available':
       aVal = a.quantity_available ?? 0; bVal = b.quantity_available ?? 0;
       return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
@@ -512,6 +562,8 @@ function renderVendorCard(container, group, savedSelections = {}) {
             <th style="width:36px"></th>
             ${sortHeaderHtml('SKU', 'sku')}
             ${sortHeaderHtml('Description', 'description')}
+            ${sortHeaderHtml('On Hand', 'quantity_on_hand', 'text-end')}
+            ${sortHeaderHtml('Committed', 'quantity_committed', 'text-end')}
             ${sortHeaderHtml('Available', 'quantity_available', 'text-end')}
             ${sortHeaderHtml('Reorder Pt', 'reorder_point', 'text-end')}
             <th class="text-end">On Order</th>
@@ -578,6 +630,8 @@ function renderItemRow(p, sid) {
   // suggested_order_qty is already rounded to pack boundaries server-side;
   // Math.ceil here guards against any floating-point edge cases
   const suggestedQty = isPack ? Math.ceil(suggestedEaches / packSize) : suggestedEaches;
+  const onHand       = p.quantity_on_hand ?? 0;
+  const committed    = p.quantity_committed ?? 0;
   const available    = p.quantity_available ?? 0;
   const onOrder      = p.on_order_qty ?? 0;
   const reorderPt    = p.reorder_point ?? '-';
@@ -610,6 +664,12 @@ function renderItemRow(p, sid) {
       </td>
       <td>
         <span title="${escapeHtml(p.description || '')}">${escapeHtml((p.description || '').substring(0, 55))}${(p.description || '').length > 55 ? '…' : ''}</span>
+      </td>
+      <td class="text-end text-muted">${onHand.toLocaleString()}</td>
+      <td class="text-end">
+        ${committed > 0
+          ? `<a href="#" class="text-warning fw-bold text-decoration-none" onclick="viewProductReservations(${p.id}, '${escapeHtml(p.sku || '')}'); return false;" title="View reservations">${committed.toLocaleString()} <i class="ti ti-eye" style="font-size:.75rem"></i></a>`
+          : `<span class="text-muted">0</span>`}
       </td>
       <td class="text-end ${availColor}">${available.toLocaleString()}</td>
       <td class="text-end text-muted">${typeof reorderPt === 'number' ? reorderPt.toLocaleString() : reorderPt}</td>
@@ -943,6 +1003,67 @@ function statusBadgeHtml(status) {
 
 function showLoading(show) {
   document.getElementById('loadingState').style.display = show ? 'block' : 'none';
+}
+
+// ─── Reservations ─────────────────────────────────────────────────────────────
+
+async function viewProductReservations(productId, sku) {
+  document.getElementById('reservationProductName').textContent = sku;
+  document.getElementById('reservationsLoading').style.display = 'block';
+  document.getElementById('reservationsContent').style.display = 'none';
+  document.getElementById('reservationsEmpty').style.display = 'none';
+
+  safeShowModal('reservationsModal');
+
+  try {
+    const reservations = await authenticatedFetch(`/products/${productId}/reservations`);
+    const active = (Array.isArray(reservations) ? reservations : [])
+      .filter(r => !['fulfilled', 'cancelled'].includes(r.status));
+
+    document.getElementById('reservationsLoading').style.display = 'none';
+
+    if (active.length === 0) {
+      document.getElementById('reservationsEmpty').style.display = 'block';
+      return;
+    }
+
+    const statusBadge = (status) => {
+      const map = {
+        active:      'bg-success',
+        in_progress: 'bg-primary',
+        on_hold:     'bg-warning',
+        completed:   'bg-secondary',
+      };
+      const cls = map[status] || 'bg-secondary';
+      const label = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return `<span class="badge ${cls}">${label}</span>`;
+    };
+
+    document.getElementById('reservationsTableBody').innerHTML = active.map(r => {
+      const remaining = (r.quantity_reserved || 0) - (r.quantity_fulfilled || 0);
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(r.job_number || '—')}</strong>
+            ${r.job_name ? `<br><small class="text-muted">${escapeHtml(r.job_name)}</small>` : ''}
+          </td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="text-end">${(r.quantity_reserved || 0).toLocaleString()}</td>
+          <td class="text-end text-success">${(r.quantity_fulfilled || 0).toLocaleString()}</td>
+          <td class="text-end ${remaining > 0 ? 'text-warning fw-bold' : ''}">${remaining.toLocaleString()}</td>
+          <td>${r.needed_date ? `<span class="text-muted small">${r.needed_date}</span>` : '—'}</td>
+          <td><small class="text-muted">${escapeHtml(r.notes || '')}</small></td>
+        </tr>
+      `;
+    }).join('');
+
+    document.getElementById('reservationsContent').style.display = 'block';
+  } catch (err) {
+    document.getElementById('reservationsLoading').style.display = 'none';
+    document.getElementById('reservationsEmpty').textContent = 'Failed to load reservations.';
+    document.getElementById('reservationsEmpty').style.display = 'block';
+    console.error('Error loading reservations:', err);
+  }
 }
 
 function safeShowModal(id) {

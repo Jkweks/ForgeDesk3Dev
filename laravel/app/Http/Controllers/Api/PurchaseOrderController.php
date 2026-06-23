@@ -10,6 +10,10 @@ use App\Models\InventoryTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class PurchaseOrderController extends Controller
 {
@@ -557,6 +561,104 @@ class PurchaseOrderController extends Controller
             DB::rollBack();
             return response()->json(['message' => 'Failed to add line item'], 500);
         }
+    }
+
+    /**
+     * Export a Tubelite purchase order as an EZ Estimate-format Excel file
+     */
+    public function exportEzEstimate(PurchaseOrder $purchaseOrder)
+    {
+        $purchaseOrder->load(['supplier', 'items.product']);
+
+        if (!str_contains(strtolower($purchaseOrder->supplier->name ?? ''), 'tubelite')) {
+            return response()->json(['message' => 'EZ Estimate export is only available for Tubelite purchase orders'], 422);
+        }
+
+        // Separate items by product type (mirroring the import's SL/P distinction)
+        $slItems = [];
+        $pItems  = [];
+
+        foreach ($purchaseOrder->items as $item) {
+            $sku = strtoupper($item->product->sku ?? '');
+            if (preg_match('/^(A|E|M|T)/', $sku)) {
+                $slItems[] = $item;
+            } else {
+                $pItems[] = $item;
+            }
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getProperties()
+            ->setCreator('ForgeDesk')
+            ->setTitle("EZ Estimate Export - {$purchaseOrder->po_number}");
+
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2C3E50']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ];
+
+        // ── Sheet 1: SL Items (Stock Length — A/E/M/T) ──
+        $slSheet = $spreadsheet->getActiveSheet()->setTitle('SL Items');
+        $slHeaders = ['Part Number', 'SKU', 'Description', 'Finish', 'Pricing Category', 'Qty Ordered', 'Unit Price', 'Total'];
+        foreach ($slHeaders as $col => $header) {
+            $slSheet->setCellValueByColumnAndRow($col + 1, 1, $header);
+        }
+        $slSheet->getStyle('A1:H1')->applyFromArray($headerStyle);
+
+        $row = 2;
+        foreach ($slItems as $item) {
+            $p = $item->product;
+            $slSheet->setCellValueByColumnAndRow(1, $row, $p->part_number ?? '');
+            $slSheet->setCellValueByColumnAndRow(2, $row, $p->sku ?? '');
+            $slSheet->setCellValueByColumnAndRow(3, $row, $p->description ?? '');
+            $slSheet->setCellValueByColumnAndRow(4, $row, $p->finish ?? '');
+            $slSheet->setCellValueByColumnAndRow(5, $row, $p->pricing_category ?? '');
+            $slSheet->setCellValueByColumnAndRow(6, $row, $item->quantity_ordered);
+            $slSheet->setCellValueByColumnAndRow(7, $row, (float) $item->unit_cost);
+            $slSheet->setCellValueByColumnAndRow(8, $row, (float) $item->total_cost);
+            $row++;
+        }
+
+        foreach (range(1, 8) as $col) {
+            $slSheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+
+        // ── Sheet 2: P Items (Accessories — P/S/CP and others) ──
+        $pSheet = $spreadsheet->createSheet()->setTitle('P Items');
+        $pHeaders = ['Part Number', 'SKU', 'Description', 'Pricing Category', 'Qty Ordered', 'Unit Price', 'Total'];
+        foreach ($pHeaders as $col => $header) {
+            $pSheet->setCellValueByColumnAndRow($col + 1, 1, $header);
+        }
+        $pSheet->getStyle('A1:G1')->applyFromArray($headerStyle);
+
+        $row = 2;
+        foreach ($pItems as $item) {
+            $p = $item->product;
+            $pSheet->setCellValueByColumnAndRow(1, $row, $p->part_number ?? '');
+            $pSheet->setCellValueByColumnAndRow(2, $row, $p->sku ?? '');
+            $pSheet->setCellValueByColumnAndRow(3, $row, $p->description ?? '');
+            $pSheet->setCellValueByColumnAndRow(4, $row, $p->pricing_category ?? '');
+            $pSheet->setCellValueByColumnAndRow(5, $row, $item->quantity_ordered);
+            $pSheet->setCellValueByColumnAndRow(6, $row, (float) $item->unit_cost);
+            $pSheet->setCellValueByColumnAndRow(7, $row, (float) $item->total_cost);
+            $row++;
+        }
+
+        foreach (range(1, 7) as $col) {
+            $pSheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename = 'EZ_Estimate_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number) . '_' . date('Ymd') . '.xlsx';
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'po_ez_');
+        (new Xlsx($spreadsheet))->save($tempFile);
+
+        return response()->download($tempFile, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
     }
 
     /**
