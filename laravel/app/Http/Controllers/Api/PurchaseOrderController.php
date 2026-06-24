@@ -7,6 +7,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Product;
 use App\Models\InventoryTransaction;
+use App\Models\StorageLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -355,10 +356,18 @@ class PurchaseOrderController extends Controller
                     if ($primaryLocation) {
                         $primaryLocation->quantity += $quantityToReceive;
                         $primaryLocation->save();
+                    } else {
+                        // No locations exist yet (new/unplaced product). Create an
+                        // Unassigned location record so the location table stays as
+                        // the source of truth and recalculateQuantitiesFromLocations()
+                        // never resets this receipt to zero.
+                        $unassigned = StorageLocation::where('code', 'UNASSIGNED')->first();
+                        $product->inventoryLocations()->create([
+                            'storage_location_id' => $unassigned?->id ?? null,
+                            'quantity'            => $quantityToReceive,
+                            'is_primary'          => true,
+                        ]);
                     }
-                    // If there are no locations at all, quantity_on_hand was updated
-                    // directly above and there is nothing to sync — fulfillment will
-                    // deduct from locations if/when they are created later.
                 }
             }
 
