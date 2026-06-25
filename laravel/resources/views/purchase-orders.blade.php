@@ -504,6 +504,11 @@ function renderPurchaseOrders(orders) {
                 <i class="ti ti-package"></i>
               </button>
             ` : ''}
+            ${isTubelitePO(po) ? `
+              <button class="btn btn-sm btn-ghost-secondary" onclick="exportEzEstimate(${po.id})" title="Export as EZ Estimate">
+                <i class="ti ti-file-spreadsheet"></i>
+              </button>
+            ` : ''}
           </div>
         </td>
       </tr>
@@ -877,8 +882,15 @@ async function viewPODetails(poId) {
     const actionsDiv = document.getElementById('poActionButtons');
     actionsDiv.innerHTML = '';
 
+    const tubeliteExportBtn = isTubelitePO(po)
+      ? `<button class="btn btn-outline-secondary" onclick="exportEzEstimate(${po.id})">
+           <i class="ti ti-file-spreadsheet me-1"></i>Export EZ Estimate
+         </button>`
+      : '';
+
     if (po.status === 'draft') {
       actionsDiv.innerHTML = `
+        ${tubeliteExportBtn}
         <button class="btn btn-primary" onclick="submitPO(${po.id})">
           <i class="ti ti-send me-1"></i>Submit for Approval
         </button>
@@ -888,6 +900,7 @@ async function viewPODetails(poId) {
       `;
     } else if (po.status === 'submitted') {
       actionsDiv.innerHTML = `
+        ${tubeliteExportBtn}
         <button class="btn btn-success" onclick="approvePO(${po.id})">
           <i class="ti ti-check me-1"></i>Approve
         </button>
@@ -897,6 +910,7 @@ async function viewPODetails(poId) {
       `;
     } else if (po.status === 'approved' || po.status === 'partially_received') {
       actionsDiv.innerHTML = `
+        ${tubeliteExportBtn}
         <button class="btn btn-success" onclick="showReceiveModal(${po.id})">
           <i class="ti ti-package me-1"></i>Receive Materials
         </button>
@@ -904,6 +918,8 @@ async function viewPODetails(poId) {
           <i class="ti ti-x me-1"></i>Cancel
         </button>
       `;
+    } else {
+      actionsDiv.innerHTML = tubeliteExportBtn;
     }
 
     safeShowModal('viewPOModal');
@@ -1279,6 +1295,37 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function isTubelitePO(po) {
+  return (po.supplier?.name || '').toLowerCase().includes('tubelite');
+}
+
+async function exportEzEstimate(poId) {
+  try {
+    showNotification('Generating EZ Estimate export...', 'info');
+    const response = await apiCall(`/purchase-orders/${poId}/ez-estimate-export`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      showNotification(err.message || 'Export failed', 'danger');
+      return;
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get('Content-Disposition') || '';
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : `EZ_Estimate_${poId}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('EZ Estimate export error:', err);
+    showNotification('Failed to export EZ Estimate', 'danger');
+  }
 }
 </script>
 @endsection
