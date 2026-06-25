@@ -27,14 +27,17 @@
                 <div class="card-body">
                   <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                      <label class="form-label required">File 1 — EZ Estimate (.xlsx or .xlsm)</label>
-                      <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm">
-                      <small class="form-hint">Checks Stock Lengths and Accessories sheets automatically.</small>
+                      <label class="form-label required">File 1</label>
+                      <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm,.csv">
+                      <small class="form-hint">
+                        <strong>EZ Estimate</strong> (.xlsx / .xlsm) — reads Stock Lengths &amp; Accessories sheets automatically.<br>
+                        <strong>CSV</strong> (.csv) — header row required; columns: <code>Qty, (skip), Part#, Finish</code> (Finish defaults to <code>0R</code> if blank or absent).
+                      </small>
                     </div>
                     <div class="col-md-6">
-                      <label class="form-label">File 2 — Second EZ Estimate <span class="text-muted">(optional)</span></label>
-                      <input type="file" class="form-control" id="estimateFile2" accept=".xlsx,.xlsm">
-                      <small class="form-hint">Add a second file when a job is split across two estimates. Results will be merged by part number.</small>
+                      <label class="form-label">File 2 <span class="text-muted">(optional)</span></label>
+                      <input type="file" class="form-control" id="estimateFile2" accept=".xlsx,.xlsm,.csv">
+                      <small class="form-hint">Add a second file when a job spans two estimates. Accepts EZ Estimate or CSV. Results are merged by part number — quantities for matching parts are summed.</small>
                     </div>
                   </div>
                   <div class="mb-3">

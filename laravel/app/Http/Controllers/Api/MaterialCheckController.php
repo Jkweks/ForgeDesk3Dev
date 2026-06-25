@@ -192,8 +192,8 @@ class MaterialCheckController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'file'  => 'required|file|mimes:xlsx,xlsm|max:10240',
-                'file2' => 'nullable|file|mimes:xlsx,xlsm|max:10240',
+                'file'  => 'required|file|mimes:xlsx,xlsm,csv|max:10240',
+                'file2' => 'nullable|file|mimes:xlsx,xlsm,csv|max:10240',
                 'mode'  => 'nullable|string|in:ez_estimate,generic',
             ]);
 
@@ -206,75 +206,79 @@ class MaterialCheckController extends Controller
                 ], 422);
             }
 
-            $file = $request->file('file');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] File: {$file->getClientOriginalName()}, Size: {$file->getSize()}\n", FILE_APPEND);
-            Log::info('File received', ['name' => $file->getClientOriginalName(), 'size' => $file->getSize()]);
+            $file     = $request->file('file');
+            $mode     = $request->input('mode', 'ez_estimate');
+            $file1Ext = strtolower($file->getClientOriginalExtension());
+            $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
 
-            $mode = $request->input('mode', 'ez_estimate');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Mode: {$mode}\n", FILE_APPEND);
+            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] File: {$file->getClientOriginalName()}, Size: {$file->getSize()}, Ext: {$file1Ext}\n", FILE_APPEND);
+            Log::info('File received', ['name' => $file->getClientOriginalName(), 'size' => $file->getSize(), 'ext' => $file1Ext]);
 
-            // Load the spreadsheet with optimized filter
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Loading spreadsheet with optimized filter...\n", FILE_APPEND);
-            Log::info('Loading spreadsheet with filter');
-
-            // Increase memory limit for large files (keep for entire request)
             ini_set('memory_limit', '512M');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Memory limit increased to 512M\n", FILE_APPEND);
 
-            // Create reader and apply custom read filter
-            // This only loads Stock Lengths & Accessories sheets, columns A-C, rows 11-47/11-46
-            $reader = IOFactory::createReaderForFile($file->getRealPath());
-            $reader->setReadDataOnly(true);
-            $reader->setReadFilter(new EzEstimateReadFilter());
+            // Legacy generic mode — single Excel file, early return
+            if ($mode !== 'ez_estimate' && $file1Ext !== 'csv') {
+                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing generic\n", FILE_APPEND);
+                $reader = IOFactory::createReaderForFile($file->getRealPath());
+                $reader->setReadDataOnly(true);
+                $reader->setReadFilter(new EzEstimateReadFilter());
+                $spreadsheet = $reader->load($file->getRealPath());
+                return $this->checkGenericEstimate($request, $spreadsheet);
+            }
 
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Reader created with filter, loading file...\n", FILE_APPEND);
-            $spreadsheet = $reader->load($file->getRealPath());
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Spreadsheet loaded (memory: " . round(memory_get_usage() / 1024 / 1024, 2) . "MB)\n", FILE_APPEND);
-
-            if ($mode === 'ez_estimate') {
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing EZ Estimate\n", FILE_APPEND);
-                $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
+            // Process file 1 (CSV or EZ Estimate)
+            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing file 1 as " . ($file1Ext === 'csv' ? 'CSV' : 'EZ Estimate') . "\n", FILE_APPEND);
+            if ($file1Ext === 'csv') {
+                $data1 = $this->runCsvEstimateCheck($file, $boneyardSharedOnly);
+            } else {
+                $reader = IOFactory::createReaderForFile($file->getRealPath());
+                $reader->setReadDataOnly(true);
+                $reader->setReadFilter(new EzEstimateReadFilter());
+                $spreadsheet = $reader->load($file->getRealPath());
+                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Spreadsheet loaded (memory: " . round(memory_get_usage() / 1024 / 1024, 2) . "MB)\n", FILE_APPEND);
                 $data1 = $this->runEzEstimateCheck($spreadsheet, $boneyardSharedOnly);
+            }
 
-                if ($request->hasFile('file2')) {
-                    $file2 = $request->file('file2');
-                    @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Loading second file: {$file2->getClientOriginalName()}\n", FILE_APPEND);
-                    Log::info('Loading second file', ['name' => $file2->getClientOriginalName(), 'size' => $file2->getSize()]);
+            // Process optional file 2
+            if ($request->hasFile('file2')) {
+                $file2     = $request->file('file2');
+                $file2Ext  = strtolower($file2->getClientOriginalExtension());
+                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Loading file 2: {$file2->getClientOriginalName()} ({$file2Ext})\n", FILE_APPEND);
+                Log::info('Loading file 2', ['name' => $file2->getClientOriginalName(), 'ext' => $file2Ext]);
 
+                if ($file2Ext === 'csv') {
+                    $data2 = $this->runCsvEstimateCheck($file2, $boneyardSharedOnly);
+                } else {
                     $reader2 = IOFactory::createReaderForFile($file2->getRealPath());
                     $reader2->setReadDataOnly(true);
                     $reader2->setReadFilter(new EzEstimateReadFilter());
                     $spreadsheet2 = $reader2->load($file2->getRealPath());
                     @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Second spreadsheet loaded\n", FILE_APPEND);
-
                     $data2 = $this->runEzEstimateCheck($spreadsheet2, $boneyardSharedOnly);
-
-                    $mergedResults = $this->mergeCheckResults($data1['results'], $data2['results']);
-                    $mergedSummary = $this->rebuildSummary($mergedResults);
-
-                    return response()->json([
-                        'message'            => 'Material check completed',
-                        'summary'            => $mergedSummary,
-                        'results'            => $mergedResults,
-                        'boneyard_shared_only' => $boneyardSharedOnly,
-                        'file_count'         => 2,
-                        'file1_name'         => $file->getClientOriginalName(),
-                        'file2_name'         => $file2->getClientOriginalName(),
-                    ]);
                 }
 
+                $mergedResults = $this->mergeCheckResults($data1['results'], $data2['results']);
+                $mergedSummary = $this->rebuildSummary($mergedResults);
+
                 return response()->json([
-                    'message'            => 'Material check completed',
-                    'summary'            => $data1['summary'],
-                    'results'            => $data1['results'],
+                    'message'              => 'Material check completed',
+                    'summary'              => $mergedSummary,
+                    'results'              => $mergedResults,
                     'boneyard_shared_only' => $boneyardSharedOnly,
-                    'file_count'         => 1,
-                    'file1_name'         => $file->getClientOriginalName(),
+                    'file_count'           => 2,
+                    'file1_name'           => $file->getClientOriginalName(),
+                    'file2_name'           => $file2->getClientOriginalName(),
                 ]);
-            } else {
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing generic\n", FILE_APPEND);
-                return $this->checkGenericEstimate($request, $spreadsheet);
             }
+
+            return response()->json([
+                'message'              => 'Material check completed',
+                'summary'              => $data1['summary'],
+                'results'              => $data1['results'],
+                'boneyard_shared_only' => $boneyardSharedOnly,
+                'file_count'           => 1,
+                'file1_name'           => $file->getClientOriginalName(),
+            ]);
 
         } catch (\PhpOffice\PhpSpreadsheet\Reader\Exception $e) {
             @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] PhpSpreadsheet error: {$e->getMessage()}\n", FILE_APPEND);
@@ -313,13 +317,15 @@ class MaterialCheckController extends Controller
     }
 
     /**
-     * Process an EZ Estimate spreadsheet and return raw data (no HTTP response).
-     * Used internally so results from two files can be merged before responding.
+     * Build the in-memory product lookup cache (no-op if already populated).
+     * Shared by both runEzEstimateCheck and runCsvEstimateCheck so two-file
+     * requests only hit the DB once.
      */
-    private function runEzEstimateCheck($spreadsheet, bool $boneyardSharedOnly): array
+    private function buildProductCache(bool $boneyardSharedOnly): void
     {
-        $results = [];
-        $summary = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
+        if (!empty($this->productCache)) {
+            return;
+        }
 
         Log::info('Loading products into memory cache', ['boneyard_shared_only' => $boneyardSharedOnly]);
         $productQuery = Product::where('is_active', true);
@@ -330,7 +336,6 @@ class MaterialCheckController extends Controller
         }
         $allProducts = $productQuery->get();
 
-        $this->productCache = [];
         foreach ($allProducts as $product) {
             $sku = $product->sku;
             $this->productCache[$sku] = $product;
@@ -339,6 +344,18 @@ class MaterialCheckController extends Controller
             $this->productCache[$normalized] = $product;
         }
         Log::info('Product cache built', ['products' => $allProducts->count()]);
+    }
+
+    /**
+     * Process an EZ Estimate spreadsheet and return raw data (no HTTP response).
+     * Used internally so results from two files can be merged before responding.
+     */
+    private function runEzEstimateCheck($spreadsheet, bool $boneyardSharedOnly): array
+    {
+        $results = [];
+        $summary = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
+
+        $this->buildProductCache($boneyardSharedOnly);
 
         $allSheets = $spreadsheet->getAllSheets();
         $stockLengthsSheets = [];
@@ -602,6 +619,137 @@ class MaterialCheckController extends Controller
 
         @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Completed processing {$sheetName}\n", FILE_APPEND);
         Log::info("Completed processing sheet", ['name' => $sheetName]);
+    }
+
+    /**
+     * Process a CSV estimate file and return raw data (no HTTP response).
+     *
+     * Expected columns (positional, 0-indexed; first row is header and skipped):
+     *   0 – Quantity (eaches)
+     *   1 – (ignored)
+     *   2 – Part Number
+     *   3 – Finish code (optional; defaults to '0R' when absent or blank)
+     *
+     * SKU is built as "{part_number}-{finish}" to match the EZ Estimate convention.
+     */
+    private function runCsvEstimateCheck($file, bool $boneyardSharedOnly): array
+    {
+        $results  = [];
+        $summary  = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
+        $debugLog = storage_path('logs/material-check-debug.log');
+
+        $this->buildProductCache($boneyardSharedOnly);
+
+        $handle = fopen($file->getRealPath(), 'r');
+        if (!$handle) {
+            throw new \Exception('Could not open CSV file for reading.');
+        }
+
+        $rowNumber = 0;
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNumber++;
+
+            // Skip header row
+            if ($rowNumber === 1) {
+                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] CSV header: " . implode(', ', array_map('trim', $row)) . "\n", FILE_APPEND);
+                continue;
+            }
+
+            $qty        = isset($row[0]) ? floatval(trim($row[0])) : 0;
+            $partNumber = isset($row[2]) ? trim($row[2]) : '';
+            $finish     = (isset($row[3]) && trim($row[3]) !== '') ? trim($row[3]) : '0R';
+
+            if ($qty <= 0 || empty($partNumber)) {
+                continue;
+            }
+
+            $sku = $partNumber . '-' . $finish;
+            $summary['total']++;
+
+            $product = $this->findProduct($sku);
+
+            if (!$product) {
+                $results[] = [
+                    'part_number'          => $partNumber,
+                    'finish'               => $finish,
+                    'sku'                  => $sku,
+                    'description'          => '',
+                    'required_qty_packs'   => 0,
+                    'required_qty_eaches'  => (int) ceil($qty),
+                    'on_hand'              => null,
+                    'committed'            => null,
+                    'on_order'             => null,
+                    'available_qty_packs'  => 0,
+                    'available_qty_eaches' => 0,
+                    'shortage_packs'       => 0,
+                    'shortage_eaches'      => (int) ceil($qty),
+                    'pack_size'            => 1,
+                    'has_pack_size'        => false,
+                    'status'               => 'not_found',
+                    'location'             => null,
+                    'sheet'                => 'CSV',
+                    'row'                  => $rowNumber,
+                ];
+                $summary['not_found']++;
+                continue;
+            }
+
+            $packSize    = $product->pack_size ?? 1;
+            $hasPackSize = $packSize > 1;
+
+            // CSV quantities are in eaches
+            $requiredEaches = (int) ceil($qty);
+            $requiredPacks  = $hasPackSize ? round($qty / $packSize, 4) : 0;
+
+            $availableEaches = $product->quantity_available ?? $product->quantity_on_hand ?? 0;
+            $availablePacks  = $hasPackSize ? (int) floor($availableEaches / $packSize) : $availableEaches;
+
+            $shortageEaches = max(0, $requiredEaches - $availableEaches);
+            $shortagePacks  = $hasPackSize ? (int) ceil($shortageEaches / $packSize) : $shortageEaches;
+
+            $status = 'available';
+            if ($availableEaches <= 0) {
+                $status = 'unavailable';
+                $summary['unavailable']++;
+            } elseif ($availableEaches < $requiredEaches) {
+                $status = 'partial';
+                $summary['partial']++;
+            } else {
+                $summary['available']++;
+            }
+
+            $results[] = [
+                'part_number'          => $partNumber,
+                'finish'               => $finish,
+                'sku'                  => $sku,
+                'description'          => $product->description,
+                'required_qty_packs'   => $requiredPacks,
+                'required_qty_eaches'  => $requiredEaches,
+                'on_hand'              => $product->quantity_on_hand ?? 0,
+                'committed'            => $product->quantity_committed ?? 0,
+                'on_order'             => $product->on_order_qty ?? 0,
+                'available_qty_packs'  => $availablePacks,
+                'available_qty_eaches' => $availableEaches,
+                'shortage_packs'       => $shortagePacks,
+                'shortage_eaches'      => $shortageEaches,
+                'pack_size'            => $packSize,
+                'has_pack_size'        => $hasPackSize,
+                'status'               => $status,
+                'location'             => $product->location,
+                'product_id'           => $product->id,
+                'nonsof'               => (bool) $product->nonsof,
+                'is_shared'            => (bool) $product->is_shared,
+                'sheet'                => 'CSV',
+                'row'                  => $rowNumber,
+            ];
+        }
+
+        fclose($handle);
+
+        @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] CSV processed: {$rowNumber} rows, {$summary['total']} items\n", FILE_APPEND);
+        Log::info('CSV estimate processed', ['rows' => $rowNumber, 'items' => $summary['total']]);
+
+        return ['results' => $results, 'summary' => $summary];
     }
 
     /**
