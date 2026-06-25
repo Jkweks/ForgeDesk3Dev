@@ -100,6 +100,12 @@
                         <i class="ti ti-hard-hat me-2"></i>Fab Users
                       </a>
                     </li>
+                    <li class="nav-item" role="presentation">
+                      <a href="#tab-job-reservations" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
+                         onclick="loadAdminReservations()">
+                        <i class="ti ti-clipboard-list me-2"></i>Job Reservations
+                      </a>
+                    </li>
                   </ul>
                 </div>
 
@@ -607,6 +613,65 @@
                         </table>
                       </div>
                     </div><!-- /tab-fab-users -->
+
+                    <!-- Job Reservations Tab -->
+                    <div class="tab-pane" id="tab-job-reservations" role="tabpanel">
+                      <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                          <h3 class="mb-1">Job Reservations</h3>
+                          <p class="text-muted mb-0">Read-only view of all job reservations. Manage reservations in <a href="/fulfillment/job-reservations">Fulfillment &rsaquo; Job Reservations</a>.</p>
+                        </div>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadAdminReservations(true)">
+                          <i class="ti ti-refresh me-1"></i>Refresh
+                        </button>
+                      </div>
+
+                      <!-- Filters -->
+                      <div class="row g-2 mb-3">
+                        <div class="col-md-3">
+                          <select class="form-select" id="resFilterStatus" onchange="filterAdminReservations()">
+                            <option value="">All Statuses</option>
+                            <option value="active">Active</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="on_hold">On Hold</option>
+                            <option value="draft">Draft</option>
+                            <option value="fulfilled">Fulfilled</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </div>
+                        <div class="col-md-4">
+                          <input type="text" class="form-control" id="resSearch" placeholder="Search job # or name…" oninput="filterAdminReservations()">
+                        </div>
+                        <div class="col-auto ms-auto text-muted small d-flex align-items-center" id="resCountLabel"></div>
+                      </div>
+
+                      <div id="resLoading" class="text-center text-muted py-4" style="display:none;">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <p class="mt-2 mb-0">Loading…</p>
+                      </div>
+
+                      <div class="table-responsive">
+                        <table class="table table-vcenter card-table table-striped">
+                          <thead>
+                            <tr>
+                              <th style="width:9%">Job #</th>
+                              <th style="width:5%">Rel.</th>
+                              <th style="width:20%">Job Name</th>
+                              <th style="width:12%">Requested By</th>
+                              <th style="width:9%">Needed By</th>
+                              <th style="width:9%">Status</th>
+                              <th style="width:6%" class="text-end">Items</th>
+                              <th style="width:8%" class="text-end">Requested</th>
+                              <th style="width:8%" class="text-end">Committed</th>
+                              <th style="width:14%">Created</th>
+                            </tr>
+                          </thead>
+                          <tbody id="resTableBody">
+                            <tr><td colspan="10" class="text-center text-muted py-3">Click "Job Reservations" tab to load.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div><!-- /tab-job-reservations -->
 
                   </div>
                 </div>
@@ -2555,6 +2620,91 @@
         const m = document.getElementById('tplModal');
         m.classList.remove('show'); m.style.display = '';
         document.body.classList.remove('modal-open');
+      }
+
+      // ─── Job Reservations Admin Tab ──────────────────────────────────────────
+      let adminReservations = [];
+      let adminReservationsLoaded = false;
+
+      async function loadAdminReservations(force = false) {
+        if (adminReservationsLoaded && !force) return;
+        document.getElementById('resLoading').style.display = 'block';
+        document.getElementById('resTableBody').innerHTML = '';
+        document.getElementById('resCountLabel').textContent = '';
+        try {
+          const data = await locApiFetch('/job-reservations');
+          adminReservations = data.reservations || [];
+          adminReservationsLoaded = true;
+          filterAdminReservations();
+        } catch (e) {
+          document.getElementById('resTableBody').innerHTML =
+            `<tr><td colspan="10" class="text-center text-danger py-3">Failed to load: ${locEscHtml(e.message)}</td></tr>`;
+        } finally {
+          document.getElementById('resLoading').style.display = 'none';
+        }
+      }
+
+      function filterAdminReservations() {
+        const statusFilter = document.getElementById('resFilterStatus').value;
+        const searchTerm   = document.getElementById('resSearch').value.trim().toLowerCase();
+
+        const filtered = adminReservations.filter(r => {
+          if (statusFilter && r.status !== statusFilter) return false;
+          if (searchTerm) {
+            const haystack = `${r.job_number} ${r.job_name || ''} ${r.requested_by || ''}`.toLowerCase();
+            if (!haystack.includes(searchTerm)) return false;
+          }
+          return true;
+        });
+
+        document.getElementById('resCountLabel').textContent =
+          `${filtered.length} of ${adminReservations.length} reservation${adminReservations.length !== 1 ? 's' : ''}`;
+
+        renderAdminReservations(filtered);
+      }
+
+      function renderAdminReservations(rows) {
+        const statusConfig = {
+          active:      { cls: 'bg-success',        label: 'Active' },
+          in_progress: { cls: 'bg-blue',            label: 'In Progress' },
+          on_hold:     { cls: 'bg-yellow',          label: 'On Hold' },
+          draft:       { cls: 'text-bg-secondary',  label: 'Draft' },
+          fulfilled:   { cls: 'bg-teal',            label: 'Fulfilled' },
+          cancelled:   { cls: 'text-bg-secondary',  label: 'Cancelled' },
+        };
+
+        if (rows.length === 0) {
+          document.getElementById('resTableBody').innerHTML =
+            '<tr><td colspan="10" class="text-center text-muted py-4">No reservations match the current filters.</td></tr>';
+          return;
+        }
+
+        document.getElementById('resTableBody').innerHTML = rows.map(r => {
+          const sc = statusConfig[r.status] || { cls: 'text-bg-secondary', label: r.status };
+          const neededBy = r.needed_by
+            ? `<span class="${isOverdue(r) ? 'text-danger fw-bold' : ''}">${locEscHtml(r.needed_by)}</span>`
+            : '<span class="text-muted">—</span>';
+          const totalCommitted = typeof r.total_committed === 'number'
+            ? Math.ceil(r.total_committed).toLocaleString()
+            : '—';
+          return `<tr>
+            <td><strong>${locEscHtml(r.job_number)}</strong></td>
+            <td>${r.release_number ?? '—'}</td>
+            <td>${locEscHtml(r.job_name || '—')}</td>
+            <td>${locEscHtml(r.requested_by || '—')}</td>
+            <td>${neededBy}</td>
+            <td><span class="badge ${sc.cls}">${sc.label}</span></td>
+            <td class="text-end">${r.items_count ?? 0}</td>
+            <td class="text-end">${r.total_requested != null ? Number(r.total_requested).toLocaleString() : '—'}</td>
+            <td class="text-end">${totalCommitted}</td>
+            <td class="text-muted small">${r.created_at ? r.created_at.substring(0, 10) : '—'}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      function isOverdue(r) {
+        if (!r.needed_by || ['fulfilled', 'cancelled'].includes(r.status)) return false;
+        return new Date(r.needed_by) < new Date();
       }
 
     </script>
