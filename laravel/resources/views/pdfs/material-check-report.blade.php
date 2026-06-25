@@ -122,6 +122,12 @@
     </div>
     @endif
 
+    @if(($file_count ?? 1) > 1)
+    <div style="background:#d1ecf1;border:1px solid #bee5eb;padding:5px 8px;margin-bottom:10px;font-size:8px;color:#0c5460;">
+        <strong>Combined from 2 files</strong> — File 1: {{ $file1_name ?? '' }} &nbsp;|&nbsp; File 2: {{ $file2_name ?? '' }}. Quantities for matching parts have been summed.
+    </div>
+    @endif
+
     <div class="summary-stats">
         <table>
             <tr>
@@ -149,16 +155,19 @@
         <thead>
             <tr>
                 <th style="width: 5%;">Status</th>
-                <th style="width: 10%;">Part #</th>
-                <th style="width: 8%;">Finish</th>
-                <th style="width: 22%;">Description</th>
+                @if(($file_count ?? 1) > 1)
+                <th style="width: 5%;" class="text-center">Source</th>
+                @endif
+                <th style="width: {{ ($file_count ?? 1) > 1 ? '9%' : '10%' }};">Part #</th>
+                <th style="width: 7%;">Finish</th>
+                <th style="width: {{ ($file_count ?? 1) > 1 ? '18%' : '22%' }};">Description</th>
                 <th style="width: 7%;" class="text-right">On Hand</th>
-                <th style="width: 7%;" class="text-right">Committed</th>
-                <th style="width: 7%;" class="text-right">Available</th>
-                <th style="width: 7%;" class="text-right">On Order</th>
-                <th style="width: 9%;" class="text-right">Qty Requested</th>
-                <th style="width: 9%;" class="text-right">Qty Reserved</th>
-                <th style="width: 9%;" class="text-right">Shortage</th>
+                <th style="width: 6%;" class="text-right">Committed</th>
+                <th style="width: 6%;" class="text-right">Available</th>
+                <th style="width: 6%;" class="text-right">On Order</th>
+                <th style="width: 8%;" class="text-right">Qty Requested</th>
+                <th style="width: 8%;" class="text-right">Qty Reserved</th>
+                <th style="width: 8%;" class="text-right">Shortage</th>
             </tr>
         </thead>
         <tbody>
@@ -194,6 +203,18 @@
                             <span class="badge badge-not-found">Not Found</span>
                         @endif
                     </td>
+                    @if(($file_count ?? 1) > 1)
+                    <td class="text-center">
+                        @php $fileSource = $item['file'] ?? 1; @endphp
+                        @if($fileSource === 'both')
+                            <span class="badge" style="background:#333;color:#fff;">Both</span>
+                        @elseif($fileSource == 2)
+                            <span class="badge" style="background:#6f42c1;color:#fff;">File 2</span>
+                        @else
+                            <span class="badge" style="background:#0d6efd;color:#fff;">File 1</span>
+                        @endif
+                    </td>
+                    @endif
                     <td><strong>{{ $item['part_number'] ?? '-' }}</strong></td>
                     <td>{{ $item['finish'] ?? '-' }}</td>
                     <td>{{ $item['description'] ?? '-' }}</td>
@@ -251,7 +272,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="11" class="text-center" style="padding: 20px; color: #999;">
+                    <td colspan="{{ ($file_count ?? 1) > 1 ? 12 : 11 }}" class="text-center" style="padding: 20px; color: #999;">
                         No results found.
                     </td>
                 </tr>

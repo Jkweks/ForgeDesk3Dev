@@ -192,8 +192,9 @@ class MaterialCheckController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'file' => 'required|file|mimes:xlsx,xlsm|max:10240',
-                'mode' => 'nullable|string|in:ez_estimate,generic',
+                'file'  => 'required|file|mimes:xlsx,xlsm|max:10240',
+                'file2' => 'nullable|file|mimes:xlsx,xlsm|max:10240',
+                'mode'  => 'nullable|string|in:ez_estimate,generic',
             ]);
 
             if ($validator->fails()) {
@@ -233,7 +234,43 @@ class MaterialCheckController extends Controller
             if ($mode === 'ez_estimate') {
                 @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing EZ Estimate\n", FILE_APPEND);
                 $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
-                return $this->checkEzEstimate($spreadsheet, $boneyardSharedOnly);
+                $data1 = $this->runEzEstimateCheck($spreadsheet, $boneyardSharedOnly);
+
+                if ($request->hasFile('file2')) {
+                    $file2 = $request->file('file2');
+                    @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Loading second file: {$file2->getClientOriginalName()}\n", FILE_APPEND);
+                    Log::info('Loading second file', ['name' => $file2->getClientOriginalName(), 'size' => $file2->getSize()]);
+
+                    $reader2 = IOFactory::createReaderForFile($file2->getRealPath());
+                    $reader2->setReadDataOnly(true);
+                    $reader2->setReadFilter(new EzEstimateReadFilter());
+                    $spreadsheet2 = $reader2->load($file2->getRealPath());
+                    @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Second spreadsheet loaded\n", FILE_APPEND);
+
+                    $data2 = $this->runEzEstimateCheck($spreadsheet2, $boneyardSharedOnly);
+
+                    $mergedResults = $this->mergeCheckResults($data1['results'], $data2['results']);
+                    $mergedSummary = $this->rebuildSummary($mergedResults);
+
+                    return response()->json([
+                        'message'            => 'Material check completed',
+                        'summary'            => $mergedSummary,
+                        'results'            => $mergedResults,
+                        'boneyard_shared_only' => $boneyardSharedOnly,
+                        'file_count'         => 2,
+                        'file1_name'         => $file->getClientOriginalName(),
+                        'file2_name'         => $file2->getClientOriginalName(),
+                    ]);
+                }
+
+                return response()->json([
+                    'message'            => 'Material check completed',
+                    'summary'            => $data1['summary'],
+                    'results'            => $data1['results'],
+                    'boneyard_shared_only' => $boneyardSharedOnly,
+                    'file_count'         => 1,
+                    'file1_name'         => $file->getClientOriginalName(),
+                ]);
             } else {
                 @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing generic\n", FILE_APPEND);
                 return $this->checkGenericEstimate($request, $spreadsheet);
@@ -276,49 +313,36 @@ class MaterialCheckController extends Controller
     }
 
     /**
-     * Check EZ Estimate file format
-     * Reads from Stock Lengths and Accessories sheets
+     * Process an EZ Estimate spreadsheet and return raw data (no HTTP response).
+     * Used internally so results from two files can be merged before responding.
      */
-    private function checkEzEstimate($spreadsheet, bool $boneyardSharedOnly = false)
+    private function runEzEstimateCheck($spreadsheet, bool $boneyardSharedOnly): array
     {
         $results = [];
-        $summary = [
-            'total' => 0,
-            'available' => 0,
-            'partial' => 0,
-            'unavailable' => 0,
-            'not_found' => 0,
-        ];
+        $summary = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
 
-        // Load products into memory once (avoid N+1 query problem)
         Log::info('Loading products into memory cache', ['boneyard_shared_only' => $boneyardSharedOnly]);
         $productQuery = Product::where('is_active', true);
         if ($boneyardSharedOnly) {
-            // Only include Boneyard (nonsof=false) or Shared Component (is_shared=true)
             $productQuery->where(function ($q) {
                 $q->where('nonsof', false)->orWhere('is_shared', true);
             });
         }
         $allProducts = $productQuery->get();
 
-        // Build lookup indexes for fast searching
         $this->productCache = [];
         foreach ($allProducts as $product) {
             $sku = $product->sku;
-            // Index by exact SKU
             $this->productCache[$sku] = $product;
-            // Index by lowercase SKU
             $this->productCache[strtolower($sku)] = $product;
-            // Index by normalized SKU (no spaces, dashes, underscores)
             $normalized = str_replace([' ', '-', '_'], '', $sku);
             $this->productCache[$normalized] = $product;
         }
         Log::info('Product cache built', ['products' => $allProducts->count()]);
 
-        // Get all sheets
         $allSheets = $spreadsheet->getAllSheets();
         $stockLengthsSheets = [];
-        $accessoriesSheets = [];
+        $accessoriesSheets  = [];
 
         foreach ($allSheets as $sheet) {
             $title = $sheet->getTitle();
@@ -329,43 +353,88 @@ class MaterialCheckController extends Controller
             }
         }
 
-        Log::info('Found sheets', [
-            'stock_lengths' => count($stockLengthsSheets),
-            'accessories' => count($accessoriesSheets),
-        ]);
+        Log::info('Found sheets', ['stock_lengths' => count($stockLengthsSheets), 'accessories' => count($accessoriesSheets)]);
 
-        // Process Stock Lengths sheets (A11:C47)
         foreach ($stockLengthsSheets as $sheet) {
             Log::info('Processing Stock Lengths sheet', ['name' => $sheet->getTitle()]);
-            $this->processEzEstimateSheet(
-                $sheet,
-                11,  // Start row
-                47,  // End row
-                $results,
-                $summary,
-                $sheet->getTitle()
-            );
+            $this->processEzEstimateSheet($sheet, 11, 47, $results, $summary, $sheet->getTitle());
         }
-
-        // Process Accessories sheets (A11:C46)
         foreach ($accessoriesSheets as $sheet) {
             Log::info('Processing Accessories sheet', ['name' => $sheet->getTitle()]);
-            $this->processEzEstimateSheet(
-                $sheet,
-                11,  // Start row
-                46,  // End row
-                $results,
-                $summary,
-                $sheet->getTitle()
-            );
+            $this->processEzEstimateSheet($sheet, 11, 46, $results, $summary, $sheet->getTitle());
         }
 
-        return response()->json([
-            'message' => 'Material check completed',
-            'summary' => $summary,
-            'results' => $results,
-            'boneyard_shared_only' => $boneyardSharedOnly,
-        ]);
+        return ['results' => $results, 'summary' => $summary];
+    }
+
+    /**
+     * Merge results from two EZ Estimate files.
+     * Items with the same SKU have their required quantities summed;
+     * status and shortage are recalculated against the combined total.
+     * A 'file' key (1, 2, or 'both') is added to each item.
+     */
+    private function mergeCheckResults(array $results1, array $results2): array
+    {
+        $merged = [];
+        $index  = [];
+
+        foreach ($results1 as $item) {
+            $key = $item['sku'] ?? $item['part_number'];
+            $item['file'] = 1;
+            $index[$key]  = count($merged);
+            $merged[]     = $item;
+        }
+
+        foreach ($results2 as $item) {
+            $key = $item['sku'] ?? $item['part_number'];
+            if (isset($index[$key])) {
+                $i = $index[$key];
+                $merged[$i]['required_qty_packs']  = ($merged[$i]['required_qty_packs']  ?? 0) + ($item['required_qty_packs']  ?? 0);
+                $merged[$i]['required_qty_eaches'] = ($merged[$i]['required_qty_eaches'] ?? 0) + ($item['required_qty_eaches'] ?? 0);
+                $merged[$i]['file'] = 'both';
+                // Recalculate shortage and status against combined requirement
+                $availEaches    = $merged[$i]['available_qty_eaches'] ?? 0;
+                $reqEaches      = $merged[$i]['required_qty_eaches'];
+                $shortageEaches = max(0, $reqEaches - $availEaches);
+                $packSize       = $merged[$i]['pack_size'] ?? 1;
+                $hasPacks       = $packSize > 1;
+                $merged[$i]['shortage_eaches'] = $shortageEaches;
+                $merged[$i]['shortage_packs']  = $hasPacks ? (int) ceil($shortageEaches / $packSize) : $shortageEaches;
+                if ($merged[$i]['status'] !== 'not_found') {
+                    if ($availEaches <= 0) {
+                        $merged[$i]['status'] = 'unavailable';
+                    } elseif ($availEaches < $reqEaches) {
+                        $merged[$i]['status'] = 'partial';
+                    } else {
+                        $merged[$i]['status'] = 'available';
+                    }
+                }
+            } else {
+                $item['file'] = 2;
+                $index[$key]  = count($merged);
+                $merged[]     = $item;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Rebuild summary counts from a (possibly merged) results array.
+     */
+    private function rebuildSummary(array $results): array
+    {
+        $summary = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
+        foreach ($results as $item) {
+            $summary['total']++;
+            $status = $item['status'] ?? 'not_found';
+            if (array_key_exists($status, $summary)) {
+                $summary[$status]++;
+            } else {
+                $summary['not_found']++;
+            }
+        }
+        return $summary;
     }
 
     /**
@@ -748,10 +817,13 @@ class MaterialCheckController extends Controller
     public function generateReport(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'results' => 'required|array',
-            'summary' => 'nullable|array',
-            'title' => 'nullable|string|max:255',
+            'results'            => 'required|array',
+            'summary'            => 'nullable|array',
+            'title'              => 'nullable|string|max:255',
             'boneyard_shared_only' => 'nullable|boolean',
+            'file_count'         => 'nullable|integer',
+            'file1_name'         => 'nullable|string|max:255',
+            'file2_name'         => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -769,15 +841,21 @@ class MaterialCheckController extends Controller
             'unavailable' => 0,
             'not_found' => 0,
         ]);
-        $title = $request->input('title', 'Material Check Report');
+        $title             = $request->input('title', 'Material Check Report');
         $boneyardSharedOnly = $request->boolean('boneyard_shared_only', false);
+        $fileCount         = $request->integer('file_count', 1);
+        $file1Name         = $request->input('file1_name', '');
+        $file2Name         = $request->input('file2_name', '');
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.material-check-report', [
-            'results' => $results,
-            'summary' => $summary,
-            'title' => $title,
+            'results'            => $results,
+            'summary'            => $summary,
+            'title'              => $title,
             'boneyard_shared_only' => $boneyardSharedOnly,
-            'generated_at' => now()->format('F d, Y H:i'),
+            'file_count'         => $fileCount,
+            'file1_name'         => $file1Name,
+            'file2_name'         => $file2Name,
+            'generated_at'       => now()->format('F d, Y H:i'),
         ]);
 
         $pdf->setPaper('letter', 'landscape');

@@ -25,10 +25,17 @@
                   <h3 class="card-title">Upload Estimate File</h3>
                 </div>
                 <div class="card-body">
-                  <div class="mb-3">
-                    <label class="form-label">Select Excel File (.xlsx or .xlsm)</label>
-                    <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm">
-                    <small class="form-hint">Upload an EZ Estimate file to check material availability. Checks Stock Lengths and Accessories sheets automatically.</small>
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                      <label class="form-label required">File 1 — EZ Estimate (.xlsx or .xlsm)</label>
+                      <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm">
+                      <small class="form-hint">Checks Stock Lengths and Accessories sheets automatically.</small>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">File 2 — Second EZ Estimate <span class="text-muted">(optional)</span></label>
+                      <input type="file" class="form-control" id="estimateFile2" accept=".xlsx,.xlsm">
+                      <small class="form-hint">Add a second file when a job is split across two estimates. Results will be merged by part number.</small>
+                    </div>
                   </div>
                   <div class="mb-3">
                     <label class="form-check form-switch">
@@ -88,6 +95,12 @@
               </div>
             </div>
 
+            <!-- File info banner (shown when 2 files were processed) -->
+            <div id="fileInfoBanner" class="alert alert-info d-flex align-items-center mb-3" style="display: none !important;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 9h.01" /><path d="M11 12h1v4h1" /></svg>
+              <span id="fileInfoText"></span>
+            </div>
+
             <!-- Results Table -->
             <div class="row">
               <div class="col-12">
@@ -136,6 +149,7 @@
                           <tr>
                             <th width="40"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
                             <th>Status</th>
+                            <th id="sourceColHeader" style="display:none;">Source</th>
                             <th>Part #</th>
                             <th>Finish</th>
                             <th>SKU</th>
@@ -225,6 +239,10 @@
         let selectedItems = new Set();
         let checkSummary = {};
         let checkBoneyardMode = false;
+        let checkFileCount = 1;
+        let checkFile1Name = '';
+        let checkFile2Name = '';
+        let checkHasMultipleFiles = false;
 
         async function checkMaterials() {
             const fileInput = document.getElementById('estimateFile');
@@ -242,10 +260,16 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Materials…';
 
             const boneyardSharedMode = document.getElementById('boneyardSharedMode').checked;
+            const file2Input = document.getElementById('estimateFile2');
+            const file2 = file2Input ? file2Input.files[0] : null;
+
             const formData = new FormData();
             formData.append('file', file);
             formData.append('mode', 'ez_estimate');
             formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+            if (file2) {
+                formData.append('file2', file2);
+            }
 
             try {
                 const authToken = localStorage.getItem('authToken');
@@ -266,6 +290,10 @@
                     filteredResults = [...checkResults];
                     checkSummary = data.summary || {};
                     checkBoneyardMode = !!data.boneyard_shared_only;
+                    checkFileCount = data.file_count || 1;
+                    checkFile1Name = data.file1_name || '';
+                    checkFile2Name = data.file2_name || '';
+                    checkHasMultipleFiles = checkFileCount > 1;
                     // Show/hide the mode banner based on what the API processed
                     const modeBanner = document.getElementById('boneyardSharedBanner');
                     if (modeBanner) modeBanner.style.display = data.boneyard_shared_only ? '' : 'none';
@@ -309,6 +337,20 @@
             document.getElementById('statPartial').textContent = summary.partial;
             document.getElementById('statUnavailable').textContent = summary.unavailable + summary.not_found;
 
+            // Show/hide file info banner
+            const fileInfoBanner = document.getElementById('fileInfoBanner');
+            const fileInfoText   = document.getElementById('fileInfoText');
+            if (checkHasMultipleFiles) {
+                fileInfoText.textContent = `Combined results from 2 files — File 1: ${checkFile1Name}, File 2: ${checkFile2Name}. Parts appearing in both files have their quantities summed.`;
+                fileInfoBanner.style.display = '';
+            } else {
+                fileInfoBanner.style.display = 'none';
+            }
+
+            // Show/hide source column header
+            const sourceColHeader = document.getElementById('sourceColHeader');
+            if (sourceColHeader) sourceColHeader.style.display = checkHasMultipleFiles ? '' : 'none';
+
             // Show results section and print button
             document.getElementById('resultsSection').style.display = 'block';
             document.getElementById('printReportBtn').style.display = results.length > 0 ? 'inline-flex' : 'none';
@@ -342,7 +384,10 @@
                         results: checkResults,
                         summary: checkSummary,
                         title: 'Material Check Report',
-                        boneyard_shared_only: checkBoneyardMode
+                        boneyard_shared_only: checkBoneyardMode,
+                        file_count: checkFileCount,
+                        file1_name: checkFile1Name,
+                        file2_name: checkFile2Name,
                     })
                 });
 
@@ -430,10 +475,25 @@
                         : `<span class="text-danger">${shortEaches}</span>`)
                     : '-';
 
+                // Source badge (only meaningful when 2 files were processed)
+                let sourceBadge = '';
+                if (checkHasMultipleFiles) {
+                    if (item.file === 'both') {
+                        sourceBadge = '<td><span class="badge bg-dark">Both</span></td>';
+                    } else if (item.file === 2) {
+                        sourceBadge = '<td><span class="badge bg-purple text-white" style="background:#6f42c1">File 2</span></td>';
+                    } else {
+                        sourceBadge = '<td><span class="badge bg-blue text-white" style="background:#0d6efd">File 1</span></td>';
+                    }
+                } else {
+                    sourceBadge = '<td style="display:none;"></td>';
+                }
+
                 row.className = statusClass;
                 row.innerHTML = `
                     <td>${checkboxHtml}</td>
                     <td>${statusBadge}</td>
+                    ${sourceBadge}
                     <td><strong>${item.part_number}</strong></td>
                     <td>${item.finish || '-'}</td>
                     <td><code>${item.sku || '-'}</code></td>
@@ -616,22 +676,26 @@
             }
 
             // Create CSV content with pack information
-            const headers = ['Status', 'Part Number', 'Finish', 'SKU', 'Description', 'Pack Size', 'Required (packs)', 'Required (eaches)', 'Available (packs)', 'Available (eaches)', 'Shortage (packs)', 'Shortage (eaches)', 'Location'];
-            const rows = checkResults.map(item => [
-                item.status,
-                item.part_number,
-                item.finish || '',
-                item.sku || '',
-                item.description || '',
-                item.pack_size || 1,
-                item.required_qty_packs ?? item.required_quantity ?? 0,
-                item.required_qty_eaches ?? item.required_quantity ?? 0,
-                item.available_qty_packs ?? 0,
-                item.available_qty_eaches ?? item.available_quantity ?? 0,
-                item.shortage_packs ?? item.shortage ?? 0,
-                item.shortage_eaches ?? item.shortage ?? 0,
-                item.location || ''
-            ]);
+            const baseHeaders = ['Status', 'Part Number', 'Finish', 'SKU', 'Description', 'Pack Size', 'Required (packs)', 'Required (eaches)', 'Available (packs)', 'Available (eaches)', 'Shortage (packs)', 'Shortage (eaches)', 'Location'];
+            const headers = checkHasMultipleFiles ? ['Source', ...baseHeaders] : baseHeaders;
+            const rows = checkResults.map(item => {
+                const base = [
+                    item.status,
+                    item.part_number,
+                    item.finish || '',
+                    item.sku || '',
+                    item.description || '',
+                    item.pack_size || 1,
+                    item.required_qty_packs ?? item.required_quantity ?? 0,
+                    item.required_qty_eaches ?? item.required_quantity ?? 0,
+                    item.available_qty_packs ?? 0,
+                    item.available_qty_eaches ?? item.available_quantity ?? 0,
+                    item.shortage_packs ?? item.shortage ?? 0,
+                    item.shortage_eaches ?? item.shortage ?? 0,
+                    item.location || ''
+                ];
+                return checkHasMultipleFiles ? [item.file === 'both' ? 'Both' : `File ${item.file}`, ...base] : base;
+            });
 
             let csvContent = headers.join(',') + '\n';
             rows.forEach(row => {
