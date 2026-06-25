@@ -99,6 +99,10 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                         Commit to Job
                       </button>
+                      <button class="btn btn-secondary btn-sm" id="printReportBtn" onclick="printReport()" style="display: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" /><path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" /><path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" /></svg>
+                        Print Report
+                      </button>
                       <button class="btn btn-sm" onclick="exportResults()">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
                         Export Results
@@ -219,6 +223,8 @@
         let checkResults = [];
         let filteredResults = [];
         let selectedItems = new Set();
+        let checkSummary = {};
+        let checkBoneyardMode = false;
 
         async function checkMaterials() {
             const fileInput = document.getElementById('estimateFile');
@@ -258,6 +264,8 @@
                     const data = await response.json();
                     checkResults = data.results;
                     filteredResults = [...checkResults];
+                    checkSummary = data.summary || {};
+                    checkBoneyardMode = !!data.boneyard_shared_only;
                     // Show/hide the mode banner based on what the API processed
                     const modeBanner = document.getElementById('boneyardSharedBanner');
                     if (modeBanner) modeBanner.style.display = data.boneyard_shared_only ? '' : 'none';
@@ -301,11 +309,61 @@
             document.getElementById('statPartial').textContent = summary.partial;
             document.getElementById('statUnavailable').textContent = summary.unavailable + summary.not_found;
 
-            // Show results section
+            // Show results section and print button
             document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('printReportBtn').style.display = results.length > 0 ? 'inline-flex' : 'none';
 
             // Populate table
             updateResultsTable(results);
+        }
+
+        async function printReport() {
+            if (checkResults.length === 0) {
+                alert('No results to print');
+                return;
+            }
+
+            const btn = document.getElementById('printReportBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
+
+            try {
+                const authToken = localStorage.getItem('authToken');
+                const response = await fetch('/api/v1/fulfillment/material-check/report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/pdf',
+                        'Authorization': `Bearer ${authToken}`,
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        results: checkResults,
+                        summary: checkSummary,
+                        title: 'Material Check Report',
+                        boneyard_shared_only: checkBoneyardMode
+                    })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                    // Revoke after a short delay to allow the tab to open
+                    setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+                } else {
+                    const text = await response.text();
+                    console.error('Report generation failed:', response.status, text);
+                    alert('Failed to generate report (HTTP ' + response.status + ')');
+                }
+            } catch (error) {
+                console.error('Error generating report:', error);
+                alert('Error generating report: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
         }
 
         function updateResultsTable(results) {

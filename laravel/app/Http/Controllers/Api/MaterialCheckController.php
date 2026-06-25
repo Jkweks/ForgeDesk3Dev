@@ -502,6 +502,9 @@ class MaterialCheckController extends Controller
                     'description' => $product->description,
                     'required_qty_packs' => $qtyPacks,
                     'required_qty_eaches' => $requiredEaches,
+                    'on_hand' => $product->quantity_on_hand ?? 0,
+                    'committed' => $product->quantity_committed ?? 0,
+                    'on_order' => $product->on_order_qty ?? 0,
                     'available_qty_packs' => $availablePacks,
                     'available_qty_eaches' => $availableEaches,
                     'shortage_packs' => $shortagePacks,
@@ -737,6 +740,51 @@ class MaterialCheckController extends Controller
         }
 
         return $index - 1; // Convert to 0-based index
+    }
+
+    /**
+     * Generate a PDF report from material check results
+     */
+    public function generateReport(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'results' => 'required|array',
+            'summary' => 'nullable|array',
+            'title' => 'nullable|string|max:255',
+            'boneyard_shared_only' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'details' => $validator->errors(),
+            ], 422);
+        }
+
+        $results = $request->input('results', []);
+        $summary = $request->input('summary', [
+            'total' => count($results),
+            'available' => 0,
+            'partial' => 0,
+            'unavailable' => 0,
+            'not_found' => 0,
+        ]);
+        $title = $request->input('title', 'Material Check Report');
+        $boneyardSharedOnly = $request->boolean('boneyard_shared_only', false);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.material-check-report', [
+            'results' => $results,
+            'summary' => $summary,
+            'title' => $title,
+            'boneyard_shared_only' => $boneyardSharedOnly,
+            'generated_at' => now()->format('F d, Y H:i'),
+        ]);
+
+        $pdf->setPaper('letter', 'landscape');
+
+        $filename = 'material-check-report-' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->download($filename);
     }
 
     /**

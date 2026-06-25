@@ -108,6 +108,7 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
     Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials']);
+    Route::post('/fulfillment/material-check/report', [MaterialCheckController::class, 'generateReport']);
     Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials']);
 
     // Job Reservations
