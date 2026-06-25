@@ -669,20 +669,22 @@ class MaterialCheckController extends Controller
             $product = $this->findProduct($sku);
 
             if (!$product) {
+                // Pack size is unknown for unmatched parts; treat required and shortage as eaches.
+                $reqEa = (int) ceil($qty);
                 $results[] = [
                     'part_number'          => $partNumber,
                     'finish'               => $finish,
                     'sku'                  => $sku,
                     'description'          => '',
-                    'required_qty_packs'   => 0,
-                    'required_qty_eaches'  => (int) ceil($qty),
+                    'required_qty_packs'   => $reqEa,
+                    'required_qty_eaches'  => $reqEa,
                     'on_hand'              => null,
                     'committed'            => null,
                     'on_order'             => null,
                     'available_qty_packs'  => 0,
                     'available_qty_eaches' => 0,
-                    'shortage_packs'       => 0,
-                    'shortage_eaches'      => (int) ceil($qty),
+                    'shortage_packs'       => $reqEa,
+                    'shortage_eaches'      => $reqEa,
                     'pack_size'            => 1,
                     'has_pack_size'        => false,
                     'status'               => 'not_found',
@@ -697,9 +699,11 @@ class MaterialCheckController extends Controller
             $packSize    = $product->pack_size ?? 1;
             $hasPackSize = $packSize > 1;
 
-            // CSV quantities are in eaches
+            // CSV quantities are in eaches (not packs like EZ Estimate).
+            // For pack-size products, derive the fractional-pack equivalent for display;
+            // for non-pack products, packs === eaches.
             $requiredEaches = (int) ceil($qty);
-            $requiredPacks  = $hasPackSize ? round($qty / $packSize, 4) : 0;
+            $requiredPacks  = $hasPackSize ? round($qty / $packSize, 4) : $requiredEaches;
 
             $availableEaches = $product->quantity_available ?? $product->quantity_on_hand ?? 0;
             $availablePacks  = $hasPackSize ? (int) floor($availableEaches / $packSize) : $availableEaches;
