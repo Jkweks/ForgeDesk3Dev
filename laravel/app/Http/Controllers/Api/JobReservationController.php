@@ -588,8 +588,8 @@ class JobReservationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'product_id' => 'required|exists:products,id',
-                'requested_qty' => 'required|integer|min:1',
-                'committed_qty' => 'required|integer|min:0',
+                'requested_qty' => 'required|numeric|min:0.0001',
+                'committed_qty' => 'required|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
@@ -689,8 +689,8 @@ class JobReservationController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'requested_qty' => 'sometimes|integer|min:1',
-                'committed_qty' => 'sometimes|integer|min:0',
+                'requested_qty' => 'sometimes|numeric|min:0.0001',
+                'committed_qty' => 'sometimes|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
@@ -1090,8 +1090,8 @@ class JobReservationController extends Controller
                 'notes' => 'nullable|string',
                 'items' => 'required|array|min:1',
                 'items.*.product_id' => 'required|integer|exists:products,id',
-                'items.*.requested_qty' => 'required|integer|min:1',
-                'items.*.committed_qty' => 'nullable|integer|min:0',
+                'items.*.requested_qty' => 'required|numeric|min:0.0001',
+                'items.*.committed_qty' => 'nullable|numeric|min:0',
             ]);
 
             if ($validator->fails()) {

@@ -318,13 +318,13 @@
                         <div class="col-md-3">
                           <div class="mb-3">
                             <label class="form-label">Requested Qty</label>
-                            <input type="number" class="form-control" id="newItemRequestedQty" min="1" value="1">
+                            <input type="number" class="form-control" id="newItemRequestedQty" min="0.0001" step="0.0001" value="1">
                           </div>
                         </div>
                         <div class="col-md-3">
                           <div class="mb-3">
                             <label class="form-label">Committed Qty</label>
-                            <input type="number" class="form-control" id="newItemCommittedQty" min="0" value="0">
+                            <input type="number" class="form-control" id="newItemCommittedQty" min="0" step="0.0001" value="0">
                           </div>
                         </div>
                       </div>
@@ -504,13 +504,13 @@
                         <div class="col-md-2">
                           <div class="mb-3">
                             <label class="form-label">Requested Qty</label>
-                            <input type="number" class="form-control" id="manualItemRequestedQty" min="1" value="1">
+                            <input type="number" class="form-control" id="manualItemRequestedQty" min="0.0001" step="0.0001" value="1">
                           </div>
                         </div>
                         <div class="col-md-2">
                           <div class="mb-3">
                             <label class="form-label">Committed Qty</label>
-                            <input type="number" class="form-control" id="manualItemCommittedQty" min="0" value="0">
+                            <input type="number" class="form-control" id="manualItemCommittedQty" min="0" step="0.0001" value="0">
                             <small class="form-hint">Leave 0 for auto</small>
                           </div>
                         </div>
@@ -1207,16 +1207,16 @@
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm"
                                value="${item.requested_qty}"
-                               min="1"
+                               min="0.0001" step="0.0001"
                                onchange="updateItemQuantity(${index}, 'requested_qty', this.value)"
-                               style="width: 80px;">
+                               style="width: 90px;">
                     </td>
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm"
                                value="${item.committed_qty}"
-                               min="0"
+                               min="0" step="0.0001"
                                onchange="updateItemQuantity(${index}, 'committed_qty', this.value)"
-                               style="width: 80px;"
+                               style="width: 90px;"
                                ${item.consumed_qty > 0 ? `min="${item.consumed_qty}"` : ''}>
                     </td>
                     <td class="text-end">${item.consumed_qty}</td>
@@ -1243,7 +1243,7 @@
 
         function updateItemQuantity(index, field, value) {
             const item = editingItems[index];
-            const numValue = parseInt(value);
+            const numValue = parseFloat(value);
 
             if (field === 'committed_qty' && numValue < item.consumed_qty) {
                 alert(`Cannot reduce committed quantity below already consumed (${item.consumed_qty})`);
@@ -1279,8 +1279,8 @@
 
         async function addNewItem() {
             const sku = document.getElementById('newItemSKU').value.trim();
-            const requestedQty = parseInt(document.getElementById('newItemRequestedQty').value);
-            const committedQty = parseInt(document.getElementById('newItemCommittedQty').value);
+            const requestedQty = parseFloat(document.getElementById('newItemRequestedQty').value);
+            const committedQty = parseFloat(document.getElementById('newItemCommittedQty').value);
 
             if (!sku) {
                 alert('Please enter a product SKU');
@@ -1738,16 +1738,16 @@
 
         function addManualItem() {
             const productId = document.getElementById('manualItemProductId').value;
-            const requestedQty = parseInt(document.getElementById('manualItemRequestedQty').value);
-            const committedQty = parseInt(document.getElementById('manualItemCommittedQty').value);
+            const requestedQty = parseFloat(document.getElementById('manualItemRequestedQty').value);
+            const committedQty = parseFloat(document.getElementById('manualItemCommittedQty').value);
 
             if (!productId) {
                 alert('Please select a product');
                 return;
             }
 
-            if (requestedQty < 1) {
-                alert('Requested quantity must be at least 1');
+            if (requestedQty <= 0) {
+                alert('Requested quantity must be greater than 0');
                 return;
             }
 

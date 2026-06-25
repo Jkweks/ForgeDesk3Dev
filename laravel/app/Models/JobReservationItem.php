@@ -20,8 +20,8 @@ class JobReservationItem extends Model
     protected $casts = [
         'reservation_id' => 'integer',
         'product_id' => 'integer',
-        'requested_qty' => 'integer',
-        'committed_qty' => 'integer',
+        'requested_qty' => 'decimal:4',
+        'committed_qty' => 'decimal:4',
         'consumed_qty' => 'integer',
     ];
 
@@ -56,7 +56,9 @@ class JobReservationItem extends Model
             return;
         }
 
-        // Calculate total committed from all ACTIVE reservations
+        // Sum fractional committed quantities across all active reservations, then
+        // apply ceiling so partial lengths (e.g. 0.25 + 1.33 = 1.58) round up to
+        // the number of whole pieces that must be on hand (2 in that example).
         $totalCommitted = self::where('product_id', $this->product_id)
             ->whereHas('reservation', function($query) {
                 $query->whereIn('status', ['active', 'in_progress', 'on_hold'])
@@ -64,7 +66,7 @@ class JobReservationItem extends Model
             })
             ->sum('committed_qty');
 
-        $product->quantity_committed = $totalCommitted;
+        $product->quantity_committed = (int) ceil($totalCommitted);
         $product->save();
         $product->updateStatus();
     }
