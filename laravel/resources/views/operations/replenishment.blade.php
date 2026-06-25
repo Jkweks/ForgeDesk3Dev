@@ -667,8 +667,8 @@ function renderItemRow(p, sid) {
       </td>
       <td class="text-end text-muted">${onHand.toLocaleString()}</td>
       <td class="text-end">
-        ${committed > 0
-          ? `<a href="#" class="text-warning fw-bold text-decoration-none" onclick="viewProductReservations(${p.id}, '${escapeHtml(p.sku || '')}'); return false;" title="View reservations">${committed.toLocaleString()} <i class="ti ti-eye" style="font-size:.75rem"></i></a>`
+        ${(onHand - available) > 0
+          ? `<a href="#" class="text-warning fw-bold text-decoration-none" onclick="viewProductReservations(${p.id}, '${escapeHtml(p.sku || '')}'); return false;" title="View reservations">${(onHand - available).toLocaleString()} <i class="ti ti-eye" style="font-size:.75rem"></i></a>`
           : `<span class="text-muted">0</span>`}
       </td>
       <td class="text-end ${availColor}">${available.toLocaleString()}</td>
@@ -1032,7 +1032,7 @@ async function viewProductReservations(productId, sku) {
         active:      'bg-success',
         in_progress: 'bg-primary',
         on_hold:     'bg-warning',
-        completed:   'bg-secondary',
+        fulfilled:   'bg-secondary',
       };
       const cls = map[status] || 'bg-secondary';
       const label = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
