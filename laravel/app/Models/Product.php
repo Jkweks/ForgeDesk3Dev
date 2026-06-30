@@ -40,6 +40,7 @@ class Product extends Model
         'average_daily_use' => 'decimal:2',
         'dimension_height' => 'decimal:2',
         'dimension_depth' => 'decimal:2',
+        'quantity_committed' => 'decimal:1',
         'is_active' => 'boolean',
         'is_discontinued' => 'boolean',
         'nonsof'     => 'boolean',
@@ -242,7 +243,8 @@ class Product extends Model
      */
     public function getCommittedFromReservationsAttribute()
     {
-        return $this->activeReservationItems()->sum('committed_qty');
+        $total = (float) $this->activeReservationItems()->sum('committed_qty');
+        return ceil(round($total * 10, 6)) / 10;
     }
 
     public function requiredParts()

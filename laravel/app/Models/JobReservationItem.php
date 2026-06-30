@@ -56,9 +56,10 @@ class JobReservationItem extends Model
             return;
         }
 
-        // Sum fractional committed quantities across all active reservations, then
-        // apply ceiling so partial lengths (e.g. 0.25 + 1.33 = 1.58) round up to
-        // the number of whole pieces that must be on hand (2 in that example).
+        // Sum all fractional committed quantities across active reservations,
+        // then round up to the nearest tenth. This means 0.8 + 0.3 + 0.2 = 1.3
+        // (not 2), because the 0.8 and 0.2 share one stick and the 0.3 is on a
+        // separate stick — total material needed is 1.3 sticks, not 2 whole sticks.
         $totalCommitted = self::where('product_id', $this->product_id)
             ->whereHas('reservation', function($query) {
                 $query->whereIn('status', ['active', 'in_progress', 'on_hold'])
@@ -66,7 +67,7 @@ class JobReservationItem extends Model
             })
             ->sum('committed_qty');
 
-        $product->quantity_committed = (int) ceil($totalCommitted);
+        $product->quantity_committed = ceil(round((float) $totalCommitted * 10, 6)) / 10;
         $product->save();
         $product->updateStatus();
     }
