@@ -43,7 +43,7 @@ class JobReservationItem extends Model
     }
 
     /**
-     * Sync the product's quantity_committed with sum of active reservation items
+     * Sync the product's quantity_committed with bin-packed sum of active reservation items.
      */
     public function syncProductCommittedQuantity()
     {
@@ -56,20 +56,83 @@ class JobReservationItem extends Model
             return;
         }
 
-        // Sum all fractional committed quantities across active reservations,
-        // then round up to the nearest tenth. This means 0.8 + 0.3 + 0.2 = 1.3
-        // (not 2), because the 0.8 and 0.2 share one stick and the 0.3 is on a
-        // separate stick — total material needed is 1.3 sticks, not 2 whole sticks.
-        $totalCommitted = self::where('product_id', $this->product_id)
-            ->whereHas('reservation', function($query) {
+        $quantities = self::where('product_id', $this->product_id)
+            ->whereHas('reservation', function ($query) {
                 $query->whereIn('status', ['active', 'in_progress', 'on_hold'])
                       ->whereNull('deleted_at');
             })
-            ->sum('committed_qty');
+            ->pluck('committed_qty')
+            ->map(fn ($v) => (float) $v)
+            ->toArray();
 
-        $product->quantity_committed = ceil(round((float) $totalCommitted * 10, 6)) / 10;
+        $product->quantity_committed = self::computeCommitted($quantities);
         $product->save();
         $product->updateStatus();
+    }
+
+    /**
+     * FFD bin-packing: pack fractional stick quantities into unit-capacity bins.
+     *
+     * Each "bin" is one stock-length stick. Items may not be split across sticks.
+     * All sealed bins (not the last opened one) count as 1.0; the last bin counts
+     * as its actual fill rounded up to the nearest 0.1.
+     *
+     * Examples:
+     *   [0.8, 0.3]        → bins [0.8+0.2?No → 0.8 | 0.3] → 1 + ceil(0.3×10)/10 = 1.3
+     *   [0.8, 0.3, 0.2]   → bins [0.8+0.2=1.0 | 0.3]      → 1 + ceil(0.3×10)/10 = 1.3
+     *   [0.5, 0.5, 0.3]   → bins [0.5+0.5=1.0 | 0.3]      → 1 + 0.3 = 1.3
+     */
+    public static function computeCommitted(array $quantities): float
+    {
+        if (empty($quantities)) {
+            return 0.0;
+        }
+
+        // Expand any qty > 1.0 into whole sticks + remainder
+        $items = [];
+        foreach ($quantities as $rawQty) {
+            $qty = round((float) $rawQty, 6);
+            if ($qty <= 0.000001) {
+                continue;
+            }
+            $full = (int) floor($qty);
+            $rem  = round($qty - $full, 6);
+            for ($i = 0; $i < $full; $i++) {
+                $items[] = 1.0;
+            }
+            if ($rem > 0.000001) {
+                $items[] = $rem;
+            }
+        }
+
+        if (empty($items)) {
+            return 0.0;
+        }
+
+        // First-Fit Decreasing: largest items placed first to minimise bin count
+        rsort($items);
+
+        $bins = [];
+        foreach ($items as $item) {
+            $placed = false;
+            foreach ($bins as &$binUsed) {
+                if (round($binUsed + $item, 6) <= 1.000001) {
+                    $binUsed = round($binUsed + $item, 6);
+                    $placed  = true;
+                    break;
+                }
+            }
+            unset($binUsed);
+            if (!$placed) {
+                $bins[] = round($item, 6);
+            }
+        }
+
+        $n        = count($bins);
+        $lastUsed = $bins[$n - 1];
+
+        // Sealed bins each count as 1.0; last bin rounds up to nearest 0.1
+        return ($n - 1) + ceil(round($lastUsed * 10, 6)) / 10;
     }
 
     /**

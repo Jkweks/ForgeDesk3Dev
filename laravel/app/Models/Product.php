@@ -239,12 +239,16 @@ class Product extends Model
     }
 
     /**
-     * Calculate committed quantity from active reservations (real-time)
+     * Calculate committed quantity from active reservations using FFD bin packing (real-time).
      */
     public function getCommittedFromReservationsAttribute()
     {
-        $total = (float) $this->activeReservationItems()->sum('committed_qty');
-        return ceil(round($total * 10, 6)) / 10;
+        $quantities = $this->activeReservationItems()
+            ->pluck('committed_qty')
+            ->map(fn ($v) => (float) $v)
+            ->toArray();
+
+        return JobReservationItem::computeCommitted($quantities);
     }
 
     public function requiredParts()
@@ -562,12 +566,11 @@ class Product extends Model
     }
 
     /**
-     * Get committed packs from active reservations (real-time calculation)
+     * Get committed packs from active reservations (real-time, bin-packed).
      */
     public function getCommittedPacksFromReservationsAttribute()
     {
-        $totalEaches = $this->activeReservationItems()->sum('committed_qty');
-        return $this->eachesToPacksNeeded($totalEaches);
+        return $this->eachesToPacksNeeded($this->committed_from_reservations);
     }
 
     /**
