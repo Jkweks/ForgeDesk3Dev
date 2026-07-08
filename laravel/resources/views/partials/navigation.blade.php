@@ -97,6 +97,16 @@
                     <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders <span class="badge bg-blue-lt text-blue ms-1" style="font-size:.65rem;vertical-align:middle">Beta</span></a>
                   </div>
                 </li>
+                @if(env('DEVREPORT'))
+                <li class="nav-item {{ Request::is('dev-issues*') ? 'active' : '' }}">
+                  <a class="nav-link" href="/dev-issues" {{ Request::is('dev-issues') ? 'aria-current=page' : '' }}>
+                    <span class="nav-link-icon d-md-none d-lg-inline-block">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 12l2 2l4 -4" /><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /></svg>
+                    </span>
+                    <span class="nav-link-title">Dev Issues <span class="badge bg-orange-lt text-orange ms-1" style="font-size:.65rem">DEV</span></span>
+                  </a>
+                </li>
+                @endif
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">
                   <a class="nav-link" href="/admin" {{ Request::is('admin') ? 'aria-current=page' : '' }}>
                     <span class="nav-link-icon d-md-none d-lg-inline-block">

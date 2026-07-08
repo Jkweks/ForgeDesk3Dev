@@ -441,5 +441,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update']); // POST with _method=PUT for multipart
         Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update']);
         Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy']);
+
+        // Dev Issue Tracker
+        Route::get('/dev-issues', [\App\Http\Controllers\Api\DevIssueController::class, 'index']);
+        Route::post('/dev-issues', [\App\Http\Controllers\Api\DevIssueController::class, 'store']);
+        Route::get('/dev-issues/{devIssue}', [\App\Http\Controllers\Api\DevIssueController::class, 'show']);
+        Route::put('/dev-issues/{devIssue}', [\App\Http\Controllers\Api\DevIssueController::class, 'update']);
+        Route::delete('/dev-issues/{devIssue}', [\App\Http\Controllers\Api\DevIssueController::class, 'destroy']);
     });
 });

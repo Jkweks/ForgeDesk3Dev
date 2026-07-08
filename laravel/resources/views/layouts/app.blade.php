@@ -320,5 +320,9 @@
   @include('partials.auth-scripts')
 
   @stack('scripts')
+
+  @if(env('DEVREPORT'))
+  @include('partials.devreport-widget')
+  @endif
 </body>
 </html>

@@ -98,3 +98,8 @@ Route::get('/admin/location-assignment', function () {
 Route::get('/shop', function () {
     return view('shop-floor');
 });
+
+// Dev Issue Tracker
+Route::get('/dev-issues', function () {
+    return view('dev-issues');
+});
