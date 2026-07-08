@@ -20,9 +20,9 @@ class JobReservationItem extends Model
     protected $casts = [
         'reservation_id' => 'integer',
         'product_id' => 'integer',
-        'requested_qty' => 'integer',
-        'committed_qty' => 'integer',
-        'consumed_qty' => 'integer',
+        'requested_qty' => 'decimal:1',
+        'committed_qty' => 'decimal:1',
+        'consumed_qty' => 'decimal:1',
     ];
 
     /**

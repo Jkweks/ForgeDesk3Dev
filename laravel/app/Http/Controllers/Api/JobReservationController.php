@@ -102,9 +102,21 @@ class JobReservationController extends Controller
     public function show($id)
     {
         try {
-            $reservation = JobReservation::with(['items.product'])->findOrFail($id);
+            $reservation = JobReservation::with(['items.product.inventoryLocations.storageLocation'])->findOrFail($id);
 
             $items = $reservation->items->map(function ($item) {
+                $locations = $item->product->inventoryLocations->map(function ($loc) {
+                    return [
+                        'id' => $loc->id,
+                        'bin' => $loc->storageLocation?->name ?? 'Unassigned',
+                        'bin_code' => $loc->storageLocation?->code,
+                        'quantity' => $loc->quantity,
+                        'quantity_committed' => $loc->quantity_committed,
+                        'quantity_available' => $loc->quantity_available,
+                        'is_primary' => $loc->is_primary,
+                    ];
+                })->sortByDesc('is_primary')->values();
+
                 return [
                     'id' => $item->id,
                     'product_id' => $item->product_id,
@@ -123,6 +135,7 @@ class JobReservationController extends Controller
                         'quantity_on_hand' => $item->product->quantity_on_hand,
                         'quantity_available' => $item->product->quantity_available,
                     ],
+                    'bin_locations' => $locations,
                 ];
             });
 
@@ -264,7 +277,7 @@ class JobReservationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'consumed_quantities' => 'required|array',
-                'consumed_quantities.*' => 'required|integer|min:0',
+                'consumed_quantities.*' => 'required|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
@@ -588,8 +601,8 @@ class JobReservationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'product_id' => 'required|exists:products,id',
-                'requested_qty' => 'required|integer|min:1',
-                'committed_qty' => 'required|integer|min:0',
+                'requested_qty' => 'required|numeric|min:0.1',
+                'committed_qty' => 'required|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
@@ -689,8 +702,8 @@ class JobReservationController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'requested_qty' => 'sometimes|integer|min:1',
-                'committed_qty' => 'sometimes|integer|min:0',
+                'requested_qty' => 'sometimes|numeric|min:0.1',
+                'committed_qty' => 'sometimes|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
@@ -1090,8 +1103,8 @@ class JobReservationController extends Controller
                 'notes' => 'nullable|string',
                 'items' => 'required|array|min:1',
                 'items.*.product_id' => 'required|integer|exists:products,id',
-                'items.*.requested_qty' => 'required|integer|min:1',
-                'items.*.committed_qty' => 'nullable|integer|min:0',
+                'items.*.requested_qty' => 'required|numeric|min:0.1',
+                'items.*.committed_qty' => 'nullable|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
