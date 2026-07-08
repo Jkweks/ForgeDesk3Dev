@@ -31,6 +31,7 @@ class Product extends Model
     ];
 
     protected $casts = [
+        'quantity_committed' => 'decimal:1',
         'unit_cost' => 'decimal:2',
         'net_cost' => 'decimal:2',
         'finish_multiplier' => 'decimal:4',

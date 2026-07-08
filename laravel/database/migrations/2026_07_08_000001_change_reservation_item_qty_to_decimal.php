@@ -17,6 +17,10 @@ return new class extends Migration
             $table->decimal('consumed_qty', 10, 1)->default(0)->change();
         });
 
+        Schema::table('products', function (Blueprint $table) {
+            $table->decimal('quantity_committed', 10, 1)->default(0)->change();
+        });
+
         DB::statement("
             CREATE VIEW inventory_commitments AS
             SELECT
@@ -55,6 +59,10 @@ return new class extends Migration
             $table->integer('requested_qty')->change();
             $table->integer('committed_qty')->change();
             $table->integer('consumed_qty')->default(0)->change();
+        });
+
+        Schema::table('products', function (Blueprint $table) {
+            $table->integer('quantity_committed')->default(0)->change();
         });
 
         DB::statement("
