@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use App\Models\JobReservationItem;
 
 class Product extends Model
 {
@@ -243,7 +244,7 @@ class Product extends Model
      */
     public function getCommittedFromReservationsAttribute()
     {
-        return $this->activeReservationItems()->sum('committed_qty');
+        return JobReservationItem::binAwareCommitted($this->id);
     }
 
     public function requiredParts()
