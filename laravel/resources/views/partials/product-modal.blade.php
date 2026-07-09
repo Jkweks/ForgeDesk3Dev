@@ -2071,6 +2071,11 @@
       return div.innerHTML;
     }
 
+    function fmtQty(n) {
+      const v = parseFloat(n) || 0;
+      return Number.isInteger(v) ? v.toString() : v.toFixed(1).replace(/\.0$/, '');
+    }
+
     function getTransactionTypeBadge(type) {
       const badges = {
         'receipt': '<span class="badge text-bg-success">Receipt</span>',
@@ -2503,9 +2508,9 @@
             </td>
             <td>${new Date(reservation.reserved_date).toLocaleDateString()}</td>
             <td>${requiredDate}${isOverdue ? ' <span class="badge text-bg-danger">OVERDUE</span>' : ''}</td>
-            <td class="text-end">${reservation.quantity_reserved}</td>
-            <td class="text-end">${reservation.quantity_fulfilled}</td>
-            <td class="text-end"><strong>${remaining}</strong></td>
+            <td class="text-end">${fmtQty(reservation.quantity_reserved)}</td>
+            <td class="text-end">${fmtQty(reservation.quantity_fulfilled)}</td>
+            <td class="text-end"><strong>${fmtQty(remaining)}</strong></td>
             <td>${statusBadge}</td>
             <td class="table-actions">
               <div class="btn-group">
@@ -2622,12 +2627,12 @@
       const reservation = currentProductReservations.find(r => r.id === reservationId);
       if (!reservation) return;
 
-      const remaining = reservation.quantity_reserved - reservation.quantity_fulfilled;
-      const quantity = prompt(`Fulfill reservation for ${reservation.job_number}\n\nRemaining: ${remaining} units\nEnter quantity to fulfill:`);
+      const remaining = Math.round((parseFloat(reservation.quantity_reserved) - parseFloat(reservation.quantity_fulfilled)) * 10) / 10;
+      const quantity = prompt(`Fulfill reservation for ${reservation.job_number}\n\nRemaining: ${fmtQty(remaining)} units\nEnter quantity to fulfill:`);
 
       if (quantity === null) return; // User cancelled
 
-      const qtyNum = parseInt(quantity);
+      const qtyNum = Math.round(parseFloat(quantity) * 10) / 10;
       if (isNaN(qtyNum) || qtyNum <= 0) {
         showNotification('Please enter a valid quantity', 'warning');
         return;
