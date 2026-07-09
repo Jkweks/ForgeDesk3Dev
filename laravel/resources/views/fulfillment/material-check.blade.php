@@ -22,9 +22,18 @@
             <div class="col-12">
               <div class="card">
                 <div class="card-header">
-                  <h3 class="card-title">Upload Estimate File</h3>
+                  <ul class="nav nav-tabs card-header-tabs" id="uploadTabs">
+                    <li class="nav-item">
+                      <a class="nav-link active" href="#" onclick="switchTab('ez'); return false;" id="tab-ez">EZ Estimate (.xlsx)</a>
+                    </li>
+                    <li class="nav-item">
+                      <a class="nav-link" href="#" onclick="switchTab('csv'); return false;" id="tab-csv">CSV Upload</a>
+                    </li>
+                  </ul>
                 </div>
-                <div class="card-body">
+
+                <!-- EZ Estimate tab -->
+                <div id="panel-ez" class="card-body">
                   <div class="mb-3">
                     <label class="form-label">Select Excel File (.xlsx or .xlsm)</label>
                     <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm">
@@ -38,6 +47,19 @@
                     <small class="text-muted d-block mt-1">When enabled, availability is checked only against Boneyard items and Shared Components. Regular stock inventory is excluded from results.</small>
                   </div>
                   <button id="checkMaterialsBtn" class="btn btn-primary" onclick="checkMaterials()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
+                    Check Materials
+                  </button>
+                </div>
+
+                <!-- CSV tab -->
+                <div id="panel-csv" class="card-body" style="display:none;">
+                  <div class="mb-3">
+                    <label class="form-label">Select CSV File</label>
+                    <input type="file" class="form-control" id="csvFile" accept=".csv,.txt">
+                    <small class="form-hint">CSV must have columns: <strong>Qty</strong>, <strong>Part Number</strong>, and optionally <strong>Color Code</strong>. First row is the header. SKU is built as <code>PartNumber-ColorCode</code>.</small>
+                  </div>
+                  <button id="checkCsvBtn" class="btn btn-primary" onclick="checkMaterialsCsv()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
                     Check Materials
                   </button>
@@ -219,6 +241,57 @@
         let checkResults = [];
         let filteredResults = [];
         let selectedItems = new Set();
+
+        function switchTab(tab) {
+            document.getElementById('panel-ez').style.display  = tab === 'ez'  ? '' : 'none';
+            document.getElementById('panel-csv').style.display = tab === 'csv' ? '' : 'none';
+            document.getElementById('tab-ez').classList.toggle('active',  tab === 'ez');
+            document.getElementById('tab-csv').classList.toggle('active', tab === 'csv');
+        }
+
+        async function checkMaterialsCsv() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            if (!file) { alert('Please select a CSV file'); return; }
+
+            const btn = document.getElementById('checkCsvBtn');
+            btn.disabled = true;
+            btn.classList.replace('btn-primary', 'btn-warning');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking…';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const authToken = localStorage.getItem('authToken');
+                const response = await fetch('/api/v1/fulfillment/material-check-csv', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${authToken}`,
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    },
+                    body: formData,
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    checkResults = data.results;
+                    filteredResults = [...checkResults];
+                    const modeBanner = document.getElementById('boneyardSharedBanner');
+                    if (modeBanner) modeBanner.style.display = 'none';
+                    displayResults(data.results, data.summary);
+                } else {
+                    alert('Error: ' + (data.error || data.message || `HTTP ${response.status}`));
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.classList.replace('btn-warning', 'btn-primary');
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon me-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>Check Materials';
+            }
+        }
 
         async function checkMaterials() {
             const fileInput = document.getElementById('estimateFile');

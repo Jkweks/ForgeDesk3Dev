@@ -740,6 +740,137 @@ class MaterialCheckController extends Controller
     }
 
     /**
+     * Check materials from a CSV file with columns: Qty, Part Number, Color Code
+     * SKU is constructed as PartNumber-ColorCode (matching EZ Estimate convention)
+     */
+    public function checkCsv(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:csv,txt|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => 'Validation failed', 'details' => $validator->errors()], 422);
+        }
+
+        $path = $request->file('file')->getRealPath();
+        $handle = fopen($path, 'r');
+        if (!$handle) {
+            return response()->json(['error' => 'Could not open uploaded file'], 500);
+        }
+
+        // Read header row and normalise column names
+        $rawHeaders = fgetcsv($handle);
+        if (!$rawHeaders) {
+            fclose($handle);
+            return response()->json(['error' => 'CSV file is empty'], 400);
+        }
+        $headers = array_map(fn($h) => strtolower(trim($h)), $rawHeaders);
+
+        $qtyIdx   = array_search('qty',          $headers) !== false ? array_search('qty',          $headers) : array_search('quantity',     $headers);
+        $partIdx  = array_search('part number',  $headers) !== false ? array_search('part number',  $headers) : array_search('part_number',   $headers);
+        $colorIdx = array_search('color code',   $headers) !== false ? array_search('color code',   $headers) : array_search('color_code',    $headers);
+
+        if ($qtyIdx === false || $partIdx === false) {
+            fclose($handle);
+            return response()->json([
+                'error' => 'CSV must have Qty and Part Number columns. Found: ' . implode(', ', $rawHeaders),
+            ], 400);
+        }
+
+        // Build product cache once
+        $allProducts = Product::where('is_active', true)->get();
+        $this->productCache = [];
+        foreach ($allProducts as $product) {
+            $sku = $product->sku;
+            $this->productCache[$sku]                                      = $product;
+            $this->productCache[strtolower($sku)]                          = $product;
+            $this->productCache[str_replace([' ', '-', '_'], '', $sku)]    = $product;
+        }
+
+        $results = [];
+        $summary = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
+
+        while (($row = fgetcsv($handle)) !== false) {
+            if (empty(array_filter($row))) continue;
+
+            $qty        = isset($row[$qtyIdx])  ? floatval($row[$qtyIdx])  : 0;
+            $partNumber = isset($row[$partIdx]) ? trim($row[$partIdx])      : '';
+            $colorCode  = ($colorIdx !== false && isset($row[$colorIdx])) ? trim($row[$colorIdx]) : '';
+
+            if ($qty <= 0 || $partNumber === '') continue;
+
+            $sku = $colorCode !== '' ? "{$partNumber}-{$colorCode}" : $partNumber;
+
+            $summary['total']++;
+            $product = $this->findProduct($sku);
+
+            if (!$product) {
+                $results[] = [
+                    'part_number'         => $partNumber,
+                    'finish'              => $colorCode,
+                    'sku'                 => $sku,
+                    'description'         => '',
+                    'required_qty_packs'  => $qty,
+                    'required_qty_eaches' => $qty,
+                    'available_qty_packs' => 0,
+                    'available_qty_eaches'=> 0,
+                    'shortage_packs'      => $qty,
+                    'shortage_eaches'     => $qty,
+                    'pack_size'           => 1,
+                    'has_pack_size'       => false,
+                    'status'              => 'not_found',
+                    'location'            => null,
+                ];
+                $summary['not_found']++;
+                continue;
+            }
+
+            $packSize     = $product->pack_size ?? 1;
+            $hasPackSize  = $packSize > 1;
+            $requiredEach = $hasPackSize ? (float) ($qty * $packSize) : (float) $qty;
+            $availableEach= (float) ($product->quantity_available ?? $product->quantity_on_hand ?? 0);
+            $shortageEach = max(0.0, $requiredEach - $availableEach);
+
+            if ($availableEach <= 0) {
+                $status = 'unavailable'; $summary['unavailable']++;
+            } elseif ($availableEach < $requiredEach) {
+                $status = 'partial'; $summary['partial']++;
+            } else {
+                $status = 'available'; $summary['available']++;
+            }
+
+            $results[] = [
+                'part_number'         => $partNumber,
+                'finish'              => $colorCode,
+                'sku'                 => $sku,
+                'description'         => $product->description,
+                'required_qty_packs'  => $qty,
+                'required_qty_eaches' => $requiredEach,
+                'available_qty_packs' => $hasPackSize ? floor($availableEach / $packSize) : $availableEach,
+                'available_qty_eaches'=> $availableEach,
+                'shortage_packs'      => $hasPackSize ? ceil($shortageEach / $packSize) : $shortageEach,
+                'shortage_eaches'     => $shortageEach,
+                'pack_size'           => $packSize,
+                'has_pack_size'       => $hasPackSize,
+                'status'              => $status,
+                'location'            => $product->location,
+                'product_id'          => $product->id,
+                'nonsof'              => (bool) $product->nonsof,
+                'is_shared'           => (bool) $product->is_shared,
+            ];
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'message' => 'Material check completed',
+            'summary' => $summary,
+            'results' => $results,
+        ]);
+    }
+
+    /**
      * Find a product by part number/SKU using in-memory cache
      * Tries multiple approaches to find the best match
      */
