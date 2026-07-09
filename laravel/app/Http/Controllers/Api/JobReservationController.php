@@ -732,7 +732,7 @@ class JobReservationController extends Controller
                     ->firstOrFail();
 
                 // Cannot reduce committed below consumed
-                if ($request->has('committed_qty') && $request->committed_qty < $item->consumed_qty) {
+                if ($request->has('committed_qty') && (float) $request->committed_qty < (float) $item->consumed_qty) {
                     return response()->json([
                         'error' => 'Invalid quantity',
                         'message' => "Cannot reduce committed quantity below already consumed ({$item->consumed_qty})",

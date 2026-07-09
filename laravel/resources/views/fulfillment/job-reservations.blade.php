@@ -1442,6 +1442,9 @@
 
                 // Update/add/remove items
                 for (const item of editingItems) {
+                    const rqty = Math.round(parseFloat(item.requested_qty) * 10) / 10;
+                    const cqty = Math.round(parseFloat(item.committed_qty) * 10) / 10;
+
                     if (item.id === null) {
                         // New item - add it
                         const addResponse = await fetch(`/api/v1/job-reservations/${id}/items`, {
@@ -1453,14 +1456,14 @@
                             },
                             body: JSON.stringify({
                                 product_id: item.product_id,
-                                requested_qty: item.requested_qty,
-                                committed_qty: item.committed_qty
+                                requested_qty: rqty,
+                                committed_qty: cqty
                             })
                         });
 
                         if (!addResponse.ok) {
                             const error = await addResponse.json();
-                            alert('Error adding item: ' + (error.message || error.error));
+                            alert('Error adding item: ' + (error.message || error.error) + (error.details ? '\n' + JSON.stringify(error.details) : ''));
                             return;
                         }
                     } else {
@@ -1473,14 +1476,14 @@
                                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                             },
                             body: JSON.stringify({
-                                requested_qty: item.requested_qty,
-                                committed_qty: item.committed_qty
+                                requested_qty: rqty,
+                                committed_qty: cqty
                             })
                         });
 
                         if (!updateResponse.ok) {
                             const error = await updateResponse.json();
-                            alert('Error updating item: ' + (error.message || error.error));
+                            alert('Error updating item: ' + (error.message || error.error) + (error.details ? '\n' + JSON.stringify(error.details) : ''));
                             return;
                         }
                     }
