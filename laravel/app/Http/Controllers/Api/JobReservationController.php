@@ -1035,7 +1035,6 @@ class JobReservationController extends Controller
                 ]);
             }
 
-            // Calculate committed quantities from active reservations
             $activeReservations = JobReservationItem::where('product_id', $product)
                 ->whereHas('reservation', function ($query) {
                     $query->whereIn('status', ['active', 'in_progress', 'on_hold']);
@@ -1043,9 +1042,7 @@ class JobReservationController extends Controller
                 ->with('reservation')
                 ->get();
 
-            $quantityCommitted = $activeReservations->sum(function ($item) {
-                return $item->committed_qty - $item->consumed_qty;
-            });
+            $quantityCommitted = JobReservationItem::binAwareCommitted((int) $product);
 
             $activeCount = $activeReservations->unique('reservation_id')->count();
 
