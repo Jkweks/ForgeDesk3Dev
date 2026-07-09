@@ -78,15 +78,7 @@ class JobReservation extends Model
             $product = Product::find($productId);
             if (!$product) continue;
 
-            // Calculate total committed from all ACTIVE reservations for this product
-            $totalCommitted = JobReservationItem::where('product_id', $productId)
-                ->whereHas('reservation', function($query) {
-                    $query->whereIn('status', ['active', 'in_progress', 'on_hold'])
-                          ->whereNull('deleted_at');
-                })
-                ->sum('committed_qty');
-
-            $product->quantity_committed = $totalCommitted;
+            $product->quantity_committed = JobReservationItem::binAwareCommitted($productId);
             $product->save();
             $product->updateStatus();
         }
