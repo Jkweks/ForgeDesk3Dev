@@ -37,13 +37,8 @@ class SyncCommittedFromReservations extends Command
         $locationChanged = 0;
 
         foreach ($products as $product) {
-            // ── 1. Calculate total committed from active, unfulfilled reservations ──────
-            $totalCommitted = JobReservationItem::where('product_id', $product->id)
-                ->whereHas('reservation', function ($q) {
-                    $q->whereIn('status', ['active', 'in_progress', 'on_hold'])
-                      ->whereNull('deleted_at');
-                })
-                ->sum('committed_qty');
+            // ── 1. Calculate committed using bin-packing (accounts for cutting waste) ──
+            $totalCommitted = JobReservationItem::binAwareCommitted($product->id);
 
             // ── 2. Sync product.quantity_committed ────────────────────────────────────
             $oldProductCommitted = $product->quantity_committed;
