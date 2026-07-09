@@ -826,9 +826,8 @@ class MaterialCheckController extends Controller
                 continue;
             }
 
-            $packSize     = $product->pack_size ?? 1;
-            $hasPackSize  = $packSize > 1;
-            $requiredEach = $hasPackSize ? (float) ($qty * $packSize) : (float) $qty;
+            // CSV quantities are always eaches — no pack conversion
+            $requiredEach = (float) $qty;
             $availableEach= (float) ($product->quantity_available ?? $product->quantity_on_hand ?? 0);
             $shortageEach = max(0.0, $requiredEach - $availableEach);
 
@@ -847,12 +846,12 @@ class MaterialCheckController extends Controller
                 'description'         => $product->description,
                 'required_qty_packs'  => $qty,
                 'required_qty_eaches' => $requiredEach,
-                'available_qty_packs' => $hasPackSize ? floor($availableEach / $packSize) : $availableEach,
+                'available_qty_packs' => $availableEach,
                 'available_qty_eaches'=> $availableEach,
-                'shortage_packs'      => $hasPackSize ? ceil($shortageEach / $packSize) : $shortageEach,
+                'shortage_packs'      => $shortageEach,
                 'shortage_eaches'     => $shortageEach,
-                'pack_size'           => $packSize,
-                'has_pack_size'       => $hasPackSize,
+                'pack_size'           => 1,
+                'has_pack_size'       => false,
                 'status'              => $status,
                 'location'            => $product->location,
                 'product_id'          => $product->id,
