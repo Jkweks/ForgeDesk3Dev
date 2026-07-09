@@ -826,8 +826,8 @@ class MaterialCheckController extends Controller
                 continue;
             }
 
-            // CSV quantities are always eaches — no pack conversion
-            $requiredEach = (float) $qty;
+            // CSV quantities are always eaches — round up to nearest 0.1
+            $requiredEach = ceil($qty * 10) / 10;
             $availableEach= (float) ($product->quantity_available ?? $product->quantity_on_hand ?? 0);
             $shortageEach = max(0.0, $requiredEach - $availableEach);
 
@@ -844,7 +844,7 @@ class MaterialCheckController extends Controller
                 'finish'              => $colorCode,
                 'sku'                 => $sku,
                 'description'         => $product->description,
-                'required_qty_packs'  => $qty,
+                'required_qty_packs'  => $requiredEach,
                 'required_qty_eaches' => $requiredEach,
                 'available_qty_packs' => $availableEach,
                 'available_qty_eaches'=> $availableEach,
