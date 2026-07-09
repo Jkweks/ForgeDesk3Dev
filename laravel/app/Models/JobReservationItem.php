@@ -94,18 +94,17 @@ class JobReservationItem extends Model
     }
 
     /**
-     * Calculate total committed material for a product using bin-packing logic.
+     * Calculate committed material using greedy bin-packing into 1.0-unit sticks.
      *
-     * A raw sum (e.g. 1.0 + 4×0.3 = 2.2) underestimates when cuts leave waste on a
-     * stick. This packs items greedily into inventory locations (treating each location's
-     * on-hand quantity as the bin capacity) and counts any leftover space that is too
-     * small for the smallest item as committed waste.
+     * Cuts are packed largest-first into sticks of length 1.0. If the leftover space
+     * on a stick is smaller than the smallest remaining cut, that space is counted as
+     * committed waste (unusable for other jobs).
      *
-     * Example: items=[1.0, 0.3, 0.3, 0.3, 0.3], bins=[1.0, 1.0, 1.0]
-     *   bin1 → 1.0 used (exact fit)
-     *   bin2 → 0.9 used, 0.1 left — too small for 0.3 → waste, committed = 1.0
-     *   bin3 → 0.3 used
-     *   total = 1.0 + 1.0 + 0.3 = 2.3
+     * Example: cuts=[1.0, 0.5, 0.3, 0.3, 0.3]
+     *   stick1 → 1.0 (full)
+     *   stick2 → 0.5 + 0.3 = 0.8, leftover 0.2 < 0.3 → waste → commit 1.0
+     *   stick3 → 0.3 + 0.3 = 0.6, leftover 0.4 ≥ 0.3 → commit 0.6
+     *   total = 2.6
      */
     public static function binAwareCommitted(int $productId): float
     {
@@ -123,49 +122,35 @@ class JobReservationItem extends Model
             return 0.0;
         }
 
-        $locations = InventoryLocation::where('product_id', $productId)
-            ->whereNull('deleted_at')
-            ->orderByDesc('is_primary')
-            ->orderByDesc('quantity')
-            ->get();
-
-        if ($locations->isEmpty()) {
-            return round(array_sum($items) * 10) / 10;
-        }
-
-        $bins = $locations->map(fn($loc) => (float) $loc->quantity)->toArray();
-        $binUsed = array_fill(0, count($bins), 0.0);
+        $stickLength = 1.0;
         $minItem = min($items);
-        $unplaced = [];
+        $bins = []; // each entry = used length on that stick
 
         foreach ($items as $item) {
             $placed = false;
-            for ($b = 0; $b < count($bins); $b++) {
-                $space = round(($bins[$b] - $binUsed[$b]) * 10) / 10;
+            foreach ($bins as &$used) {
+                $space = round(($stickLength - $used) * 10) / 10;
                 if ($space >= $item - 0.00001) {
-                    $binUsed[$b] = round(($binUsed[$b] + $item) * 10) / 10;
+                    $used = round(($used + $item) * 10) / 10;
                     $placed = true;
                     break;
                 }
             }
+            unset($used);
             if (!$placed) {
-                $unplaced[] = $item;
+                $bins[] = round($item * 10) / 10;
             }
         }
 
         $total = 0.0;
-        for ($b = 0; $b < count($bins); $b++) {
-            if ($binUsed[$b] <= 0) continue;
-            $remaining = round(($bins[$b] - $binUsed[$b]) * 10) / 10;
-            // Waste: leftover space is positive but smaller than the smallest item
+        foreach ($bins as $used) {
+            $remaining = round(($stickLength - $used) * 10) / 10;
             if ($remaining > 0 && $remaining < $minItem - 0.00001) {
-                $total += $bins[$b]; // commit the whole bin including waste
+                $total += $stickLength; // leftover too small to cut — commit whole stick
             } else {
-                $total += $binUsed[$b];
+                $total += $used;
             }
         }
-
-        $total += array_sum($unplaced);
 
         return round($total * 10) / 10;
     }
