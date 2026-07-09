@@ -663,7 +663,7 @@
     let suppliers = [];
 
     function formatCommittedDisplay(product, linkable = true) {
-      const committedEaches = product.quantity_committed || 0;
+      const committedEaches = Math.round(((product.quantity_on_hand || 0) - (product.quantity_available || 0)) * 10) / 10;
       const committedPacks = product.quantity_committed_packs || committedEaches;
       const packSize = product.pack_size || 1;
       const hasPackSize = packSize > 1;
