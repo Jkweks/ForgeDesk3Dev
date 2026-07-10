@@ -26,9 +26,12 @@
                 </div>
                 <div class="card-body">
                   <div class="mb-3">
-                    <label class="form-label">Select Excel File (.xlsx or .xlsm)</label>
-                    <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm">
-                    <small class="form-hint">Upload an EZ Estimate file to check material availability. Checks Stock Lengths and Accessories sheets automatically.</small>
+                    <label class="form-label">Select File</label>
+                    <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm,.csv">
+                    <small class="form-hint">
+                      <strong>EZ Estimate (.xlsx/.xlsm)</strong> — quantities in packs; checks Stock Lengths &amp; Accessories sheets automatically.<br>
+                      <strong>CSV (.csv)</strong> — quantities in eaches; columns: <code>Qty</code>, <code>Part Number</code>, <code>Color Code</code> (optional). SKU built as <code>PartNumber-ColorCode</code>.
+                    </small>
                   </div>
                   <div class="mb-3">
                     <label class="form-check form-switch">
@@ -235,32 +238,38 @@
             btn.classList.add('btn-warning');
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Materials…';
 
+            const isCsv = file.name.toLowerCase().endsWith('.csv');
             const boneyardSharedMode = document.getElementById('boneyardSharedMode').checked;
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('mode', 'ez_estimate');
-            formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+
+            let url;
+            if (isCsv) {
+                url = '/api/v1/fulfillment/material-check-csv';
+            } else {
+                url = '/api/v1/fulfillment/material-check';
+                formData.append('mode', 'ez_estimate');
+                formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+            }
 
             try {
                 const authToken = localStorage.getItem('authToken');
-                const response = await fetch('/api/v1/fulfillment/material-check', {
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
                         'Authorization': `Bearer ${authToken}`,
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                        // Don't set Content-Type - browser will set it automatically with boundary for FormData
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     },
-                    body: formData
+                    body: formData,
                 });
 
                 if (response.ok) {
                     const data = await response.json();
                     checkResults = data.results;
                     filteredResults = [...checkResults];
-                    // Show/hide the mode banner based on what the API processed
                     const modeBanner = document.getElementById('boneyardSharedBanner');
-                    if (modeBanner) modeBanner.style.display = data.boneyard_shared_only ? '' : 'none';
+                    if (modeBanner) modeBanner.style.display = (!isCsv && data.boneyard_shared_only) ? '' : 'none';
                     displayResults(data.results, data.summary);
                 } else {
                     // Read body once as text, then try to parse as JSON

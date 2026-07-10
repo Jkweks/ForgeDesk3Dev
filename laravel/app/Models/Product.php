@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use App\Models\JobReservationItem;
 
 class Product extends Model
 {
@@ -31,6 +32,7 @@ class Product extends Model
     ];
 
     protected $casts = [
+        'quantity_committed' => 'decimal:1',
         'unit_cost' => 'decimal:2',
         'net_cost' => 'decimal:2',
         'finish_multiplier' => 'decimal:4',
@@ -242,7 +244,7 @@ class Product extends Model
      */
     public function getCommittedFromReservationsAttribute()
     {
-        return $this->activeReservationItems()->sum('committed_qty');
+        return JobReservationItem::binAwareCommitted($this->id);
     }
 
     public function requiredParts()
@@ -277,7 +279,7 @@ class Product extends Model
 
     public function getQuantityAvailableAttribute()
     {
-        return $this->quantity_on_hand - $this->committed_from_reservations;
+        return (int) floor($this->quantity_on_hand - $this->committed_from_reservations);
     }
 
     public function updateStatus()
@@ -575,7 +577,7 @@ class Product extends Model
     {
         $onHandPacks = $this->quantity_on_hand_packs;
         $committedPacks = $this->committed_packs_from_reservations;
-        return $onHandPacks - $committedPacks;
+        return (int) floor($onHandPacks - $committedPacks);
     }
 
     /**

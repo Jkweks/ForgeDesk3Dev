@@ -25,7 +25,7 @@ class SyncCommittedFromReservations extends Command
         $this->info('Syncing committed quantities from active reservations...');
         $this->newLine();
 
-        $query = Product::with(['inventoryLocations']);
+        $query = Product::query();
 
         if ($productId = $this->option('product')) {
             $query->where('id', $productId);
@@ -33,24 +33,16 @@ class SyncCommittedFromReservations extends Command
 
         $products = $query->get();
 
-        $productChanged  = 0;
-        $locationChanged = 0;
+        $productChanged = 0;
 
         foreach ($products as $product) {
-            // ── 1. Calculate total committed from active, unfulfilled reservations ──────
-            $totalCommitted = JobReservationItem::where('product_id', $product->id)
-                ->whereHas('reservation', function ($q) {
-                    $q->whereIn('status', ['active', 'in_progress', 'on_hold'])
-                      ->whereNull('deleted_at');
-                })
-                ->sum('committed_qty');
+            $totalCommitted = JobReservationItem::binAwareCommitted($product->id);
 
-            // ── 2. Sync product.quantity_committed ────────────────────────────────────
             $oldProductCommitted = $product->quantity_committed;
 
             if ($oldProductCommitted != $totalCommitted) {
                 $this->line(sprintf(
-                    '  [product] %s: quantity_committed %s → %s',
+                    '  %s: quantity_committed %s → %s',
                     $product->sku, $oldProductCommitted, $totalCommitted
                 ));
 
@@ -61,49 +53,14 @@ class SyncCommittedFromReservations extends Command
 
                 $productChanged++;
             }
-
-            // ── 3. Distribute committed qty across inventory_locations ────────────────
-            //   Waterfall: fill primary location first (up to its physical quantity),
-            //   then overflow into secondary locations ordered by quantity descending.
-            //   Any location that receives no allocation gets quantity_committed = 0.
-
-            $locations = $product->inventoryLocations
-                ->sortByDesc('is_primary')          // primary first
-                ->sortByDesc('quantity')             // then by stock descending
-                ->values();
-
-            $remaining = $totalCommitted;
-
-            foreach ($locations as $location) {
-                $allocated = min($remaining, $location->quantity);
-                $allocated = max(0, $allocated); // never negative
-
-                $oldLocationCommitted = $location->quantity_committed;
-
-                if ($oldLocationCommitted != $allocated) {
-                    $this->line(sprintf(
-                        '    [location] %s / loc#%d: quantity_committed %s → %s',
-                        $product->sku, $location->id, $oldLocationCommitted, $allocated
-                    ));
-
-                    if (!$dryRun) {
-                        $location->quantity_committed = $allocated;
-                        $location->save();
-                    }
-
-                    $locationChanged++;
-                }
-
-                $remaining -= $allocated;
-            }
         }
 
         $this->newLine();
 
         if ($dryRun) {
-            $this->warn("DRY RUN complete — {$productChanged} product(s) and {$locationChanged} location row(s) would change.");
+            $this->warn("DRY RUN complete — {$productChanged} product(s) would change.");
         } else {
-            $this->info("✓ Done — {$productChanged} product(s) and {$locationChanged} location row(s) updated.");
+            $this->info("✓ Done — {$productChanged} product(s) updated.");
         }
 
         return 0;

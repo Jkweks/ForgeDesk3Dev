@@ -360,13 +360,13 @@
                           <div class="col-md-2">
                             <div class="mb-3">
                               <label class="form-label">Requested Qty</label>
-                              <input type="number" class="form-control" id="newResItemRequestedQty" min="1" value="1">
+                              <input type="number" class="form-control" id="newResItemRequestedQty" min="0.1" step="0.1" value="1">
                             </div>
                           </div>
                           <div class="col-md-2">
                             <div class="mb-3">
                               <label class="form-label">Committed Qty</label>
-                              <input type="number" class="form-control" id="newResItemCommittedQty" min="0" value="0">
+                              <input type="number" class="form-control" id="newResItemCommittedQty" min="0" step="0.1" value="0">
                               <small class="form-hint">0 = auto</small>
                             </div>
                           </div>
@@ -402,7 +402,7 @@
       <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Material Check - Upload EZ Estimate</h5>
+            <h5 class="modal-title">Material Check</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
@@ -410,9 +410,12 @@
             <div class="card mb-3">
               <div class="card-body">
                 <div class="mb-3">
-                  <label class="form-label">Select EZ Estimate File (.xlsx or .xlsm)</label>
-                  <input type="file" class="form-control" id="materialCheckFile" accept=".xlsx,.xlsm">
-                  <small class="form-hint">Upload an EZ Estimate file to check material availability</small>
+                  <label class="form-label">Select File</label>
+                  <input type="file" class="form-control" id="materialCheckFile" accept=".xlsx,.xlsm,.csv">
+                  <small class="form-hint">
+                    <strong>EZ Estimate (.xlsx/.xlsm)</strong> — quantities in packs.<br>
+                    <strong>CSV (.csv)</strong> — quantities in eaches; columns: <code>Qty</code>, <code>Part Number</code>, <code>Color Code</code> (optional).
+                  </small>
                 </div>
                 <div class="mb-3">
                   <label class="form-check form-switch">
@@ -696,11 +699,11 @@
                         </div>
                         <div class="col-md-3">
                           <label class="form-label">Requested Qty</label>
-                          <input type="number" class="form-control" id="editResNewItemRequestedQty" min="1" value="1">
+                          <input type="number" class="form-control" id="editResNewItemRequestedQty" min="0.1" step="0.1" value="1">
                         </div>
                         <div class="col-md-3">
                           <label class="form-label">Committed Qty</label>
-                          <input type="number" class="form-control" id="editResNewItemCommittedQty" min="0" value="0">
+                          <input type="number" class="form-control" id="editResNewItemCommittedQty" min="0" step="0.1" value="0">
                         </div>
                       </div>
                       <div class="d-flex gap-2 mt-2">
@@ -1436,6 +1439,11 @@
         let jobWorkOrders = [];
         let reservationItems = [];
 
+        function fmtQty(n) {
+            const v = parseFloat(n) || 0;
+            return Number.isInteger(v) ? v.toString() : v.toFixed(1).replace(/\.0$/, '');
+        }
+
         function toggleJobRow(jobId) {
             const detailRow = document.getElementById(`job-detail-${jobId}`);
             if (!detailRow) return;
@@ -1787,11 +1795,11 @@
 
         function addItemToNewReservation() {
             const productId = document.getElementById('newResItemProductId').value;
-            const requestedQty = parseInt(document.getElementById('newResItemRequestedQty').value);
-            const committedQty = parseInt(document.getElementById('newResItemCommittedQty').value);
+            const requestedQty = Math.round(parseFloat(document.getElementById('newResItemRequestedQty').value) * 10) / 10;
+            const committedQty = Math.round(parseFloat(document.getElementById('newResItemCommittedQty').value) * 10) / 10;
 
             if (!productId) { alert('Please select a product'); return; }
-            if (requestedQty < 1) { alert('Requested quantity must be at least 1'); return; }
+            if (requestedQty < 0.1) { alert('Requested quantity must be at least 0.1'); return; }
             if (reservationItems.some(item => item.product_id == productId)) {
                 alert('This product is already in the reservation');
                 return;
@@ -1841,8 +1849,8 @@
                                 <td>${item.part_number}</td>
                                 <td>${item.finish || '-'}</td>
                                 <td>${item.description}</td>
-                                <td>${item.requested_qty}</td>
-                                <td><span class="badge bg-${item.available > 0 ? 'success' : 'warning'}">${item.available}</span></td>
+                                <td>${fmtQty(item.requested_qty)}</td>
+                                <td><span class="badge bg-${item.available > 0 ? 'success' : 'warning'}">${fmtQty(item.available)}</span></td>
                                 <td>
                                     <button class="btn btn-sm btn-ghost-danger" onclick="removeReservationItem(${index})">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
@@ -1939,9 +1947,9 @@
                     <td><strong>${escapeHtml(item.product.part_number)}</strong></td>
                     <td>${escapeHtml(item.product.finish || '-')}</td>
                     <td>${escapeHtml(item.product.description || '-')}</td>
-                    <td class="text-end">${item.requested_qty}</td>
-                    <td class="text-end">${item.committed_qty}</td>
-                    <td class="text-end">${item.consumed_qty}</td>
+                    <td class="text-end">${fmtQty(item.requested_qty)}</td>
+                    <td class="text-end">${fmtQty(item.committed_qty)}</td>
+                    <td class="text-end">${fmtQty(item.consumed_qty)}</td>
                     <td class="text-end">${item.released_qty}</td>
                     <td class="text-end">${item.product.quantity_on_hand}</td>
                     <td class="text-end">${item.product.quantity_available}</td>
@@ -2116,8 +2124,8 @@
                         <tr>
                             <td><strong>${escapeHtml(item.product.part_number)}</strong></td>
                             <td>${escapeHtml(item.product.finish || '-')}</td>
-                            <td>${item.committed_qty}</td>
-                            <td>${item.consumed_qty}</td>
+                            <td>${fmtQty(item.committed_qty)}</td>
+                            <td>${fmtQty(item.consumed_qty)}</td>
                             <td>
                                 <input type="number" class="form-control form-control-sm"
                                     id="resConsumed_${item.product_id}"
@@ -2126,11 +2134,12 @@
                                     data-already-consumed="${item.consumed_qty}"
                                     value="${item.consumed_qty}"
                                     min="${item.consumed_qty}"
+                                    step="0.1"
                                     onchange="updateResRelease(${item.product_id})"
                                     style="width: 100px;">
                             </td>
                             <td>
-                                <span id="resRelease_${item.product_id}" class="badge bg-success">${toRelease}</span>
+                                <span id="resRelease_${item.product_id}" class="badge bg-success">${fmtQty(toRelease)}</span>
                             </td>
                         </tr>
                     `;
@@ -2145,22 +2154,22 @@
 
         function updateResRelease(productId) {
             const input = document.getElementById(`resConsumed_${productId}`);
-            const consumed = parseInt(input.value) || 0;
-            const committed = parseInt(input.dataset.committed);
-            const alreadyConsumed = parseInt(input.dataset.alreadyConsumed);
+            const consumed = Math.round((parseFloat(input.value) || 0) * 10) / 10;
+            const committed = parseFloat(input.dataset.committed);
+            const alreadyConsumed = parseFloat(input.dataset.alreadyConsumed);
 
             if (consumed < alreadyConsumed) {
-                alert(`Cannot reduce consumed quantity below already consumed (${alreadyConsumed})`);
+                alert(`Cannot reduce consumed quantity below already consumed (${fmtQty(alreadyConsumed)})`);
                 input.value = alreadyConsumed;
                 return;
             }
 
             const badge = document.getElementById(`resRelease_${productId}`);
             if (consumed > committed) {
-                badge.textContent = `-${consumed - committed}`;
+                badge.textContent = `-${fmtQty(Math.round((consumed - committed) * 10) / 10)}`;
                 badge.className = 'badge bg-warning';
             } else {
-                badge.textContent = committed - consumed;
+                badge.textContent = fmtQty(Math.round((committed - consumed) * 10) / 10);
                 badge.className = 'badge bg-success';
             }
         }
@@ -2171,7 +2180,7 @@
 
             completeResItems.forEach(item => {
                 const input = document.getElementById(`resConsumed_${item.product_id}`);
-                consumedQuantities[item.product_id] = parseInt(input.value) || 0;
+                consumedQuantities[item.product_id] = Math.round((parseFloat(input.value) || 0) * 10) / 10;
             });
 
             try {
@@ -2248,17 +2257,17 @@
                     <td>${escapeHtml(item.product.description || '-')}</td>
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm"
-                               value="${item.requested_qty}" min="1"
+                               value="${item.requested_qty}" min="0.1" step="0.1"
                                onchange="updateEditResItemQty(${index}, 'requested_qty', this.value)"
                                style="width: 80px;">
                     </td>
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm"
-                               value="${item.committed_qty}" min="${item.consumed_qty || 0}"
+                               value="${item.committed_qty}" min="${item.consumed_qty || 0}" step="0.1"
                                onchange="updateEditResItemQty(${index}, 'committed_qty', this.value)"
                                style="width: 80px;">
                     </td>
-                    <td class="text-end">${item.consumed_qty}</td>
+                    <td class="text-end">${fmtQty(item.consumed_qty)}</td>
                     <td class="text-end">${item.product.quantity_on_hand}</td>
                     <td class="text-center">
                         ${item.consumed_qty === 0 ? `
@@ -2278,10 +2287,10 @@
 
         function updateEditResItemQty(index, field, value) {
             const item = editingResItems[index];
-            const numValue = parseInt(value);
+            const numValue = Math.round(parseFloat(value) * 10) / 10;
 
-            if (field === 'committed_qty' && numValue < item.consumed_qty) {
-                alert(`Cannot reduce committed quantity below already consumed (${item.consumed_qty})`);
+            if (field === 'committed_qty' && numValue < parseFloat(item.consumed_qty)) {
+                alert(`Cannot reduce committed quantity below already consumed (${fmtQty(item.consumed_qty)})`);
                 renderEditResItems();
                 return;
             }
@@ -2305,8 +2314,8 @@
 
         async function addItemToEditReservation() {
             const sku = document.getElementById('editResNewItemSKU').value.trim();
-            const requestedQty = parseInt(document.getElementById('editResNewItemRequestedQty').value);
-            const committedQty = parseInt(document.getElementById('editResNewItemCommittedQty').value);
+            const requestedQty = Math.round(parseFloat(document.getElementById('editResNewItemRequestedQty').value) * 10) / 10;
+            const committedQty = Math.round(parseFloat(document.getElementById('editResNewItemCommittedQty').value) * 10) / 10;
 
             if (!sku) { alert('Please enter a product SKU'); return; }
 
@@ -2377,19 +2386,22 @@
                 }
 
                 for (const item of editingResItems) {
+                    const rqty = Math.round(parseFloat(item.requested_qty) * 10) / 10;
+                    const cqty = Math.round(parseFloat(item.committed_qty) * 10) / 10;
+
                     if (item.id === null) {
                         const addResponse = await jobsAPI(`/api/v1/job-reservations/${id}/items`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 product_id: item.product_id,
-                                requested_qty: item.requested_qty,
-                                committed_qty: item.committed_qty
+                                requested_qty: rqty,
+                                committed_qty: cqty
                             })
                         });
                         if (!addResponse.ok) {
                             const error = await addResponse.json();
-                            alert('Error adding item: ' + (error.message || error.error));
+                            alert('Error adding item: ' + (error.message || error.error) + (error.details ? '\n' + JSON.stringify(error.details) : ''));
                             return;
                         }
                     } else {
@@ -2397,13 +2409,13 @@
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                requested_qty: item.requested_qty,
-                                committed_qty: item.committed_qty
+                                requested_qty: rqty,
+                                committed_qty: cqty
                             })
                         });
                         if (!updateResponse.ok) {
                             const error = await updateResponse.json();
-                            alert('Error updating item: ' + (error.message || error.error));
+                            alert('Error updating item: ' + (error.message || error.error) + (error.details ? '\n' + JSON.stringify(error.details) : ''));
                             return;
                         }
                     }
@@ -2566,14 +2578,22 @@
             btn.classList.add('btn-warning');
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Materials…';
 
+            const isCsv = file.name.toLowerCase().endsWith('.csv');
             const boneyardSharedMode = document.getElementById('jobBoneyardSharedMode').checked;
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('mode', 'ez_estimate');
-            formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+
+            let url;
+            if (isCsv) {
+                url = '/api/v1/fulfillment/material-check-csv';
+            } else {
+                url = '/api/v1/fulfillment/material-check';
+                formData.append('mode', 'ez_estimate');
+                formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+            }
 
             try {
-                const response = await jobsAPI('/api/v1/fulfillment/material-check', {
+                const response = await jobsAPI(url, {
                     method: 'POST',
                     body: formData
                 });
@@ -2586,7 +2606,7 @@
                 const data = await response.json();
                 materialCheckResults = data.results;
                 const banner = document.getElementById('jobBoneyardSharedBanner');
-                if (banner) banner.style.display = data.boneyard_shared_only ? '' : 'none';
+                if (banner) banner.style.display = (!isCsv && data.boneyard_shared_only) ? '' : 'none';
                 displayMaterialCheckResults(data.results, data.summary);
             } catch (error) {
                 console.error('Error checking materials:', error);

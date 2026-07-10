@@ -318,13 +318,13 @@
                         <div class="col-md-3">
                           <div class="mb-3">
                             <label class="form-label">Requested Qty</label>
-                            <input type="number" class="form-control" id="newItemRequestedQty" min="1" value="1">
+                            <input type="number" class="form-control" id="newItemRequestedQty" min="0.1" step="0.1" value="1">
                           </div>
                         </div>
                         <div class="col-md-3">
                           <div class="mb-3">
                             <label class="form-label">Committed Qty</label>
-                            <input type="number" class="form-control" id="newItemCommittedQty" min="0" value="0">
+                            <input type="number" class="form-control" id="newItemCommittedQty" min="0" step="0.1" value="0">
                           </div>
                         </div>
                       </div>
@@ -504,13 +504,13 @@
                         <div class="col-md-2">
                           <div class="mb-3">
                             <label class="form-label">Requested Qty</label>
-                            <input type="number" class="form-control" id="manualItemRequestedQty" min="1" value="1">
+                            <input type="number" class="form-control" id="manualItemRequestedQty" min="0.1" step="0.1" value="1">
                           </div>
                         </div>
                         <div class="col-md-2">
                           <div class="mb-3">
                             <label class="form-label">Committed Qty</label>
-                            <input type="number" class="form-control" id="manualItemCommittedQty" min="0" value="0">
+                            <input type="number" class="form-control" id="manualItemCommittedQty" min="0" step="0.1" value="0">
                             <small class="form-hint">Leave 0 for auto</small>
                           </div>
                         </div>
@@ -565,6 +565,49 @@
         let completeItems = [];
         let editingReservation = null;
         let editingItems = [];
+
+        // Format a quantity to 1 decimal, dropping trailing .0 for whole numbers
+        function fmtQty(n) {
+            const v = parseFloat(n) || 0;
+            return Number.isInteger(v) ? v.toString() : v.toFixed(1).replace(/\.0$/, '');
+        }
+
+        // Build bin packing breakdown HTML for a reservation item
+        function buildBinPackingHtml(item) {
+            const bins = item.bin_locations;
+            if (!bins || bins.length === 0) return '';
+
+            let remaining = parseFloat(item.committed_qty);
+            const rows = bins.map(bin => {
+                if (remaining <= 0) return null;
+                const avail = parseFloat(bin.quantity_available);
+                const pull = Math.min(remaining, avail > 0 ? avail : 0);
+                remaining = Math.round((remaining - pull) * 10) / 10;
+                const rowClass = pull > 0 ? '' : 'text-muted';
+                const primaryBadge = bin.is_primary ? '<span class="badge bg-blue-lt ms-1" style="font-size:0.65rem">primary</span>' : '';
+                return `<div class="d-flex justify-content-between align-items-center py-0 ${rowClass}" style="font-size:0.8rem">
+                    <span><i class="ti ti-package me-1 text-muted"></i>${bin.bin}${primaryBadge}</span>
+                    <span class="ms-3 font-monospace">${fmtQty(pull)} <span class="text-muted">/ ${fmtQty(bin.quantity_available)} avail</span></span>
+                </div>`;
+            }).filter(Boolean);
+
+            if (remaining > 0) {
+                rows.push(`<div class="d-flex justify-content-between py-0 text-danger" style="font-size:0.8rem">
+                    <span><i class="ti ti-alert-triangle me-1"></i>Shortfall</span>
+                    <span class="font-monospace">${fmtQty(remaining)}</span>
+                </div>`);
+            }
+
+            return `<div class="border rounded p-1 bg-light" style="min-width:200px">${rows.join('')}</div>`;
+        }
+
+        function toggleBins(btn) {
+            const breakdown = btn.closest('div').parentElement.querySelector('.bin-breakdown');
+            if (!breakdown) return;
+            const shown = breakdown.style.display !== 'none';
+            breakdown.style.display = shown ? 'none' : 'block';
+            btn.querySelector('i').className = shown ? 'ti ti-stack-2' : 'ti ti-stack-2-filled';
+        }
 
         // Helper function to close modal
         function closeModal(modalId) {
@@ -645,8 +688,8 @@
                         <td>${res.requested_by}</td>
                         <td>${res.needed_by || '-'}</td>
                         <td>${res.items_count}</td>
-                        <td>${res.total_committed}</td>
-                        <td>${res.total_consumed}</td>
+                        <td>${fmtQty(res.total_committed)}</td>
+                        <td>${fmtQty(res.total_consumed)}</td>
                         <td><small class="text-muted">${new Date(res.created_at).toLocaleDateString()}</small></td>
                         <td>
                             <div class="btn-group btn-group-sm">
@@ -779,21 +822,30 @@
 
             document.getElementById('detailModalTitle').textContent = `Reservation #${res.id} - ${res.job_number} Release ${res.release_number}`;
 
-            const itemsTable = items.map(item => `
+            const itemsTable = items.map(item => {
+                const binHtml = buildBinPackingHtml(item);
+                return `
                 <tr>
                     <td><code>${item.product.sku || '-'}</code></td>
                     <td><strong>${item.product.part_number}</strong></td>
                     <td>${item.product.finish || '-'}</td>
                     <td>${item.product.description || '-'}</td>
-                    <td>${item.requested_qty}</td>
-                    <td>${item.committed_qty}</td>
-                    <td>${item.consumed_qty}</td>
-                    <td>${item.released_qty}</td>
-                    <td>${item.product.quantity_on_hand}</td>
-                    <td>${item.product.quantity_available}</td>
+                    <td>${fmtQty(item.requested_qty)}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span>${fmtQty(item.committed_qty)}</span>
+                            ${binHtml ? `<button type="button" class="btn btn-sm btn-ghost-secondary py-0 px-1" onclick="toggleBins(this)" title="Show bin breakdown"><i class="ti ti-stack-2"></i></button>` : ''}
+                        </div>
+                        ${binHtml ? `<div class="bin-breakdown mt-1" style="display:none">${binHtml}</div>` : ''}
+                    </td>
+                    <td>${fmtQty(item.consumed_qty)}</td>
+                    <td>${fmtQty(item.released_qty)}</td>
+                    <td>${fmtQty(item.product.quantity_on_hand)}</td>
+                    <td>${fmtQty(item.product.quantity_available)}</td>
                     <td>${item.product.location || '-'}</td>
                 </tr>
-            `).join('');
+                `;
+            }).join('');
 
             document.getElementById('detailModalBody').innerHTML = `
                 <div class="row mb-3">
@@ -995,8 +1047,8 @@
                             <tr>
                                 <td><strong>${item.product.part_number}</strong></td>
                                 <td>${item.product.finish || '-'}</td>
-                                <td>${item.committed_qty}</td>
-                                <td>${item.consumed_qty}</td>
+                                <td>${fmtQty(item.committed_qty)}</td>
+                                <td>${fmtQty(item.consumed_qty)}</td>
                                 <td>
                                     <input type="number"
                                         class="form-control form-control-sm"
@@ -1006,12 +1058,13 @@
                                         data-already-consumed="${item.consumed_qty}"
                                         value="${item.consumed_qty}"
                                         min="${item.consumed_qty}"
+                                        step="0.1"
                                         onchange="updateToRelease(${item.product_id})"
                                         style="width: 100px;"
                                         title="Can consume more than committed if needed">
                                 </td>
                                 <td>
-                                    <span id="release_${item.product_id}" class="badge bg-success" title="">${toRelease}</span>
+                                    <span id="release_${item.product_id}" class="badge bg-success" title="">${fmtQty(toRelease)}</span>
                                 </td>
                             </tr>
                         `;
@@ -1045,29 +1098,29 @@
 
         function updateToRelease(productId) {
             const input = document.getElementById(`consumed_${productId}`);
-            const consumed = parseInt(input.value) || 0;
-            const committed = parseInt(input.dataset.committed);
-            const alreadyConsumed = parseInt(input.dataset.alreadyConsumed);
+            const consumed = Math.round((parseFloat(input.value) || 0) * 10) / 10;
+            const committed = parseFloat(input.dataset.committed);
+            const alreadyConsumed = parseFloat(input.dataset.alreadyConsumed);
 
             // Validate constraints
             if (consumed < alreadyConsumed) {
-                alert(`Cannot reduce consumed quantity below already consumed (${alreadyConsumed})`);
+                alert(`Cannot reduce consumed quantity below already consumed (${fmtQty(alreadyConsumed)})`);
                 input.value = alreadyConsumed;
                 return;
             }
 
             // Allow over-consumption but warn
             if (consumed > committed) {
-                const overConsumption = consumed - committed;
+                const overConsumption = Math.round((consumed - committed) * 10) / 10;
                 const badge = document.getElementById(`release_${productId}`);
-                badge.textContent = `-${overConsumption}`;
+                badge.textContent = `-${fmtQty(overConsumption)}`;
                 badge.className = 'badge bg-warning';
-                badge.title = `Over-consuming by ${overConsumption} units`;
+                badge.title = `Over-consuming by ${fmtQty(overConsumption)} units`;
             } else {
                 // Update to release badge
-                const toRelease = committed - consumed;
+                const toRelease = Math.round((committed - consumed) * 10) / 10;
                 const badge = document.getElementById(`release_${productId}`);
-                badge.textContent = toRelease;
+                badge.textContent = fmtQty(toRelease);
                 badge.className = 'badge bg-success';
                 badge.title = '';
             }
@@ -1080,7 +1133,7 @@
             // Gather all consumed quantities
             completeItems.forEach(item => {
                 const input = document.getElementById(`consumed_${item.product_id}`);
-                consumedQuantities[item.product_id] = parseInt(input.value) || 0;
+                consumedQuantities[item.product_id] = Math.round((parseFloat(input.value) || 0) * 10) / 10;
             });
 
             try {
@@ -1207,19 +1260,19 @@
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm"
                                value="${item.requested_qty}"
-                               min="1"
+                               min="0.1" step="0.1"
                                onchange="updateItemQuantity(${index}, 'requested_qty', this.value)"
                                style="width: 80px;">
                     </td>
                     <td class="text-end">
                         <input type="number" class="form-control form-control-sm"
                                value="${item.committed_qty}"
-                               min="0"
+                               min="0" step="0.1"
                                onchange="updateItemQuantity(${index}, 'committed_qty', this.value)"
                                style="width: 80px;"
                                ${item.consumed_qty > 0 ? `min="${item.consumed_qty}"` : ''}>
                     </td>
-                    <td class="text-end">${item.consumed_qty}</td>
+                    <td class="text-end">${fmtQty(item.consumed_qty)}</td>
                     <td class="text-end">${item.product.quantity_on_hand}</td>
                     <td class="text-center">
                         ${item.consumed_qty === 0 ? `
@@ -1243,7 +1296,7 @@
 
         function updateItemQuantity(index, field, value) {
             const item = editingItems[index];
-            const numValue = parseInt(value);
+            const numValue = Math.round(parseFloat(value) * 10) / 10;
 
             if (field === 'committed_qty' && numValue < item.consumed_qty) {
                 alert(`Cannot reduce committed quantity below already consumed (${item.consumed_qty})`);
@@ -1279,8 +1332,8 @@
 
         async function addNewItem() {
             const sku = document.getElementById('newItemSKU').value.trim();
-            const requestedQty = parseInt(document.getElementById('newItemRequestedQty').value);
-            const committedQty = parseInt(document.getElementById('newItemCommittedQty').value);
+            const requestedQty = Math.round(parseFloat(document.getElementById('newItemRequestedQty').value) * 10) / 10;
+            const committedQty = Math.round(parseFloat(document.getElementById('newItemCommittedQty').value) * 10) / 10;
 
             if (!sku) {
                 alert('Please enter a product SKU');
@@ -1389,6 +1442,9 @@
 
                 // Update/add/remove items
                 for (const item of editingItems) {
+                    const rqty = Math.round(parseFloat(item.requested_qty) * 10) / 10;
+                    const cqty = Math.round(parseFloat(item.committed_qty) * 10) / 10;
+
                     if (item.id === null) {
                         // New item - add it
                         const addResponse = await fetch(`/api/v1/job-reservations/${id}/items`, {
@@ -1400,14 +1456,14 @@
                             },
                             body: JSON.stringify({
                                 product_id: item.product_id,
-                                requested_qty: item.requested_qty,
-                                committed_qty: item.committed_qty
+                                requested_qty: rqty,
+                                committed_qty: cqty
                             })
                         });
 
                         if (!addResponse.ok) {
                             const error = await addResponse.json();
-                            alert('Error adding item: ' + (error.message || error.error));
+                            alert('Error adding item: ' + (error.message || error.error) + (error.details ? '\n' + JSON.stringify(error.details) : ''));
                             return;
                         }
                     } else {
@@ -1420,14 +1476,14 @@
                                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                             },
                             body: JSON.stringify({
-                                requested_qty: item.requested_qty,
-                                committed_qty: item.committed_qty
+                                requested_qty: rqty,
+                                committed_qty: cqty
                             })
                         });
 
                         if (!updateResponse.ok) {
                             const error = await updateResponse.json();
-                            alert('Error updating item: ' + (error.message || error.error));
+                            alert('Error updating item: ' + (error.message || error.error) + (error.details ? '\n' + JSON.stringify(error.details) : ''));
                             return;
                         }
                     }
@@ -1738,16 +1794,16 @@
 
         function addManualItem() {
             const productId = document.getElementById('manualItemProductId').value;
-            const requestedQty = parseInt(document.getElementById('manualItemRequestedQty').value);
-            const committedQty = parseInt(document.getElementById('manualItemCommittedQty').value);
+            const requestedQty = Math.round(parseFloat(document.getElementById('manualItemRequestedQty').value) * 10) / 10;
+            const committedQty = Math.round(parseFloat(document.getElementById('manualItemCommittedQty').value) * 10) / 10;
 
             if (!productId) {
                 alert('Please select a product');
                 return;
             }
 
-            if (requestedQty < 1) {
-                alert('Requested quantity must be at least 1');
+            if (requestedQty < 0.1) {
+                alert('Requested quantity must be at least 0.1');
                 return;
             }
 
@@ -1787,8 +1843,8 @@
                     <td>${item.part_number}</td>
                     <td>${item.finish || '-'}</td>
                     <td>${item.description}</td>
-                    <td class="text-end">${item.requested_qty}</td>
-                    <td class="text-end">${item.committed_qty || 'Auto'}</td>
+                    <td class="text-end">${fmtQty(item.requested_qty)}</td>
+                    <td class="text-end">${item.committed_qty ? fmtQty(item.committed_qty) : 'Auto'}</td>
                     <td class="text-end"><span class="badge bg-${item.available > 0 ? 'success' : 'warning'}">${item.available}</span></td>
                     <td class="text-center">
                         <button type="button" class="btn btn-sm btn-ghost-danger" onclick="removeManualItem(${index})" title="Remove">
