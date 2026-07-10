@@ -360,6 +360,8 @@ class MaterialCheckController extends Controller
             );
         }
 
+        $results = $this->mergeResultsBySku($results, $summary);
+
         return response()->json([
             'message' => 'Material check completed',
             'summary' => $summary,
@@ -683,6 +685,8 @@ class MaterialCheckController extends Controller
                 ];
             }
 
+            $results = $this->mergeResultsBySku($results, $summary);
+
             return response()->json([
                 'message' => 'Material check completed',
                 'summary' => $summary,
@@ -874,6 +878,8 @@ class MaterialCheckController extends Controller
 
         fclose($handle);
 
+        $results = $this->mergeResultsBySku($results, $summary);
+
         return response()->json([
             'message' => 'Material check completed',
             'summary' => $summary,
@@ -922,6 +928,60 @@ class MaterialCheckController extends Controller
         }
 
         return [['part_number' => $partNumber, 'finish' => $finish, 'qty' => $qty]];
+    }
+
+    /**
+     * Merge duplicate SKU rows in $results, summing quantities and re-evaluating status.
+     * Only merges rows that share the same SKU and were found in inventory.
+     */
+    private function mergeResultsBySku(array $results, array &$summary): array
+    {
+        $merged = [];
+        foreach ($results as $row) {
+            $key = $row['sku'];
+            if (!isset($merged[$key])) {
+                $merged[$key] = $row;
+                continue;
+            }
+
+            $existing = &$merged[$key];
+
+            // Roll back the old status contribution to the summary
+            if ($existing['status'] !== 'not_found') {
+                $summary[$existing['status']]--;
+                $summary['total']--;
+            }
+
+            // Sum quantities
+            $existing['required_qty_packs']  += $row['required_qty_packs'];
+            $existing['required_qty_eaches'] += $row['required_qty_eaches'];
+
+            // Re-evaluate status against the merged required qty
+            $available = $existing['available_qty_eaches'];
+            $required  = $existing['required_qty_eaches'];
+
+            if ($row['status'] === 'not_found') {
+                // Keep existing status — one found row + a not_found duplicate skips
+            } elseif ($available <= 0) {
+                $existing['status'] = 'unavailable';
+            } elseif ($available < $required) {
+                $existing['status'] = 'partial';
+            } else {
+                $existing['status'] = 'available';
+            }
+
+            // Recalculate shortage
+            $existing['shortage_eaches'] = max(0, $required - $available);
+            $existing['shortage_packs']  = $existing['shortage_eaches'];
+
+            // Re-add merged row's status to summary
+            if ($existing['status'] !== 'not_found') {
+                $summary[$existing['status']]++;
+                $summary['total']++;
+            }
+        }
+
+        return array_values($merged);
     }
 
     /**
