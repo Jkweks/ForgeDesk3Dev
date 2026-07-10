@@ -819,6 +819,7 @@
                 ${product.part_number ? `Part #: <strong class="text-body">${product.part_number}</strong>` : ''}
                 ${product.part_number && product.finish ? ' &nbsp;·&nbsp; ' : ''}
                 ${product.finish ? `Finish: <strong class="text-body">${product.finish}${product.finish_name ? ' – ' + product.finish_name : ''}</strong>` : ''}
+                <span class="ms-2 text-muted" style="opacity:0.6;">ID: ${product.id}</span>
               </div>
             </div>
           </div>
@@ -1137,7 +1138,7 @@
               <div class="row g-2 mb-2">
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">SKU</label>
-                  <input type="text" class="form-control form-control-sm" name="sku" value="" readonly>
+                  <input type="text" class="form-control form-control-sm" name="sku" value="">
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Part Number</label>
