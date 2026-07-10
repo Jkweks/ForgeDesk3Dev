@@ -887,7 +887,7 @@ class MaterialCheckController extends Controller
      * Returns an array of one or more ['part_number', 'finish', 'qty'] rows:
      *   - E2250  → renamed to E2550 (any finish)
      *   - P1928A → exploded into 3× P1929B + 1× P5919 (same finish, qty multiplied)
-     *   - P1928C → exploded into 3× P1929B + 1× P5920 (same finish, qty multiplied)
+     *   - P1928C → exploded into 3× P1929A + 1× P5920 (same finish, qty multiplied)
      */
     private function applyPartRules(string $partNumber, string $finish, float $qty): array
     {
@@ -907,10 +907,10 @@ class MaterialCheckController extends Controller
             ];
         }
 
-        // P1928C is a kit: 3× P1929B + 1× P5920
+        // P1928C is a kit: 3× P1929A + 1× P5920
         if ($pn === 'P1928C') {
             return [
-                ['part_number' => 'P1929B', 'finish' => $finish, 'qty' => $qty * 3],
+                ['part_number' => 'P1929A', 'finish' => $finish, 'qty' => $qty * 3],
                 ['part_number' => 'P5920',  'finish' => $finish, 'qty' => $qty * 1],
             ];
         }
