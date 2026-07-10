@@ -885,8 +885,9 @@ class MaterialCheckController extends Controller
      * Apply part number correction and substitution rules.
      *
      * Returns an array of one or more ['part_number', 'finish', 'qty'] rows:
-     *   - E2250 → renamed to E2550 (any finish)
-     *   - P1928C → exploded into 3× P1929 + 1× P5920 (same finish, qty multiplied)
+     *   - E2250  → renamed to E2550 (any finish)
+     *   - P1928A → exploded into 3× P1929B + 1× P5919 (same finish, qty multiplied)
+     *   - P1928C → exploded into 3× P1929B + 1× P5920 (same finish, qty multiplied)
      */
     private function applyPartRules(string $partNumber, string $finish, float $qty): array
     {
@@ -898,11 +899,19 @@ class MaterialCheckController extends Controller
             $pn = 'E2550';
         }
 
-        // P1928C is a kit: 3× P1929 + 1× P5920
+        // P1928A is a kit: 3× P1929B + 1× P5919
+        if ($pn === 'P1928A') {
+            return [
+                ['part_number' => 'P1929B', 'finish' => $finish, 'qty' => $qty * 3],
+                ['part_number' => 'P5919',  'finish' => $finish, 'qty' => $qty * 1],
+            ];
+        }
+
+        // P1928C is a kit: 3× P1929B + 1× P5920
         if ($pn === 'P1928C') {
             return [
-                ['part_number' => 'P1929', 'finish' => $finish, 'qty' => $qty * 3],
-                ['part_number' => 'P5920', 'finish' => $finish, 'qty' => $qty * 1],
+                ['part_number' => 'P1929B', 'finish' => $finish, 'qty' => $qty * 3],
+                ['part_number' => 'P5920',  'finish' => $finish, 'qty' => $qty * 1],
             ];
         }
 
