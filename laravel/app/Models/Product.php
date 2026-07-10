@@ -279,7 +279,7 @@ class Product extends Model
 
     public function getQuantityAvailableAttribute()
     {
-        return $this->quantity_on_hand - $this->committed_from_reservations;
+        return (int) floor($this->quantity_on_hand - $this->committed_from_reservations);
     }
 
     public function updateStatus()
@@ -577,7 +577,7 @@ class Product extends Model
     {
         $onHandPacks = $this->quantity_on_hand_packs;
         $committedPacks = $this->committed_packs_from_reservations;
-        return $onHandPacks - $committedPacks;
+        return (int) floor($onHandPacks - $committedPacks);
     }
 
     /**
