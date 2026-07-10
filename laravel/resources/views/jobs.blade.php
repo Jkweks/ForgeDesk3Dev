@@ -402,7 +402,7 @@
       <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Material Check - Upload EZ Estimate</h5>
+            <h5 class="modal-title">Material Check</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
@@ -410,9 +410,12 @@
             <div class="card mb-3">
               <div class="card-body">
                 <div class="mb-3">
-                  <label class="form-label">Select EZ Estimate File (.xlsx or .xlsm)</label>
-                  <input type="file" class="form-control" id="materialCheckFile" accept=".xlsx,.xlsm">
-                  <small class="form-hint">Upload an EZ Estimate file to check material availability</small>
+                  <label class="form-label">Select File</label>
+                  <input type="file" class="form-control" id="materialCheckFile" accept=".xlsx,.xlsm,.csv">
+                  <small class="form-hint">
+                    <strong>EZ Estimate (.xlsx/.xlsm)</strong> — quantities in packs.<br>
+                    <strong>CSV (.csv)</strong> — quantities in eaches; columns: <code>Qty</code>, <code>Part Number</code>, <code>Color Code</code> (optional).
+                  </small>
                 </div>
                 <div class="mb-3">
                   <label class="form-check form-switch">
@@ -2575,14 +2578,22 @@
             btn.classList.add('btn-warning');
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking Materials…';
 
+            const isCsv = file.name.toLowerCase().endsWith('.csv');
             const boneyardSharedMode = document.getElementById('jobBoneyardSharedMode').checked;
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('mode', 'ez_estimate');
-            formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+
+            let url;
+            if (isCsv) {
+                url = '/api/v1/fulfillment/material-check-csv';
+            } else {
+                url = '/api/v1/fulfillment/material-check';
+                formData.append('mode', 'ez_estimate');
+                formData.append('boneyard_shared_only', boneyardSharedMode ? '1' : '0');
+            }
 
             try {
-                const response = await jobsAPI('/api/v1/fulfillment/material-check', {
+                const response = await jobsAPI(url, {
                     method: 'POST',
                     body: formData
                 });
@@ -2595,7 +2606,7 @@
                 const data = await response.json();
                 materialCheckResults = data.results;
                 const banner = document.getElementById('jobBoneyardSharedBanner');
-                if (banner) banner.style.display = data.boneyard_shared_only ? '' : 'none';
+                if (banner) banner.style.display = (!isCsv && data.boneyard_shared_only) ? '' : 'none';
                 displayMaterialCheckResults(data.results, data.summary);
             } catch (error) {
                 console.error('Error checking materials:', error);
