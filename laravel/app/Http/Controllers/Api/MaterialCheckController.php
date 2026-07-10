@@ -885,7 +885,8 @@ class MaterialCheckController extends Controller
      * Apply part number correction and substitution rules.
      *
      * Returns an array of one or more ['part_number', 'finish', 'qty'] rows:
-     *   - E2250  → renamed to E2550 (any finish)
+     *   - E2250  → renamed to E2550-0R (finish forced to 0R)
+     *   - E2550  → finish always forced to 0R
      *   - P1928A → exploded into 3× P1929B + 1× P5919 (same finish, qty multiplied)
      *   - P1928C → exploded into 3× P1929A + 1× P5920 (same finish, qty multiplied)
      */
@@ -897,6 +898,11 @@ class MaterialCheckController extends Controller
         if ($pn === 'E2250') {
             $partNumber = 'E2550';
             $pn = 'E2550';
+        }
+
+        // E2550 always uses finish 0R regardless of what was specified
+        if ($pn === 'E2550') {
+            return [['part_number' => 'E2550', 'finish' => '0R', 'qty' => $qty]];
         }
 
         // P1928A is a kit: 3× P1929B + 1× P5919
