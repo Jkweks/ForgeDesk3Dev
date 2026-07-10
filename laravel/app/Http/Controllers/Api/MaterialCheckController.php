@@ -429,93 +429,99 @@ class MaterialCheckController extends Controller
                     $finish = '0R';
                 }
 
-                // Combine Part Number and Finish to create SKU (format: PartNumber-Finish)
-                $sku = $partNumber . '-' . $finish;
+                foreach ($this->applyPartRules($partNumber, $finish, $qtyPacks) as $line) {
+                    $pn      = $line['part_number'];
+                    $fin     = $line['finish'];
+                    $lineQty = $line['qty'];
 
-                $summary['total']++;
+                    // Combine Part Number and Finish to create SKU (format: PartNumber-Finish)
+                    $sku = $pn . '-' . $fin;
 
-                // Look up the part in inventory
-                $product = $this->findProduct($sku);
+                    $summary['total']++;
 
-                if (!$product) {
+                    // Look up the part in inventory
+                    $product = $this->findProduct($sku);
+
+                    if (!$product) {
+                        $results[] = [
+                            'part_number' => $pn,
+                            'finish' => $fin,
+                            'sku' => $sku,
+                            'description' => '',
+                            'required_qty_packs' => $lineQty,
+                            'required_qty_eaches' => 0,
+                            'available_qty_packs' => 0,
+                            'available_qty_eaches' => 0,
+                            'shortage_packs' => $lineQty,
+                            'shortage_eaches' => 0,
+                            'pack_size' => 1,
+                            'status' => 'not_found',
+                            'location' => null,
+                            'sheet' => $sheetName,
+                            'row' => $row,
+                        ];
+                        $summary['not_found']++;
+                        continue;
+                    }
+
+                    // Get pack size (default to 1 if not set)
+                    $packSize = $product->pack_size ?? 1;
+                    $hasPackSize = $packSize > 1;
+
+                    // Convert required packs to eaches
+                    // e.g., 0.86 packs * 100 pack_size = 86 eaches
+                    $requiredEaches = $hasPackSize
+                        ? (int) ceil($lineQty * $packSize)
+                        : (int) ceil($lineQty);
+
+                    // Calculate availability in eaches (from fulfillment system)
+                    $availableEaches = $product->quantity_available ?? $product->quantity_on_hand ?? 0;
+
+                    // Convert available to packs (full packs only)
+                    $availablePacks = $hasPackSize
+                        ? floor($availableEaches / $packSize)
+                        : $availableEaches;
+
+                    // Calculate shortage
+                    $shortageEaches = max(0, $requiredEaches - $availableEaches);
+                    $shortagePacks = $hasPackSize
+                        ? ceil($shortageEaches / $packSize)
+                        : $shortageEaches;
+
+                    // Determine status based on eaches comparison
+                    $status = 'available';
+                    if ($availableEaches <= 0) {
+                        $status = 'unavailable';
+                        $summary['unavailable']++;
+                    } elseif ($availableEaches < $requiredEaches) {
+                        $status = 'partial';
+                        $summary['partial']++;
+                    } else {
+                        $summary['available']++;
+                    }
+
                     $results[] = [
-                        'part_number' => $partNumber,
-                        'finish' => $finish,
+                        'part_number' => $pn,
+                        'finish' => $fin,
                         'sku' => $sku,
-                        'description' => '',
-                        'required_qty_packs' => $qtyPacks,
-                        'required_qty_eaches' => 0,
-                        'available_qty_packs' => 0,
-                        'available_qty_eaches' => 0,
-                        'shortage_packs' => $qtyPacks,
-                        'shortage_eaches' => 0,
-                        'pack_size' => 1,
-                        'status' => 'not_found',
-                        'location' => null,
+                        'description' => $product->description,
+                        'required_qty_packs' => $lineQty,
+                        'required_qty_eaches' => $requiredEaches,
+                        'available_qty_packs' => $availablePacks,
+                        'available_qty_eaches' => $availableEaches,
+                        'shortage_packs' => $shortagePacks,
+                        'shortage_eaches' => $shortageEaches,
+                        'pack_size' => $packSize,
+                        'has_pack_size' => $hasPackSize,
+                        'status' => $status,
+                        'location' => $product->location,
+                        'product_id' => $product->id,
+                        'nonsof' => (bool) $product->nonsof,
+                        'is_shared' => (bool) $product->is_shared,
                         'sheet' => $sheetName,
                         'row' => $row,
                     ];
-                    $summary['not_found']++;
-                    continue;
                 }
-
-                // Get pack size (default to 1 if not set)
-                $packSize = $product->pack_size ?? 1;
-                $hasPackSize = $packSize > 1;
-
-                // Convert required packs to eaches
-                // e.g., 0.86 packs * 100 pack_size = 86 eaches
-                $requiredEaches = $hasPackSize
-                    ? (int) ceil($qtyPacks * $packSize)
-                    : (int) ceil($qtyPacks);
-
-                // Calculate availability in eaches (from fulfillment system)
-                $availableEaches = $product->quantity_available ?? $product->quantity_on_hand ?? 0;
-
-                // Convert available to packs (full packs only)
-                $availablePacks = $hasPackSize
-                    ? floor($availableEaches / $packSize)
-                    : $availableEaches;
-
-                // Calculate shortage
-                $shortageEaches = max(0, $requiredEaches - $availableEaches);
-                $shortagePacks = $hasPackSize
-                    ? ceil($shortageEaches / $packSize)
-                    : $shortageEaches;
-
-                // Determine status based on eaches comparison
-                $status = 'available';
-                if ($availableEaches <= 0) {
-                    $status = 'unavailable';
-                    $summary['unavailable']++;
-                } elseif ($availableEaches < $requiredEaches) {
-                    $status = 'partial';
-                    $summary['partial']++;
-                } else {
-                    $summary['available']++;
-                }
-
-                $results[] = [
-                    'part_number' => $partNumber,
-                    'finish' => $finish,
-                    'sku' => $sku,
-                    'description' => $product->description,
-                    'required_qty_packs' => $qtyPacks,
-                    'required_qty_eaches' => $requiredEaches,
-                    'available_qty_packs' => $availablePacks,
-                    'available_qty_eaches' => $availableEaches,
-                    'shortage_packs' => $shortagePacks,
-                    'shortage_eaches' => $shortageEaches,
-                    'pack_size' => $packSize,
-                    'has_pack_size' => $hasPackSize,
-                    'status' => $status,
-                    'location' => $product->location,
-                    'product_id' => $product->id,
-                    'nonsof' => (bool) $product->nonsof,
-                    'is_shared' => (bool) $product->is_shared,
-                    'sheet' => $sheetName,
-                    'row' => $row,
-                ];
             } catch (\Exception $e) {
                 // Log error but continue processing other rows
                 @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Error processing row {$row} in {$sheetName}: {$e->getMessage()}\n", FILE_APPEND);
@@ -800,64 +806,70 @@ class MaterialCheckController extends Controller
 
             if ($qty <= 0 || $partNumber === '') continue;
 
-            $sku = $colorCode !== '' ? "{$partNumber}-{$colorCode}" : $partNumber;
+            foreach ($this->applyPartRules($partNumber, $colorCode, $qty) as $line) {
+                $pn    = $line['part_number'];
+                $fin   = $line['finish'];
+                $lineQty = $line['qty'];
+                $sku   = $fin !== '' ? "{$pn}-{$fin}" : $pn;
 
-            $summary['total']++;
-            $product = $this->findProduct($sku);
+                // CSV quantities are always eaches — round up to nearest 0.1
+                $requiredEach = ceil($lineQty * 10) / 10;
 
-            if (!$product) {
+                $summary['total']++;
+                $product = $this->findProduct($sku);
+
+                if (!$product) {
+                    $results[] = [
+                        'part_number'         => $pn,
+                        'finish'              => $fin,
+                        'sku'                 => $sku,
+                        'description'         => '',
+                        'required_qty_packs'  => $requiredEach,
+                        'required_qty_eaches' => $requiredEach,
+                        'available_qty_packs' => 0,
+                        'available_qty_eaches'=> 0,
+                        'shortage_packs'      => $requiredEach,
+                        'shortage_eaches'     => $requiredEach,
+                        'pack_size'           => 1,
+                        'has_pack_size'       => false,
+                        'status'              => 'not_found',
+                        'location'            => null,
+                    ];
+                    $summary['not_found']++;
+                    continue;
+                }
+
+                $availableEach = (float) ($product->quantity_available ?? $product->quantity_on_hand ?? 0);
+                $shortageEach  = max(0.0, $requiredEach - $availableEach);
+
+                if ($availableEach <= 0) {
+                    $status = 'unavailable'; $summary['unavailable']++;
+                } elseif ($availableEach < $requiredEach) {
+                    $status = 'partial'; $summary['partial']++;
+                } else {
+                    $status = 'available'; $summary['available']++;
+                }
+
                 $results[] = [
-                    'part_number'         => $partNumber,
-                    'finish'              => $colorCode,
+                    'part_number'         => $pn,
+                    'finish'              => $fin,
                     'sku'                 => $sku,
-                    'description'         => '',
-                    'required_qty_packs'  => $qty,
-                    'required_qty_eaches' => $qty,
-                    'available_qty_packs' => 0,
-                    'available_qty_eaches'=> 0,
-                    'shortage_packs'      => $qty,
-                    'shortage_eaches'     => $qty,
+                    'description'         => $product->description,
+                    'required_qty_packs'  => $requiredEach,
+                    'required_qty_eaches' => $requiredEach,
+                    'available_qty_packs' => $availableEach,
+                    'available_qty_eaches'=> $availableEach,
+                    'shortage_packs'      => $shortageEach,
+                    'shortage_eaches'     => $shortageEach,
                     'pack_size'           => 1,
                     'has_pack_size'       => false,
-                    'status'              => 'not_found',
-                    'location'            => null,
+                    'status'              => $status,
+                    'location'            => $product->location,
+                    'product_id'          => $product->id,
+                    'nonsof'              => (bool) $product->nonsof,
+                    'is_shared'           => (bool) $product->is_shared,
                 ];
-                $summary['not_found']++;
-                continue;
             }
-
-            // CSV quantities are always eaches — round up to nearest 0.1
-            $requiredEach = ceil($qty * 10) / 10;
-            $availableEach= (float) ($product->quantity_available ?? $product->quantity_on_hand ?? 0);
-            $shortageEach = max(0.0, $requiredEach - $availableEach);
-
-            if ($availableEach <= 0) {
-                $status = 'unavailable'; $summary['unavailable']++;
-            } elseif ($availableEach < $requiredEach) {
-                $status = 'partial'; $summary['partial']++;
-            } else {
-                $status = 'available'; $summary['available']++;
-            }
-
-            $results[] = [
-                'part_number'         => $partNumber,
-                'finish'              => $colorCode,
-                'sku'                 => $sku,
-                'description'         => $product->description,
-                'required_qty_packs'  => $requiredEach,
-                'required_qty_eaches' => $requiredEach,
-                'available_qty_packs' => $availableEach,
-                'available_qty_eaches'=> $availableEach,
-                'shortage_packs'      => $shortageEach,
-                'shortage_eaches'     => $shortageEach,
-                'pack_size'           => 1,
-                'has_pack_size'       => false,
-                'status'              => $status,
-                'location'            => $product->location,
-                'product_id'          => $product->id,
-                'nonsof'              => (bool) $product->nonsof,
-                'is_shared'           => (bool) $product->is_shared,
-            ];
         }
 
         fclose($handle);
@@ -867,6 +879,34 @@ class MaterialCheckController extends Controller
             'summary' => $summary,
             'results' => $results,
         ]);
+    }
+
+    /**
+     * Apply part number correction and substitution rules.
+     *
+     * Returns an array of one or more ['part_number', 'finish', 'qty'] rows:
+     *   - E2250 → renamed to E2550 (any finish)
+     *   - P1928C → exploded into 3× P1929 + 1× P5920 (same finish, qty multiplied)
+     */
+    private function applyPartRules(string $partNumber, string $finish, float $qty): array
+    {
+        $pn = strtoupper(trim($partNumber));
+
+        // E2250 is a systematic misprint — correct to E2550
+        if ($pn === 'E2250') {
+            $partNumber = 'E2550';
+            $pn = 'E2550';
+        }
+
+        // P1928C is a kit: 3× P1929 + 1× P5920
+        if ($pn === 'P1928C') {
+            return [
+                ['part_number' => 'P1929', 'finish' => $finish, 'qty' => $qty * 3],
+                ['part_number' => 'P5920', 'finish' => $finish, 'qty' => $qty * 1],
+            ];
+        }
+
+        return [['part_number' => $partNumber, 'finish' => $finish, 'qty' => $qty]];
     }
 
     /**
