@@ -933,9 +933,11 @@ function woStepContextMenu(stepId, currentStatus, event) {
     menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
     const isSpecial = currentStatus === 'not_required' || currentStatus === 'on_hold';
     menu.innerHTML = isSpecial
-        ? `<button class="dropdown-item" onclick="setWoStepStatus(${stepId},'pending');this.closest('#wo-step-ctx').remove()">Reset to Pending</button>
+        ? `<button class="dropdown-item text-success" onclick="markAllWoStepsComplete();this.closest('#wo-step-ctx').remove()">Mark Complete (All Steps)</button>
+           <button class="dropdown-item" onclick="setWoStepStatus(${stepId},'pending');this.closest('#wo-step-ctx').remove()">Reset to Pending</button>
            <button class="dropdown-item text-danger" onclick="deleteWoStep(${stepId});this.closest('#wo-step-ctx').remove()">Delete Step</button>`
-        : `<button class="dropdown-item text-muted" onclick="setWoStepStatus(${stepId},'not_required');this.closest('#wo-step-ctx').remove()">Mark Not Required</button>
+        : `<button class="dropdown-item text-success" onclick="markAllWoStepsComplete();this.closest('#wo-step-ctx').remove()">Mark Complete (All Steps)</button>
+           <button class="dropdown-item text-muted" onclick="setWoStepStatus(${stepId},'not_required');this.closest('#wo-step-ctx').remove()">Mark Not Required</button>
            <button class="dropdown-item text-warning" onclick="setWoStepStatus(${stepId},'on_hold');this.closest('#wo-step-ctx').remove()">Mark On Hold</button>
            <button class="dropdown-item text-danger" onclick="deleteWoStep(${stepId});this.closest('#wo-step-ctx').remove()">Delete Step</button>`;
     document.body.appendChild(menu);
@@ -950,6 +952,23 @@ async function setWoStepStatus(stepId, status) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status }),
         });
+        reloadWoSteps();
+    } catch (e) { console.error(e); }
+}
+
+async function markAllWoStepsComplete() {
+    if (!currentWO) return;
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/steps`);
+        const data = await r.json();
+        const stepsToComplete = (data.steps || []).filter(s => s.status !== 'not_required' && s.status !== 'complete');
+        await Promise.all(stepsToComplete.map(s =>
+            API(`/job-steps/${s.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'complete' }),
+            })
+        ));
         reloadWoSteps();
     } catch (e) { console.error(e); }
 }
@@ -1240,6 +1259,30 @@ async function setStageStatus(stageId, status) {
     }
 }
 
+async function markAllElevStagesComplete(stageId) {
+    const elev = findElevForStage(stageId);
+    if (!elev) return;
+    try {
+        const stagesToComplete = (elev.stages || []).filter(s => s.status !== 'not_required' && s.status !== 'complete');
+        await Promise.all(stagesToComplete.map(s =>
+            API(`/work-order-stages/${s.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'complete' }),
+            })
+        ));
+        const expanded = getExpandedElevationIds();
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = await r.json();
+        currentWO = wo;
+        renderElevations(wo.elevations || []);
+        restoreExpandedElevations(expanded);
+        loadWorkOrders();
+        // Trigger completion check on the last stage updated (or the original)
+        checkElevationCompletion(stageId, 'complete');
+    } catch (e) { console.error(e); }
+}
+
 // ── Elevation completion prompts ──────────────────────────────────────────
 let _elevPromptId = null;
 
@@ -1345,8 +1388,10 @@ function stageContextMenu(stageId, currentStatus, event) {
     menu.style.cssText = `position:fixed;z-index:9999;left:${event.clientX}px;top:${event.clientY}px`;
     const isSpecial = currentStatus === 'not_required' || currentStatus === 'on_hold';
     menu.innerHTML = isSpecial
-        ? `<button class="dropdown-item" onclick="setStageStatus(${stageId},'pending');this.closest('#stage-ctx-menu').remove()">Reset to Pending</button>`
-        : `<button class="dropdown-item text-muted" onclick="setStageStatus(${stageId},'not_required');this.closest('#stage-ctx-menu').remove()">Mark Not Required</button>
+        ? `<button class="dropdown-item text-success" onclick="markAllElevStagesComplete(${stageId});this.closest('#stage-ctx-menu').remove()">Mark Complete (All Stages)</button>
+           <button class="dropdown-item" onclick="setStageStatus(${stageId},'pending');this.closest('#stage-ctx-menu').remove()">Reset to Pending</button>`
+        : `<button class="dropdown-item text-success" onclick="markAllElevStagesComplete(${stageId});this.closest('#stage-ctx-menu').remove()">Mark Complete (All Stages)</button>
+           <button class="dropdown-item text-muted" onclick="setStageStatus(${stageId},'not_required');this.closest('#stage-ctx-menu').remove()">Mark Not Required</button>
            <button class="dropdown-item text-warning" onclick="setStageStatus(${stageId},'on_hold');this.closest('#stage-ctx-menu').remove()">Mark On Hold</button>`;
     document.body.appendChild(menu);
     const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
