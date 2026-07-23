@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class FdStageTemplate extends Model
 {
@@ -19,5 +20,15 @@ class FdStageTemplate extends Model
     public function defaultUser(): BelongsTo
     {
         return $this->belongsTo(FdUser::class, 'default_user_id');
+    }
+
+    public function dependsOn(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            FdStageTemplate::class,
+            'fd_stage_template_deps',
+            'template_id',
+            'depends_on_template_id'
+        );
     }
 }

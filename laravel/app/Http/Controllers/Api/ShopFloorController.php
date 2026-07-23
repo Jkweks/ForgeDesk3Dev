@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FdWorkOrder;
 use App\Models\FdWoStage;
 use App\Models\FdUser;
+use App\Services\StageStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -89,7 +90,12 @@ class ShopFloorController extends Controller
             }
             $stage->save();
 
-            return response()->json(['status' => $next]);
+            if ($stage->elevation_id) {
+                StageStatusService::recomputeElevation($stage->elevation_id);
+                $stage->refresh();
+            }
+
+            return response()->json(['status' => $stage->status, 'blocked_reason' => $stage->blocked_reason]);
         } catch (\Exception $e) {
             Log::error('ShopFloorController@cycleStage failed', ['id' => $id, 'message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to update stage'], 500);
@@ -157,6 +163,7 @@ class ShopFloorController extends Controller
                     'id'             => $s->id,
                     'name'           => $s->name,
                     'status'         => $s->status,
+                    'blocked_reason' => $s->blocked_reason,
                     'sort_order'     => $s->sort_order,
                     'assigned_to_id' => $s->assigned_to_id,
                     'assigned_name'     => $s->assignedTo?->name,

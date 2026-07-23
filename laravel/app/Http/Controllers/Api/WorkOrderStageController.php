@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FdWoStage;
+use App\Models\FdWoStageDep;
 use App\Models\FdStageLog;
+use App\Services\StageStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -31,22 +33,35 @@ class WorkOrderStageController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'work_order_id' => 'required|integer|exists:fd_work_orders,id',
-            'name'          => 'required|string|max:255',
+            'name' => 'required|string|max:255',
         ]);
 
         try {
-            $maxOrder = FdWoStage::where('work_order_id', $request->work_order_id)->max('sort_order') ?? 0;
-
-            $stage = FdWoStage::create([
-                'work_order_id' => $request->work_order_id,
-                'name'          => $request->name,
-                'description'   => $request->description,
-                'sort_order'    => $maxOrder + 1,
-                'status'        => 'pending',
-                'assigned_to_id' => $request->assigned_to_id,
-                'notes'         => $request->notes,
-            ]);
+            if ($request->filled('elevation_id')) {
+                $maxOrder = FdWoStage::where('elevation_id', $request->elevation_id)->max('sort_order') ?? 0;
+                $stage = FdWoStage::create([
+                    'elevation_id'  => $request->elevation_id,
+                    'work_order_id' => null,
+                    'name'          => $request->name,
+                    'description'   => $request->description,
+                    'sort_order'    => $maxOrder + 1,
+                    'status'        => 'pending',
+                    'assigned_to_id' => $request->assigned_to_id,
+                    'notes'         => $request->notes,
+                ]);
+            } else {
+                $request->validate(['work_order_id' => 'required|integer|exists:fd_work_orders,id']);
+                $maxOrder = FdWoStage::where('work_order_id', $request->work_order_id)->max('sort_order') ?? 0;
+                $stage = FdWoStage::create([
+                    'work_order_id' => $request->work_order_id,
+                    'name'          => $request->name,
+                    'description'   => $request->description,
+                    'sort_order'    => $maxOrder + 1,
+                    'status'        => 'pending',
+                    'assigned_to_id' => $request->assigned_to_id,
+                    'notes'         => $request->notes,
+                ]);
+            }
 
             return response()->json(['id' => $stage->id], 201);
         } catch (\Exception $e) {
@@ -81,6 +96,11 @@ class WorkOrderStageController extends Controller
 
             $stage->save();
 
+            // Recompute dep statuses for the elevation when status changes
+            if ($request->has('status') && $stage->elevation_id) {
+                StageStatusService::recomputeElevation($stage->elevation_id);
+            }
+
             // Append log entry if provided
             if ($request->filled('log_message')) {
                 FdStageLog::create([
@@ -94,6 +114,42 @@ class WorkOrderStageController extends Controller
         } catch (\Exception $e) {
             Log::error('WorkOrderStageController@update failed', ['id' => $id, 'message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to update stage'], 500);
+        }
+    }
+
+    public function storeDep(Request $request, int $id)
+    {
+        $request->validate(['depends_on_stage_id' => 'required|integer|exists:fd_wo_stages,id']);
+        try {
+            $stage = FdWoStage::findOrFail($id);
+            $dep = FdWoStageDep::firstOrCreate([
+                'stage_id'            => $stage->id,
+                'depends_on_stage_id' => $request->depends_on_stage_id,
+            ]);
+            if ($stage->elevation_id) {
+                StageStatusService::recomputeElevation($stage->elevation_id);
+            }
+            return response()->json(['id' => $dep->id], 201);
+        } catch (\Exception $e) {
+            Log::error('WorkOrderStageController@storeDep failed', ['id' => $id, 'message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to add dependency'], 500);
+        }
+    }
+
+    public function destroyDep(int $id, int $depId)
+    {
+        try {
+            $stage = FdWoStage::findOrFail($id);
+            FdWoStageDep::where('stage_id', $stage->id)
+                ->where('depends_on_stage_id', $depId)
+                ->delete();
+            if ($stage->elevation_id) {
+                StageStatusService::recomputeElevation($stage->elevation_id);
+            }
+            return response()->json(['deleted' => $depId]);
+        } catch (\Exception $e) {
+            Log::error('WorkOrderStageController@destroyDep failed', ['id' => $id, 'message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to remove dependency'], 500);
         }
     }
 

@@ -413,6 +413,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store']);
         Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update']);
         Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy']);
+        Route::post('/work-order-stages/{id}/dependencies', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'storeDep']);
+        Route::delete('/work-order-stages/{id}/dependencies/{depId}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroyDep']);
+
+        // Apply template stages (bulk and per-elevation)
+        Route::post('/work-orders/{id}/apply-template-path', [\App\Http\Controllers\Api\ApplyTemplateController::class, 'applyToWorkOrder']);
+        Route::post('/elevations/{id}/apply-template-stages', [\App\Http\Controllers\Api\ApplyTemplateController::class, 'applyToElevation']);
 
         // Elevation Types (admin-managed list)
         Route::get('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'index']);
@@ -422,6 +428,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate']);
         Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate']);
         Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate']);
+        Route::post('/stage-templates/{id}/dependencies', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeDep']);
+        Route::delete('/stage-templates/{id}/dependencies/{depId}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyDep']);
 
         Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
         Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);

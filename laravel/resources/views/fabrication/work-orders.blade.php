@@ -226,6 +226,9 @@
           <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
             <i class="ti ti-door me-1"></i>Door Schedule
           </button>
+          <button class="btn btn-ghost-secondary" onclick="openApplyTemplatePath()" title="Apply saved stage path to all elevations">
+            <i class="ti ti-route me-1"></i>Apply Path
+          </button>
           <button class="btn btn-ghost-primary" onclick="openBulkElev()">
             <i class="ti ti-plus me-1"></i>Add Elevation
           </button>
@@ -1146,7 +1149,10 @@ function elevRow(e) {
         </td>
         <td>
             <div class="btn-group btn-group-sm">
-                <button class="btn btn-ghost-secondary" onclick="openEditElev(${e.id})" title="Edit">
+                <button class="btn btn-ghost-secondary" onclick="openStageEditor(${e.id})" title="Edit stages &amp; dependencies">
+                    <i class="ti ti-list-check"></i>
+                </button>
+                <button class="btn btn-ghost-secondary" onclick="openEditElev(${e.id})" title="Edit elevation">
                     <i class="ti ti-pencil"></i>
                 </button>
                 <button class="btn btn-ghost-danger" onclick="deleteElev(${e.id})" title="Delete">
@@ -2216,4 +2222,287 @@ async function saveQuickJob() {
     </div>
   </div>
 </div>
+
+<!-- ── Apply Template Path modal ── -->
+<div class="modal modal-blur fade" id="applyTemplatePathModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="ti ti-route me-2"></i>Apply Stage Path</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-0">Adds any missing stages to all elevations based on their saved templates. Completed and in-progress stages are left untouched.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="saveApplyTemplatePath()">Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Stage Editor modal ── -->
+<div class="modal modal-blur fade" id="stageEditorModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="stageEditorTitle">Edit Stages</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="stageEditorBody" style="max-height:70vh;overflow-y:auto">
+        <p class="p-3 text-muted">Loading…</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="saveStageEditor()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Apply Template Path ────────────────────────────────────────────────────
+function openApplyTemplatePath() {
+    if (!currentWO) return;
+    const modal = bootstrap.Modal.getOrCreate(document.getElementById('applyTemplatePathModal'));
+    modal.show();
+}
+
+async function saveApplyTemplatePath() {
+    if (!currentWO) return;
+    bootstrap.Modal.getInstance(document.getElementById('applyTemplatePathModal'))?.hide();
+    try {
+        await API(`/work-orders/${currentWO.id}/apply-template-path`, { method: 'POST' });
+        const r = await API(`/work-orders/${currentWO.id}`);
+        const wo = r.work_order || r;
+        currentWO = wo;
+        renderWoDetail(wo);
+    } catch (e) { console.error(e); alert('Failed to apply template path'); }
+}
+
+// ─── Stage Editor ───────────────────────────────────────────────────────────
+let _seElevId       = null;
+let _seStages       = [];       // working copy of stages
+let _seDepChanges   = {};       // { stageId: { add: Set<depId>, remove: Set<depId> } }
+let _seDirtyStages  = {};       // { stageId: { name, sort_order, assigned_to_id } }
+let _seDragSrcId    = null;
+
+function openStageEditor(elevId) {
+    _seElevId     = elevId;
+    _seDepChanges = {};
+    _seDirtyStages = {};
+
+    const elev = (currentWO?.elevations || []).find(e => e.id === elevId);
+    document.getElementById('stageEditorTitle').textContent =
+        'Edit Stages' + (elev ? ` — ${elev.elevation_tag}` : '');
+
+    const stages = (elev?.stages || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+    _seStages = stages.map(s => ({ ...s, depends_on: [...(s.depends_on || [])] }));
+
+    renderStageEditorCards();
+
+    const modal = bootstrap.Modal.getOrCreate(document.getElementById('stageEditorModal'));
+    modal.show();
+    initStageDrag();
+}
+
+const _seStatusColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger', not_required: 'blue-lt', on_hold: 'orange' };
+const _seStatusLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked', not_required: 'N/R', on_hold: 'On Hold' };
+
+function renderStageEditorCards() {
+    const body = document.getElementById('stageEditorBody');
+    if (!_seStages.length) {
+        body.innerHTML = '<p class="p-3 text-muted">No stages. Add one below.</p>';
+        return;
+    }
+
+    const userOpts = '<option value="">— Unassigned —</option>' +
+        (fabUsers || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+
+    const cards = _seStages.map((s, idx) => {
+        const depChecks = _seStages
+            .filter(o => o.id !== s.id)
+            .map(o => `
+                <label class="form-check form-check-inline mb-0">
+                    <input type="checkbox" class="form-check-input"
+                        ${s.depends_on.includes(o.id) ? 'checked' : ''}
+                        onchange="seToggleDep(${s.id}, ${o.id}, this.checked)">
+                    <span class="form-check-label small">${esc(o.name)}</span>
+                </label>`).join('');
+
+        const blockedNote = s.status === 'blocked' && s.blocked_reason
+            ? `<span class="text-danger small ms-2"><i class="ti ti-lock"></i> ${esc(s.blocked_reason)}</span>`
+            : '';
+
+        return `
+        <div class="se-card border-bottom p-3" id="se-card-${s.id}" draggable="true"
+             data-stage-id="${s.id}" data-idx="${idx}">
+          <div class="d-flex align-items-center gap-2">
+            <div class="se-drag-handle text-muted" style="cursor:grab;user-select:none" title="Drag to reorder">
+              <i class="ti ti-grip-vertical"></i>
+            </div>
+            <input type="text" class="form-control form-control-sm" style="max-width:200px"
+                value="${esc(s.name)}"
+                onchange="seMarkDirty(${s.id}, 'name', this.value)">
+            <select class="form-select form-select-sm" style="max-width:160px"
+                onchange="seMarkDirty(${s.id}, 'assigned_to_id', this.value || null)">
+                ${userOpts.replace(`value="${s.assigned_to_id || ''}"`, `value="${s.assigned_to_id || ''}" selected`)}
+            </select>
+            <span class="badge bg-${_seStatusColors[s.status] || 'secondary'} ms-auto">${_seStatusLabels[s.status] || s.status}</span>
+            ${blockedNote}
+            <button class="btn btn-ghost-danger btn-sm" onclick="seDeleteStage(${s.id})" title="Remove stage">
+                <i class="ti ti-trash"></i>
+            </button>
+          </div>
+          <div class="mt-2 ms-4 ps-1">
+            <div class="text-muted small mb-1">Depends on (must complete before this stage):</div>
+            <div class="d-flex flex-wrap gap-2">${depChecks || '<span class="text-muted small">No other stages.</span>'}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    body.innerHTML = cards + `
+        <div class="p-3 border-top">
+            <div class="d-flex gap-2 align-items-end">
+                <div class="flex-grow-1">
+                    <label class="form-label form-label-sm mb-1">New Stage Name</label>
+                    <input type="text" class="form-control form-control-sm" id="se-new-name" placeholder="Stage name">
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="seAddStage()">
+                    <i class="ti ti-plus me-1"></i>Add Stage
+                </button>
+            </div>
+        </div>`;
+
+    initStageDrag();
+}
+
+function seMarkDirty(stageId, field, value) {
+    if (!_seDirtyStages[stageId]) _seDirtyStages[stageId] = {};
+    _seDirtyStages[stageId][field] = value;
+    const s = _seStages.find(x => x.id === stageId);
+    if (s) s[field] = value;
+}
+
+function seToggleDep(stageId, depId, checked) {
+    if (!_seDepChanges[stageId]) _seDepChanges[stageId] = { add: new Set(), remove: new Set() };
+    const s = _seStages.find(x => x.id === stageId);
+    if (checked) {
+        _seDepChanges[stageId].add.add(depId);
+        _seDepChanges[stageId].remove.delete(depId);
+        if (s) s.depends_on = [...s.depends_on.filter(id => id !== depId), depId];
+    } else {
+        _seDepChanges[stageId].remove.add(depId);
+        _seDepChanges[stageId].add.delete(depId);
+        if (s) s.depends_on = s.depends_on.filter(id => id !== depId);
+    }
+}
+
+async function seAddStage() {
+    const nameEl = document.getElementById('se-new-name');
+    const name = nameEl?.value.trim();
+    if (!name) { alert('Stage name is required'); return; }
+    try {
+        await API('/work-order-stages', {
+            method: 'POST',
+            body: JSON.stringify({ elevation_id: _seElevId, name }),
+        });
+        // Reload the elevation stages to pick up the new stage
+        const r = await API(`/work-orders/${currentWO.id}`);
+        currentWO = r.work_order || r;
+        const updatedElev = (currentWO.elevations || []).find(e => e.id === _seElevId);
+        _seStages = (updatedElev?.stages || []).slice().sort((a, b) => a.sort_order - b.sort_order)
+            .map(s => ({ ...s, depends_on: [...(s.depends_on || [])] }));
+        renderStageEditorCards();
+    } catch (e) { console.error(e); alert('Failed to add stage'); }
+}
+
+async function seDeleteStage(stageId) {
+    if (!confirm('Remove this stage?')) return;
+    try {
+        await API(`/work-order-stages/${stageId}`, { method: 'DELETE' });
+        _seStages = _seStages.filter(s => s.id !== stageId);
+        delete _seDirtyStages[stageId];
+        delete _seDepChanges[stageId];
+        renderStageEditorCards();
+    } catch (e) { console.error(e); alert('Failed to delete stage'); }
+}
+
+async function saveStageEditor() {
+    try {
+        const patches = [];
+
+        // Sort order from current _seStages order
+        _seStages.forEach((s, idx) => {
+            const newOrder = idx + 1;
+            if (!_seDirtyStages[s.id]) _seDirtyStages[s.id] = {};
+            if (s.sort_order !== newOrder) _seDirtyStages[s.id].sort_order = newOrder;
+        });
+
+        for (const [stageId, fields] of Object.entries(_seDirtyStages)) {
+            if (Object.keys(fields).length) {
+                patches.push(API(`/work-order-stages/${stageId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(fields),
+                }));
+            }
+        }
+
+        for (const [stageId, { add, remove }] of Object.entries(_seDepChanges)) {
+            for (const depId of add) {
+                patches.push(API(`/work-order-stages/${stageId}/dependencies`, {
+                    method: 'POST',
+                    body: JSON.stringify({ depends_on_stage_id: depId }),
+                }));
+            }
+            for (const depId of remove) {
+                patches.push(API(`/work-order-stages/${stageId}/dependencies/${depId}`, { method: 'DELETE' }));
+            }
+        }
+
+        await Promise.all(patches);
+        bootstrap.Modal.getInstance(document.getElementById('stageEditorModal'))?.hide();
+
+        const r = await API(`/work-orders/${currentWO.id}`);
+        currentWO = r.work_order || r;
+        renderWoDetail(currentWO);
+    } catch (e) { console.error(e); alert('Failed to save changes'); }
+}
+
+// ─── Drag-to-reorder for stage editor cards ────────────────────────────────
+function initStageDrag() {
+    const body = document.getElementById('stageEditorBody');
+    if (!body) return;
+
+    body.querySelectorAll('.se-card').forEach(card => {
+        card.addEventListener('dragstart', e => {
+            _seDragSrcId = parseInt(card.dataset.stageId);
+            e.dataTransfer.effectAllowed = 'move';
+            card.style.opacity = '0.4';
+        });
+        card.addEventListener('dragend', () => { card.style.opacity = ''; });
+        card.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            card.classList.add('bg-azure-lt');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('bg-azure-lt'));
+        card.addEventListener('drop', e => {
+            e.preventDefault();
+            card.classList.remove('bg-azure-lt');
+            const targetId = parseInt(card.dataset.stageId);
+            if (_seDragSrcId === null || _seDragSrcId === targetId) return;
+
+            const srcIdx = _seStages.findIndex(s => s.id === _seDragSrcId);
+            const tgtIdx = _seStages.findIndex(s => s.id === targetId);
+            if (srcIdx < 0 || tgtIdx < 0) return;
+
+            const [moved] = _seStages.splice(srcIdx, 1);
+            _seStages.splice(tgtIdx, 0, moved);
+            renderStageEditorCards();
+        });
+    });
+}
+</script>
 @endpush

@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FdStageTemplateDep;
 use App\Models\FdWoElevation;
 use App\Models\FdWoStage;
+use App\Models\FdWoStageDep;
 use App\Models\FdStageTemplate;
 use App\Models\FdWorkOrder;
+use App\Services\StageStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -52,8 +55,9 @@ class ElevationController extends Controller
                     ->orderBy('sort_order')
                     ->get();
 
+                $templateToStage = [];
                 foreach ($templates as $tpl) {
-                    FdWoStage::create([
+                    $stage = FdWoStage::create([
                         'elevation_id'   => $elevation->id,
                         'work_order_id'  => null,
                         'template_id'    => $tpl->id,
@@ -63,7 +67,27 @@ class ElevationController extends Controller
                         'status'         => 'pending',
                         'assigned_to_id' => $tpl->default_user_id,
                     ]);
+                    $templateToStage[$tpl->id] = $stage->id;
                 }
+
+                // Copy template dependency pairs to stage dependency pairs
+                $templateIds = $templates->pluck('id');
+                $templateDeps = FdStageTemplateDep::whereIn('template_id', $templateIds)
+                    ->whereIn('depends_on_template_id', $templateIds)
+                    ->get();
+
+                foreach ($templateDeps as $dep) {
+                    $stageId    = $templateToStage[$dep->template_id] ?? null;
+                    $depStageId = $templateToStage[$dep->depends_on_template_id] ?? null;
+                    if ($stageId && $depStageId) {
+                        FdWoStageDep::create([
+                            'stage_id'            => $stageId,
+                            'depends_on_stage_id' => $depStageId,
+                        ]);
+                    }
+                }
+
+                StageStatusService::recomputeElevation($elevation->id);
             }
 
             DB::commit();
@@ -104,7 +128,13 @@ class ElevationController extends Controller
 
     private function formatElevation(FdWoElevation $e): array
     {
-        $stages = $e->relationLoaded('stages') ? $e->stages : $e->stages()->with(['assignedTo', 'completedBy'])->get();
+        $stages = $e->relationLoaded('stages')
+            ? $e->stages
+            : $e->stages()->with(['assignedTo', 'completedBy'])->get();
+
+        // Load dep IDs for all stages in one query
+        $stageIds = $stages->pluck('id');
+        $depRows  = FdWoStageDep::whereIn('stage_id', $stageIds)->get()->groupBy('stage_id');
         $stageCount    = $stages->count();
         $stagesDone    = $stages->whereIn('status', ['complete', 'not_required'])->count();
         $stagesActive  = $stages->where('status', 'in_progress')->count();
@@ -133,14 +163,18 @@ class ElevationController extends Controller
             'stages_blocked'    => $stagesBlocked,
             'stages'            => $stages->map(fn($s) => [
                 'id'                => $s->id,
+                'template_id'       => $s->template_id,
                 'name'              => $s->name,
                 'status'            => $s->status,
+                'blocked_reason'    => $s->blocked_reason,
                 'sort_order'        => $s->sort_order,
+                'assigned_to_id'    => $s->assigned_to_id,
                 'assigned_name'     => $s->assignedTo?->name,
                 'completed_by_id'   => $s->completed_by_id,
                 'completed_by_name' => $s->completedBy?->name,
                 'started_at'        => $s->started_at?->toIso8601String(),
                 'completed_at'      => $s->completed_at?->toIso8601String(),
+                'depends_on'        => ($depRows->get($s->id) ?? collect())->pluck('depends_on_stage_id')->values(),
             ])->values(),
             'created_at'        => $e->created_at->toIso8601String(),
             'updated_at'        => $e->updated_at->toIso8601String(),

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\FdElevationType;
 use App\Models\FdStageTemplate;
+use App\Models\FdStageTemplateDep;
 use App\Models\FdUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -20,16 +21,23 @@ class ElevationTypeController extends Controller
                 $templates = FdStageTemplate::with('defaultUser')
                     ->where('elevation_type_id', $type->id)
                     ->orderBy('sort_order')
+                    ->get();
+
+                $templateIds = $templates->pluck('id');
+                $depRows = FdStageTemplateDep::whereIn('template_id', $templateIds)
                     ->get()
-                    ->map(fn($t) => [
-                        'id'              => $t->id,
-                        'name'            => $t->name,
-                        'description'     => $t->description,
-                        'sort_order'      => $t->sort_order,
-                        'default_user_id' => $t->default_user_id,
-                        'default_user'    => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
-                    ]);
-                return array_merge($type->toArray(), ['stage_templates' => $templates]);
+                    ->groupBy('template_id');
+
+                $mapped = $templates->map(fn($t) => [
+                    'id'              => $t->id,
+                    'name'            => $t->name,
+                    'description'     => $t->description,
+                    'sort_order'      => $t->sort_order,
+                    'default_user_id' => $t->default_user_id,
+                    'default_user'    => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
+                    'depends_on'      => ($depRows->get($t->id) ?? collect())->pluck('depends_on_template_id')->values(),
+                ]);
+                return array_merge($type->toArray(), ['stage_templates' => $mapped]);
             });
         }
 
@@ -132,5 +140,27 @@ class ElevationTypeController extends Controller
         $template = FdStageTemplate::findOrFail($id);
         $template->delete();
         return response()->json(['deleted' => $id]);
+    }
+
+    /** Add a dependency between two stage templates */
+    public function storeDep(Request $request, int $id)
+    {
+        $request->validate(['depends_on_template_id' => 'required|integer|exists:fd_stage_templates,id']);
+        $template = FdStageTemplate::findOrFail($id);
+        $dep = FdStageTemplateDep::firstOrCreate([
+            'template_id'            => $template->id,
+            'depends_on_template_id' => $request->depends_on_template_id,
+        ]);
+        return response()->json(['id' => $dep->id], 201);
+    }
+
+    /** Remove a dependency between two stage templates */
+    public function destroyDep(int $id, int $depId)
+    {
+        $template = FdStageTemplate::findOrFail($id);
+        FdStageTemplateDep::where('template_id', $template->id)
+            ->where('depends_on_template_id', $depId)
+            ->delete();
+        return response()->json(['deleted' => $depId]);
     }
 }

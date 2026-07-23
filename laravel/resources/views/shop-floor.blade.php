@@ -500,16 +500,20 @@ function elevBlock(e) {
 
   const stagesBtns = (e.stages || []).map(s => {
     const who = s.completed_by_name || s.assigned_name || '';
-    const tip  = who ? `${who} · tap to advance` : 'tap to advance';
+    const tipBase = who ? `${who} · tap to advance` : 'tap to advance';
+    const tip = s.blocked_reason ? `${s.blocked_reason} · tap to override` : tipBase;
     const byLine = s.completed_by_name
       ? `<span style="font-size:.6rem;opacity:.7">${esc(s.completed_by_name)}</span>`
+      : '';
+    const blockedLine = (s.status === 'blocked' && s.blocked_reason)
+      ? `<span style="font-size:.6rem;opacity:.8;white-space:normal">${esc(s.blocked_reason)}</span>`
       : '';
     return `<button class="stage-btn ${s.status}"
         onclick="cycleStage(event, ${s.id})"
         title="${esc(tip)}">
       <span class="sname">${esc(s.name)}</span>
       <span class="sstatus">${STATUS_LABEL[s.status] || s.status}</span>
-      ${byLine}
+      ${byLine}${blockedLine}
     </button>`;
   }).join('');
 
@@ -566,6 +570,13 @@ async function cycleStage(event, stageId) {
     });
   }
 
+  // If the stage is blocked, warn the operator and let them confirm override
+  const sfStage = sfFindStageById(stageId);
+  if (sfStage && sfStage.status === 'blocked' && sfStage.blocked_reason) {
+    const ok = confirm(`${sfStage.blocked_reason}\n\nProceed anyway?`);
+    if (!ok) return;
+  }
+
   btn.disabled = true; btn.style.opacity = '.55';
   try {
     const body = sfFabUser ? JSON.stringify({ fab_user_id: sfFabUser.user_id }) : '{}';
@@ -590,6 +601,16 @@ function sfFindElevForStage(stageId) {
   for (const wo of sfWOs) {
     for (const e of wo.elevations || []) {
       if ((e.stages || []).some(s => s.id === stageId)) return e;
+    }
+  }
+  return null;
+}
+
+function sfFindStageById(stageId) {
+  for (const wo of sfWOs) {
+    for (const e of wo.elevations || []) {
+      const s = (e.stages || []).find(s => s.id === stageId);
+      if (s) return s;
     }
   }
   return null;

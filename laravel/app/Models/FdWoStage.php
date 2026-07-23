@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FdWoStage extends Model
@@ -12,7 +13,8 @@ class FdWoStage extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_id', 'template_id', 'name', 'description',
-        'sort_order', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
+        'sort_order', 'status', 'blocked_reason', 'assigned_to_id', 'completed_by_id',
+        'started_at', 'completed_at', 'notes',
     ];
 
     protected $casts = [
@@ -43,5 +45,25 @@ class FdWoStage extends Model
     public function log(): HasMany
     {
         return $this->hasMany(FdStageLog::class, 'stage_id')->orderBy('created_at');
+    }
+
+    public function dependsOn(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            FdWoStage::class,
+            'fd_wo_stage_deps',
+            'stage_id',
+            'depends_on_stage_id'
+        );
+    }
+
+    public function dependents(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            FdWoStage::class,
+            'fd_wo_stage_deps',
+            'depends_on_stage_id',
+            'stage_id'
+        );
     }
 }

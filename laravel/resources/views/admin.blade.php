@@ -2393,11 +2393,26 @@
         }
       }
 
+      let _tplAllTemplates = [];
+
       function renderTplModal(templates) {
+        _tplAllTemplates = templates;
         const userOpts = '<option value="">— No default —</option>' +
           tplUsers.map(u => `<option value="${u.id}">${escT(u.name)}</option>`).join('');
 
-        const rows = templates.map((t, idx) => `
+        const rows = templates.map((t, idx) => {
+          const depIds = (t.depends_on || []);
+          const others = templates.filter(o => o.id !== t.id);
+          const depCheckboxes = others.length
+            ? others.map(o => `
+                <label class="form-check form-check-inline mb-0">
+                  <input type="checkbox" class="form-check-input" ${depIds.includes(o.id) ? 'checked' : ''}
+                    onchange="toggleTplDep(${t.id}, ${o.id}, this.checked)">
+                  <span class="form-check-label small">${escT(o.name)}</span>
+                </label>`).join('')
+            : '<span class="text-muted small">No other stages to depend on.</span>';
+
+          return `
           <tr id="tpl-row-${t.id}">
             <td style="width:52px">
               <div class="d-flex flex-column gap-1">
@@ -2431,16 +2446,29 @@
               </select>
             </td>
             <td>
-              <button class="btn btn-sm btn-ghost-danger" onclick="deleteTpl(${t.id})" title="Delete stage">
-                <i class="ti ti-trash"></i>
-              </button>
+              <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-ghost-secondary" onclick="toggleTplDepsRow(${t.id})" title="Edit dependencies"
+                    id="tpl-dep-btn-${t.id}">
+                  <i class="ti ti-arrow-merge-right"></i>${depIds.length ? `<span class="badge bg-blue-lt ms-1">${depIds.length}</span>` : ''}
+                </button>
+                <button class="btn btn-sm btn-ghost-danger" onclick="deleteTpl(${t.id})" title="Delete stage">
+                  <i class="ti ti-trash"></i>
+                </button>
+              </div>
             </td>
-          </tr>`).join('');
+          </tr>
+          <tr id="tpl-deps-${t.id}" class="table-light" style="display:none">
+            <td colspan="6" class="ps-4 py-2">
+              <div class="small fw-medium text-muted mb-1">Must complete before <strong>${escT(t.name)}</strong> can start:</div>
+              <div class="d-flex flex-wrap gap-3">${depCheckboxes}</div>
+            </td>
+          </tr>`;
+        }).join('');
 
         document.getElementById('tplModalBody').innerHTML = `
           <p class="text-muted small mb-2">
             Edit stage names, descriptions, and default assignees. Use arrows to reorder.
-            Changes to names and descriptions save on blur (click away or press Enter).
+            Click <i class="ti ti-arrow-merge-right"></i> to set which stages must finish before each stage can start.
           </p>
           <div class="table-responsive">
             <table class="table table-sm table-vcenter align-middle mb-2">
@@ -2451,7 +2479,7 @@
                   <th>Stage Name</th>
                   <th>Description</th>
                   <th>Default Assignee</th>
-                  <th style="width:48px"></th>
+                  <th style="width:80px"></th>
                 </tr>
               </thead>
               <tbody>${rows || '<tr><td colspan="6" class="text-muted text-center py-3">No stages yet. Add one below.</td></tr>'}</tbody>
@@ -2472,6 +2500,43 @@
               </button>
             </div>
           </div>`;
+      }
+
+      function toggleTplDepsRow(id) {
+        const row = document.getElementById(`tpl-deps-${id}`);
+        if (!row) return;
+        row.style.display = row.style.display === 'none' ? '' : 'none';
+      }
+
+      async function toggleTplDep(templateId, depTemplateId, isChecked) {
+        const headers = {
+          'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': adminCsrfToken(),
+        };
+        try {
+          if (isChecked) {
+            await fetch(`/api/v1/stage-templates/${templateId}/dependencies`, {
+              method: 'POST', credentials: 'include', headers,
+              body: JSON.stringify({ depends_on_template_id: depTemplateId }),
+            });
+          } else {
+            await fetch(`/api/v1/stage-templates/${templateId}/dependencies/${depTemplateId}`, {
+              method: 'DELETE', credentials: 'include', headers,
+            });
+          }
+          // Update badge count without full reload
+          const tpl = _tplAllTemplates.find(t => t.id === templateId);
+          if (tpl) {
+            if (isChecked) { tpl.depends_on = [...(tpl.depends_on || []), depTemplateId]; }
+            else { tpl.depends_on = (tpl.depends_on || []).filter(id => id !== depTemplateId); }
+            const btn = document.getElementById(`tpl-dep-btn-${templateId}`);
+            if (btn) {
+              const count = tpl.depends_on.length;
+              btn.innerHTML = `<i class="ti ti-arrow-merge-right"></i>${count ? `<span class="badge bg-blue-lt ms-1">${count}</span>` : ''}`;
+            }
+          }
+        } catch (e) { console.error(e); alert('Failed to update dependency'); }
       }
 
       async function saveTplField(id, field, value) {
