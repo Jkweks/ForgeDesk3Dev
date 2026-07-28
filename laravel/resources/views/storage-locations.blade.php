@@ -77,6 +77,9 @@
                 <div class="card-header">
                   <h3 class="card-title">Storage Locations</h3>
                   <div class="ms-auto d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" id="bulkShelfPrintBtn" onclick="printAllShelfLabels()">
+                      <i class="ti ti-printer me-1"></i> Print All Shelves
+                    </button>
                     <div class="btn-group" role="group">
                       <input type="radio" class="btn-check" name="view-mode" id="view-tree" autocomplete="off" checked>
                       <label class="btn btn-sm" for="view-tree">Tree View</label>
@@ -750,6 +753,43 @@
 
       } catch (e) {
         showNotification('Failed to generate shelf label PDF', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    async function printAllShelfLabels() {
+      const btn = document.getElementById('bulkShelfPrintBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating…';
+
+      try {
+        const response = await fetch(`${API_BASE}/storage-locations/bulk-shelf-labels-pdf`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'application/pdf',
+          }
+        });
+
+        if (!response.ok) {
+          showNotification('Failed to generate shelf labels PDF', 'danger');
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'shelf-labels-all.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+      } catch (e) {
+        showNotification('Failed to generate shelf labels PDF', 'danger');
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
