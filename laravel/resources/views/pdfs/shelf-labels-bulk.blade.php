@@ -100,7 +100,7 @@
     $idRowHeight    = 82;
     $gapHeight      = 6;
     $itemsHeight    = 418 - $idRowHeight - $gapHeight;
-    $rows           = (int) ceil($count / max($cols, 1));
+    $rows           = max(1, (int) ceil($count / max($cols, 1)));
     $spacing        = 5;
     $itemCellHeight = ($itemsHeight - ($rows - 1) * $spacing) / $rows;
     $imageHeight    = $itemCellHeight - 35;
