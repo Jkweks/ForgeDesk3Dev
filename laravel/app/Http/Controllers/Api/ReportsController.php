@@ -19,6 +19,7 @@ class ReportsController extends Controller
     {
         $lowStock = Product::whereIn('status', ['low', 'very_low'])
             ->where('is_active', true)
+            ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
             ->with(['category', 'supplier', 'inventoryLocations'])
             ->get()
             ->map(function ($product) {
@@ -27,6 +28,7 @@ class ReportsController extends Controller
 
         $critical = Product::where('status', 'critical')
             ->where('is_active', true)
+            ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
             ->with(['category', 'supplier', 'inventoryLocations'])
             ->get()
             ->map(function ($product) {
@@ -203,6 +205,7 @@ class ReportsController extends Controller
     public function reorderRecommendations(Request $request)
     {
         $products = Product::where('is_active', true)
+            ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
             ->where(function($query) {
                 // Products at or below reorder point (using actual DB columns)
                 $query->whereRaw('(quantity_on_hand - quantity_committed) <= reorder_point')
