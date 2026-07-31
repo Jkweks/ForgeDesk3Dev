@@ -282,7 +282,7 @@
         <div class="modal-body">
           <form id="resetPasswordForm">
             <input type="hidden" id="resetToken">
-            <input type="hidden" id="resetEmail" autocomplete="username">
+            <input type="email" id="resetEmail" name="username" autocomplete="username" tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;">
             <div class="mb-3">
               <label class="form-label">New Password</label>
               <input type="password" class="form-control" id="newPassword" minlength="8" autocomplete="new-password" required>

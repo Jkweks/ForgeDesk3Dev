@@ -216,7 +216,7 @@ class CycleCountItem extends Model
                 'reference_number' => $this->session->session_number,
                 'reference_type' => 'cycle_count',
                 'reference_id' => $this->session_id,
-                'notes' => $notes . " [Location-based count: {$location->storageLocation->name}]",
+                'notes' => $notes . " [Location-based count: " . ($location->storageLocation?->name ?? 'Unknown Location') . "]",
                 'user_id' => $userId,
                 'transaction_date' => now(),
             ]);
