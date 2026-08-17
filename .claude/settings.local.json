@@ -1,8 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -d /mnt/titan/ForgeDesk3-dev/*/)",
-      "mcp__Claude_Code_Remote__subscribe_pr_activity"
+      "Bash(ls -d /mnt/titan/ForgeDesk3-dev/*/)"
     ]
   }
 }

@@ -459,8 +459,8 @@ class BusinessJobController extends Controller
                 'notes' => 'nullable|string',
                 'items' => 'required|array|min:1',
                 'items.*.product_id' => 'required|exists:products,id',
-                'items.*.requested_qty' => 'required|numeric|min:0',
-                'items.*.committed_qty' => 'nullable|numeric|min:0',
+                'items.*.requested_qty' => 'required|integer|min:1',
+                'items.*.committed_qty' => 'nullable|integer|min:0',
             ]);
 
             if ($validator->fails()) {

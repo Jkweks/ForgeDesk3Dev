@@ -233,7 +233,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/storage-locations-tree', [App\Http\Controllers\Api\StorageLocationController::class, 'tree']);
         Route::get('/storage-locations-stats', [App\Http\Controllers\Api\StorageLocationController::class, 'withStats']);
         Route::get('/storage-locations-names', [App\Http\Controllers\Api\StorageLocationController::class, 'locationNames']);
-        Route::get('/storage-locations/bulk-shelf-labels-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'bulkShelfLabelsPdf']);
         Route::get('/storage-locations/{storageLocation}/shelf-label-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'shelfLabelPdf']);
         Route::apiResource('storage-locations', App\Http\Controllers\Api\StorageLocationController::class);
 
