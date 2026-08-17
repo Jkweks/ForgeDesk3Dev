@@ -2121,7 +2121,7 @@
           color: color,
           sort_order: parseInt(document.getElementById('elevTypeSortOrder').value) || 99,
         };
-        if (!body.name) { alert('Name is required.'); return; }
+        if (!body.name) { fabToast('Name is required.', 'info'); return; }
         try {
           const url = id ? `/api/v1/elevation-types/${id}` : '/api/v1/elevation-types';
           const method = id ? 'PUT' : 'POST';
@@ -2141,12 +2141,18 @@
           await loadElevationTypes();
         } catch (e) {
           console.error(e);
-          alert('Failed to save elevation type');
+          fabToast('Failed to save elevation type.', 'error');
         }
       }
 
       async function deactivateElevType(id) {
-        if (!confirm('Deactivate this elevation type? It will no longer appear in work order forms.')) return;
+        const ok = await fabConfirm({
+          title: 'Deactivate Elevation Type',
+          message: 'Deactivate this elevation type? It will no longer appear in work order forms.',
+          confirmLabel: 'Deactivate',
+          confirmClass: 'btn-warning',
+        });
+        if (!ok) return;
         try {
           await fetch(`/api/v1/elevation-types/${id}`, {
             method: 'DELETE',
@@ -2156,7 +2162,7 @@
           await loadElevationTypes();
         } catch (e) {
           console.error(e);
-          alert('Failed to deactivate');
+          fabToast('Failed to deactivate.', 'error');
         }
       }
 
@@ -2187,7 +2193,7 @@
           renderFabUsers(data.users || []);
         } catch (e) {
           console.error(e);
-          alert('Failed to load fab users');
+          fabToast('Failed to load fab users.', 'error');
         } finally {
           document.getElementById('fab-users-loading').style.display = 'none';
         }
@@ -2268,8 +2274,14 @@
         } catch (e) { console.error(e); }
       }
 
-      function clearFabPin() {
-        if (!confirm('Remove this user\'s shop floor PIN?')) return;
+      async function clearFabPin() {
+        const ok = await fabConfirm({
+          title: 'Remove PIN',
+          message: 'Remove this user\'s shop floor PIN?',
+          confirmLabel: 'Remove',
+          confirmClass: 'btn-warning',
+        });
+        if (!ok) return;
         _fabUserClearPin = true;
         document.getElementById('fabUserPin').value = '';
         document.getElementById('fabUserClearPinBtn').style.display = 'none';
@@ -2278,7 +2290,7 @@
 
       async function saveFabUser() {
         const name = document.getElementById('fabUserName').value.trim();
-        if (!name) { alert('Name is required.'); return; }
+        if (!name) { fabToast('Name is required.', 'info'); return; }
         const id  = document.getElementById('fabUserId').value;
         const pin = document.getElementById('fabUserPin').value.trim();
         const body = {
@@ -2301,7 +2313,7 @@
           const userId = id || saved.id;
           // Handle PIN separately
           if (pin) {
-            if (pin.length < 4) { alert('PIN must be at least 4 digits.'); return; }
+            if (pin.length < 4) { fabToast('PIN must be at least 4 digits.', 'info'); return; }
             await fabUserAPI(`/fab-users/${userId}/set-pin`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -2318,16 +2330,22 @@
           await loadFabUsersAdmin();
         } catch (e) {
           console.error(e);
-          alert('Failed to save fab user');
+          fabToast('Failed to save fab user.', 'error');
         }
       }
 
       async function deactivateFabUser(id) {
-        if (!confirm('Deactivate this fab user? They will no longer appear in assignment dropdowns.')) return;
+        const ok = await fabConfirm({
+          title: 'Deactivate Fab User',
+          message: 'Deactivate this fab user? They will no longer appear in assignment dropdowns.',
+          confirmLabel: 'Deactivate',
+          confirmClass: 'btn-warning',
+        });
+        if (!ok) return;
         try {
           await fabUserAPI(`/fab-users/${id}`, { method: 'DELETE' });
           await loadFabUsersAdmin();
-        } catch (e) { console.error(e); alert('Failed to deactivate'); }
+        } catch (e) { console.error(e); fabToast('Failed to deactivate.', 'error'); }
       }
 
       async function reactivateFabUser(id) {
@@ -2338,7 +2356,7 @@
             body: JSON.stringify({ active: true }),
           });
           await loadFabUsersAdmin();
-        } catch (e) { console.error(e); alert('Failed to reactivate'); }
+        } catch (e) { console.error(e); fabToast('Failed to reactivate.', 'error'); }
       }
 
       function showFabUserModal() {
@@ -2482,7 +2500,7 @@
             },
             body: JSON.stringify({ [field]: value || null }),
           });
-        } catch (e) { console.error(e); alert('Failed to save'); }
+        } catch (e) { console.error(e); fabToast('Failed to save.', 'error'); }
       }
 
       async function moveTpl(id, direction) {
@@ -2508,13 +2526,13 @@
             fetch(`/api/v1/stage-templates/${b.id}`, { method: 'PATCH', credentials: 'include', headers: tplHeaders, body: JSON.stringify({ sort_order: a.sort_order }) }),
           ]);
           await reloadTplModal();
-        } catch (e) { console.error(e); alert('Failed to reorder'); }
+        } catch (e) { console.error(e); fabToast('Failed to reorder.', 'error'); }
       }
 
       async function addTpl() {
         const name = document.getElementById('tpl-new-name').value.trim();
         const desc = document.getElementById('tpl-new-desc').value.trim();
-        if (!name) { alert('Stage name is required'); return; }
+        if (!name) { fabToast('Stage name is required.', 'info'); return; }
         try {
           await fetch('/api/v1/stage-templates', {
             method: 'POST',
@@ -2526,11 +2544,17 @@
             body: JSON.stringify({ elevation_type_id: tplCurrentTypeId, name, description: desc || null }),
           });
           await reloadTplModal();
-        } catch (e) { console.error(e); alert('Failed to add stage'); }
+        } catch (e) { console.error(e); fabToast('Failed to add stage.', 'error'); }
       }
 
       async function deleteTpl(id) {
-        if (!confirm('Delete this stage template? Existing work order stages are not affected.')) return;
+        const ok = await fabConfirm({
+          title: 'Delete Stage Template',
+          message: 'Delete this stage template? Existing work order stages are not affected.',
+          confirmLabel: 'Delete',
+          confirmClass: 'btn-danger',
+        });
+        if (!ok) return;
         try {
           await fetch(`/api/v1/stage-templates/${id}`, {
             method: 'DELETE',
@@ -2538,7 +2562,7 @@
             headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
           });
           await reloadTplModal();
-        } catch (e) { console.error(e); alert('Failed to delete stage'); }
+        } catch (e) { console.error(e); fabToast('Failed to delete stage.', 'error'); }
       }
 
       function showTplModal() {

@@ -19,6 +19,7 @@ class ShopFloorController extends Controller
         'complete'     => 'pending',
         'blocked'      => 'pending',
         'not_required' => 'pending',
+        'on_hold'      => 'pending',
     ];
 
     public function workOrders(Request $request)
@@ -109,6 +110,32 @@ class ShopFloorController extends Controller
             return response()->json(['updated' => $id]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to update elevation'], 500);
+        }
+    }
+
+    public function bulkCompleteStages(Request $request, int $id)
+    {
+        try {
+            $elevation = \App\Models\FdWoElevation::with('stages')->findOrFail($id);
+
+            // Only sweep up stages that are actively in the queue — never touch
+            // 'blocked' or 'on_hold' stages via a bulk action; those need a
+            // deliberate individual tap so a real blocker or office hold can't
+            // be silently cleared.
+            $stages = $elevation->stages->whereIn('status', ['pending', 'in_progress']);
+
+            $fabUserId = $request->input('fab_user_id') ?: null;
+            foreach ($stages as $stage) {
+                $stage->status          = 'complete';
+                $stage->completed_at    = now();
+                $stage->completed_by_id = $fabUserId;
+                $stage->save();
+            }
+
+            return response()->json(['updated' => $stages->count()]);
+        } catch (\Exception $e) {
+            Log::error('ShopFloorController@bulkCompleteStages failed', ['id' => $id, 'message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to complete stages'], 500);
         }
     }
 
