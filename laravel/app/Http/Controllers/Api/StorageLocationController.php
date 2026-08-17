@@ -362,6 +362,62 @@ class StorageLocationController extends Controller
     }
 
     /**
+     * Generate a single PDF containing a label for every shelf-type location.
+     */
+    public function bulkShelfLabelsPdf()
+    {
+        $locations = StorageLocation::where('type', 'shelf')
+            ->orderBy('name')
+            ->get();
+
+        $labels = $locations->map(function ($loc) {
+            $items = \App\Models\InventoryLocation::where('storage_location_id', $loc->id)
+                ->whereNull('deleted_at')
+                ->with('product')
+                ->orderBy('is_primary', 'desc')
+                ->get()
+                ->filter(fn($il) => $il->quantity > 0)
+                ->map(function ($il) {
+                    $photoData = null;
+                    if ($il->product->photo_path) {
+                        $path = storage_path('app/public/' . $il->product->photo_path);
+                        if (file_exists($path)) {
+                            $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                            $mime = match($ext) {
+                                'png'  => 'image/png',
+                                'gif'  => 'image/gif',
+                                'webp' => 'image/webp',
+                                default => 'image/jpeg',
+                            };
+                            $photoData = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+                        }
+                    }
+                    return ['sku' => $il->product->sku, 'photo_data' => $photoData];
+                })
+                ->values()
+                ->take(6)
+                ->toArray();
+
+            return [
+                'shelf_id' => $loc->code ?: $loc->name,
+                'items'    => $items,
+            ];
+        })->values()->toArray();
+
+        if (empty($labels)) {
+            return response()->json(['error' => 'No shelf-type locations found'], 404);
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.shelf-labels-bulk', [
+            'labels' => $labels,
+        ]);
+
+        $pdf->setPaper('letter', 'landscape');
+
+        return $pdf->stream('shelf-labels-all.pdf');
+    }
+
+    /**
      * Generate and stream a shelf label PDF for a storage location.
      */
     public function shelfLabelPdf(StorageLocation $storageLocation)

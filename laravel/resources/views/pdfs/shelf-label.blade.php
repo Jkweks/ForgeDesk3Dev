@@ -11,7 +11,10 @@
     $idRowHeight   = 82;
     $gapHeight     = 6;
     $itemsHeight   = 418 - $idRowHeight - $gapHeight;  // 330pt
-    $imageHeight   = $itemsHeight - 35;                 // ~295pt, leaves room for SKU row
+    $rows          = (int) ceil($count / max($cols, 1));
+    $spacing       = 5; // border-spacing between rows
+    $itemCellHeight = ($itemsHeight - ($rows - 1) * $spacing) / $rows;
+    $imageHeight    = $itemCellHeight - 35;             // leaves room for SKU row
 @endphp
 <!DOCTYPE html>
 <html>
@@ -69,7 +72,7 @@
     vertical-align: top;
     padding: 5pt;
     width: {{ round(100 / $cols, 2) }}%;
-    height: {{ $itemsHeight }}pt;
+    height: {{ $itemCellHeight }}pt;
     overflow: hidden;
   }
 
