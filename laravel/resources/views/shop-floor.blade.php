@@ -118,10 +118,12 @@
     .stage-btn.in_progress { background: #fff3cd; color: #664d03; }
     .stage-btn.complete    { background: #d1e7dd; color: #0a3622; }
     .stage-btn.blocked     { background: #f8d7da; color: #58151c; }
+    .stage-btn.on_hold     { background: #fde3c4; color: #7a3f00; border: 2px dashed #b96a00; }
     [data-bs-theme="dark"] .stage-btn.pending     { background: #343a40; color: #adb5bd; }
     [data-bs-theme="dark"] .stage-btn.in_progress { background: #3d2e00; color: #ffc107; }
     [data-bs-theme="dark"] .stage-btn.complete    { background: #051b11; color: #75b798; }
     [data-bs-theme="dark"] .stage-btn.blocked     { background: #2c0b0e; color: #ea868f; }
+    [data-bs-theme="dark"] .stage-btn.on_hold     { background: #3d2503; color: #f5a623; border: 2px dashed #f5a623; }
 
     /* ── Status summary chips ── */
     .sf-chip {
@@ -130,8 +132,10 @@
     }
     .sf-chip.in_progress { background: #fff3cd; color: #664d03; }
     .sf-chip.blocked     { background: #f8d7da; color: #58151c; }
+    .sf-chip.on_hold     { background: #fde3c4; color: #7a3f00; }
     [data-bs-theme="dark"] .sf-chip.in_progress { background: #3d2e00; color: #ffc107; }
     [data-bs-theme="dark"] .sf-chip.blocked     { background: #2c0b0e; color: #ea868f; }
+    [data-bs-theme="dark"] .sf-chip.on_hold     { background: #3d2503; color: #f5a623; }
 
     /* ── not_required stage ── */
     .stage-btn.not_required { background: var(--tblr-blue-lt, #dce7f9); color: var(--tblr-blue, #2c5fc3); }
@@ -169,6 +173,7 @@
 </head>
 <body>
 <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
+<script src="{{ asset('js/fab-shared.js') }}"></script>
 
 <!-- ── PIN login overlay ── -->
 <div class="sf-pin-overlay" id="sf-pin-overlay">
@@ -209,6 +214,21 @@
     <div class="d-flex gap-2 justify-content-center">
       <button class="btn btn-ghost-secondary" onclick="sfDismissElevReopen()">Cancel</button>
       <button class="btn btn-warning" onclick="sfConfirmElevReopen()">Yes, Reopen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── On-hold stage prompt ── -->
+<div id="sf-hold-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
+  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">🚧</div>
+    <h4 style="margin-bottom:.5rem">Stage is on hold</h4>
+    <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
+      <strong id="sf-hold-name"></strong> was put on hold by the office.<br>Take it off hold and start work?
+    </p>
+    <div class="d-flex gap-2 justify-content-center">
+      <button class="btn btn-ghost-secondary" onclick="sfDismissHold()">Cancel</button>
+      <button class="btn btn-warning" onclick="sfConfirmHold()">Yes, Take Off Hold</button>
     </div>
   </div>
 </div>
@@ -277,7 +297,7 @@ let hideDone   = false;
 let sfFabUser  = null;  // { user_id, name, initials }
 const expandedWOs = new Set();
 
-const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked', not_required: 'N/R' };
+const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked', not_required: 'N/R', on_hold: 'On Hold' };
 
 const API = (path, opts = {}) =>
   fetch('/api/v1' + path, {
@@ -436,11 +456,13 @@ function render() {
     const doneStages  = allStages.filter(s => ['complete','not_required'].includes(s.status)).length;
     const inProg      = allStages.filter(s => s.status === 'in_progress').length;
     const blocked     = allStages.filter(s => s.status === 'blocked').length;
+    const onHold      = allStages.filter(s => s.status === 'on_hold').length;
     const pct         = totalStages ? Math.round((doneStages / totalStages) * 100) : 0;
 
     const chips = [
       inProg  ? `<span class="sf-chip in_progress">${inProg} active</span>` : '',
       blocked ? `<span class="sf-chip blocked">${blocked} blocked</span>` : '',
+      onHold  ? `<span class="sf-chip on_hold">${onHold} on hold</span>` : '',
     ].filter(Boolean).join(' ');
 
     const assignedBadges = (wo.assigned_users || []).map(u =>
@@ -513,12 +535,22 @@ function elevBlock(e) {
     </button>`;
   }).join('');
 
+  const openCount = (e.stages || []).filter(s => s.status === 'pending' || s.status === 'in_progress').length;
+  const bulkBtn = openCount > 0
+    ? `<button class="stage-btn" style="background:var(--tblr-success-lt,#d1e7dd);color:var(--tblr-success,#0a3622);border:2px solid var(--tblr-success,#2fb344)"
+          onclick="bulkCompleteElevStages(event, ${e.id})"
+          title="Mark all remaining stages complete">
+        <span class="sname">All Stages</span>
+        <span class="sstatus">✓ Complete All</span>
+      </button>`
+    : '';
+
   return `<div class="elev-block">
     <div class="elev-meta">
       <div class="elev-tag">${esc(e.elevation_tag)} ${scopeBadge}</div>
       <div class="d-flex gap-1 mt-1 flex-wrap">${typeBadge}${dateLabel}</div>
     </div>
-    <div class="elev-stages">${stagesBtns || '<span class="text-muted small">No stages</span>'}</div>
+    <div class="elev-stages">${stagesBtns || '<span class="text-muted small">No stages</span>'}${bulkBtn}</div>
   </div>`;
 }
 
@@ -552,6 +584,14 @@ async function cycleStage(event, stageId) {
   event.stopPropagation();
   const btn = event.currentTarget;
 
+  // If the stage is on hold, require explicit confirmation before clearing it —
+  // a single tap should never silently erase a PM's hold.
+  if (btn.classList.contains('on_hold')) {
+    const sname = btn.querySelector('.sname')?.textContent || 'This stage';
+    const ok = await sfHoldPrompt(sname);
+    if (!ok) return;
+  }
+
   // Find the elevation for this stage to check if it's complete
   const elev = sfFindElevForStage(stageId);
   if (elev && elev.date_completed) {
@@ -581,6 +621,40 @@ async function cycleStage(event, stageId) {
     sfCheckElevationCompletion();
   } catch (e) {
     console.error(e);
+    fabToast('Failed to update stage — check your connection and try again.', 'error');
+    btn.disabled = false; btn.style.opacity = '';
+  }
+}
+
+async function bulkCompleteElevStages(event, elevId) {
+  event.stopPropagation();
+  const btn = event.currentTarget;
+
+  const elev = sfWOs.flatMap(wo => wo.elevations || []).find(e => e.id === elevId);
+  const tag = elev ? elev.elevation_tag : 'this elevation';
+
+  const ok = await fabConfirm({
+    title: 'Complete All Stages',
+    message: `Mark all remaining stages on ${tag} complete? Blocked or on-hold stages are left untouched.`,
+    confirmLabel: 'Mark All Complete',
+    confirmClass: 'btn-success',
+  });
+  if (!ok) return;
+
+  btn.disabled = true; btn.style.opacity = '.55';
+  try {
+    const body = sfFabUser ? JSON.stringify({ fab_user_id: sfFabUser.user_id }) : '{}';
+    await API(`/shop/elevations/${elevId}/complete-stages`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    await reload();
+    sfCheckElevationCompletionById(elevId);
+    fabToast('Stages marked complete.', 'success');
+  } catch (e) {
+    console.error(e);
+    fabToast('Failed to complete stages — check your connection and try again.', 'error');
     btn.disabled = false; btn.style.opacity = '';
   }
 }
@@ -598,6 +672,12 @@ function sfFindElevForStage(stageId) {
 function sfCheckElevationCompletion() {
   if (!_sfLastCycledStageId) return;
   const elev = sfFindElevForStage(_sfLastCycledStageId);
+  if (!elev) return;
+  sfCheckElevationCompletionById(elev.id);
+}
+
+function sfCheckElevationCompletionById(elevId) {
+  const elev = sfWOs.flatMap(wo => wo.elevations || []).find(e => e.id === elevId);
   if (!elev || !(elev.stages || []).length) return;
   const TERMINAL = ['complete', 'not_required'];
   const allTerminal = elev.stages.every(s => TERMINAL.includes(s.status));
@@ -636,7 +716,10 @@ async function sfConfirmElevComplete() {
         completed_by_id: fabId,
       }),
     });
-  } catch (e) { console.error(e); }
+  } catch (e) {
+    console.error(e);
+    fabToast('Failed to mark elevation complete — check your connection and try again.', 'error');
+  }
   document.getElementById('sf-elev-complete-prompt').style.display = 'none';
   _sfElevPromptId = null;
   await reload();
@@ -657,10 +740,33 @@ function sfDismissElevReopen() {
   if (_sfElevReopenResolve) { _sfElevReopenResolve(false); _sfElevReopenResolve = null; }
 }
 
+// ── On-hold confirm overlay ────────────────────────────────────────────────
+let _sfHoldResolve = null;
+
+async function sfHoldPrompt(stageName) {
+  document.getElementById('sf-hold-name').textContent = stageName;
+  document.getElementById('sf-hold-prompt').style.display = 'flex';
+  return new Promise(resolve => { _sfHoldResolve = resolve; });
+}
+
+function sfConfirmHold() {
+  document.getElementById('sf-hold-prompt').style.display = 'none';
+  if (_sfHoldResolve) { _sfHoldResolve(true); _sfHoldResolve = null; }
+}
+
+function sfDismissHold() {
+  document.getElementById('sf-hold-prompt').style.display = 'none';
+  if (_sfHoldResolve) { _sfHoldResolve(false); _sfHoldResolve = null; }
+}
+
 async function reload() {
-  const r = await API('/shop/work-orders');
-  sfWOs   = (await r.json()).work_orders || [];
-  render();
+  try {
+    const r = await API('/shop/work-orders');
+    sfWOs = (await r.json()).work_orders || [];
+    render();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ── Auto-refresh every 60 s ────────────────────────────────────────────────

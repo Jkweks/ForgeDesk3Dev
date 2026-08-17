@@ -17,6 +17,29 @@ class JobStepController extends Controller
         return response()->json(['steps' => $steps->map(fn($s) => $this->fmt($s))]);
     }
 
+    public function completeAll(int $workOrderId)
+    {
+        $wo = FdWorkOrder::findOrFail($workOrderId);
+
+        // Skip steps already terminal (complete/not_required) and steps on hold —
+        // a bulk action should never silently clear a hold placed by the office.
+        $steps = $wo->steps()->where('status', 'pending')->get();
+
+        foreach ($steps as $step) {
+            $step->status          = 'complete';
+            $step->completed_at    = now();
+            $step->completed_by_id = auth()->id();
+            $step->save();
+        }
+
+        $all = $wo->steps()->with('completedBy')->get();
+
+        return response()->json([
+            'updated' => $steps->count(),
+            'steps'   => $all->map(fn($s) => $this->fmt($s)),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $request->validate([

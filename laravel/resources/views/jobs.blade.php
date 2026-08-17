@@ -1585,8 +1585,6 @@
                 return;
             }
 
-            const woStepColor = { pending: 'secondary', complete: 'success', not_required: 'info' };
-            const woStepIcon  = { pending: '', complete: '✓', not_required: '—' };
             contentEl.innerHTML = `
                 <div class="table-responsive">
                     <table class="table table-sm table-vcenter mb-0">
@@ -1604,14 +1602,19 @@
                                     ? `${wo.elevations_complete}/${wo.elevation_count}`
                                     : '<span class="text-muted">—</span>';
                                 const steps = wo.steps || [];
-                                const stepsHtml = steps.map(s => {
-                                    const color = woStepColor[s.status] || 'secondary';
-                                    return `<span class="badge bg-${color}-lt text-${color}" style="cursor:pointer;font-size:.72rem;padding:.22rem .5rem"
-                                        title="${escapeHtml(s.status === 'complete' && s.completed_by_name ? 'By: ' + s.completed_by_name : s.status)}"
-                                        onclick="cycleWoStepInJob(${s.id}, '${s.status}', ${jobId})">
-                                        ${woStepIcon[s.status] ? woStepIcon[s.status] + ' ' : ''}${escapeHtml(s.name)}
-                                    </span>`;
-                                }).join('');
+                                const stepsHtml = steps.map(s => FabStep.stepBadgeHtml(s, {
+                                    esc: escapeHtml,
+                                    fontSize: '.72rem',
+                                    padding: '.22rem .5rem',
+                                    onClick: `cycleWoStepInJob(${s.id}, '${s.status}', ${jobId})`,
+                                })).join('');
+                                const pendingStepCount = steps.filter(s => s.status === 'pending').length;
+                                const bulkStepBtn = pendingStepCount > 0
+                                    ? `<button class="btn btn-ghost-success btn-sm px-2 py-0 ms-1" style="font-size:.66rem"
+                                           onclick="bulkCompleteWoStepsInJob(${wo.id}, ${jobId})" title="Mark all pending steps complete">
+                                           <i class="ti ti-checks"></i> Complete All (${pendingStepCount})
+                                       </button>`
+                                    : '';
                                 return `<tr>
                                     <td><strong>${escapeHtml(wo.release_label)}</strong></td>
                                     <td>${wo.date_issued || '—'}</td>
@@ -1625,6 +1628,7 @@
                                             ${stepsHtml}
                                             <button class="btn btn-ghost-secondary btn-sm px-1 py-0 ms-1" style="font-size:.66rem"
                                                 onclick="addWoStepInJob(${wo.id}, ${jobId})" title="Add step"><i class="ti ti-plus"></i></button>
+                                            ${bulkStepBtn}
                                         </div>
                                     </td>
                                 </tr>`;
@@ -1636,7 +1640,8 @@
         }
 
         async function cycleWoStepInJob(stepId, currentStatus, jobId) {
-            const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
+            const nextStatus = await FabStep.cycleStepStatus(currentStatus);
+            if (!nextStatus) return;
             try {
                 await jobsAPI(`/api/v1/job-steps/${stepId}`, {
                     method: 'PATCH',
@@ -1646,7 +1651,29 @@
                 // Force-reload the WO tab to reflect the new step status
                 delete jobTabLoaded[`${jobId}-wo`];
                 await loadJobWorkOrders(jobId);
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error(e);
+                fabToast('Failed to update step status.', 'error');
+            }
+        }
+
+        async function bulkCompleteWoStepsInJob(woId, jobId) {
+            const ok = await fabConfirm({
+                title: 'Complete All Steps',
+                message: 'Mark all pending steps on this work order complete? Steps on hold are left untouched.',
+                confirmLabel: 'Mark All Complete',
+                confirmClass: 'btn-success',
+            });
+            if (!ok) return;
+            try {
+                await jobsAPI(`/api/v1/work-orders/${woId}/steps/complete-all`, { method: 'PATCH' });
+                delete jobTabLoaded[`${jobId}-wo`];
+                await loadJobWorkOrders(jobId);
+                fabToast('Steps marked complete.', 'success');
+            } catch (e) {
+                console.error(e);
+                fabToast('Failed to complete steps.', 'error');
+            }
         }
 
         async function addWoStepInJob(woId, jobId) {

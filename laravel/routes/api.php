@@ -105,6 +105,7 @@ Route::prefix('v1')->group(function () {
     Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
     Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
     Route::patch('/shop/elevations/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'updateElevation']);
+    Route::patch('/shop/elevations/{id}/complete-stages', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteStages']);
     // ─────────────────────────────────────────────────────────────────────────
 
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
@@ -470,6 +471,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin']);
 
         Route::get('/work-orders/{workOrderId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
+        Route::patch('/work-orders/{workOrderId}/steps/complete-all', [\App\Http\Controllers\Api\JobStepController::class, 'completeAll']);
         Route::post('/job-steps', [\App\Http\Controllers\Api\JobStepController::class, 'store']);
         Route::patch('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'update']);
         Route::delete('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'destroy']);

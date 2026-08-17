@@ -31,6 +31,10 @@
               <input class="form-check-input" type="checkbox" id="toggle-archived" onchange="applyFilter()">
               <label class="form-check-label ms-2" for="toggle-archived">Archived</label>
             </div>
+            <button class="btn btn-outline-secondary" onclick="openReorderQueue()" data-permission="fabrication.work-orders.edit">
+              <i class="ti ti-arrows-sort"></i>
+              Reorder Queue
+            </button>
             <button class="btn btn-primary" onclick="openCreateWO()" data-permission="fabrication.work-orders.create">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>
               New Work Order
@@ -572,6 +576,28 @@
   </div>
 </div>
 
+<!-- ============================================================
+     Reorder Queue Modal
+     ============================================================ -->
+<div class="modal modal-blur fade" id="reorderQueueModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reorder Shop Queue</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('reorderQueueModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Drag to set the order the shop floor should work these. Unprioritized work orders aren't shown here.</p>
+        <ul class="list-group" id="reorder-queue-list" style="max-height:60vh;overflow-y:auto;"></ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('reorderQueueModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveReorderQueue()" id="reorder-queue-save-btn">Save Order</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Date prompt modal (wizard step 2 — all dates blank) -->
 <div class="modal modal-blur fade" id="wizDatePromptModal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
@@ -714,6 +740,92 @@ function renderWOList(wos) {
 }
 
 // ============================================================
+// Reorder Queue
+// ============================================================
+let reorderQueueWOs = [];
+let reorderDragId = null;
+
+function openReorderQueue() {
+    // Active (non-archived, unpicked-up-yet) WOs, prioritized ones first in their
+    // current order, then unprioritized ones appended in list order.
+    reorderQueueWOs = allWOs
+        .filter(wo => !wo.archived)
+        .slice()
+        .sort((a, b) => {
+            if (a.priority == null && b.priority == null) return 0;
+            if (a.priority == null) return 1;
+            if (b.priority == null) return -1;
+            return a.priority - b.priority;
+        });
+    renderReorderQueue();
+    showModal(document.getElementById('reorderQueueModal'));
+}
+
+function renderReorderQueue() {
+    const list = document.getElementById('reorder-queue-list');
+    if (!reorderQueueWOs.length) {
+        list.innerHTML = '<li class="list-group-item text-muted">No active work orders to order.</li>';
+        return;
+    }
+    list.innerHTML = reorderQueueWOs.map((wo, idx) => `
+        <li class="list-group-item d-flex align-items-center gap-2" draggable="true"
+            data-wo-id="${wo.id}"
+            ondragstart="reorderDragStart(event, ${wo.id})"
+            ondragover="reorderDragOver(event)"
+            ondrop="reorderDrop(event, ${wo.id})"
+            style="cursor:grab">
+            <i class="ti ti-grip-vertical text-muted"></i>
+            <span class="badge bg-secondary-lt text-secondary" style="min-width:2rem;text-align:center">${idx + 1}</span>
+            <strong>${esc(wo.release_label)}</strong>
+            <span class="text-muted small">${esc(wo.job?.job_name || '')}</span>
+        </li>
+    `).join('');
+}
+
+function reorderDragStart(event, woId) {
+    reorderDragId = woId;
+    event.dataTransfer.effectAllowed = 'move';
+}
+
+function reorderDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function reorderDrop(event, targetWoId) {
+    event.preventDefault();
+    if (reorderDragId == null || reorderDragId === targetWoId) return;
+    const fromIdx = reorderQueueWOs.findIndex(w => w.id === reorderDragId);
+    const toIdx   = reorderQueueWOs.findIndex(w => w.id === targetWoId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = reorderQueueWOs.splice(fromIdx, 1);
+    reorderQueueWOs.splice(toIdx, 0, moved);
+    reorderDragId = null;
+    renderReorderQueue();
+}
+
+async function saveReorderQueue() {
+    const btn = document.getElementById('reorder-queue-save-btn');
+    btn.disabled = true;
+    try {
+        await Promise.all(reorderQueueWOs.map((wo, idx) =>
+            API(`/work-orders/${wo.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ priority: idx + 1 }),
+            })
+        ));
+        hideModal(document.getElementById('reorderQueueModal'));
+        await loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to save queue order. Please try again.', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ============================================================
 // Filters
 // ============================================================
 function debounceFilter() {
@@ -833,7 +945,7 @@ async function saveWOAssignments() {
         loadWorkOrders();
     } catch (e) {
         console.error(e);
-        alert('Failed to save assignments');
+        fabToast('Failed to save assignments.', 'error');
     }
 }
 
@@ -874,7 +986,7 @@ function archiveCurrentWO() {
                 await loadWorkOrders();
             } catch (e) {
                 console.error(e);
-                alert('Failed to archive work order');
+                fabToast('Failed to archive work order.', 'error');
             }
         }
     );
@@ -886,20 +998,40 @@ function archiveCurrentWO() {
 function renderWoSteps(woId, steps) {
     const container = document.getElementById('wo-steps-container');
     if (!container) return;
-    const statusColor = { pending: 'secondary', complete: 'success', not_required: 'info', on_hold: 'orange' };
-    const statusIcon  = { pending: '', complete: '✓', not_required: '—', on_hold: '⏸' };
-    const html = steps.map(s => {
-        const color = statusColor[s.status] || 'secondary';
-        return `<span class="badge bg-${color}-lt text-${color}" style="cursor:pointer;font-size:.78rem;padding:.28rem .6rem"
-            title="${esc(s.status === 'complete' && s.completed_by_name ? 'By: ' + s.completed_by_name : s.status)}"
-            onclick="cycleWoStep(${s.id}, '${s.status}')"
-            oncontextmenu="woStepContextMenu(${s.id}, '${s.status}', event)">
-            ${statusIcon[s.status] ? statusIcon[s.status] + ' ' : ''}${esc(s.name)}
-        </span>`;
-    }).join('');
+    const html = steps.map(s => FabStep.stepBadgeHtml(s, {
+        esc,
+        onClick: `cycleWoStep(${s.id}, '${s.status}')`,
+        onContextMenu: `woStepContextMenu(${s.id}, '${s.status}', event)`,
+    })).join('');
+    const pendingCount = steps.filter(s => s.status === 'pending').length;
+    const bulkBtn = pendingCount > 0
+        ? `<button class="btn btn-ghost-success btn-sm ms-1 px-2 py-0" style="font-size:.72rem"
+               onclick="bulkCompleteWoSteps(${woId})" title="Mark all pending steps complete">
+               <i class="ti ti-checks"></i> Complete All (${pendingCount})
+           </button>`
+        : '';
     container.innerHTML = `<span class="text-muted small me-2" style="white-space:nowrap">WO Steps:</span>${html}
         <button class="btn btn-ghost-secondary btn-sm ms-1 px-1 py-0" style="font-size:.72rem"
-            onclick="addWoStep()" title="Add step"><i class="ti ti-plus"></i></button>`;
+            onclick="addWoStep()" title="Add step"><i class="ti ti-plus"></i></button>
+        ${bulkBtn}`;
+}
+
+async function bulkCompleteWoSteps(woId) {
+    const ok = await fabConfirm({
+        title: 'Complete All Steps',
+        message: 'Mark all pending steps on this work order complete? Steps on hold are left untouched.',
+        confirmLabel: 'Mark All Complete',
+        confirmClass: 'btn-success',
+    });
+    if (!ok) return;
+    try {
+        await API(`/work-orders/${woId}/steps/complete-all`, { method: 'PATCH' });
+        await reloadWoSteps();
+        fabToast('Steps marked complete.', 'success');
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to complete steps.', 'error');
+    }
 }
 
 async function reloadWoSteps() {
@@ -912,7 +1044,8 @@ async function reloadWoSteps() {
 }
 
 async function cycleWoStep(stepId, currentStatus) {
-    const nextStatus = currentStatus === 'pending' ? 'complete' : 'pending';
+    const nextStatus = await FabStep.cycleStepStatus(currentStatus);
+    if (!nextStatus) return;
     try {
         await API(`/job-steps/${stepId}`, {
             method: 'PATCH',
@@ -920,7 +1053,10 @@ async function cycleWoStep(stepId, currentStatus) {
             body: JSON.stringify({ status: nextStatus }),
         });
         reloadWoSteps();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to update step status.', 'error');
+    }
 }
 
 function woStepContextMenu(stepId, currentStatus, event) {
@@ -971,7 +1107,7 @@ function addWoStep() {
 async function saveWoStep() {
     if (!currentWO) return;
     const name = document.getElementById('add-step-name').value.trim();
-    if (!name) { alert('Step name is required.'); return; }
+    if (!name) { fabToast('Step name is required.', 'info'); return; }
     try {
         await API('/job-steps', {
             method: 'POST',
@@ -1038,7 +1174,7 @@ function deleteDrawing(drawingId) {
             renderDrawings(wo.drawings || []);
         } catch (e) {
             console.error(e);
-            alert('Failed to delete drawing');
+            fabToast('Failed to delete drawing.', 'error');
         }
     });
 }
@@ -1417,7 +1553,7 @@ async function saveElev() {
         notes: document.getElementById('elev-notes').value || null,
     };
 
-    if (!body.elevation_tag) { alert('Elevation Tag is required.'); return; }
+    if (!body.elevation_tag) { fabToast('Elevation Tag is required.', 'info'); return; }
 
     try {
         if (isEdit) {
@@ -1442,7 +1578,7 @@ async function saveElev() {
         loadWorkOrders();
     } catch (e) {
         console.error(e);
-        alert('Failed to save elevation');
+        fabToast('Failed to save elevation.', 'error');
     }
 }
 
@@ -1457,7 +1593,7 @@ function deleteElev(elevId) {
             loadWorkOrders();
         } catch (e) {
             console.error(e);
-            alert('Failed to delete elevation');
+            fabToast('Failed to delete elevation.', 'error');
         }
     });
 }
@@ -1603,7 +1739,7 @@ function closeWoWizard() {
 
 async function wizardCreateWO() {
     const jobId = document.getElementById('new-wo-job').value;
-    if (!jobId) { alert('Please select a job.'); return; }
+    if (!jobId) { fabToast('Please select a job.', 'info'); return; }
 
     const btn = document.getElementById('wo-wizard-next');
     btn.disabled = true; btn.textContent = 'Creating…';
@@ -1637,7 +1773,7 @@ async function wizardCreateWO() {
         showWizardStep(2);
     } catch (e) {
         console.error(e);
-        alert('Failed to create work order');
+        fabToast('Failed to create work order.', 'error');
     } finally {
         btn.disabled = false;
     }
@@ -1651,7 +1787,7 @@ function wizDatePromptResolve(date) {
 }
 function wizDatePromptSubmit() {
     const val = document.getElementById('wiz-date-prompt-value').value || null;
-    if (!val) { alert('Please enter a date, or click Skip.'); return; }
+    if (!val) { fabToast('Please enter a date, or click Skip.', 'info'); return; }
     wizDatePromptResolve(val);
 }
 function promptForDate() {
@@ -1699,7 +1835,7 @@ async function wizardSaveElevations() {
         showWizardStep(3);
     } catch (e) {
         console.error(e);
-        alert('Failed to save some elevations');
+        fabToast('Failed to save some elevations.', 'error');
     } finally {
         btn.disabled = false;
     }
@@ -1753,7 +1889,7 @@ async function wizardFinishDoors() {
         }
     } catch (e) {
         console.error(e);
-        alert('Failed to save some door/frame elevations');
+        fabToast('Failed to save some door/frame elevations.', 'error');
     } finally {
         btn.disabled = false;
         wizardComplete();
@@ -1945,7 +2081,7 @@ async function saveBulkElev() {
         loadWorkOrders();
     } catch (e) {
         console.error(e);
-        alert('Failed to create some elevations');
+        fabToast('Failed to create some elevations.', 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Create Elevations';
@@ -2017,7 +2153,7 @@ async function saveDoorSchedule() {
     const frameTypeId = elevTypes.find(t => t.name === 'Frame')?.id;
 
     if (!doorTypeId || !frameTypeId) {
-        alert('Door or Frame elevation types not found. Check Admin → Elevation Types.');
+        fabToast('Door or Frame elevation types not found. Check Admin → Elevation Types.', 'error');
         return;
     }
 
@@ -2054,7 +2190,7 @@ async function saveDoorSchedule() {
         loadWorkOrders();
     } catch (e) {
         console.error(e);
-        alert('Failed to create some elevations');
+        fabToast('Failed to create some elevations.', 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Create Elevations';
@@ -2077,7 +2213,7 @@ function openQuickJobCreate() {
 async function saveQuickJob() {
     const jobNumber = document.getElementById('qj-number').value.trim();
     const jobName = document.getElementById('qj-name').value.trim();
-    if (!jobNumber || !jobName) { alert('Job Number and Job Name are required'); return; }
+    if (!jobNumber || !jobName) { fabToast('Job Number and Job Name are required.', 'info'); return; }
 
     try {
         const r = await fetch('/api/v1/business-jobs', {
@@ -2113,7 +2249,7 @@ async function saveQuickJob() {
             sel.value = data.job.id;
         }
     } catch (e) {
-        alert('Error: ' + e.message);
+        fabToast('Error: ' + e.message, 'error');
     }
 }
 </script>
