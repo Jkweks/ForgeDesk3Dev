@@ -156,9 +156,7 @@ class OrderController extends Controller
                     'expected_release_date' => $validated['expected_release_date'] ?? null,
                 ]);
 
-                $product->quantity_committed += $item->quantity;
-                $product->save();
-                $product->updateStatus();
+                $product->recalculateCommittedQuantity();
 
                 $item->quantity_committed = $item->quantity;
                 $item->save();
@@ -179,15 +177,13 @@ class OrderController extends Controller
         return DB::transaction(function () use ($order) {
             foreach ($order->committedInventory as $committed) {
                 $product = $committed->product;
-                
-                $product->quantity_committed -= $committed->quantity_committed;
-                $product->save();
-                $product->updateStatus();
 
                 $committed->orderItem->quantity_committed = 0;
                 $committed->orderItem->save();
 
                 $committed->delete();
+
+                $product->recalculateCommittedQuantity();
             }
 
             $order->status = 'pending';
@@ -217,15 +213,15 @@ class OrderController extends Controller
                     "Shipped for order {$order->order_number}"
                 );
 
-                $product->quantity_committed -= $item->quantity_committed;
-                $product->save();
-                $product->updateStatus();
-
                 $item->quantity_shipped = $item->quantity;
                 $item->save();
             }
 
             $order->committedInventory()->delete();
+
+            foreach ($order->items as $item) {
+                $item->product->recalculateCommittedQuantity();
+            }
 
             $order->update([
                 'status' => 'shipped',

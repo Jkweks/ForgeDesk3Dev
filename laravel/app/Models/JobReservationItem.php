@@ -56,9 +56,7 @@ class JobReservationItem extends Model
             return;
         }
 
-        $product->quantity_committed = self::binAwareCommitted($this->product_id);
-        $product->save();
-        $product->updateStatus();
+        $product->recalculateCommittedQuantity();
     }
 
     /**

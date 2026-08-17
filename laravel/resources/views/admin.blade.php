@@ -1541,7 +1541,7 @@
           const r = await fetch('/api/v1/products/refresh-statuses', {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Authorization': 'Bearer ' + authToken, 'X-CSRF-TOKEN': adminCsrfToken() },
+            headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
           });
           const data = await r.json();
           result.className = 'text-success small';
@@ -2018,7 +2018,6 @@
           method,
           credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-CSRF-TOKEN': adminCsrfToken(),
@@ -2047,7 +2046,7 @@
         try {
           const r = await fetch('/api/v1/elevation-types', {
             credentials: 'include',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'X-CSRF-TOKEN': adminCsrfToken() },
+            headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
           });
           const data = await r.json();
           elevationTypes = data.elevation_types || [];
@@ -2131,7 +2130,6 @@
             credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
               'X-CSRF-TOKEN': adminCsrfToken(),
             },
             body: JSON.stringify(body),
@@ -2153,7 +2151,7 @@
           await fetch(`/api/v1/elevation-types/${id}`, {
             method: 'DELETE',
             credentials: 'include',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'X-CSRF-TOKEN': adminCsrfToken() },
+            headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
           });
           await loadElevationTypes();
         } catch (e) {
@@ -2176,7 +2174,6 @@
         ...opts,
         credentials: 'include',
         headers: {
-          'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
           'X-CSRF-TOKEN': adminCsrfToken(),
           ...(opts.headers || {}),
         },
@@ -2378,7 +2375,7 @@
 
       async function reloadTplModal() {
         try {
-          const authHeaders = { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'X-CSRF-TOKEN': adminCsrfToken() };
+          const authHeaders = { 'X-CSRF-TOKEN': adminCsrfToken() };
           const [tplRes, uRes] = await Promise.all([
             fetch('/api/v1/elevation-types?with_templates=1', { credentials: 'include', headers: authHeaders }),
             fetch('/api/v1/fab-users?all=1', { credentials: 'include', headers: authHeaders }),
@@ -2480,7 +2477,6 @@
             method: 'PATCH',
             credentials: 'include',
             headers: {
-              'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
               'Content-Type': 'application/json',
               'X-CSRF-TOKEN': adminCsrfToken(),
             },
@@ -2493,7 +2489,7 @@
         try {
           const r = await fetch('/api/v1/elevation-types?with_templates=1', {
             credentials: 'include',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'X-CSRF-TOKEN': adminCsrfToken() },
+            headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
           });
           const typeData  = ((await r.json()).elevation_types || []).find(t => t.id === tplCurrentTypeId);
           const templates = typeData?.stage_templates || [];
@@ -2506,7 +2502,7 @@
           // Swap sort_orders
           const a = templates[idx];
           const b = templates[swapIdx];
-          const tplHeaders = { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'Content-Type': 'application/json', 'X-CSRF-TOKEN': adminCsrfToken() };
+          const tplHeaders = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': adminCsrfToken() };
           await Promise.all([
             fetch(`/api/v1/stage-templates/${a.id}`, { method: 'PATCH', credentials: 'include', headers: tplHeaders, body: JSON.stringify({ sort_order: b.sort_order }) }),
             fetch(`/api/v1/stage-templates/${b.id}`, { method: 'PATCH', credentials: 'include', headers: tplHeaders, body: JSON.stringify({ sort_order: a.sort_order }) }),
@@ -2524,7 +2520,6 @@
             method: 'POST',
             credentials: 'include',
             headers: {
-              'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
               'Content-Type': 'application/json',
               'X-CSRF-TOKEN': adminCsrfToken(),
             },
@@ -2540,7 +2535,7 @@
           await fetch(`/api/v1/stage-templates/${id}`, {
             method: 'DELETE',
             credentials: 'include',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('authToken'), 'X-CSRF-TOKEN': adminCsrfToken() },
+            headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
           });
           await reloadTplModal();
         } catch (e) { console.error(e); alert('Failed to delete stage'); }

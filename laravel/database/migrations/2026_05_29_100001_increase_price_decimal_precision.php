@@ -2,25 +2,79 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        // SQLite rebuilds the products table for a column ->change(), which
+        // breaks while the inventory_commitments view (referencing products)
+        // still exists. Drop it around the rebuild, same pattern used elsewhere.
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        if ($isSqlite) {
+            DB::statement('DROP VIEW IF EXISTS inventory_commitments');
+        }
+
         Schema::table('products', function (Blueprint $table) {
             $table->decimal('net_cost', 10, 4)->nullable()->change();
             $table->decimal('price_per_length', 10, 4)->nullable()->change();
             $table->decimal('price_per_package', 10, 4)->nullable()->change();
         });
+
+        if ($isSqlite) {
+            self::recreateInventoryCommitmentsView();
+        }
     }
 
     public function down(): void
     {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        if ($isSqlite) {
+            DB::statement('DROP VIEW IF EXISTS inventory_commitments');
+        }
+
         Schema::table('products', function (Blueprint $table) {
             $table->decimal('net_cost', 10, 2)->nullable()->change();
             $table->decimal('price_per_length', 10, 2)->nullable()->change();
             $table->decimal('price_per_package', 10, 2)->nullable()->change();
         });
+
+        if ($isSqlite) {
+            self::recreateInventoryCommitmentsView();
+        }
+    }
+
+    private static function recreateInventoryCommitmentsView(): void
+    {
+        DB::statement("
+            CREATE VIEW inventory_commitments AS
+            SELECT
+                p.id AS product_id,
+                p.sku,
+                p.part_number,
+                p.finish,
+                p.description,
+                p.quantity_on_hand AS stock,
+                COALESCE(SUM(
+                    CASE
+                        WHEN r.status IN ('active', 'in_progress', 'on_hold')
+                        THEN ri.committed_qty
+                        ELSE 0
+                    END
+                ), 0) AS committed_qty,
+                p.quantity_on_hand - COALESCE(SUM(
+                    CASE
+                        WHEN r.status IN ('active', 'in_progress', 'on_hold')
+                        THEN ri.committed_qty
+                        ELSE 0
+                    END
+                ), 0) AS available_qty
+            FROM products p
+            LEFT JOIN job_reservation_items ri ON p.id = ri.product_id
+            LEFT JOIN job_reservations r ON ri.reservation_id = r.id AND r.deleted_at IS NULL
+            GROUP BY p.id
+        ");
     }
 };

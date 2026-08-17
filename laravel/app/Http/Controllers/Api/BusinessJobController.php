@@ -777,16 +777,26 @@ class BusinessJobController extends Controller
             ]);
 
             // Update product quantity via inventory locations canonical path
-            $location = \App\Models\InventoryLocation::where('product_id', $product->id)->first();
+            $location = \App\Models\InventoryLocation::where('product_id', $product->id)
+                ->orderBy('is_primary', 'desc')
+                ->orderBy('id', 'asc')
+                ->first();
             if ($location) {
                 $location->quantity = max(0, $location->quantity + $qty);
                 $location->save();
-                $product->recalculateQuantitiesFromLocations();
             } else {
-                $product->quantity_on_hand = max(0, $qtyAfter);
-                $product->save();
-                $product->updateStatus();
+                // No location row exists yet for this product — create an "Unassigned"
+                // location so inventory_locations stays the source of truth instead of
+                // drifting from a direct quantity_on_hand write.
+                $unassigned = \App\Models\StorageLocation::where('code', 'UNASSIGNED')->first();
+                \App\Models\InventoryLocation::create([
+                    'product_id'          => $product->id,
+                    'storage_location_id' => $unassigned?->id ?? null,
+                    'quantity'            => max(0, $qty),
+                    'is_primary'          => true,
+                ]);
             }
+            $product->recalculateQuantitiesFromLocations();
 
             DB::commit();
 

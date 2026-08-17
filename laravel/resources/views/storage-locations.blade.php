@@ -730,7 +730,6 @@
       try {
         const response = await fetch(`${API_BASE}/storage-locations/${currentViewLocationId}/shelf-label-pdf`, {
           headers: {
-            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/pdf',
           }
         });
@@ -768,7 +767,6 @@
       try {
         const response = await fetch(`${API_BASE}/storage-locations/bulk-shelf-labels-pdf`, {
           headers: {
-            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/pdf',
           }
         });

@@ -754,7 +754,6 @@
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     },
                     body: JSON.stringify({ status: 'active' }),
@@ -1694,9 +1693,8 @@
                 return;
             }
             try {
-                const token = localStorage.getItem('authToken');
                 const res = await fetch(`/api/v1/job-reservations?job_number=${encodeURIComponent(jobNumber)}`, {
-                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+                    headers: { 'Accept': 'application/json' }
                 });
                 if (res.ok) {
                     const data = await res.json();

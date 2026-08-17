@@ -308,28 +308,13 @@ class PurchaseOrderController extends Controller
                 // Update product inventory
                 $product = $poItem->product;
                 $quantityBefore = $product->quantity_on_hand;
-                $product->quantity_on_hand += $quantityToReceive;
                 $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) - $quantityToReceive);
                 $product->save();
 
-                // Create inventory transaction
-                InventoryTransaction::create([
-                    'product_id' => $product->id,
-                    'type' => 'receipt',
-                    'quantity' => $quantityToReceive,
-                    'quantity_before' => $quantityBefore,
-                    'quantity_after' => $product->quantity_on_hand,
-                    'reference_number' => $purchaseOrder->po_number,
-                    'reference_type' => 'purchase_order',
-                    'reference_id' => $purchaseOrder->id,
-                    'notes' => $itemData['notes'] ?? "Received from PO {$purchaseOrder->po_number}",
-                    'user_id' => auth()->id(),
-                    'transaction_date' => $receivedDate,
-                ]);
-
-                // Update storage location quantity — always keep locations in sync
-                // so that fulfillment's recalculateQuantitiesFromLocations() produces
-                // the correct quantity_on_hand.
+                // Update storage location quantity, then recalculate quantity_on_hand
+                // from inventory_locations (the canonical source of truth) instead of
+                // incrementing quantity_on_hand directly — this self-corrects any
+                // pre-existing drift instead of compounding it.
                 if (!empty($itemData['storage_location_id'])) {
                     $location = $product->inventoryLocations()
                         ->where('storage_location_id', $itemData['storage_location_id'])
@@ -369,6 +354,23 @@ class PurchaseOrderController extends Controller
                         ]);
                     }
                 }
+
+                $product->recalculateQuantitiesFromLocations();
+
+                // Create inventory transaction
+                InventoryTransaction::create([
+                    'product_id' => $product->id,
+                    'type' => 'receipt',
+                    'quantity' => $quantityToReceive,
+                    'quantity_before' => $quantityBefore,
+                    'quantity_after' => $product->quantity_on_hand,
+                    'reference_number' => $purchaseOrder->po_number,
+                    'reference_type' => 'purchase_order',
+                    'reference_id' => $purchaseOrder->id,
+                    'notes' => $itemData['notes'] ?? "Received from PO {$purchaseOrder->po_number}",
+                    'user_id' => auth()->id(),
+                    'transaction_date' => $receivedDate,
+                ]);
             }
 
             // Update PO status

@@ -1408,7 +1408,6 @@ async function exportMonthlyStatementPdf() {
     const response = await fetch(`${API_BASE}/reports/monthly-statement/pdf?month=${month}&year=${year}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${authToken}`,
         'Accept': 'application/pdf'
       }
     });
@@ -1502,7 +1501,6 @@ async function exportInventoryCsv() {
     const response = await fetch(`${API_BASE}/reports/inventory/csv`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${authToken}`,
         'Accept': 'text/csv'
       }
     });
@@ -1536,7 +1534,6 @@ async function exportInventoryPdf() {
     const response = await fetch(`${API_BASE}/reports/inventory/pdf`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${authToken}`,
         'Accept': 'application/pdf'
       }
     });
@@ -1577,7 +1574,6 @@ async function exportReport(type) {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${authToken}`,
         'Accept': 'text/csv'
       }
     });
@@ -1634,7 +1630,6 @@ async function exportReportPdf(type) {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${authToken}`,
         'Accept': 'application/pdf'
       }
     });
@@ -1832,7 +1827,7 @@ async function exportStorageLocationPdf() {
   try {
     showNotification('Generating PDF report...', 'info');
     const response = await fetch(`${API_BASE}/reports/storage-locations/pdf`, {
-      headers: { 'Authorization': `Bearer ${authToken}`, 'Accept': 'application/pdf' }
+      headers: { 'Accept': 'application/pdf' }
     });
     if (!response.ok) throw new Error('Failed to generate PDF');
     const blob = await response.blob();

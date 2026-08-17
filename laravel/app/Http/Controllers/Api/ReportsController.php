@@ -20,7 +20,7 @@ class ReportsController extends Controller
         $lowStock = Product::whereIn('status', ['low', 'very_low'])
             ->where('is_active', true)
             ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
-            ->with(['category', 'supplier', 'inventoryLocations'])
+            ->with(['categories', 'supplier', 'inventoryLocations'])
             ->get()
             ->map(function ($product) {
                 return $this->enrichProductData($product);
@@ -29,7 +29,7 @@ class ReportsController extends Controller
         $critical = Product::where('status', 'critical')
             ->where('is_active', true)
             ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
-            ->with(['category', 'supplier', 'inventoryLocations'])
+            ->with(['categories', 'supplier', 'inventoryLocations'])
             ->get()
             ->map(function ($product) {
                 return $this->enrichProductData($product);
@@ -61,7 +61,7 @@ class ReportsController extends Controller
                     $resQuery->whereIn('status', ['active', 'in_progress', 'on_hold']);
                 });
             })
-            ->with(['category', 'supplier', 'reservationItems' => function($query) {
+            ->with(['categories', 'supplier', 'reservationItems' => function($query) {
                 $query->whereHas('reservation', function($resQuery) {
                     $resQuery->whereIn('status', ['active', 'in_progress', 'on_hold']);
                 })->with('reservation');
@@ -124,7 +124,7 @@ class ReportsController extends Controller
         // Eager load products with their transactions in a single query
         $products = Product::where('is_active', true)
             ->with([
-                'category',
+                'categories',
                 'supplier',
                 'transactions' => function($query) use ($since) {
                     $query->where('transaction_date', '>=', $since);
@@ -169,7 +169,7 @@ class ReportsController extends Controller
                 'id' => $product->id,
                 'sku' => $product->sku,
                 'description' => $product->description,
-                'category' => $product->category?->name,
+                'category' => $product->primaryCategory()?->name,
                 'on_hand' => $product->quantity_on_hand,
                 'on_hand_display' => $onHandDisplay,
                 'available' => $product->quantity_available,
@@ -212,7 +212,7 @@ class ReportsController extends Controller
                     // Or products below minimum
                     ->orWhereRaw('(quantity_on_hand - quantity_committed) <= minimum_quantity');
             })
-            ->with(['category', 'supplier'])
+            ->with(['categories', 'supplier'])
             ->get()
             ->map(function ($product) {
                 return $this->enrichProductData($product, true);
@@ -242,7 +242,7 @@ class ReportsController extends Controller
         $products = Product::where('is_active', true)
             ->where('is_discontinued', false)
             ->with([
-                'category',
+                'categories',
                 'supplier',
                 'transactions' => function($query) {
                     $query->where('type', 'shipment')
@@ -278,7 +278,7 @@ class ReportsController extends Controller
                 'id' => $product->id,
                 'sku' => $product->sku,
                 'description' => $product->description,
-                'category' => $product->category?->name,
+                'category' => $product->primaryCategory()?->name,
                 'on_hand' => $product->quantity_on_hand,
                 'on_hand_display' => $displayQuantity,
                 'unit_cost' => $product->unit_cost,
@@ -311,7 +311,7 @@ class ReportsController extends Controller
         $since = Carbon::now()->subDays($days);
 
         $transactions = InventoryTransaction::where('transaction_date', '>=', $since)
-            ->with('product')
+            ->with('product.categories')
             ->get();
 
         // Group by date
@@ -330,7 +330,7 @@ class ReportsController extends Controller
 
         // Group by category
         $byCategory = $transactions->groupBy(function ($transaction) {
-            return $transaction->product->category?->name ?? 'Uncategorized';
+            return $transaction->product->primaryCategory()?->name ?? 'Uncategorized';
         })->map(function ($categoryTransactions, $category) {
             return [
                 'category' => $category,
@@ -369,7 +369,7 @@ class ReportsController extends Controller
         // Load ALL products (active or inactive) to capture complete inventory value
         // Products are filtered later based on whether they have inventory/transactions
         $products = Product::with([
-                'category',
+                'categories',
                 'supplier',
                 'transactions' => function($query) use ($startDate, $endDate) {
                     $query->whereBetween('transaction_date', [$startDate, $endDate])
@@ -514,7 +514,7 @@ class ReportsController extends Controller
                 'id' => $product->id,
                 'sku' => $product->sku,
                 'description' => $product->description,
-                'category' => $product->category?->name,
+                'category' => $product->primaryCategory()?->name,
                 'supplier' => $product->supplier?->name,
 
                 // Beginning inventory
@@ -646,7 +646,7 @@ class ReportsController extends Controller
             'id' => $product->id,
             'sku' => $product->sku,
             'description' => $product->description,
-            'category' => $product->category?->name,
+            'category' => $product->primaryCategory()?->name,
             'supplier' => $product->supplier?->name,
             'on_hand' => $product->quantity_on_hand,
             'on_hand_packs' => $product->quantity_on_hand_packs,
@@ -1023,7 +1023,7 @@ class ReportsController extends Controller
 
         // Get all transactions for more detailed breakdown
         $allTransactions = InventoryTransaction::where('transaction_date', '>=', $since)
-            ->with('product.category')
+            ->with('product.categories')
             ->get();
 
         // Transform by_date to include issues (negative quantity transactions)
@@ -1045,7 +1045,7 @@ class ReportsController extends Controller
         // Transform by_category to include product_count and percentage
         $totalTransactions = $allTransactions->count();
         $byCategory = $allTransactions->groupBy(function($t) {
-            return $t->product->category?->name ?? 'Uncategorized';
+            return $t->product->primaryCategory()?->name ?? 'Uncategorized';
         })->map(function($catTrans, $category) use ($totalTransactions) {
             return [
                 'transaction_count' => $catTrans->count(),
