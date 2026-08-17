@@ -789,14 +789,12 @@
     </div>
 
     <script>
-        const jobsApiToken = () => localStorage.getItem('authToken');
         const jobsCsrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
         const jobsAPI = (url, opts = {}) => fetch(url, {
             ...opts,
             credentials: 'include',
             headers: {
                 'Accept': 'application/json',
-                'Authorization': 'Bearer ' + jobsApiToken(),
                 'X-CSRF-TOKEN': jobsCsrf(),
                 ...(opts.headers || {}),
             },

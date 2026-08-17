@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -16,14 +18,58 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Drop the old CHECK constraint
-        DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+        $driver = DB::connection()->getDriverName();
 
         // 2. Remap any existing 'low_stock' rows to 'low' so no rows violate the new constraint
         DB::statement("UPDATE products SET status = 'low' WHERE status = 'low_stock'");
 
-        // 3. Add the new CHECK constraint with the expanded value set
-        DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low', 'very_low', 'critical', 'out_of_stock'))");
+        // 1 & 3. Expand the CHECK constraint to the new value set. `ALTER TABLE ...
+        // DROP/ADD CONSTRAINT` is Postgres/MySQL syntax; SQLite has no named
+        // constraints and needs a column rebuild instead (Laravel's `->change()`
+        // handles that for us).
+        if ($driver === 'sqlite') {
+            // SQLite rebuilds the table to change a column (rename → recreate →
+            // copy → drop → rename back), and the inventory_commitments view
+            // (which references products) breaks that rebuild since the table
+            // briefly doesn't exist under its real name. Drop it around the
+            // rebuild, same pattern used elsewhere for this view.
+            DB::statement('DROP VIEW IF EXISTS inventory_commitments');
+            Schema::table('products', function (Blueprint $table) {
+                $table->enum('status', ['in_stock', 'low', 'very_low', 'critical', 'out_of_stock'])
+                    ->default('in_stock')->change();
+            });
+            DB::statement("
+                CREATE VIEW inventory_commitments AS
+                SELECT
+                    p.id AS product_id,
+                    p.sku,
+                    p.part_number,
+                    p.finish,
+                    p.description,
+                    p.quantity_on_hand AS stock,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN r.status IN ('active', 'in_progress', 'on_hold')
+                            THEN ri.committed_qty
+                            ELSE 0
+                        END
+                    ), 0) AS committed_qty,
+                    p.quantity_on_hand - COALESCE(SUM(
+                        CASE
+                            WHEN r.status IN ('active', 'in_progress', 'on_hold')
+                            THEN ri.committed_qty
+                            ELSE 0
+                        END
+                    ), 0) AS available_qty
+                FROM products p
+                LEFT JOIN job_reservation_items ri ON p.id = ri.product_id
+                LEFT JOIN job_reservations r ON ri.reservation_id = r.id AND r.deleted_at IS NULL
+                GROUP BY p.id
+            ");
+        } else {
+            DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+            DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low', 'very_low', 'critical', 'out_of_stock'))");
+        }
 
         // 4. Recalculate all statuses using the full new logic
         DB::statement("
@@ -92,8 +138,18 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+        $driver = DB::connection()->getDriverName();
+
         DB::statement("UPDATE products SET status = 'low_stock' WHERE status IN ('low', 'very_low')");
-        DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low_stock', 'critical', 'out_of_stock'))");
+
+        if ($driver === 'sqlite') {
+            Schema::table('products', function (Blueprint $table) {
+                $table->enum('status', ['in_stock', 'low_stock', 'critical', 'out_of_stock'])
+                    ->default('in_stock')->change();
+            });
+        } else {
+            DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
+            DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low_stock', 'critical', 'out_of_stock'))");
+        }
     }
 };

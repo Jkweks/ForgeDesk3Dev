@@ -561,7 +561,6 @@ async function apiFetch(path, method = 'GET', body = null) {
   const opts = {
     method,
     headers: {
-      'Authorization': `Bearer ${authToken}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },

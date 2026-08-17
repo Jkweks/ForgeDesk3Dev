@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use App\Models\JobReservationItem;
+use App\Models\CommittedInventory;
 
 class Product extends Model
 {
@@ -142,6 +143,10 @@ class Product extends Model
      */
     public function primaryCategory()
     {
+        if ($this->relationLoaded('categories')) {
+            return $this->categories->firstWhere('pivot.is_primary', true);
+        }
+
         return $this->categories()->wherePivot('is_primary', true)->first();
     }
 
@@ -199,6 +204,23 @@ class Product extends Model
         $this->quantity_committed = $totals->total_committed ?? 0;
         $this->save();
 
+        $this->updateStatus();
+
+        return $this;
+    }
+
+    /**
+     * Recalculate quantity_committed as the sum of active job-reservation commitments
+     * (bin-aware) and sales-order commitments (CommittedInventory). This is the
+     * canonical way to update quantity_committed — JobReservationItem and
+     * OrderController both call this instead of writing quantity_committed directly,
+     * so neither system silently overwrites the other's commitment when it recalculates.
+     */
+    public function recalculateCommittedQuantity()
+    {
+        $this->quantity_committed = JobReservationItem::binAwareCommitted($this->id)
+            + CommittedInventory::where('product_id', $this->id)->sum('quantity_committed');
+        $this->save();
         $this->updateStatus();
 
         return $this;

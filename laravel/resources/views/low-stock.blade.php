@@ -257,7 +257,6 @@
 
     async function exportProducts() {
       try {
-        const authToken = localStorage.getItem('authToken');
         const search = document.getElementById('searchInput').value;
         const category = document.getElementById('categoryFilter').value;
 
@@ -266,7 +265,7 @@
         if (category) params.append('category_id', category);
 
         const response = await fetch(`${API_BASE}/products?${params}`, {
-          headers: { 'Authorization': `Bearer ${authToken}`, 'Accept': 'text/csv' }
+          headers: { 'Accept': 'text/csv' }
         });
 
         if (!response.ok) throw new Error('Export failed');

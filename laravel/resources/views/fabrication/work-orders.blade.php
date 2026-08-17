@@ -610,7 +610,6 @@ const API = (path, opts = {}) => fetch('/api/v1' + path, {
     ...opts,
     credentials: 'include',
     headers: {
-        'Authorization': 'Bearer ' + authToken,
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
         ...(opts.headers || {}),
     },
@@ -1015,7 +1014,6 @@ async function uploadDrawings(files) {
         try {
             await fetch(`/api/v1/work-orders/${currentWO.id}/drawings`, {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + authToken },
                 body: fd,
             });
         } catch (e) {
@@ -2086,7 +2084,6 @@ async function saveQuickJob() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + localStorage.getItem('authToken'),
             },
             body: JSON.stringify({
                 job_number: jobNumber,

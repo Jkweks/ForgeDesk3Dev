@@ -1525,12 +1525,10 @@ function printCycleCountReport() {
 
   // Open PDF in new window/tab
   const apiUrl = window.location.origin + '/api/v1/cycle-counts/' + sessionId + '/pdf';
-  const authToken = localStorage.getItem('authToken');
 
   // Create a temporary link to download the PDF
   fetch(apiUrl, {
     headers: {
-      'Authorization': 'Bearer ' + authToken,
       'Accept': 'application/pdf',
     }
   })
@@ -1568,12 +1566,10 @@ function downloadPdfReport(sessionId) {
 
   // Open PDF in new window/tab
   const apiUrl = window.location.origin + '/api/v1/cycle-counts/' + sessionId + '/pdf';
-  const authToken = localStorage.getItem('authToken');
 
   // Create a temporary link to download the PDF
   fetch(apiUrl, {
     headers: {
-      'Authorization': 'Bearer ' + authToken,
       'Accept': 'application/pdf',
     }
   })

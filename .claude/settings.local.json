@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(ls -d /mnt/titan/ForgeDesk3-dev/*/)",
-      "mcp__Claude_Code_Remote__subscribe_pr_activity"
+      "mcp__Claude_Code_Remote__subscribe_pr_activity",
+      "Bash(php -l app/Http/Middleware/CheckPermission.php)",
+      "Bash(php -l bootstrap/app.php)",
+      "Bash(php -l routes/api.php)",
+      "Bash(docker compose *)"
     ]
   }
 }

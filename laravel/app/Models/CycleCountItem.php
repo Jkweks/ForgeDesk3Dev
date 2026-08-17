@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\StorageLocation;
 
 class CycleCountItem extends Model
 {
@@ -230,16 +231,40 @@ class CycleCountItem extends Model
             return $transaction;
         } else {
             // Legacy: product-level count without location (should not happen going forward)
-            // Still supported for backward compatibility
+            // Still supported for backward compatibility. Apply the variance to the
+            // primary inventory location (falling back to creating an "Unassigned"
+            // location) and recalculate from locations, rather than writing
+            // quantity_on_hand directly — this keeps inventory_locations as the
+            // source of truth instead of letting it drift.
             $product = $this->product;
+            $quantityBefore = $product->quantity_on_hand;
+
+            $primaryLocation = $product->inventoryLocations()
+                ->orderBy('is_primary', 'desc')
+                ->orderBy('id', 'asc')
+                ->first();
+
+            if ($primaryLocation) {
+                $primaryLocation->quantity += $varianceEaches;
+                $primaryLocation->save();
+            } else {
+                $unassigned = StorageLocation::where('code', 'UNASSIGNED')->first();
+                $product->inventoryLocations()->create([
+                    'storage_location_id' => $unassigned?->id ?? null,
+                    'quantity'            => $countedEaches,
+                    'is_primary'          => true,
+                ]);
+            }
+
+            $product->recalculateQuantitiesFromLocations();
 
             // Create inventory adjustment transaction (in eaches)
             $transaction = InventoryTransaction::create([
                 'product_id' => $this->product_id,
                 'type' => 'cycle_count',
                 'quantity' => $varianceEaches,
-                'quantity_before' => $systemEaches,
-                'quantity_after' => $countedEaches,
+                'quantity_before' => $quantityBefore,
+                'quantity_after' => $product->quantity_on_hand,
                 'reference_number' => $this->session->session_number,
                 'reference_type' => 'cycle_count',
                 'reference_id' => $this->session_id,
@@ -247,10 +272,6 @@ class CycleCountItem extends Model
                 'user_id' => $userId,
                 'transaction_date' => now(),
             ]);
-
-            // Update product quantity (in eaches)
-            $product->quantity_on_hand = $countedEaches;
-            $product->save();
 
             $this->update([
                 'variance_status' => 'approved',

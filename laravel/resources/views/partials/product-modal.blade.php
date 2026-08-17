@@ -1356,11 +1356,9 @@
       formData.append('photo', file);
 
       try {
-        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${API_BASE}/products/${productId}/photo`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
           },
@@ -1391,11 +1389,9 @@
       const formData = new FormData();
       formData.append('photo', file);
       try {
-        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${API_BASE}/products/${productId}/photo`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
           },
@@ -2101,7 +2097,6 @@
         const response = await fetch(`${API_BASE}${url}`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${authToken}`,
             'Accept': 'text/csv'
           }
         });

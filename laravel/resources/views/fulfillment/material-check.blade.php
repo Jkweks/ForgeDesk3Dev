@@ -253,12 +253,10 @@
             }
 
             try {
-                const authToken = localStorage.getItem('authToken');
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
-                        'Authorization': `Bearer ${authToken}`,
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     },
                     body: formData,
@@ -511,13 +509,11 @@
             };
 
             try {
-                const authToken = localStorage.getItem('authToken');
                 const response = await fetch('/api/v1/fulfillment/commit-materials', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'Authorization': `Bearer ${authToken}`,
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify(payload)

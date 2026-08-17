@@ -576,7 +576,6 @@ async function fabApiMultipart(endpoint, formData, method='POST'){
     'Accept': 'application/json',
     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
   };
-  if(authToken) headers['Authorization'] = `Bearer ${authToken}`;
   const response = await fetch(`${API_BASE}${endpoint}`, { method, headers, body: formData });
   if(!response.ok){
     if(response.status===401){ showLogin(); return null; }

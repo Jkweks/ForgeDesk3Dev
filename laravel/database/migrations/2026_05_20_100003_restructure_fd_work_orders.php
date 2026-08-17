@@ -10,6 +10,12 @@ return new class extends Migration
     {
         // Drop foreign key on assigned_to_id before dropping column
         Schema::table('fd_work_orders', function (Blueprint $table) {
+            // job_type and planned_complete_date have indexes from the create
+            // migration; drop them first so the column drop below doesn't leave
+            // SQLite's table rebuild referencing a now-missing column via an index.
+            $table->dropIndex(['job_type']);
+            $table->dropIndex(['planned_complete_date']);
+
             // Drop old columns no longer needed
             $table->dropColumn([
                 'project_name', 'job_number', 'wo_number', 'job_type', 'system',

@@ -1,6 +1,5 @@
 <script>
   const API_BASE = '/api/v1';
-  let authToken = null; // kept for compatibility — pages that still send `Authorization: Bearer null` gracefully fall back to session auth
   let currentUser = null;
 
   // Load user data from localStorage
@@ -340,12 +339,19 @@
     }
   }
 
+  // Reads the XSRF-TOKEN cookie, which Laravel refreshes on every response —
+  // always current, unlike the <meta> tag which is stamped once at page load.
+  function getXsrfToken() {
+    const cookie = document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='));
+    return cookie ? decodeURIComponent(cookie.split('=')[1]) : '';
+  }
+
   // API Helper
   async function apiCall(endpoint, options = {}) {
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+      'X-XSRF-TOKEN': getXsrfToken(),
       ...options.headers
     };
 
@@ -360,7 +366,13 @@
 
   // Authenticated Fetch - returns JSON directly (convenience wrapper)
   async function authenticatedFetch(endpoint, options = {}) {
-    const response = await apiCall(endpoint, options);
+    let response = await apiCall(endpoint, options);
+
+    // CSRF token mismatch — refresh the cookie and retry once before giving up
+    if (response.status === 419) {
+      await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
+      response = await apiCall(endpoint, options);
+    }
 
     if (!response.ok) {
       // Handle 401 Unauthorized - redirect to login
@@ -370,6 +382,11 @@
         showLogin();
         showNotification('Session expired. Please login again.', 'warning');
         throw new Error('Session expired');
+      }
+
+      if (response.status === 419) {
+        showNotification('Your session security token expired. Please try again.', 'warning');
+        throw new Error('CSRF token mismatch');
       }
 
       const error = await response.json().catch(() => ({ message: 'Request failed' }));
@@ -412,15 +429,13 @@
     try {
       // Initialize Sanctum session and get a fresh XSRF token (required before first login POST)
       await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
-      const xsrfCookie = document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='));
-      const xsrfToken = xsrfCookie ? decodeURIComponent(xsrfCookie.split('=')[1]) : '';
 
       const response = await fetch('/api/login', {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-XSRF-TOKEN': xsrfToken,
+          'X-XSRF-TOKEN': getXsrfToken(),
         },
         body: JSON.stringify({ email, password, remember })
       });
@@ -451,7 +466,7 @@
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+          'X-XSRF-TOKEN': getXsrfToken()
         }
       });
     } catch (_) { /* best-effort — clear local state regardless */ }
