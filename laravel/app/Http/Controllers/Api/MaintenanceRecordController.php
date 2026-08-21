@@ -10,7 +10,7 @@ class MaintenanceRecordController extends Controller
 {
     public function index(Request $request)
     {
-        $query = MaintenanceRecord::with(['machine', 'task', 'asset']);
+        $query = MaintenanceRecord::with(['machine', 'task', 'asset', 'performer']);
 
         if ($request->has('machine_id')) {
             $query->where('machine_id', $request->machine_id);
@@ -25,10 +25,26 @@ class MaintenanceRecordController extends Controller
         }
 
         if ($request->has('performed_by')) {
-            $query->where('performed_by', 'like', "%{$request->performed_by}%");
+            $query->where('performed_by', $request->performed_by);
         }
 
-        return response()->json($query->latest('performed_at')->get());
+        if ($request->filled('date_from')) {
+            $query->whereDate('performed_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('performed_at', '<=', $request->date_to);
+        }
+
+        $query->latest('performed_at');
+
+        $perPage = $request->get('per_page', 25);
+
+        if ($perPage === 'all') {
+            return response()->json($query->get());
+        }
+
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -37,7 +53,7 @@ class MaintenanceRecordController extends Controller
             'machine_id' => 'required|exists:machines,id',
             'task_id' => 'nullable|exists:maintenance_tasks,id',
             'asset_id' => 'nullable|exists:assets,id',
-            'performed_by' => 'nullable|max:255',
+            'performed_by' => 'nullable|exists:users,id',
             'performed_at' => 'nullable|date',
             'notes' => 'nullable',
             'downtime_minutes' => 'nullable|integer|min:0',
@@ -48,7 +64,7 @@ class MaintenanceRecordController extends Controller
 
         $record = MaintenanceRecord::create($validated);
 
-        return response()->json($record->load(['machine', 'task', 'asset']), 201);
+        return response()->json($record->load(['machine', 'task', 'asset', 'performer']), 201);
     }
 
     public function show(MaintenanceRecord $record)
@@ -56,7 +72,8 @@ class MaintenanceRecordController extends Controller
         return response()->json($record->load([
             'machine',
             'task',
-            'asset'
+            'asset',
+            'performer',
         ]));
     }
 
@@ -66,7 +83,7 @@ class MaintenanceRecordController extends Controller
             'machine_id' => 'required|exists:machines,id',
             'task_id' => 'nullable|exists:maintenance_tasks,id',
             'asset_id' => 'nullable|exists:assets,id',
-            'performed_by' => 'nullable|max:255',
+            'performed_by' => 'nullable|exists:users,id',
             'performed_at' => 'nullable|date',
             'notes' => 'nullable',
             'downtime_minutes' => 'nullable|integer|min:0',
@@ -77,12 +94,13 @@ class MaintenanceRecordController extends Controller
 
         $record->update($validated);
 
-        return response()->json($record->load(['machine', 'task', 'asset']));
+        return response()->json($record->load(['machine', 'task', 'asset', 'performer']));
     }
 
     public function destroy(MaintenanceRecord $record)
     {
         $record->delete();
+
         return response()->json(null, 204);
     }
 }

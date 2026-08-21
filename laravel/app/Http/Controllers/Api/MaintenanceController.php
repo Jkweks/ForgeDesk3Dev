@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Machine;
 use App\Models\Asset;
-use App\Models\MaintenanceTask;
+use App\Models\Machine;
 use App\Models\MaintenanceRecord;
+use App\Models\MaintenanceTask;
 use Illuminate\Http\Request;
 
 class MaintenanceController extends Controller
@@ -19,8 +19,8 @@ class MaintenanceController extends Controller
         $totalRecords = MaintenanceRecord::count();
 
         $allTasks = MaintenanceTask::where('status', 'active')->get();
-        $overdueTasks = $allTasks->filter(fn($task) => $task->is_overdue)->count();
-        $dueSoonTasks = $allTasks->filter(fn($task) => $task->is_due_soon)->count();
+        $overdueTasks = $allTasks->filter(fn ($task) => $task->is_overdue)->count();
+        $dueSoonTasks = $allTasks->filter(fn ($task) => $task->is_due_soon)->count();
 
         $totalDowntime = Machine::sum('total_downtime_minutes');
         $lastService = MaintenanceRecord::latest('performed_at')->first();
@@ -44,9 +44,9 @@ class MaintenanceController extends Controller
             ->with('machine')
             ->get();
 
-        $upcoming = $tasks->filter(function($task) {
+        $upcoming = $tasks->filter(function ($task) {
             return $task->is_overdue || $task->is_due_soon;
-        })->map(function($task) {
+        })->map(function ($task) {
             return [
                 'id' => $task->id,
                 'title' => $task->title,
@@ -57,7 +57,7 @@ class MaintenanceController extends Controller
                 'is_overdue' => $task->is_overdue,
                 'is_due_soon' => $task->is_due_soon,
             ];
-        })->sortBy(function($task) {
+        })->sortBy(function ($task) {
             return $task['next_due_date'];
         })->values();
 
@@ -72,5 +72,42 @@ class MaintenanceController extends Controller
             ->get();
 
         return response()->json($records);
+    }
+
+    public function serviceHistoryPdf(Request $request)
+    {
+        $query = MaintenanceRecord::with(['machine', 'task', 'performer']);
+
+        if ($request->filled('machine_id')) {
+            $query->where('machine_id', $request->machine_id);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('performed_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('performed_at', '<=', $request->date_to);
+        }
+
+        $records = $query->latest('performed_at')->get();
+
+        $summary = [
+            'total_records' => $records->count(),
+            'total_downtime_minutes' => $records->sum('downtime_minutes'),
+            'total_labor_hours' => $records->sum('labor_hours'),
+            'machine' => $request->filled('machine_id') ? Machine::find($request->machine_id)?->name : 'All Machines',
+            'date_from' => $request->date_from,
+            'date_to' => $request->date_to,
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.maintenance-service-history', [
+            'records' => $records,
+            'summary' => $summary,
+        ]);
+
+        $pdf->setPaper('letter', 'landscape');
+
+        return $pdf->stream('maintenance-service-history-'.date('Y-m-d').'.pdf');
     }
 }

@@ -9,6 +9,13 @@
 .priority-low { background-color: var(--tblr-success); color: #fff; }
 .overdue { background-color: var(--tblr-danger); color: #fff; }
 .due-soon { background-color: var(--tblr-warning); color: #fff; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--tblr-border-color); border: 1px solid var(--tblr-border-color); }
+.calendar-day-header { background: var(--tblr-bg-surface-secondary); padding: 6px; text-align: center; font-weight: 600; font-size: 0.75rem; }
+.calendar-day { background: var(--tblr-bg-surface); min-height: 100px; padding: 4px; font-size: 0.75rem; }
+.calendar-day.other-month { opacity: 0.4; }
+.calendar-day.today { outline: 2px solid var(--tblr-primary); outline-offset: -2px; }
+.calendar-day-number { font-weight: 600; margin-bottom: 4px; }
+.calendar-task { display: block; padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; width: 100%; }
 @endsection
 
 @section('content')
@@ -69,6 +76,14 @@
             </div>
           </div>
 
+          <!-- Maintenance Alerts -->
+          <div class="card mb-3" id="maintenanceAlertsCard" style="display: none;">
+            <div class="card-header">
+              <h3 class="card-title">Maintenance Alerts</h3>
+            </div>
+            <div class="card-body" id="maintenanceAlertsList"></div>
+          </div>
+
           <!-- Tabs -->
           <div class="card">
             <div class="card-header">
@@ -88,6 +103,9 @@
                 <li class="nav-item" role="presentation">
                   <a href="#tab-records" class="nav-link" data-bs-toggle="tab" role="tab">Service Log</a>
                 </li>
+                <li class="nav-item" role="presentation">
+                  <a href="#tab-calendar" class="nav-link" data-bs-toggle="tab" role="tab" onclick="renderCalendar()">Calendar</a>
+                </li>
               </ul>
             </div>
             <div class="card-body">
@@ -98,6 +116,18 @@
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#machineModal" onclick="openMachineModal()">
                       <i class="ti ti-plus icon"></i> Add Machine
                     </button>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Search</label>
+                      <input type="text" class="form-control" id="machineSearch" placeholder="Name, type, manufacturer, model" onkeyup="debounceMachineSearch()">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Equipment Type</label>
+                      <select class="form-select" id="machineTypeFilter" onchange="loadMachinesTable(1)">
+                        <option value="">All Types</option>
+                      </select>
+                    </div>
                   </div>
                   <div class="table-responsive">
                     <table class="table table-vcenter">
@@ -116,6 +146,13 @@
                       <tbody id="machinesTable"></tbody>
                     </table>
                   </div>
+                  <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div class="text-muted" id="machinesPageInfo"></div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm" id="machinesPrevPage" onclick="changeMachinesPage(-1)">Prev</button>
+                      <button type="button" class="btn btn-sm" id="machinesNextPage" onclick="changeMachinesPage(1)">Next</button>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Assets Tab -->
@@ -124,6 +161,12 @@
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#assetModal" onclick="openAssetModal()">
                       <i class="ti ti-plus icon"></i> Add Asset
                     </button>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Search</label>
+                      <input type="text" class="form-control" id="assetSearch" placeholder="Name or description" onkeyup="debounceAssetSearch()">
+                    </div>
                   </div>
                   <div class="table-responsive">
                     <table class="table table-vcenter">
@@ -137,6 +180,13 @@
                       </thead>
                       <tbody id="assetsTable"></tbody>
                     </table>
+                  </div>
+                  <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div class="text-muted" id="assetsPageInfo"></div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm" id="assetsPrevPage" onclick="changeAssetsPage(-1)">Prev</button>
+                      <button type="button" class="btn btn-sm" id="assetsNextPage" onclick="changeAssetsPage(1)">Next</button>
+                    </div>
                   </div>
                 </div>
 
@@ -236,6 +286,41 @@
                       <i class="ti ti-plus icon"></i> Add Task
                     </button>
                   </div>
+                  <div class="row mb-3">
+                    <div class="col-md-3">
+                      <label class="form-label">Machine</label>
+                      <select class="form-select" id="taskMachineFilter" onchange="loadTasksTable(1)">
+                        <option value="">All Machines</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Status</label>
+                      <select class="form-select" id="taskStatusFilter" onchange="loadTasksTable(1)">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="paused">Paused</option>
+                        <option value="retired">Retired</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Priority</label>
+                      <select class="form-select" id="taskPriorityFilter" onchange="loadTasksTable(1)">
+                        <option value="">All Priorities</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Due</label>
+                      <select class="form-select" id="taskDueFilter" onchange="loadTasksTable(1)">
+                        <option value="">Any</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="due_soon">Due Soon</option>
+                      </select>
+                    </div>
+                  </div>
                   <div class="table-responsive">
                     <table class="table table-vcenter">
                       <thead>
@@ -253,14 +338,46 @@
                       <tbody id="tasksTable"></tbody>
                     </table>
                   </div>
+                  <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div class="text-muted" id="tasksPageInfo"></div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm" id="tasksPrevPage" onclick="changeTasksPage(-1)">Prev</button>
+                      <button type="button" class="btn btn-sm" id="tasksNextPage" onclick="changeTasksPage(1)">Next</button>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Service Log Tab -->
                 <div class="tab-pane" id="tab-records" role="tabpanel">
-                  <div class="d-flex mb-3">
+                  <div class="d-flex mb-3 gap-2">
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#recordModal" onclick="openRecordModal()">
                       <i class="ti ti-plus icon"></i> Add Service Record
                     </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="exportServiceHistoryPdf()">
+                      <i class="ti ti-file-type-pdf icon"></i> Export PDF
+                    </button>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-3">
+                      <label class="form-label">Machine</label>
+                      <select class="form-select" id="recordMachineFilter" onchange="loadRecords(1)">
+                        <option value="">All Machines</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Performed By</label>
+                      <select class="form-select" id="recordPerformedByFilter" onchange="loadRecords(1)">
+                        <option value="">Anyone</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">From</label>
+                      <input type="date" class="form-control" id="recordDateFrom" onchange="loadRecords(1)">
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">To</label>
+                      <input type="date" class="form-control" id="recordDateTo" onchange="loadRecords(1)">
+                    </div>
                   </div>
                   <div class="table-responsive">
                     <table class="table table-vcenter">
@@ -279,6 +396,27 @@
                       <tbody id="recordsTable"></tbody>
                     </table>
                   </div>
+                  <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div class="text-muted" id="recordsPageInfo"></div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm" id="recordsPrevPage" onclick="changeRecordsPage(-1)">Prev</button>
+                      <button type="button" class="btn btn-sm" id="recordsNextPage" onclick="changeRecordsPage(1)">Next</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Calendar Tab -->
+                <div class="tab-pane" id="tab-calendar" role="tabpanel">
+                  <div class="d-flex align-items-center justify-content-between mb-3">
+                    <button type="button" class="btn btn-outline-secondary" onclick="changeCalendarMonth(-1)">
+                      <i class="ti ti-chevron-left"></i> Prev
+                    </button>
+                    <h3 class="mb-0" id="calendarMonthLabel"></h3>
+                    <button type="button" class="btn btn-outline-secondary" onclick="changeCalendarMonth(1)">
+                      Next <i class="ti ti-chevron-right"></i>
+                    </button>
+                  </div>
+                  <div id="calendarGrid" class="calendar-grid"></div>
                 </div>
               </div>
             </div>
@@ -410,7 +548,9 @@
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Assigned To</label>
-                <input type="text" class="form-control" id="taskAssignedTo">
+                <select class="form-select" id="taskAssignedTo">
+                  <option value="">Unassigned</option>
+                </select>
               </div>
             </div>
             <div class="row">
@@ -494,7 +634,9 @@
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Performed By</label>
-                <input type="text" class="form-control" id="recordPerformedBy">
+                <select class="form-select" id="recordPerformedBy">
+                  <option value="">Unspecified</option>
+                </select>
               </div>
             </div>
             <div class="row">

@@ -281,8 +281,12 @@
   function showModal(modalElement) {
     try {
       if (window.bootstrap && window.bootstrap.Modal) {
-        const modal = new window.bootstrap.Modal(modalElement);
-        modal.show();
+        const modal = window.bootstrap.Modal.getOrCreateInstance(modalElement);
+        // Avoid stacking a second backdrop if the modal is already open
+        // (e.g. a save handler refreshing content by re-calling the open function)
+        if (!modalElement.classList.contains('show')) {
+          modal.show();
+        }
         return true;
       }
     } catch (e) {
@@ -403,6 +407,11 @@
       });
 
       throw new Error(error.message || `HTTP ${response.status}`);
+    }
+
+    // No-content responses (e.g. DELETE returning 204) have no body to parse
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return null;
     }
 
     return response.json();

@@ -1,32 +1,32 @@
 <?php
 
+use App\Http\Controllers\Api\AssetController;
+use App\Http\Controllers\Api\BusinessJobController;
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CycleCountController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DoorFrameConfigurationController;
+use App\Http\Controllers\Api\FabricationDocumentController;
+use App\Http\Controllers\Api\ImportExportController;
+use App\Http\Controllers\Api\InventoryLocationController;
+use App\Http\Controllers\Api\InventoryTransactionController;
+use App\Http\Controllers\Api\JobReservationController;
+use App\Http\Controllers\Api\MachineController;
+use App\Http\Controllers\Api\MachineToolingController;
+use App\Http\Controllers\Api\MaintenanceController;
+use App\Http\Controllers\Api\MaintenanceRecordController;
+use App\Http\Controllers\Api\MaintenanceTaskController;
+use App\Http\Controllers\Api\MaterialCheckController;
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PasswordResetController;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Http\Controllers\Api\ReportsController;
+use App\Http\Controllers\Api\RequiredPartsController;
+use App\Http\Controllers\Api\StatusController;
+use App\Http\Controllers\Api\SupplierController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\ProductController;
-use App\Http\Controllers\Api\CategoryController;
-use App\Http\Controllers\Api\OrderController;
-use App\Http\Controllers\Api\ImportExportController;
-use App\Http\Controllers\Api\MaintenanceController;
-use App\Http\Controllers\Api\MachineController;
-use App\Http\Controllers\Api\AssetController;
-use App\Http\Controllers\Api\MaintenanceTaskController;
-use App\Http\Controllers\Api\MaintenanceRecordController;
-use App\Http\Controllers\Api\InventoryLocationController;
-use App\Http\Controllers\Api\JobReservationController;
-use App\Http\Controllers\Api\SupplierController;
-use App\Http\Controllers\Api\InventoryTransactionController;
-use App\Http\Controllers\Api\RequiredPartsController;
-use App\Http\Controllers\Api\ReportsController;
-use App\Http\Controllers\Api\PurchaseOrderController;
-use App\Http\Controllers\Api\CycleCountController;
-use App\Http\Controllers\Api\MachineToolingController;
-use App\Http\Controllers\Api\MaterialCheckController;
-use App\Http\Controllers\Api\StatusController;
-use App\Http\Controllers\Api\BusinessJobController;
-use App\Http\Controllers\Api\DoorFrameConfigurationController;
-use App\Http\Controllers\Api\PasswordResetController;
-use App\Http\Controllers\Api\FabricationDocumentController;
 
 // Public test route (no auth required)
 Route::get('/test', function () {
@@ -36,7 +36,7 @@ Route::get('/test', function () {
 Route::get('/v1/test', function () {
     return response()->json([
         'message' => 'ForgeDesk API is working!',
-        'version' => '1.0'
+        'version' => '1.0',
     ]);
 });
 
@@ -50,11 +50,11 @@ Route::post('/login', function (Request $request) {
 
     $user = \App\Models\User::where('email', $request->email)->first();
 
-    if (!$user || !\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+    if (! $user || ! \Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
         return response()->json(['message' => 'Invalid credentials'], 401);
     }
 
-    if (!$user->is_active) {
+    if (! $user->is_active) {
         return response()->json(['message' => 'Your account has been deactivated. Please contact an administrator.'], 403);
     }
 
@@ -80,7 +80,7 @@ Route::post('/login', function (Request $request) {
             'role' => $user->role,
             'is_active' => $user->is_active,
             'permissions' => $permissions,
-        ]
+        ],
     ]);
 });
 
@@ -88,6 +88,7 @@ Route::post('/logout', function (Request $request) {
     \Illuminate\Support\Facades\Auth::logout();
     $request->session()->invalidate();
     $request->session()->regenerateToken();
+
     return response()->json(['message' => 'Logged out']);
 })->middleware('auth:sanctum');
 
@@ -100,7 +101,7 @@ Route::post('/password/verify-token', [PasswordResetController::class, 'verifyTo
 Route::prefix('v1')->group(function () {
     // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
     Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
-    Route::get('/shop/fab-users',   [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
+    Route::get('/shop/fab-users', [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
     Route::post('/shop/fab-pin-login', [\App\Http\Controllers\Api\ShopFloorController::class, 'pinLogin']);
     Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
     Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
@@ -150,6 +151,7 @@ Route::middleware('auth:sanctum')->group(function () {
                     $permissions = $role->permissions->pluck('name')->toArray();
                 }
             }
+
             return [
                 'id' => $user->id,
                 'name' => $user->full_name ?: $user->name,
@@ -190,7 +192,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/dashboard/inventory/{status}', [DashboardController::class, 'inventoryByStatus']);
         Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
-        
+
         // Categories
         Route::apiResource('categories', CategoryController::class)
             ->middlewareFor(['index', 'show'], 'permission:inventory.view')
@@ -350,22 +352,23 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{order}/commit', [OrderController::class, 'commitInventory'])->middleware('permission:orders.edit');
         Route::post('/orders/{order}/release', [OrderController::class, 'releaseInventory'])->middleware('permission:orders.edit');
         Route::post('/orders/{order}/ship', [OrderController::class, 'shipOrder'])->middleware('permission:orders.edit');
-        
+
         // Import/Export
         Route::post('/import/products', [ImportExportController::class, 'importProducts']);
         Route::get('/export/products', [ImportExportController::class, 'exportProducts']);
         Route::get('/export/template', [ImportExportController::class, 'downloadTemplate']);
 
         // Maintenance
-        Route::get('/maintenance/dashboard', [MaintenanceController::class, 'dashboard']);
-        Route::get('/maintenance/upcoming-tasks', [MaintenanceController::class, 'upcomingTasks']);
-        Route::get('/maintenance/recent-records', [MaintenanceController::class, 'recentRecords']);
+        Route::get('/maintenance/dashboard', [MaintenanceController::class, 'dashboard'])->middleware('permission:maintenance.view');
+        Route::get('/maintenance/upcoming-tasks', [MaintenanceController::class, 'upcomingTasks'])->middleware('permission:maintenance.view');
+        Route::get('/maintenance/recent-records', [MaintenanceController::class, 'recentRecords'])->middleware('permission:maintenance.view');
+        Route::get('/maintenance/service-history/pdf', [MaintenanceController::class, 'serviceHistoryPdf'])->middleware('permission:maintenance.view');
 
         // Machines
         Route::apiResource('machines', MachineController::class)
             ->middlewareFor(['index', 'show'], 'permission:maintenance.view')
             ->middlewareFor(['store', 'update', 'destroy'], 'permission:maintenance.manage');
-        Route::get('/machine-types', [MachineController::class, 'getTypes']);
+        Route::get('/machine-types', [MachineController::class, 'getTypes'])->middleware('permission:maintenance.view');
 
         // Assets
         Route::apiResource('assets', AssetController::class)
@@ -383,18 +386,18 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor(['store', 'update', 'destroy'], 'permission:maintenance.manage');
 
         // Machine Tooling
-        Route::get('/machine-tooling/inventory', [MachineToolingController::class, 'inventory']);
-        Route::get('/machine-tooling/all', [MachineToolingController::class, 'all']);
-        Route::get('/machine-tooling/statistics', [MachineToolingController::class, 'statistics']);
-        Route::get('/machine-tooling/tool-life-units', [MachineToolingController::class, 'toolLifeUnits']);
-        Route::get('/machine-tooling/tool-types', [MachineToolingController::class, 'toolTypes']);
-        Route::get('/machines/{machine}/tooling', [MachineToolingController::class, 'index']);
-        Route::post('/machines/{machine}/tooling', [MachineToolingController::class, 'store']);
-        Route::get('/machines/{machine}/tooling/compatible-tools', [MachineToolingController::class, 'compatibleTools']);
-        Route::get('/machine-tooling/{id}', [MachineToolingController::class, 'show']);
-        Route::put('/machine-tooling/{id}/update-life', [MachineToolingController::class, 'updateToolLife']);
-        Route::post('/machine-tooling/{id}/replace', [MachineToolingController::class, 'replace']);
-        Route::post('/machine-tooling/{id}/remove', [MachineToolingController::class, 'remove']);
+        Route::get('/machine-tooling/inventory', [MachineToolingController::class, 'inventory'])->middleware('permission:maintenance.view');
+        Route::get('/machine-tooling/all', [MachineToolingController::class, 'all'])->middleware('permission:maintenance.view');
+        Route::get('/machine-tooling/statistics', [MachineToolingController::class, 'statistics'])->middleware('permission:maintenance.view');
+        Route::get('/machine-tooling/tool-life-units', [MachineToolingController::class, 'toolLifeUnits'])->middleware('permission:maintenance.view');
+        Route::get('/machine-tooling/tool-types', [MachineToolingController::class, 'toolTypes'])->middleware('permission:maintenance.view');
+        Route::get('/machines/{machine}/tooling', [MachineToolingController::class, 'index'])->middleware('permission:maintenance.view');
+        Route::post('/machines/{machine}/tooling', [MachineToolingController::class, 'store'])->middleware('permission:maintenance.manage');
+        Route::get('/machines/{machine}/tooling/compatible-tools', [MachineToolingController::class, 'compatibleTools'])->middleware('permission:maintenance.view');
+        Route::get('/machine-tooling/{id}', [MachineToolingController::class, 'show'])->middleware('permission:maintenance.view');
+        Route::put('/machine-tooling/{id}/update-life', [MachineToolingController::class, 'updateToolLife'])->middleware('permission:maintenance.manage');
+        Route::post('/machine-tooling/{id}/replace', [MachineToolingController::class, 'replace'])->middleware('permission:maintenance.manage');
+        Route::post('/machine-tooling/{id}/remove', [MachineToolingController::class, 'remove'])->middleware('permission:maintenance.manage');
 
         // Business Jobs (Project Management)
         Route::apiResource('business-jobs', BusinessJobController::class)

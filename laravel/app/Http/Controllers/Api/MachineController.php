@@ -15,11 +15,11 @@ class MachineController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('equipment_type', 'like', "%{$search}%")
-                  ->orWhere('manufacturer', 'like', "%{$search}%")
-                  ->orWhere('model', 'like', "%{$search}%");
+                    ->orWhere('equipment_type', 'like', "%{$search}%")
+                    ->orWhere('manufacturer', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%");
             });
         }
 
@@ -31,7 +31,13 @@ class MachineController extends Controller
             $query->where('equipment_type', $request->equipment_type);
         }
 
-        return response()->json($query->get());
+        $perPage = $request->get('per_page', 25);
+
+        if ($perPage === 'all') {
+            return response()->json($query->get());
+        }
+
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -59,7 +65,7 @@ class MachineController extends Controller
             'machineType',
             'maintenanceTasks',
             'maintenanceRecords.task',
-            'assets'
+            'assets',
         ]));
     }
 
@@ -85,6 +91,7 @@ class MachineController extends Controller
     public function destroy(Machine $machine)
     {
         $machine->delete();
+
         return response()->json(null, 204);
     }
 

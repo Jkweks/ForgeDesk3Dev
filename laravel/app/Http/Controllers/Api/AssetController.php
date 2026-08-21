@@ -14,13 +14,19 @@ class AssetController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
-        return response()->json($query->get());
+        $perPage = $request->get('per_page', 25);
+
+        if ($perPage === 'all') {
+            return response()->json($query->get());
+        }
+
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -47,7 +53,7 @@ class AssetController extends Controller
     {
         return response()->json($asset->load([
             'machines',
-            'maintenanceRecords'
+            'maintenanceRecords',
         ]));
     }
 
@@ -74,6 +80,7 @@ class AssetController extends Controller
     public function destroy(Asset $asset)
     {
         $asset->delete();
+
         return response()->json(null, 204);
     }
 }
