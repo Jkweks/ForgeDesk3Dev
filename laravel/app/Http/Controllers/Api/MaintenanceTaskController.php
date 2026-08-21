@@ -10,7 +10,7 @@ class MaintenanceTaskController extends Controller
 {
     public function index(Request $request)
     {
-        $query = MaintenanceTask::with(['machine', 'maintenanceRecords']);
+        $query = MaintenanceTask::with(['machine', 'maintenanceRecords', 'assignedUser']);
 
         if ($request->has('machine_id')) {
             $query->where('machine_id', $request->machine_id);
@@ -25,20 +25,28 @@ class MaintenanceTaskController extends Controller
         }
 
         if ($request->has('overdue')) {
-            $tasks = $query->get()->filter(function($task) {
+            $tasks = $query->get()->filter(function ($task) {
                 return $task->is_overdue;
             })->values();
+
             return response()->json($tasks);
         }
 
         if ($request->has('due_soon')) {
-            $tasks = $query->get()->filter(function($task) {
+            $tasks = $query->get()->filter(function ($task) {
                 return $task->is_due_soon;
             })->values();
+
             return response()->json($tasks);
         }
 
-        return response()->json($query->get());
+        $perPage = $request->get('per_page', 25);
+
+        if ($perPage === 'all') {
+            return response()->json($query->get());
+        }
+
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -48,7 +56,7 @@ class MaintenanceTaskController extends Controller
             'title' => 'required|max:255',
             'description' => 'nullable',
             'frequency' => 'nullable|max:255',
-            'assigned_to' => 'nullable|max:255',
+            'assigned_to' => 'nullable|exists:users,id',
             'interval_count' => 'nullable|integer|min:1',
             'interval_unit' => 'nullable|in:day,week,month,year',
             'start_date' => 'nullable|date',
@@ -58,14 +66,15 @@ class MaintenanceTaskController extends Controller
 
         $task = MaintenanceTask::create($validated);
 
-        return response()->json($task->load('machine'), 201);
+        return response()->json($task->load(['machine', 'assignedUser']), 201);
     }
 
     public function show(MaintenanceTask $task)
     {
         return response()->json($task->load([
             'machine',
-            'maintenanceRecords'
+            'maintenanceRecords',
+            'assignedUser',
         ]));
     }
 
@@ -76,7 +85,7 @@ class MaintenanceTaskController extends Controller
             'title' => 'required|max:255',
             'description' => 'nullable',
             'frequency' => 'nullable|max:255',
-            'assigned_to' => 'nullable|max:255',
+            'assigned_to' => 'nullable|exists:users,id',
             'interval_count' => 'nullable|integer|min:1',
             'interval_unit' => 'nullable|in:day,week,month,year',
             'start_date' => 'nullable|date',
@@ -86,12 +95,13 @@ class MaintenanceTaskController extends Controller
 
         $task->update($validated);
 
-        return response()->json($task->load('machine'));
+        return response()->json($task->load(['machine', 'assignedUser']));
     }
 
     public function destroy(MaintenanceTask $task)
     {
         $task->delete();
+
         return response()->json(null, 204);
     }
 }

@@ -225,11 +225,11 @@
         <form id="loginForm">
           <div class="mb-3">
             <label class="form-label">Email</label>
-            <input type="email" class="form-control" id="loginEmail" value="admin@forgedesk.local" autocomplete="email" required>
+            <input type="email" class="form-control" id="loginEmail" autocomplete="email" required>
           </div>
           <div class="mb-3">
             <label class="form-label">Password</label>
-            <input type="password" class="form-control" id="loginPassword" value="password" autocomplete="current-password" required>
+            <input type="password" class="form-control" id="loginPassword" autocomplete="current-password" required>
           </div>
           <div class="mb-3">
             <label class="form-check">
