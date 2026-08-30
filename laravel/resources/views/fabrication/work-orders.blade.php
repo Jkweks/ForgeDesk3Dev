@@ -1633,9 +1633,13 @@ async function importWOExcel(input) {
         _wizardImportedElevations = data.elevations || [];
 
         document.getElementById('wo-excel-division').textContent = data.division || '—';
-        const n = _wizardImportedElevations.length;
-        document.getElementById('wo-excel-elev-count').textContent =
-            n > 0 ? `${n} elevation${n !== 1 ? 's' : ''} ready for Step 2` : 'No elevations found';
+        const doorRows  = _wizardImportedElevations.filter(e => (e.type || '').toLowerCase() === 'door');
+        const doorCount = doorRows.reduce((sum, e) => sum + Math.max(1, parseInt(e.quantity) || 1), 0);
+        const elevCount = _wizardImportedElevations.length - doorRows.length;
+        const parts = [];
+        if (elevCount > 0) parts.push(`${elevCount} elevation${elevCount !== 1 ? 's' : ''} ready for Step 2`);
+        if (doorCount > 0) parts.push(`${doorCount} door${doorCount !== 1 ? 's' : ''} ready for Step 3`);
+        document.getElementById('wo-excel-elev-count').textContent = parts.length ? parts.join(' · ') : 'No elevations found';
 
         statusEl.textContent = '✓ ' + file.name;
         hintEl.style.display = '';
@@ -1761,13 +1765,36 @@ async function wizardCreateWO() {
         wizardWoLabel = data.release_label || `#${data.id}`;
         loadWorkOrders();
 
-        // Pre-populate step 2 from Excel import (if any)
+        // Pre-populate step 2 from Excel import (if any).
+        // Rows tagged as "Door" belong in the Door & Frame Schedule (step 3), not the
+        // general elevations step.
+        // A door row's quantity means "N separate doors under this tag" — expand into one
+        // editable line per unit (H01 qty 9 → H01-1 … H01-9) rather than one row per tag.
+        const importedDoors = [];
+        _wizardImportedElevations
+            .filter(e => (e.type || '').toLowerCase() === 'door')
+            .forEach(e => {
+                const qty = Math.max(1, parseInt(e.quantity) || 1);
+                for (let i = 1; i <= qty; i++) {
+                    importedDoors.push({ tag: qty > 1 ? `${e.tag}-${i}` : e.tag });
+                }
+            });
+        const importedElevations = _wizardImportedElevations.filter(e => (e.type || '').toLowerCase() !== 'door');
+
         document.getElementById('wiz-bulk-body').innerHTML = '';
         wizardBulkRowId = 0;
-        if (_wizardImportedElevations.length > 0) {
-            _wizardImportedElevations.forEach(e => addWizardBulkRow(e));
+        if (importedElevations.length > 0) {
+            importedElevations.forEach(e => addWizardBulkRow(e));
         } else {
             addWizardBulkRow();
+        }
+
+        document.getElementById('wiz-door-body').innerHTML = '';
+        wizardDoorRowId = 0;
+        if (importedDoors.length > 0) {
+            importedDoors.forEach(e => addWizardDoorRow(e));
+        } else {
+            addWizardDoorRow();
         }
 
         showWizardStep(2);
@@ -1933,7 +1960,9 @@ function addWizardBulkRow(prefill) {
 }
 
 // ── Wizard step 3: door/frame row builder ──
-function addWizardDoorRow() {
+// prefill: optional { tag } from Excel import (rows tagged "Door"; quantity is
+// pre-expanded into one row per unit before this is called)
+function addWizardDoorRow(prefill) {
     const id = ++wizardDoorRowId;
     const tr = document.createElement('tr');
     tr.id = `wiz-door-row-${id}`;
@@ -1954,6 +1983,12 @@ function addWizardDoorRow() {
         <td><input type="date" class="form-control form-control-sm wiz-door-date"></td>
         <td><button class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('wiz-door-row-${id}').remove()"><i class="ti ti-x"></i></button></td>`;
     document.getElementById('wiz-door-body').appendChild(tr);
+
+    if (prefill) {
+        tr.querySelector('.wiz-door-tag').value = prefill.tag || '';
+        // Imported rows are explicitly "Door" only — leave frame unchecked until the user confirms.
+        tr.querySelector('.wiz-door-frame').checked = false;
+    }
 }
 
 function updateWizardDoorRow(id) {
@@ -2216,7 +2251,7 @@ async function saveQuickJob() {
     if (!jobNumber || !jobName) { fabToast('Job Number and Job Name are required.', 'info'); return; }
 
     try {
-        const r = await fetch('/api/v1/business-jobs', {
+        const r = await API('/business-jobs', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

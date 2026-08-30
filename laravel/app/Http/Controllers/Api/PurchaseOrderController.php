@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class PurchaseOrderController extends Controller
 {
@@ -585,91 +586,125 @@ class PurchaseOrderController extends Controller
             return response()->json(['message' => 'EZ Estimate export is only available for Tubelite purchase orders'], 422);
         }
 
-        // Separate items by product type (mirroring the import's SL/P distinction)
+        // Separate items by product type (mirroring the import's SL/Accessory distinction)
         $slItems = [];
-        $pItems  = [];
+        $accessoryItems = [];
 
         foreach ($purchaseOrder->items as $item) {
             $sku = strtoupper($item->product->sku ?? '');
             if (preg_match('/^(A|E|M|T)/', $sku)) {
                 $slItems[] = $item;
             } else {
-                $pItems[] = $item;
+                $accessoryItems[] = $item;
             }
         }
 
-        $spreadsheet = new Spreadsheet();
-        $spreadsheet->getProperties()
-            ->setCreator('ForgeDesk')
-            ->setTitle("EZ Estimate Export - {$purchaseOrder->po_number}");
+        $templatePath = storage_path('app/templates/ez_estimate_template.xlsm');
 
-        $headerStyle = [
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2C3E50']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-        ];
+        if (!file_exists($templatePath)) {
+            \Log::error('EZ Estimate export failed: template file missing', ['path' => $templatePath]);
 
-        // ── Sheet 1: SL Items (Stock Length — A/E/M/T) ──
-        $slSheet = $spreadsheet->getActiveSheet()->setTitle('SL Items');
-        $slHeaders = ['Part Number', 'SKU', 'Description', 'Finish', 'Pricing Category', 'Qty Ordered', 'Unit Price', 'Total'];
-        foreach ($slHeaders as $col => $header) {
-            $slSheet->setCellValueByColumnAndRow($col + 1, 1, $header);
-        }
-        $slSheet->getStyle('A1:H1')->applyFromArray($headerStyle);
-
-        $row = 2;
-        foreach ($slItems as $item) {
-            $p = $item->product;
-            $slSheet->setCellValueByColumnAndRow(1, $row, $p->part_number ?? '');
-            $slSheet->setCellValueByColumnAndRow(2, $row, $p->sku ?? '');
-            $slSheet->setCellValueByColumnAndRow(3, $row, $p->description ?? '');
-            $slSheet->setCellValueByColumnAndRow(4, $row, $p->finish ?? '');
-            $slSheet->setCellValueByColumnAndRow(5, $row, $p->pricing_category ?? '');
-            $slSheet->setCellValueByColumnAndRow(6, $row, $item->quantity_ordered);
-            $slSheet->setCellValueByColumnAndRow(7, $row, (float) $item->unit_cost);
-            $slSheet->setCellValueByColumnAndRow(8, $row, (float) $item->total_cost);
-            $row++;
+            return response()->json(['message' => 'EZ Estimate template is missing on the server'], 500);
         }
 
-        foreach (range(1, 8) as $col) {
-            $slSheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        try {
+            // The EZ Estimate template is a ~40-sheet, formula-heavy workbook;
+            // loading/writing it through PhpSpreadsheet peaks around 650MB, well
+            // above the app's default memory_limit.
+            @ini_set('memory_limit', '1024M');
+
+            $reader = IOFactory::createReaderForFile($templatePath);
+            $reader->setReadDataOnly(false);
+            $spreadsheet = $reader->load($templatePath);
+
+            // Stock Lengths: 3 pages, input rows 11-47 (37 rows/page), columns A=Qty, B=Part#, C=Finish
+            $this->fillEzEstimateSheets(
+                $spreadsheet,
+                ['Stock Lengths', 'Stock Lengths (2)', 'Stock Lengths (3)'],
+                11,
+                47,
+                $slItems
+            );
+
+            // Accessories: 3 pages, input rows 11-46 (36 rows/page), columns A=Qty, B=Part#, C=Finish
+            $this->fillEzEstimateSheets(
+                $spreadsheet,
+                ['Accessories', 'Accessories (2)', 'Accessories (3)'],
+                11,
+                46,
+                $accessoryItems
+            );
+
+            $spreadsheet->setActiveSheetIndexByName('Stock Lengths');
+
+            $filename = 'EZ_Estimate_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number) . '_' . date('Ymd') . '.xlsx';
+            $tempFile = tempnam(sys_get_temp_dir(), 'po_ez_');
+
+            $writer = new Xlsx($spreadsheet);
+            // This workbook's formula graph is too large/complex for PhpSpreadsheet's
+            // calculation engine to re-evaluate reliably on save (it errors out deep in
+            // unrelated sheets). Skip recalculation entirely and let Excel recalculate
+            // on open — we only need our overwritten cells to carry through as values.
+            $writer->setPreCalculateFormulas(false);
+            $writer->save($tempFile);
+
+            return response()->download($tempFile, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            \Log::error('EZ Estimate export failed', [
+                'purchase_order_id' => $purchaseOrder->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'Error exporting EZ Estimate file',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Write Qty/Part#/Finish values into consecutive EZ Estimate template pages
+     * (Stock Lengths or Accessories, each spanning up to 3 sheets).
+     *
+     * These cells are formula-driven in the template (they feed a separate
+     * internal Tubelite tool via the CALCULATIONS sheet), but for this export
+     * they're overwritten directly with values from the purchase order. The
+     * remaining columns (description/price/etc.) are left as live formulas
+     * so pricing still recalculates from the template's own price sheets.
+     */
+    private function fillEzEstimateSheets(Spreadsheet $spreadsheet, array $sheetNames, int $startRow, int $endRow, array $items): void
+    {
+        $rowsPerPage = $endRow - $startRow + 1;
+        $capacity = $rowsPerPage * count($sheetNames);
+
+        if (count($items) > $capacity) {
+            \Log::warning('EZ Estimate export: item count exceeds template capacity, truncating', [
+                'sheets' => $sheetNames,
+                'capacity' => $capacity,
+                'item_count' => count($items),
+            ]);
+            $items = array_slice($items, 0, $capacity);
         }
 
-        // ── Sheet 2: P Items (Accessories — P/S/CP and others) ──
-        $pSheet = $spreadsheet->createSheet()->setTitle('P Items');
-        $pHeaders = ['Part Number', 'SKU', 'Description', 'Pricing Category', 'Qty Ordered', 'Unit Price', 'Total'];
-        foreach ($pHeaders as $col => $header) {
-            $pSheet->setCellValueByColumnAndRow($col + 1, 1, $header);
+        $itemIndex = 0;
+        foreach ($sheetNames as $sheetName) {
+            $sheet = $spreadsheet->getSheetByName($sheetName);
+            if (!$sheet) {
+                throw new \Exception("EZ Estimate template sheet not found: {$sheetName}");
+            }
+
+            for ($row = $startRow; $row <= $endRow && $itemIndex < count($items); $row++, $itemIndex++) {
+                $item = $items[$itemIndex];
+                $product = $item->product;
+
+                $sheet->setCellValue("A{$row}", $item->quantity_ordered);
+                $sheet->setCellValue("B{$row}", $product->part_number ?? $product->sku ?? '');
+                $sheet->setCellValue("C{$row}", $product->finish ?? '');
+            }
         }
-        $pSheet->getStyle('A1:G1')->applyFromArray($headerStyle);
-
-        $row = 2;
-        foreach ($pItems as $item) {
-            $p = $item->product;
-            $pSheet->setCellValueByColumnAndRow(1, $row, $p->part_number ?? '');
-            $pSheet->setCellValueByColumnAndRow(2, $row, $p->sku ?? '');
-            $pSheet->setCellValueByColumnAndRow(3, $row, $p->description ?? '');
-            $pSheet->setCellValueByColumnAndRow(4, $row, $p->pricing_category ?? '');
-            $pSheet->setCellValueByColumnAndRow(5, $row, $item->quantity_ordered);
-            $pSheet->setCellValueByColumnAndRow(6, $row, (float) $item->unit_cost);
-            $pSheet->setCellValueByColumnAndRow(7, $row, (float) $item->total_cost);
-            $row++;
-        }
-
-        foreach (range(1, 7) as $col) {
-            $pSheet->getColumnDimensionByColumn($col)->setAutoSize(true);
-        }
-
-        $spreadsheet->setActiveSheetIndex(0);
-
-        $filename = 'EZ_Estimate_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number) . '_' . date('Ymd') . '.xlsx';
-
-        $tempFile = tempnam(sys_get_temp_dir(), 'po_ez_');
-        (new Xlsx($spreadsheet))->save($tempFile);
-
-        return response()->download($tempFile, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ])->deleteFileAfterSend(true);
     }
 
     /**
