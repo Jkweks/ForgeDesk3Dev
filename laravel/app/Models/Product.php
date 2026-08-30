@@ -120,14 +120,6 @@ class Product extends Model
     }
 
     /**
-     * @deprecated Use categories() instead. Single category relationship kept for backward compatibility.
-     */
-    public function category()
-    {
-        return $this->belongsTo(Category::class);
-    }
-
-    /**
      * Many-to-many relationship with categories
      * Products can belong to multiple categories/systems
      */
@@ -243,22 +235,6 @@ class Product extends Model
             ->whereHas('reservation', function($query) {
                 $query->whereIn('status', ['active', 'in_progress', 'on_hold']);
             });
-    }
-
-    /**
-     * Get job reservations through reservation items
-     * @deprecated Use reservationItems() for the new fulfillment schema
-     */
-    public function jobReservations()
-    {
-        return $this->hasManyThrough(
-            JobReservation::class,
-            JobReservationItem::class,
-            'product_id',       // Foreign key on job_reservation_items
-            'id',               // Foreign key on job_reservations
-            'id',               // Local key on products
-            'reservation_id'    // Local key on job_reservation_items
-        );
     }
 
     /**

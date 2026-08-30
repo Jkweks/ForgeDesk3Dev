@@ -76,7 +76,7 @@ Frontend permission helpers available in every page's JS context: `hasPermission
 
 Backend permission checks use `$user->hasPermission('inventory.edit')` or `$user->hasAnyPermission([...])` — these query through the `Role` model relationship. **Always protect API endpoints server-side**; frontend hiding is UX only.
 
-Common permissions: `inventory.view/create/edit/delete/adjust`, `orders.view/create/edit/delete`, `users.view/create/edit/delete`, `reports.view/export`, `pricing.view`, `maintenance.manage`, `settings.edit`. See `ACTION_PERMISSIONS_GUIDE.md` for the full list.
+Common permissions: `inventory.view/create/edit/delete/adjust`, `orders.view/create/edit/delete`, `users.view/create/edit/delete`, `reports.view/export`, `pricing.view`, `maintenance.manage`, `settings.edit`. See `docs/ACTION_PERMISSIONS_GUIDE.md` for the full list.
 
 ### Inventory Quantity Management
 
