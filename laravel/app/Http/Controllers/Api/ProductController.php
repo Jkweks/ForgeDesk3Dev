@@ -477,6 +477,7 @@ class ProductController extends Controller
         Product::withoutTrashed()->chunkById(100, function ($products) use (&$count) {
             foreach ($products as $product) {
                 $product->recalculateQuantitiesFromLocations();
+                $product->recalculateOnOrderFromPurchaseOrders();
                 $count++;
             }
         });

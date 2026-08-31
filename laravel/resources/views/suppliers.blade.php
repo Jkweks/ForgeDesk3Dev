@@ -706,7 +706,8 @@
         'low':          '<span class="badge text-bg-warning">Low Stock</span>',
         'very_low':     '<span class="badge text-bg-orange">Very Low</span>',
         'critical':     '<span class="badge text-bg-danger">Critical</span>',
-        'out_of_stock': '<span class="badge text-bg-dark">Out of Stock</span>'
+        'out_of_stock': '<span class="badge text-bg-dark">Out of Stock</span>',
+        'on_order':     '<span class="badge text-bg-info">On Order</span>'
       };
       return badges[status] || badges['in_stock'];
     }

@@ -305,7 +305,7 @@
                         </div>
                         <div class="card-body">
                           <p class="text-muted mb-3">
-                            Recalculates <code>quantity_on_hand</code> and <code>quantity_committed</code> from inventory locations for every product, then re-evaluates each product's status (In Stock / Low / Critical / Out of Stock). Run this if statuses appear out of sync.
+                            Recalculates <code>quantity_on_hand</code> and <code>quantity_committed</code> from inventory locations, and <code>on_order_qty</code> from open purchase orders, for every product, then re-evaluates each product's status (In Stock / Low / Critical / Out of Stock / On Order). Run this if statuses appear out of sync or after editing a PO directly.
                           </p>
                           <div class="d-flex align-items-center gap-3">
                             <button class="btn btn-warning" id="btn-refresh-statuses" onclick="refreshInventoryStatuses()">

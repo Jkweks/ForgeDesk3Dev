@@ -742,12 +742,14 @@
         'low':          '<span class="badge text-bg-warning status-badge">Low Stock</span>',
         'very_low':     '<span class="badge text-bg-orange status-badge">Very Low</span>',
         'critical':     '<span class="badge text-bg-danger status-badge">Critical</span>',
-        'out_of_stock': '<span class="badge text-bg-dark status-badge">Out of Stock</span>'
+        'out_of_stock': '<span class="badge text-bg-dark status-badge">Out of Stock</span>',
+        'on_order':     '<span class="badge text-bg-info status-badge">On Order</span>'
       };
       let badge = badges[status] || badges['in_stock'];
 
-      // Add "On Order" indicator if there's pending order quantity
-      if (onOrderQty && onOrderQty > 0) {
+      // Add a secondary "On Order" indicator when there's pending PO quantity that
+      // the primary status doesn't already convey.
+      if (status !== 'on_order' && onOrderQty && onOrderQty > 0) {
         badge += ` <span class="badge text-bg-info status-badge" title="${onOrderQty} on order">On Order</span>`;
       }
 
