@@ -237,7 +237,7 @@ class SupplierController extends Controller
     public function products(Supplier $supplier)
     {
         $products = $supplier->products()
-            ->with(['category', 'inventoryLocations'])
+            ->with(['categories', 'inventoryLocations'])
             ->orderBy('sku')
             ->paginate(50);
 
@@ -315,7 +315,7 @@ class SupplierController extends Controller
     {
         $products = $supplier->products()
             ->whereIn('status', ['low', 'very_low', 'critical'])
-            ->with(['category', 'inventoryLocations'])
+            ->with(['categories', 'inventoryLocations'])
             ->orderBy('status')
             ->orderBy('sku')
             ->get();
