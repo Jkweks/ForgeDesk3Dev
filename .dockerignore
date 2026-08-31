@@ -6,6 +6,13 @@
 docker-compose*.yml
 admin_service/
 
+# Environment / secrets — injected at runtime, never baked into the image
+.env
+.env.*
+1.env
+*.env
+*.har
+
 # Laravel dev/test artifacts
 laravel/.env
 laravel/.env.*

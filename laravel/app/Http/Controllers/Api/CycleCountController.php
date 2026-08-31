@@ -213,22 +213,46 @@ class CycleCountController extends Controller
                         ]);
                     }
                 } else {
-                    // Product-level count (no location filter)
-                    $systemQtyEaches = $product->quantity_on_hand ?? 0;
+                    // No storage location filter: still count per-location where the
+                    // product has inventory locations, so the guided count can show
+                    // and sort by storage location.
+                    $inventoryLocations = $product->inventoryLocations()->get();
 
-                    // Convert to packs if product has pack_size > 1
-                    $systemQtyForCount = $product->hasPackSize()
-                        ? $product->eachesToFullPacks($systemQtyEaches)
-                        : $systemQtyEaches;
+                    if ($inventoryLocations->count() > 0) {
+                        foreach ($inventoryLocations as $invLoc) {
+                            $systemQtyEaches = $invLoc->quantity ?? 0;
 
-                    $session->items()->create([
-                        'product_id' => $product->id,
-                        'location_id' => null,
-                        'system_quantity' => $systemQtyForCount,
-                        'counted_quantity' => null,
-                        'variance' => 0,
-                        'variance_status' => 'pending',
-                    ]);
+                            $systemQtyForCount = $product->hasPackSize()
+                                ? $product->eachesToFullPacks($systemQtyEaches)
+                                : $systemQtyEaches;
+
+                            $session->items()->create([
+                                'product_id' => $product->id,
+                                'location_id' => $invLoc->id,
+                                'system_quantity' => $systemQtyForCount,
+                                'counted_quantity' => null,
+                                'variance' => 0,
+                                'variance_status' => 'pending',
+                            ]);
+                        }
+                    } else {
+                        // Product has no inventory locations at all — fall back to a
+                        // product-level aggregate item so it still gets counted.
+                        $systemQtyEaches = $product->quantity_on_hand ?? 0;
+
+                        $systemQtyForCount = $product->hasPackSize()
+                            ? $product->eachesToFullPacks($systemQtyEaches)
+                            : $systemQtyEaches;
+
+                        $session->items()->create([
+                            'product_id' => $product->id,
+                            'location_id' => null,
+                            'system_quantity' => $systemQtyForCount,
+                            'counted_quantity' => null,
+                            'variance' => 0,
+                            'variance_status' => 'pending',
+                        ]);
+                    }
                 }
             }
 

@@ -176,15 +176,10 @@ class MaterialCheckController extends Controller
     public function checkMaterials(Request $request)
     {
         try {
-            // Enable error logging to file
-            $debugLog = storage_path('logs/material-check-debug.log');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Material check started\n", FILE_APPEND);
-
             Log::info('Material check started');
 
             // Check if file was uploaded
             if (!$request->hasFile('file')) {
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] No file in request\n", FILE_APPEND);
                 return response()->json([
                     'error' => 'No file uploaded',
                     'request_has_file' => $request->hasFile('file'),
@@ -197,7 +192,6 @@ class MaterialCheckController extends Controller
             ]);
 
             if ($validator->fails()) {
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Validation failed\n", FILE_APPEND);
                 Log::warning('Validation failed', ['errors' => $validator->errors()]);
                 return response()->json([
                     'error' => 'Validation failed',
@@ -206,19 +200,15 @@ class MaterialCheckController extends Controller
             }
 
             $file = $request->file('file');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] File: {$file->getClientOriginalName()}, Size: {$file->getSize()}\n", FILE_APPEND);
             Log::info('File received', ['name' => $file->getClientOriginalName(), 'size' => $file->getSize()]);
 
             $mode = $request->input('mode', 'ez_estimate');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Mode: {$mode}\n", FILE_APPEND);
 
             // Load the spreadsheet with optimized filter
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Loading spreadsheet with optimized filter...\n", FILE_APPEND);
-            Log::info('Loading spreadsheet with filter');
+            Log::info('Loading spreadsheet with filter', ['mode' => $mode]);
 
             // Increase memory limit for large files (keep for entire request)
             ini_set('memory_limit', '512M');
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Memory limit increased to 512M\n", FILE_APPEND);
 
             // Create reader and apply custom read filter
             // This only loads Stock Lengths & Accessories sheets, columns A-C, rows 11-47/11-46
@@ -226,21 +216,16 @@ class MaterialCheckController extends Controller
             $reader->setReadDataOnly(true);
             $reader->setReadFilter(new EzEstimateReadFilter());
 
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Reader created with filter, loading file...\n", FILE_APPEND);
             $spreadsheet = $reader->load($file->getRealPath());
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Spreadsheet loaded (memory: " . round(memory_get_usage() / 1024 / 1024, 2) . "MB)\n", FILE_APPEND);
 
             if ($mode === 'ez_estimate') {
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing EZ Estimate\n", FILE_APPEND);
                 $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
                 return $this->checkEzEstimate($spreadsheet, $boneyardSharedOnly);
             } else {
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Processing generic\n", FILE_APPEND);
                 return $this->checkGenericEstimate($request, $spreadsheet);
             }
 
         } catch (\PhpOffice\PhpSpreadsheet\Reader\Exception $e) {
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] PhpSpreadsheet error: {$e->getMessage()}\n", FILE_APPEND);
             Log::error('Excel file read error', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
@@ -252,7 +237,6 @@ class MaterialCheckController extends Controller
                 'line' => $e->getLine(),
             ], 500);
         } catch (\Exception $e) {
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Exception: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}\n", FILE_APPEND);
             Log::error('Material check error', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
@@ -266,7 +250,11 @@ class MaterialCheckController extends Controller
                 'trace_preview' => substr($e->getTraceAsString(), 0, 500),
             ], 500);
         } catch (\Throwable $e) {
-            @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Fatal error: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}\n", FILE_APPEND);
+            Log::error('Material check fatal error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             return response()->json([
                 'error' => 'Fatal error: ' . $e->getMessage(),
                 'file' => basename($e->getFile()),
@@ -392,12 +380,6 @@ class MaterialCheckController extends Controller
      */
     private function processEzEstimateSheet($sheet, $startRow, $endRow, &$results, &$summary, $sheetName)
     {
-        $debugLog = storage_path('logs/material-check-debug.log');
-
-        // Log first few rows for debugging
-        $debugSampleRows = 3;
-        $debugCounter = 0;
-
         for ($row = $startRow; $row <= $endRow; $row++) {
             try {
                 $qtyCell = $sheet->getCell("A{$row}");
@@ -407,14 +389,6 @@ class MaterialCheckController extends Controller
                 $qtyPacks = floatval($this->getCellEffectiveValue($qtyCell));
                 $partNumber = trim((string)$this->getCellEffectiveValue($partNumberCell));
                 $finish = trim((string)$this->getCellEffectiveValue($finishCell));
-
-                // Debug logging for first few rows
-                if ($debugCounter < $debugSampleRows) {
-                    $cellType = $partNumberCell->getDataType();
-                    $isFormula = ($cellType === DataType::TYPE_FORMULA);
-                    @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Sample Row {$row} in {$sheetName}: QtyPacks='{$qtyPacks}', Part='{$partNumber}', Finish='{$finish}', IsFormula={$isFormula}\n", FILE_APPEND);
-                    $debugCounter++;
-                }
 
                 // Skip rows where quantity is 0 or negative
                 if ($qtyPacks <= 0) {
@@ -526,7 +500,6 @@ class MaterialCheckController extends Controller
                 }
             } catch (\Exception $e) {
                 // Log error but continue processing other rows
-                @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Error processing row {$row} in {$sheetName}: {$e->getMessage()}\n", FILE_APPEND);
                 Log::warning("Error processing row", [
                     'sheet' => $sheetName,
                     'row' => $row,
@@ -536,7 +509,6 @@ class MaterialCheckController extends Controller
             }
         }
 
-        @file_put_contents($debugLog, "[" . date('Y-m-d H:i:s') . "] Completed processing {$sheetName}\n", FILE_APPEND);
         Log::info("Completed processing sheet", ['name' => $sheetName]);
     }
 

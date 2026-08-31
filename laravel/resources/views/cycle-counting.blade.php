@@ -1730,11 +1730,41 @@ let guidedSession = null;
 let guidedItems = [];    // sorted items
 let guidedIndex = 0;     // current item index
 
+function guidedLocationSortKey(item) {
+  const sl = item.location?.storage_location;
+  if (!sl) return null; // unlocated items sort to the end
+  return {
+    sortOrder: sl.sort_order ?? 0,
+    path: sl.path || '',
+    aisle: sl.aisle || '',
+    bay: sl.bay || '',
+    level: sl.level || '',
+    position: sl.position || '',
+    name: (sl.name || item.location?.location || '').toLowerCase(),
+  };
+}
+
 function guidedSortItems(items) {
   return [...items].sort((a, b) => {
-    const locA = (a.location?.storage_location?.name || a.location?.location || '').toLowerCase();
-    const locB = (b.location?.storage_location?.name || b.location?.location || '').toLowerCase();
-    if (locA !== locB) return locA.localeCompare(locB);
+    const keyA = guidedLocationSortKey(a);
+    const keyB = guidedLocationSortKey(b);
+
+    // Unlocated items always sort after located ones
+    if (!keyA && !keyB) { /* fall through to SKU tiebreak */ }
+    else if (!keyA) return 1;
+    else if (!keyB) return -1;
+    else {
+      // Physical layout order: explicit sort_order, then hierarchy path,
+      // then aisle/bay/level/position, then name as a final tiebreak.
+      if (keyA.sortOrder !== keyB.sortOrder) return keyA.sortOrder - keyB.sortOrder;
+      if (keyA.path !== keyB.path) return keyA.path.localeCompare(keyB.path);
+      if (keyA.aisle !== keyB.aisle) return String(keyA.aisle).localeCompare(String(keyB.aisle));
+      if (keyA.bay !== keyB.bay) return String(keyA.bay).localeCompare(String(keyB.bay));
+      if (keyA.level !== keyB.level) return String(keyA.level).localeCompare(String(keyB.level));
+      if (keyA.position !== keyB.position) return String(keyA.position).localeCompare(String(keyB.position));
+      if (keyA.name !== keyB.name) return keyA.name.localeCompare(keyB.name);
+    }
+
     const skuA = (a.product?.sku || '').toLowerCase();
     const skuB = (b.product?.sku || '').toLowerCase();
     return skuA.localeCompare(skuB);
