@@ -74,9 +74,18 @@ class User extends Authenticatable
 
     /**
      * Check if user has a specific permission
+     *
+     * The `admin` role is always granted every permission. This is a fail-safe:
+     * new permissions are added by migrations that must remember to grant them to
+     * admin, and a single missed grant would otherwise silently lock admins out
+     * with no way to recover through the UI.
      */
     public function hasPermission($permission)
     {
+        if ($this->role === 'admin') {
+            return true;
+        }
+
         if (!$this->roleModel) {
             return false;
         }
@@ -89,6 +98,10 @@ class User extends Authenticatable
      */
     public function hasAnyPermission(array $permissions)
     {
+        if ($this->role === 'admin') {
+            return true;
+        }
+
         if (!$this->roleModel) {
             return false;
         }

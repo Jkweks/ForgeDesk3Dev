@@ -54,7 +54,7 @@ The app runs on port **8040** in Docker.
 
 All web routes (`routes/web.php`) serve Blade views — they are thin shells that return a single layout. **There is no server-side rendering of data.** All data loading happens via authenticated API calls from the frontend JavaScript embedded in each Blade view.
 
-Authentication is handled entirely client-side: the login form in `dashboard.blade.php` posts to `POST /api/login`, stores the Sanctum token in `localStorage`, and attaches it as a `Bearer` header to every subsequent API call. The `/login` web route just returns `view('dashboard')`.
+Authentication uses **Sanctum SPA / session-cookie auth**, not bearer tokens. `EnsureFrontendRequestsAreStateful` is prepended to the API middleware group (`bootstrap/app.php`). The login form in `dashboard.blade.php` posts to `POST /api/login`, which calls `Auth::login()` and regenerates the session; the browser then sends the session cookie plus an `X-CSRF-TOKEN` header (from the `<meta name="csrf-token">` tag) with `credentials: 'include'` on every subsequent API call. No token is stored in `localStorage`. The `/login` web route just returns `view('dashboard')`. Production requires `SANCTUM_STATEFUL_DOMAINS`, `SESSION_DOMAIN`, `APP_URL`, and `SESSION_SECURE_COOKIE` to be set for the real domain or authenticated API calls will 401 after login.
 
 ### API Layer
 

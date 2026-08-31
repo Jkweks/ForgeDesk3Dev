@@ -119,6 +119,11 @@ class UserController extends Controller
             'is_active' => 'sometimes|boolean',
         ]);
 
+        // Only an admin may create another admin.
+        if ($validated['role'] === 'admin' && ! $request->user()->isAdmin()) {
+            return response()->json(['message' => 'Only an administrator can assign the admin role'], 403);
+        }
+
         // Generate full name from first and last name
         $validated['name'] = trim("{$validated['first_name']} {$validated['last_name']}");
 
@@ -151,6 +156,23 @@ class UserController extends Controller
             'role' => ['sometimes', 'required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
         ]);
+
+        // Only an admin may grant the admin role, or change an existing admin's role.
+        if (isset($validated['role']) && $validated['role'] !== $user->role
+            && ($validated['role'] === 'admin' || $user->role === 'admin')
+            && ! $request->user()->isAdmin()) {
+            return response()->json(['message' => 'Only an administrator can assign or remove the admin role'], 403);
+        }
+
+        // Don't let a user deactivate or demote their own account and lock themselves out.
+        if ($user->id === $request->user()->id) {
+            if (array_key_exists('is_active', $validated) && ! $validated['is_active']) {
+                return response()->json(['message' => 'You cannot deactivate your own account'], 403);
+            }
+            if (isset($validated['role']) && $validated['role'] !== $user->role) {
+                return response()->json(['message' => 'You cannot change your own role'], 403);
+            }
+        }
 
         // Update full name if first_name or last_name changed
         if (isset($validated['first_name']) || isset($validated['last_name'])) {

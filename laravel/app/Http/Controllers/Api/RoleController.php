@@ -104,6 +104,28 @@ class RoleController extends Controller
             'permissions.*' => 'exists:permissions,name',
         ]);
 
+        // `users.role` is a string that joins on `roles.name`. Renaming a role
+        // that is in use (or a system role) silently orphans every user on it —
+        // they'd lose all permissions with no error. Block it.
+        if (isset($validated['name']) && $validated['name'] !== $role->name) {
+            if ($role->is_system) {
+                return response()->json(['message' => 'System roles cannot be renamed'], 403);
+            }
+            if ($role->users()->count() > 0) {
+                return response()->json([
+                    'message' => 'Cannot rename a role that is assigned to users',
+                    'user_count' => $role->users()->count(),
+                ], 422);
+            }
+        }
+
+        // The `admin` role is granted every permission implicitly (see
+        // User::hasPermission). Editing its permission set does nothing useful
+        // and a mistaken save could look like a lockout — reject it.
+        if ($role->name === 'admin' && isset($validated['permissions'])) {
+            return response()->json(['message' => 'The admin role always has every permission and cannot be edited'], 403);
+        }
+
         $role->update([
             'name' => $validated['name'] ?? $role->name,
             'display_name' => $validated['display_name'] ?? $role->display_name,
@@ -181,6 +203,10 @@ class RoleController extends Controller
     public function assignPermissions(Request $request, $id)
     {
         $role = Role::findOrFail($id);
+
+        if ($role->name === 'admin') {
+            return response()->json(['message' => 'The admin role always has every permission and cannot be edited'], 403);
+        }
 
         $validated = $request->validate([
             'permissions' => 'required|array',
