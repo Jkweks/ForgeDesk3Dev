@@ -18,14 +18,5 @@ class AdminSeeder extends Seeder
             'role' => 'admin',
             'is_active' => true,
         ]);
-
-        User::create([
-            'name' => 'Demo User',
-            'email' => 'demo@forgedesk.local',
-            'password' => Hash::make('demo123'),
-            'email_verified_at' => now(),
-            'role' => 'viewer',
-            'is_active' => true,
-        ]);
     }
 }

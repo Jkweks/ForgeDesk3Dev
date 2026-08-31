@@ -82,7 +82,7 @@ Route::post('/login', function (Request $request) {
             'permissions' => $permissions,
         ],
     ]);
-});
+})->middleware('throttle:10,1');
 
 Route::post('/logout', function (Request $request) {
     \Illuminate\Support\Facades\Auth::logout();
@@ -102,11 +102,15 @@ Route::prefix('v1')->group(function () {
     // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
     Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
     Route::get('/shop/fab-users', [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
-    Route::post('/shop/fab-pin-login', [\App\Http\Controllers\Api\ShopFloorController::class, 'pinLogin']);
-    Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage']);
-    Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage']);
-    Route::patch('/shop/elevations/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'updateElevation']);
-    Route::patch('/shop/elevations/{id}/complete-stages', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteStages']);
+    // PIN login is unauthenticated and checks every fab user's hash — throttle
+    // hard to keep it from being brute-forced.
+    Route::post('/shop/fab-pin-login', [\App\Http\Controllers\Api\ShopFloorController::class, 'pinLogin'])->middleware('throttle:10,1');
+    // Kiosk stage mutations stay unauthenticated (shared tablets) but are
+    // throttled so a stray script can't run away with production state.
+    Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage'])->middleware('throttle:120,1');
+    Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage'])->middleware('throttle:120,1');
+    Route::patch('/shop/elevations/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'updateElevation'])->middleware('throttle:120,1');
+    Route::patch('/shop/elevations/{id}/complete-stages', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteStages'])->middleware('throttle:120,1');
     // ─────────────────────────────────────────────────────────────────────────
 
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
@@ -134,7 +138,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/ez-estimate/test', [\App\Http\Controllers\Api\EzEstimateController::class, 'test']);
     Route::get('/ez-estimate/debug', [\App\Http\Controllers\Api\EzEstimateController::class, 'debug']);
     Route::get('/ez-estimate/test-pricing', [\App\Http\Controllers\Api\EzEstimateController::class, 'testPricing']);
-    Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload']);
+    Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
     Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
     Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
 });
@@ -289,29 +293,34 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products/{product}/required-parts/sort-order', [RequiredPartsController::class, 'updateSortOrder']);
         Route::get('/products/{product}/where-used', [RequiredPartsController::class, 'whereUsed']);
 
-        // Reports & Analytics
-        Route::get('/reports/low-stock', [ReportsController::class, 'lowStockReport']);
-        Route::get('/reports/committed-parts', [ReportsController::class, 'committedPartsReport']);
-        Route::get('/reports/velocity', [ReportsController::class, 'stockVelocityAnalysis']);
-        Route::get('/reports/reorder-recommendations', [ReportsController::class, 'reorderRecommendations']);
-        Route::get('/reports/obsolete', [ReportsController::class, 'obsoleteInventory']);
-        Route::get('/reports/usage-analytics', [ReportsController::class, 'usageAnalytics']);
-        Route::get('/reports/monthly-statement', [ReportsController::class, 'monthlyInventoryStatement']);
-        Route::get('/reports/export', [ReportsController::class, 'exportReport']);
+        // Reports & Analytics — all require reports.view; export/PDF/CSV routes
+        // additionally require reports.export.
+        Route::middleware('permission:reports.view')->group(function () {
+            Route::get('/reports/low-stock', [ReportsController::class, 'lowStockReport']);
+            Route::get('/reports/committed-parts', [ReportsController::class, 'committedPartsReport']);
+            Route::get('/reports/velocity', [ReportsController::class, 'stockVelocityAnalysis']);
+            Route::get('/reports/reorder-recommendations', [ReportsController::class, 'reorderRecommendations']);
+            Route::get('/reports/obsolete', [ReportsController::class, 'obsoleteInventory']);
+            Route::get('/reports/usage-analytics', [ReportsController::class, 'usageAnalytics']);
+            Route::get('/reports/monthly-statement', [ReportsController::class, 'monthlyInventoryStatement']);
+            Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
+            Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
 
-        // PDF Reports
-        Route::get('/reports/low-stock/pdf', [ReportsController::class, 'lowStockPdf']);
-        Route::get('/reports/committed-parts/pdf', [ReportsController::class, 'committedPartsPdf']);
-        Route::get('/reports/velocity/pdf', [ReportsController::class, 'velocityAnalysisPdf']);
-        Route::get('/reports/reorder-recommendations/pdf', [ReportsController::class, 'reorderRecommendationsPdf']);
-        Route::get('/reports/obsolete/pdf', [ReportsController::class, 'obsoleteInventoryPdf']);
-        Route::get('/reports/usage-analytics/pdf', [ReportsController::class, 'usageAnalyticsPdf']);
-        Route::get('/reports/monthly-statement/pdf', [ReportsController::class, 'monthlyInventoryStatementPdf']);
-        Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
-        Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
-        Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
-        Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
-        Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
+            // Exports / PDF / CSV
+            Route::middleware('permission:reports.export')->group(function () {
+                Route::get('/reports/export', [ReportsController::class, 'exportReport']);
+                Route::get('/reports/low-stock/pdf', [ReportsController::class, 'lowStockPdf']);
+                Route::get('/reports/committed-parts/pdf', [ReportsController::class, 'committedPartsPdf']);
+                Route::get('/reports/velocity/pdf', [ReportsController::class, 'velocityAnalysisPdf']);
+                Route::get('/reports/reorder-recommendations/pdf', [ReportsController::class, 'reorderRecommendationsPdf']);
+                Route::get('/reports/obsolete/pdf', [ReportsController::class, 'obsoleteInventoryPdf']);
+                Route::get('/reports/usage-analytics/pdf', [ReportsController::class, 'usageAnalyticsPdf']);
+                Route::get('/reports/monthly-statement/pdf', [ReportsController::class, 'monthlyInventoryStatementPdf']);
+                Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
+                Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
+                Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
+            });
+        });
 
         // Purchase Orders
         Route::apiResource('purchase-orders', PurchaseOrderController::class)
@@ -421,73 +430,78 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/business-jobs/{jobId}/reservations/{reservationId}', [BusinessJobController::class, 'deleteReservation'])->middleware('permission:jobs.manage-reservations');
 
         // Door/Frame Configurator
-        Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index']);
-        Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store']);
-        Route::get('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'show']);
-        Route::put('/door-frame-configurations/{id}/opening-specs', [DoorFrameConfigurationController::class, 'updateOpeningSpecs']);
-        Route::put('/door-frame-configurations/{id}/frame-config', [DoorFrameConfigurationController::class, 'updateFrameConfig']);
-        Route::put('/door-frame-configurations/{id}/frame-parts', [DoorFrameConfigurationController::class, 'updateFrameParts']);
-        Route::put('/door-frame-configurations/{id}/door-config', [DoorFrameConfigurationController::class, 'updateDoorConfig']);
-        Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release']);
+        Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');
+        Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.create');
+        Route::get('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'show'])->middleware('permission:configurator.view');
+        Route::put('/door-frame-configurations/{id}/opening-specs', [DoorFrameConfigurationController::class, 'updateOpeningSpecs'])->middleware('permission:configurator.edit');
+        Route::put('/door-frame-configurations/{id}/frame-config', [DoorFrameConfigurationController::class, 'updateFrameConfig'])->middleware('permission:configurator.edit');
+        Route::put('/door-frame-configurations/{id}/frame-parts', [DoorFrameConfigurationController::class, 'updateFrameParts'])->middleware('permission:configurator.edit');
+        Route::put('/door-frame-configurations/{id}/door-config', [DoorFrameConfigurationController::class, 'updateDoorConfig'])->middleware('permission:configurator.edit');
+        Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release'])->middleware('permission:configurator.release');
 
-        // Fabrication Work Orders
-        Route::post('/work-orders/parse-excel', [\App\Http\Controllers\Api\WorkOrderController::class, 'parseExcel']);
-        Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
-        Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store']);
-        Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);
-        Route::put('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
-        Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update']);
-        Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy']);
-        Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments']);
+        // Fabrication Work Orders and everything scoped under them (drawings,
+        // elevations, stages, steps, fab-user list, elevation-type config).
+        // Read requires fabrication.work-orders.view; mutations layer on
+        // .create / .edit / .delete.
+        Route::middleware('permission:fabrication.work-orders.view')->group(function () {
+            Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
+            Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);
+            Route::post('/work-orders/parse-excel', [\App\Http\Controllers\Api\WorkOrderController::class, 'parseExcel'])->middleware('permission:fabrication.work-orders.create');
+            Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store'])->middleware('permission:fabrication.work-orders.create');
+            Route::put('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy'])->middleware('permission:fabrication.work-orders.delete');
+            Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments'])->middleware('permission:fabrication.work-orders.edit');
 
-        // Work Order Drawings (shop drawings file uploads)
-        Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
-        Route::post('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'store']);
-        Route::get('/work-orders/{id}/drawings/{drawing}/download', [\App\Http\Controllers\Api\WoDrawingController::class, 'download']);
-        Route::delete('/work-orders/{id}/drawings/{drawing}', [\App\Http\Controllers\Api\WoDrawingController::class, 'destroy']);
+            // Work Order Drawings (shop drawings file uploads)
+            Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
+            Route::get('/work-orders/{id}/drawings/{drawing}/download', [\App\Http\Controllers\Api\WoDrawingController::class, 'download']);
+            Route::post('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/work-orders/{id}/drawings/{drawing}', [\App\Http\Controllers\Api\WoDrawingController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
-        // Elevations (per work order)
-        Route::get('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'index']);
-        Route::post('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'store']);
-        Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update']);
-        Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy']);
+            // Elevations (per work order)
+            Route::get('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'index']);
+            Route::post('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
-        // Elevation Stage cycling (reuse existing stage controller)
-        Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
-        Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store']);
-        Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update']);
-        Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy']);
+            // Elevation Stage cycling (reuse existing stage controller)
+            Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
+            Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
-        // Elevation Types (admin-managed list)
-        Route::get('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'index']);
-        Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store']);
-        Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update']);
-        Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy']);
-        Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate']);
-        Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate']);
-        Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate']);
+            // Elevation Types (admin-managed list)
+            Route::get('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'index']);
+            Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate'])->middleware('permission:fabrication.work-orders.edit');
 
-        Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
-        Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store']);
-        Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update']);
-        Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy']);
-        Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin']);
+            Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
+            Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin'])->middleware('permission:fabrication.work-orders.edit');
 
-        Route::get('/work-orders/{workOrderId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
-        Route::patch('/work-orders/{workOrderId}/steps/complete-all', [\App\Http\Controllers\Api\JobStepController::class, 'completeAll']);
-        Route::post('/job-steps', [\App\Http\Controllers\Api\JobStepController::class, 'store']);
-        Route::patch('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'update']);
-        Route::delete('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'destroy']);
+            Route::get('/work-orders/{workOrderId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);
+            Route::patch('/work-orders/{workOrderId}/steps/complete-all', [\App\Http\Controllers\Api\JobStepController::class, 'completeAll'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/job-steps', [\App\Http\Controllers\Api\JobStepController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/job-steps/{id}', [\App\Http\Controllers\Api\JobStepController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+        });
 
         // Fabrication Documents
-        Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions']);
-        Route::get('/fabrication-documents', [FabricationDocumentController::class, 'index']);
-        Route::post('/fabrication-documents', [FabricationDocumentController::class, 'store']);
-        Route::get('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'show']);
+        Route::get('/fabrication-documents/filter-options', [FabricationDocumentController::class, 'filterOptions'])->middleware('permission:fabrication.view');
+        Route::get('/fabrication-documents', [FabricationDocumentController::class, 'index'])->middleware('permission:fabrication.view');
+        Route::post('/fabrication-documents', [FabricationDocumentController::class, 'store'])->middleware('permission:fabrication.create');
+        Route::get('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'show'])->middleware('permission:fabrication.view');
         // Laravel's method-parameter override (Request::capture()) treats a POST with
         // a `_method=PUT` body field as PUT before routing, so this single PUT route
         // already handles the frontend's multipart POST-with-_method=PUT edit calls.
-        Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update']);
-        Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy']);
+        Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update'])->middleware('permission:fabrication.edit');
+        Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy'])->middleware('permission:fabrication.delete');
     });
 });
