@@ -757,10 +757,7 @@
             <div class="mb-3">
               <label class="form-label required">Email</label>
               <input type="email" class="form-control" id="addUserEmail" placeholder="user@example.com">
-            </div>
-            <div class="mb-3">
-              <label class="form-label required">Password</label>
-              <input type="password" class="form-control" id="addUserPassword" placeholder="Password" autocomplete="new-password">
+              <small class="form-hint">A welcome email with a temporary password is sent to this address. The user must set a new password within 48 hours.</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
@@ -984,7 +981,6 @@
         document.getElementById('addUserFirstName').value = '';
         document.getElementById('addUserLastName').value = '';
         document.getElementById('addUserEmail').value = '';
-        document.getElementById('addUserPassword').value = '';
         document.getElementById('addUserRole').value = '';
         document.getElementById('addUserActive').checked = true;
 
@@ -1000,11 +996,10 @@
         const firstName = document.getElementById('addUserFirstName').value;
         const lastName = document.getElementById('addUserLastName').value;
         const email = document.getElementById('addUserEmail').value;
-        const password = document.getElementById('addUserPassword').value;
         const role = document.getElementById('addUserRole').value;
         const active = document.getElementById('addUserActive').checked;
 
-        if (!firstName || !lastName || !email || !password || !role) {
+        if (!firstName || !lastName || !email || !role) {
           showNotification('Please fill in all required fields', 'danger');
           return;
         }
@@ -1016,19 +1011,31 @@
               first_name: firstName,
               last_name: lastName,
               email: email,
-              password: password,
               role: role,
               is_active: active
             })
           });
 
-          showNotification('User created successfully', 'success');
+          showNotification(response.message || 'User created. Welcome email sent.', response.email_sent === false ? 'warning' : 'success');
           hideModal(document.getElementById('addUserModal'));
           loadUsers();
           loadStatistics();
         } catch (error) {
           console.error('Error creating user:', error);
           showNotification(error.message || 'Failed to create user', 'danger');
+        }
+      }
+
+      async function resendInvitation(userId) {
+        if (!confirm('Resend the welcome email with a new temporary password? The current temporary password will stop working.')) return;
+
+        try {
+          const response = await authenticatedFetch(`/users/${userId}/resend-invitation`, { method: 'POST' });
+          showNotification(response.message || 'Invitation resent.', response.email_sent === false ? 'warning' : 'success');
+          loadUsers();
+        } catch (error) {
+          console.error('Error resending invitation:', error);
+          showNotification(error.message || 'Failed to resend invitation', 'danger');
         }
       }
 
@@ -1377,14 +1384,26 @@
         };
 
         tbody.innerHTML = users.map(user => {
-          const statusBadge = user.is_active
+          let statusBadge = user.is_active
             ? '<span class="badge bg-success">Active</span>'
             : '<span class="badge text-bg-secondary">Inactive</span>';
+
+          if (user.must_change_password) {
+            statusBadge += user.temp_password_expired
+              ? ' <span class="badge bg-red" title="Temporary password expired">Invite expired</span>'
+              : ' <span class="badge bg-yellow" title="Waiting for the user to set a new password">Pending invite</span>';
+          }
 
           const roleBadge = roleBadges[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
 
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
+
+          const resendBtn = user.must_change_password
+            ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="resendInvitation(${user.id})" title="Resend invitation" data-permission="users.edit">
+                  <i class="ti ti-mail-forward"></i>
+                </button>`
+            : '';
 
           return `
             <tr>
@@ -1395,6 +1414,7 @@
               <td>${lastLogin}</td>
               <td>${createdAt}</td>
               <td>
+                ${resendBtn}
                 <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editUser(${user.id})" title="Edit" data-permission="users.edit">
                   <i class="ti ti-edit"></i>
                 </button>

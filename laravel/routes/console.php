@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Prune expired Sanctum tokens daily (keeps personal_access_tokens table tidy)
 Schedule::command('sanctum:prune-expired --hours=720')->daily();
+
+// Lock accounts whose temporary password was never changed within the window
+Schedule::command('users:expire-temp-passwords')->hourly();

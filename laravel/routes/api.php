@@ -58,6 +58,13 @@ Route::post('/login', function (Request $request) {
         return response()->json(['message' => 'Your account has been deactivated. Please contact an administrator.'], 403);
     }
 
+    // A temporary password that was never changed within the allowed window is dead.
+    if ($user->temporaryPasswordExpired()) {
+        return response()->json([
+            'message' => 'Your temporary password has expired. Please ask an administrator to resend your invitation.',
+        ], 403);
+    }
+
     $user->updateLastLogin();
 
     $remember = $request->boolean('remember', false);
@@ -80,6 +87,8 @@ Route::post('/login', function (Request $request) {
             'role' => $user->role,
             'is_active' => $user->is_active,
             'permissions' => $permissions,
+            'must_change_password' => $user->must_change_password,
+            'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
         ],
     ]);
 })->middleware('throttle:10,1');
@@ -144,7 +153,7 @@ Route::prefix('v1')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::prefix('v1')->group(function () {
+    Route::prefix('v1')->middleware('password.current')->group(function () {
         // Current user
         Route::get('/user', function (Request $request) {
             $user = $request->user();
@@ -163,6 +172,8 @@ Route::middleware('auth:sanctum')->group(function () {
                 'role' => $user->role,
                 'is_active' => $user->is_active,
                 'permissions' => $permissions,
+                'must_change_password' => $user->must_change_password,
+                'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
             ];
         });
 
@@ -175,6 +186,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/users/{user}', [\App\Http\Controllers\Api\UserController::class, 'destroy'])->middleware('permission:users.delete');
         Route::post('/users/{user}/restore', [\App\Http\Controllers\Api\UserController::class, 'restore'])->middleware('permission:users.delete');
         Route::post('/users/{user}/reset-password', [\App\Http\Controllers\Api\UserController::class, 'resetPassword'])->middleware('permission:users.edit');
+        Route::post('/users/{user}/resend-invitation', [\App\Http\Controllers\Api\UserController::class, 'resendInvitation'])->middleware('permission:users.edit');
 
         // Self-service user endpoints
         Route::post('/user/change-password', [\App\Http\Controllers\Api\UserController::class, 'changePassword']);
@@ -274,8 +286,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Inventory Transactions (Activity & Audit Trail)
         Route::get('/transactions', [InventoryTransactionController::class, 'index']);
-        Route::post('/transactions/manual', [InventoryTransactionController::class, 'createManual']);
+        Route::post('/transactions/manual', [InventoryTransactionController::class, 'createManual'])->middleware('permission:inventory.create');
         Route::get('/transactions/{transaction}', [InventoryTransactionController::class, 'show']);
+        Route::match(['put', 'patch'], '/transactions/{transaction}', [InventoryTransactionController::class, 'update']);
+        Route::delete('/transactions/{transaction}', [InventoryTransactionController::class, 'destroy']);
         Route::get('/transactions-statistics', [InventoryTransactionController::class, 'statistics']);
         Route::get('/transactions-types', [InventoryTransactionController::class, 'types']);
         Route::get('/transactions-export', [InventoryTransactionController::class, 'export']);

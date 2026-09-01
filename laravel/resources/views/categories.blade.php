@@ -295,7 +295,7 @@
       // For tree view, we need hierarchical data with all descendants
       // For list view, we can use flat data
       let url = currentView === 'tree'
-        ? '/category-tree'
+        ? '/categories-tree'
         : '/categories?per_page=all&with_parent=true&with_children=true';
 
       if (search) {

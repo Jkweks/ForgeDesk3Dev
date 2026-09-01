@@ -112,4 +112,21 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Temporary Password Workflow
+    |--------------------------------------------------------------------------
+    |
+    | When an administrator creates a user, ForgeDesk emails them a random
+    | temporary password. `ttl_hours` is how long that temporary password
+    | stays valid before the account is locked and an admin must resend the
+    | invitation. `length` controls the generated password strength.
+    |
+    */
+
+    'temp_password' => [
+        'ttl_hours' => (int) env('TEMP_PASSWORD_TTL_HOURS', 48),
+        'length' => (int) env('TEMP_PASSWORD_LENGTH', 16),
+    ],
+
 ];

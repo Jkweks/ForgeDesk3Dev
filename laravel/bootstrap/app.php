@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'password.current' => \App\Http\Middleware\EnsurePasswordIsCurrent::class,
         ]);
     })
     ->withSchedule(function (Schedule $schedule): void {

@@ -18,7 +18,7 @@
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
                   Export
                 </button>
-                <button class="btn btn-primary" onclick="showAddTransactionModal()">
+                <button class="btn btn-primary" data-permission="inventory.create" onclick="showAddTransactionModal()">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
                   Add Transaction
                 </button>
@@ -213,6 +213,70 @@
     </div>
   </div>
 
+  <!-- Edit Transaction Modal (admin only) -->
+  <div class="modal modal-blur fade" id="editTransactionModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Transaction</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="editTransactionForm">
+          <div class="modal-body">
+            <input type="hidden" id="editTransactionId">
+            <div class="alert alert-warning">
+              Changing the quantity or type will adjust this product's on-hand inventory by the difference.
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Product</label>
+              <p class="mb-0" id="editTransactionProduct">-</p>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label required">Transaction Type</label>
+                <select class="form-select" name="type" id="editTransactionType" required>
+                  <option value="issue">Issue (Remove from inventory)</option>
+                  <option value="receipt">Receipt (Add to inventory)</option>
+                  <option value="return">Return (Add to inventory)</option>
+                  <option value="adjustment">Adjustment (Add to inventory)</option>
+                  <option value="transfer">Transfer</option>
+                  <option value="cycle_count">Cycle Count</option>
+                  <option value="shipment">Shipment (Remove from inventory)</option>
+                  <option value="job_issue">Job Issue (Remove for job)</option>
+                  <option value="job_material_transfer">Job Material Transfer (Add from completed job)</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label required">Quantity</label>
+                <input type="number" min="1" step="1" class="form-control" name="quantity" id="editTransactionQuantity" required>
+                <small class="form-hint">Magnitude only; the sign is derived from the type.</small>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label required">Date &amp; Time</label>
+              <input type="datetime-local" class="form-control" name="transaction_date" id="editTransactionDate" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label required">Reference/Job Name</label>
+              <input type="text" class="form-control" name="reference_number" id="editTransactionReference" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" name="notes" id="editTransactionNotes" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="saveEditTransactionBtn">
+              <i class="ti ti-check me-1"></i>
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
 @endsection
 
 
@@ -394,6 +458,14 @@
               <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="viewTransaction(${trans.id})" title="View Details">
                 <i class="ti ti-eye"></i>
               </button>
+              ${isAdmin() ? `
+              <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editTransaction(${trans.id})" title="Edit">
+                <i class="ti ti-pencil"></i>
+              </button>
+              <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteTransaction(${trans.id})" title="Delete">
+                <i class="ti ti-trash"></i>
+              </button>
+              ` : ''}
             </td>
           </tr>
         `;
@@ -546,6 +618,62 @@
       } catch (error) {
         console.error('Error loading transaction details:', error);
         showNotification('Failed to load transaction details', 'danger');
+      }
+    }
+
+    function toDateTimeLocal(dateString) {
+      if (!dateString) return '';
+      const d = new Date(dateString);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function editTransaction(transactionId) {
+      if (!isAdmin()) return;
+      try {
+        const trans = await authenticatedFetch(`/transactions/${transactionId}`);
+
+        document.getElementById('editTransactionId').value = trans.id;
+        document.getElementById('editTransactionProduct').textContent =
+          `${trans.product?.sku || '-'} - ${trans.product?.description || '-'}`;
+        document.getElementById('editTransactionType').value = trans.type;
+        document.getElementById('editTransactionQuantity').value = Math.abs(trans.quantity);
+        document.getElementById('editTransactionDate').value = toDateTimeLocal(trans.transaction_date);
+        document.getElementById('editTransactionReference').value = trans.reference_number || '';
+        document.getElementById('editTransactionNotes').value = trans.notes || '';
+
+        showModal(document.getElementById('editTransactionModal'));
+      } catch (error) {
+        console.error('Error loading transaction for edit:', error);
+        showNotification('Failed to load transaction', 'danger');
+      }
+    }
+
+    async function deleteTransaction(transactionId) {
+      if (!isAdmin()) return;
+      if (!confirm('Delete this transaction? Its effect on inventory will be reversed. This action cannot be undone.')) return;
+
+      try {
+        const response = await apiCall(`/transactions/${transactionId}`, { method: 'DELETE' });
+
+        if (response.status === 401) {
+          localStorage.removeItem('userData');
+          currentUser = null;
+          showLogin();
+          showNotification('Session expired. Please login again.', 'warning');
+          return;
+        }
+
+        if (response.ok) {
+          showNotification('Transaction deleted successfully', 'success');
+          await Promise.all([loadTransactions(), loadStatistics()]);
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to delete transaction', 'danger');
+        }
+      } catch (error) {
+        console.error('Error deleting transaction:', error);
+        showNotification('Failed to delete transaction', 'danger');
       }
     }
 
@@ -859,6 +987,63 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="ti ti-check me-1"></i>Save Transaction';
+      }
+    });
+
+    document.getElementById('editTransactionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!isAdmin()) return;
+
+      const id = document.getElementById('editTransactionId').value;
+      const formData = new FormData(e.target);
+      const quantity = parseInt(formData.get('quantity'));
+
+      if (!quantity || quantity < 1) {
+        showNotification('Please enter a valid quantity', 'danger');
+        return;
+      }
+
+      const data = {
+        type: formData.get('type'),
+        transaction_date: formData.get('transaction_date'),
+        reference_number: formData.get('reference_number'),
+        notes: formData.get('notes') || null,
+        quantity: quantity
+      };
+
+      const btn = document.getElementById('saveEditTransactionBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+      try {
+        const response = await apiCall(`/transactions/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.status === 401) {
+          localStorage.removeItem('userData');
+          currentUser = null;
+          showLogin();
+          showNotification('Session expired. Please login again.', 'warning');
+          return;
+        }
+
+        if (response.ok) {
+          showNotification('Transaction updated successfully', 'success');
+          hideModal(document.getElementById('editTransactionModal'));
+          await Promise.all([loadTransactions(), loadStatistics()]);
+        } else {
+          const error = await response.json();
+          showNotification(error.message || 'Failed to update transaction', 'danger');
+        }
+      } catch (error) {
+        console.error('Error updating transaction:', error);
+        showNotification('Failed to update transaction', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-check me-1"></i>Save Changes';
       }
     });
   </script>
