@@ -13,3 +13,6 @@ Schedule::command('sanctum:prune-expired --hours=720')->daily();
 
 // Lock accounts whose temporary password was never changed within the window
 Schedule::command('users:expire-temp-passwords')->hourly();
+
+// Rebuild work-order priority ranking from due dates (locked rows keep their slot)
+Schedule::command('fd:resequence-priorities')->dailyAt('01:30')->withoutOverlapping();

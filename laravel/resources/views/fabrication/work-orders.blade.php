@@ -10,6 +10,7 @@
 .pip-blocked      { background: var(--tblr-danger, #d63939); }
 .pip-not_required { background: var(--tblr-blue-lt, #e9f0fb); border: 1px solid var(--tblr-blue, #206bc4); }
 .pip-on_hold      { background: var(--tblr-orange-lt, #fff4e6); border: 1px solid var(--tblr-orange, #f76707); }
+.pip-locked       { box-shadow: 0 0 0 2px var(--tblr-danger, #d63939); opacity: .55; }
 .wo-offcanvas    { width: 700px !important; }
 .elev-row td     { vertical-align: middle; }
 .wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
@@ -96,10 +97,11 @@
             <table class="table table-vcenter card-table table-hover table-striped">
               <thead>
                 <tr>
-                  <th style="width:3rem">#</th>
+                  <th style="width:4.5rem">#</th>
                   <th>Release</th>
                   <th>Job Name</th>
                   <th>PM</th>
+                  <th>Due</th>
                   <th>Assigned</th>
                   <th>Material</th>
                   <th>Elevations</th>
@@ -160,9 +162,15 @@
             onchange="patchWO('date_issued', this.value)">
         </div>
         <div class="col-auto">
+          <div class="subheader">Due Date</div>
+          <input type="date" class="form-control form-control-sm" id="d-due-date" style="width:150px"
+            onchange="patchWO('due_date', this.value || null)">
+        </div>
+        <div class="col-auto">
           <div class="subheader">Priority</div>
           <input type="number" class="form-control form-control-sm" id="d-priority" style="width:80px"
             min="1" placeholder="—" onchange="patchWO('priority', this.value ? parseInt(this.value) : null)">
+          <div class="form-hint mt-1" id="d-priority-hint"></div>
         </div>
         <div class="col-auto">
           <div class="subheader">Material Delivery</div>
@@ -399,11 +407,16 @@
             <label class="form-label required">Elevation Tag</label>
             <input type="text" class="form-control" id="elev-tag" placeholder="e.g. A1, B2">
           </div>
-          <div class="col-md-6">
+          <div class="col-md-3">
             <label class="form-label">Type</label>
-            <select class="form-select" id="elev-type">
+            <select class="form-select" id="elev-type" onchange="onElevTypeChange()">
               <option value="">— None —</option>
             </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Complexity Tier</label>
+            <select class="form-select" id="elev-tier"></select>
+            <small class="form-hint" id="elev-tier-hint"></small>
           </div>
         </div>
         <div class="row mb-3">
@@ -587,10 +600,16 @@
         <button type="button" class="btn-close" onclick="hideModal(document.getElementById('reorderQueueModal'))"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">Drag to set the order the shop floor should work these. Unprioritized work orders aren't shown here.</p>
+        <p class="text-muted small mb-3">
+          Priority is normally derived from each work order's due date. Drag to override —
+          moved work orders get <strong>pinned</strong> and the nightly recalc leaves them alone.
+        </p>
         <ul class="list-group" id="reorder-queue-list" style="max-height:60vh;overflow-y:auto;"></ul>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-danger me-auto" onclick="recalcPriorityFromDueDates()">
+          <i class="ti ti-refresh me-1"></i>Recalc from due dates
+        </button>
         <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('reorderQueueModal'))">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveReorderQueue()" id="reorder-queue-save-btn">Save Order</button>
       </div>
@@ -718,11 +737,18 @@ function renderWOList(wos) {
         const priorityCell = wo.priority != null
             ? `<span class="badge bg-secondary-lt text-secondary">${wo.priority}</span>`
             : '<span class="text-muted">—</span>';
+        const pinBtn = `<button class="btn btn-sm btn-ghost-${wo.priority_locked ? 'yellow' : 'secondary'} p-0 px-1"
+            title="${wo.priority_locked ? 'Pinned — auto-ranking skips this WO' : 'Pin at this position'}"
+            onclick="toggleWOPin(${wo.id}, event)"><i class="ti ti-pin${wo.priority_locked ? '-filled' : ''}"></i></button>`;
+        const dueCell = wo.due_date
+            ? `<span class="small ${new Date(wo.due_date) < new Date(new Date().toDateString()) ? 'text-danger' : 'text-muted'}">${wo.due_date}</span>`
+            : '<span class="text-muted">—</span>';
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
-            <td>${priorityCell}</td>
+            <td class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</td>
             <td><strong>${esc(wo.release_label)}</strong></td>
             <td>${esc(wo.job?.job_name || '—')}</td>
             <td class="text-muted">${esc(wo.job?.project_manager || '—')}</td>
+            <td>${dueCell}</td>
             <td>${assignedPills}</td>
             <td>${matBadge(wo.material_delivery)}</td>
             <td>
@@ -808,13 +834,13 @@ async function saveReorderQueue() {
     const btn = document.getElementById('reorder-queue-save-btn');
     btn.disabled = true;
     try {
-        await Promise.all(reorderQueueWOs.map((wo, idx) =>
-            API(`/work-orders/${wo.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ priority: idx + 1 }),
-            })
-        ));
+        // One call: pins every listed WO at its dragged position (priority_locked).
+        const r = await API('/work-orders/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ordered_ids: reorderQueueWOs.map(w => w.id) }),
+        });
+        if (!r.ok) throw new Error('reorder failed');
         hideModal(document.getElementById('reorderQueueModal'));
         await loadWorkOrders();
     } catch (e) {
@@ -822,6 +848,51 @@ async function saveReorderQueue() {
         fabToast('Failed to save queue order. Please try again.', 'error');
     } finally {
         btn.disabled = false;
+    }
+}
+
+// "Recalc from due dates" — clears every hand-pin and re-derives priority
+// purely from due_date. Confirm because it discards the manual order.
+async function recalcPriorityFromDueDates() {
+    const ok = await fabConfirm({
+        title: 'Recalculate priority',
+        message: 'Re-rank every work order by its due date? This clears all manual pins.',
+        confirmLabel: 'Recalculate',
+        confirmClass: 'btn-primary',
+    });
+    if (!ok) return;
+    try {
+        const r = await API('/work-orders/resequence-priority', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clear_locks: true }),
+        });
+        if (!r.ok) throw new Error('resequence failed');
+        hideModal(document.getElementById('reorderQueueModal'));
+        await loadWorkOrders();
+        fabToast('Priority recalculated from due dates.', 'success');
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to recalculate priority.', 'error');
+    }
+}
+
+// Pin / unpin a single WO at its current rank (list row pin button).
+async function toggleWOPin(woId, event) {
+    event.stopPropagation();
+    const wo = allWOs.find(w => w.id === woId);
+    if (!wo) return;
+    try {
+        const r = await API(`/work-orders/${woId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ priority_locked: !wo.priority_locked }),
+        });
+        if (!r.ok) throw new Error('pin toggle failed');
+        await loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to update pin.', 'error');
     }
 }
 
@@ -863,7 +934,11 @@ function populateDetail(wo) {
     document.getElementById('d-pm').textContent = job.project_manager || '—';
     document.getElementById('d-division').textContent = job.division || '—';
     document.getElementById('d-date-issued').value = wo.date_issued || '';
+    document.getElementById('d-due-date').value = wo.due_date || '';
     document.getElementById('d-priority').value = wo.priority != null ? wo.priority : '';
+    document.getElementById('d-priority-hint').textContent = wo.priority_locked
+        ? 'Pinned — auto-ranking skips this WO'
+        : 'Auto-ranked by due date';
     document.getElementById('d-material').value = wo.material_delivery || '';
     document.getElementById('d-notes').value = wo.notes || '';
 
@@ -886,6 +961,16 @@ async function patchWO(field, value) {
         });
         // Refresh list silently
         loadWorkOrders();
+
+        // A due-date / priority change reshuffles the ranking — re-sync the panel.
+        if (['due_date', 'priority', 'priority_locked'].includes(field)) {
+            const rr = await API(`/work-orders/${currentWO.id}`);
+            currentWO = await rr.json();
+            document.getElementById('d-priority').value = currentWO.priority != null ? currentWO.priority : '';
+            document.getElementById('d-priority-hint').textContent = currentWO.priority_locked
+                ? 'Pinned — auto-ranking skips this WO'
+                : 'Auto-ranked by due date';
+        }
     } catch (e) {
         console.error(e);
     }
@@ -1025,13 +1110,51 @@ async function bulkCompleteWoSteps(woId) {
     });
     if (!ok) return;
     try {
-        await API(`/work-orders/${woId}/steps/complete-all`, { method: 'PATCH' });
+        const send = (override) => API(`/work-orders/${woId}/steps/complete-all`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(override ? { override: true } : {}),
+        });
+        let r = await send(false);
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            if (err.code === 'stage_gated'
+                && confirm(`"${err.blocking_stage?.name || 'An earlier step'}" isn't complete. Override and complete all?`)) {
+                r = await send(true);
+            }
+            if (!r.ok) { fabToast('Failed to complete steps.', 'error'); return; }
+        }
         await reloadWoSteps();
         fabToast('Steps marked complete.', 'success');
     } catch (e) {
         console.error(e);
         fabToast('Failed to complete steps.', 'error');
     }
+}
+
+// PATCH a job step, offering a gate override on a 422 stage_gated response.
+async function patchJobStepStatus(stepId, status) {
+    const send = (override) => API(`/job-steps/${stepId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(override
+            ? { status, override: true }
+            : { status }),
+    });
+    let r = await send(false);
+    if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        if (err.code === 'stage_gated'
+            && confirm(`"${err.blocking_stage?.name || 'An earlier step'}" isn't complete. Override the gate and continue?`)) {
+            r = await send(true);
+        }
+        if (!r.ok) {
+            const e2 = await r.json().catch(() => ({}));
+            fabToast(e2.message || 'Failed to update step status.', 'error');
+            return false;
+        }
+    }
+    return true;
 }
 
 async function reloadWoSteps() {
@@ -1047,12 +1170,7 @@ async function cycleWoStep(stepId, currentStatus) {
     const nextStatus = await FabStep.cycleStepStatus(currentStatus);
     if (!nextStatus) return;
     try {
-        await API(`/job-steps/${stepId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus }),
-        });
-        reloadWoSteps();
+        if (await patchJobStepStatus(stepId, nextStatus)) reloadWoSteps();
     } catch (e) {
         console.error(e);
         fabToast('Failed to update step status.', 'error');
@@ -1209,12 +1327,16 @@ function elevRow(e) {
 
     const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset', on_hold: 'Reset' };
     const stages = e.stages || [];
-    const pips = stages.map(s =>
-        `<span class="pip pip-${s.status}" style="cursor:pointer"
-            title="${s.name}: ${s.status} → left-click to ${nextLabels[s.status] || 'advance'}, right-click for options"
+    const pips = stages.map(s => {
+        const blk = stageBlocker(s, stages);
+        const tip = blk
+            ? `${s.name}: blocked by "${blk.name}" — click to override`
+            : `${s.name}: ${s.status} → left-click to ${nextLabels[s.status] || 'advance'}, right-click for options`;
+        return `<span class="pip pip-${s.status}${blk ? ' pip-locked' : ''}" style="cursor:pointer"
+            title="${esc(tip)}"
             onclick="cycleStage(${s.id},'${s.status}',event)"
-            oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)"></span>`
-    ).join('');
+            oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)"></span>`;
+    }).join('');
 
     const completedInfo = e.date_completed
         ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-muted">${esc(e.completed_by_name)}</small>` : ''}`
@@ -1305,7 +1427,7 @@ function toggleStages(rowId, btn) {
 // ============================================================
 async function loadElevTypes() {
     try {
-        const r = await API('/elevation-types');
+        const r = await API('/elevation-types?with_templates=1');
         const data = await r.json();
         elevTypes = data.elevation_types || [];
         const sel = document.getElementById('elev-type');
@@ -1318,6 +1440,39 @@ async function loadElevTypes() {
     } catch (e) {
         console.error(e);
     }
+}
+
+// Populate the complexity-tier picker for the selected elevation type.
+// `preselectId` keeps the elevation's current tier when editing.
+function refreshElevTierOptions(preselectId) {
+    const typeId = parseInt(document.getElementById('elev-type').value) || null;
+    const tierSel = document.getElementById('elev-tier');
+    const hint = document.getElementById('elev-tier-hint');
+    const type = elevTypes.find(t => t.id === typeId);
+    const sets = (type?.stage_template_sets || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+
+    tierSel.innerHTML = '';
+    if (!sets.length) {
+        tierSel.disabled = true;
+        hint.textContent = typeId ? 'This type has no tiers yet.' : 'Pick a type first.';
+        return;
+    }
+    tierSel.disabled = false;
+    const chosen = sets.some(s => s.id === preselectId)
+        ? preselectId
+        : (sets.find(s => s.is_default) || sets[0]).id;
+    sets.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `${s.name} (${(s.stage_templates || []).length} steps)${s.is_default ? ' · default' : ''}`;
+        if (s.id === chosen) opt.selected = true;
+        tierSel.appendChild(opt);
+    });
+    hint.textContent = 'Changing the tier on an existing elevation re-syncs its stages.';
+}
+
+function onElevTypeChange() {
+    refreshElevTierOptions(null);
 }
 
 async function loadFabUsers() {
@@ -1354,16 +1509,41 @@ async function cycleStage(stageId, currentStatus, event) {
     await setStageStatus(stageId, nextStatus);
 }
 
+// The first earlier blocking stage in the same elevation that isn't done yet,
+// or null. Mirrors StageGateService::blockingStageFor on the server.
+function stageBlocker(stage, siblings) {
+    const done = st => st === 'complete' || st === 'not_required';
+    return (siblings || []).find(p =>
+        p.id !== stage.id && p.blocks_next && p.sort_order < stage.sort_order && !done(p.status)
+    ) || null;
+}
+
 async function setStageStatus(stageId, status) {
     try {
-        await API(`/work-order-stages/${stageId}`, {
+        const send = (override) => API(`/work-order-stages/${stageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status }),
+            body: JSON.stringify(override
+                ? { status, override: true, log_message: 'Gate overridden from Work Orders screen' }
+                : { status }),
         });
+
+        let r = await send(false);
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            if (err.code === 'stage_gated'
+                && confirm(`"${err.blocking_stage?.name || 'An earlier stage'}" isn't complete. Override the gate and continue?`)) {
+                r = await send(true);
+            }
+            if (!r.ok) {
+                const e2 = await r.json().catch(() => ({}));
+                fabToast(e2.message || 'Failed to update stage', 'error');
+                return;
+            }
+        }
+
         const expanded = getExpandedElevationIds();
-        const r = await API(`/work-orders/${currentWO.id}`);
-        const wo = await r.json();
+        const wo = await (await API(`/work-orders/${currentWO.id}`)).json();
         currentWO = wo;
         renderElevations(wo.elevations || []);
         restoreExpandedElevations(expanded);
@@ -1517,6 +1697,7 @@ function openAddElev() {
     document.getElementById('elev-completed-by').value = '';
     document.getElementById('elev-scope').checked = true;
     document.getElementById('elev-notes').value = '';
+    refreshElevTierOptions(null);
     showModal(document.getElementById('addElevModal'));
 }
 
@@ -1534,6 +1715,7 @@ function openEditElev(elevId) {
     document.getElementById('elev-completed-by').value = e.completed_by_id || '';
     document.getElementById('elev-scope').checked = (e.scope !== 'kit');
     document.getElementById('elev-notes').value = e.notes || '';
+    refreshElevTierOptions(e.template_set_id || null);
     showModal(document.getElementById('addElevModal'));
 }
 
@@ -1542,9 +1724,11 @@ async function saveElev() {
     const elevId = document.getElementById('elev-id').value;
     const isEdit = !!elevId;
 
+    const tierVal = document.getElementById('elev-tier').value;
     const body = {
         elevation_tag: document.getElementById('elev-tag').value,
         elevation_type_id: document.getElementById('elev-type').value || null,
+        template_set_id: tierVal ? parseInt(tierVal) : null,
         quantity: parseInt(document.getElementById('elev-qty').value) || 1,
         date_requested: document.getElementById('elev-date-req').value || null,
         date_completed: document.getElementById('elev-date-done').value || null,
@@ -1556,18 +1740,26 @@ async function saveElev() {
     if (!body.elevation_tag) { fabToast('Elevation Tag is required.', 'info'); return; }
 
     try {
+        let resp;
         if (isEdit) {
-            await API(`/elevations/${elevId}`, {
+            resp = await API(`/elevations/${elevId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
         } else {
-            await API(`/work-orders/${currentWO.id}/elevations`, {
+            resp = await API(`/work-orders/${currentWO.id}/elevations`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
+        }
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) { fabToast(data.message || 'Failed to save elevation.', 'error'); return; }
+        if (data.resync_summary) {
+            const s = data.resync_summary;
+            fabToast(`Stages re-synced — added ${s.added.length}, kept ${s.carried.length}, retired ${s.retired.length}` +
+                (s.kept_with_progress.length ? `, left ${s.kept_with_progress.length} with progress` : ''), 'success');
         }
         hideModal(document.getElementById('addElevModal'));
         // Reload detail

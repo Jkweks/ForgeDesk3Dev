@@ -110,6 +110,7 @@ Route::post('/password/verify-token', [PasswordResetController::class, 'verifyTo
 Route::prefix('v1')->group(function () {
     // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
     Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
+    Route::get('/shop/my-queue', [\App\Http\Controllers\Api\ShopFloorController::class, 'myQueue'])->middleware('throttle:120,1');
     Route::get('/shop/fab-users', [\App\Http\Controllers\Api\ShopFloorController::class, 'fabUsers']);
     // PIN login is unauthenticated and checks every fab user's hash — throttle
     // hard to keep it from being brute-forced.
@@ -459,6 +460,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // .create / .edit / .delete.
         Route::middleware('permission:fabrication.work-orders.view')->group(function () {
             Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
+            Route::get('/work-queue', [\App\Http\Controllers\Api\WorkQueueController::class, 'index']);
+            // Static paths BEFORE the /work-orders/{id} wildcard.
+            Route::post('/work-orders/resequence-priority', [\App\Http\Controllers\Api\WorkOrderController::class, 'resequencePriority'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/work-orders/reorder', [\App\Http\Controllers\Api\WorkOrderController::class, 'reorder'])->middleware('permission:fabrication.work-orders.edit');
             Route::get('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'show']);
             Route::post('/work-orders/parse-excel', [\App\Http\Controllers\Api\WorkOrderController::class, 'parseExcel'])->middleware('permission:fabrication.work-orders.create');
             Route::post('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'store'])->middleware('permission:fabrication.work-orders.create');
@@ -481,6 +486,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
             // Elevation Stage cycling (reuse existing stage controller)
             Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
+            Route::post('/work-order-stages/bulk-assign', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'bulkAssign'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
@@ -493,6 +499,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate'])->middleware('permission:fabrication.work-orders.edit');
+
+            // Complexity tiers (stage template sets)
+            Route::get('/stage-template-sets', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'index']);
+            Route::post('/stage-template-sets', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/stage-template-sets/{id}', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/stage-template-sets/{id}', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
             Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);
             Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');

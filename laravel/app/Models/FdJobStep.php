@@ -9,6 +9,12 @@ class FdJobStep extends Model
 {
     protected $table = 'fd_job_steps';
 
+    /** Every status a job step may hold. */
+    public const STATUSES = ['pending', 'complete', 'not_required', 'on_hold'];
+
+    /** Statuses that count as "done" for gating purposes. */
+    public const TERMINAL = ['complete', 'not_required'];
+
     protected $fillable = [
         'work_order_id', 'name', 'sort_order', 'status', 'completed_by_id', 'completed_at',
     ];
