@@ -177,6 +177,11 @@
     return hasPermission(`${resource}.export`);
   }
 
+  // Role helper - true when the logged-in user is an administrator
+  function isAdmin() {
+    return !!currentUser && currentUser.role === 'admin';
+  }
+
   // Watch for dynamically added content and apply permissions
   function initPermissionWatcher() {
     if (!currentUser || !currentUser.permissions) {
@@ -395,6 +400,12 @@
 
       const error = await response.json().catch(() => ({ message: 'Request failed' }));
 
+      // User signed in with a temporary password and must change it before doing anything else
+      if (response.status === 403 && error.code === 'password_change_required') {
+        showForcedPasswordChange();
+        throw new Error(error.message || 'Password change required');
+      }
+
       // Log full error details to console for debugging
       console.error('API Error Details:', {
         endpoint: endpoint,
@@ -426,6 +437,94 @@
   function showLogin() {
     document.getElementById('loginPage').classList.add('active');
     document.getElementById('app').classList.remove('active');
+  }
+
+  // Blocking overlay shown when the user signed in with a temporary password.
+  // They cannot use the app until they set a new one.
+  function showForcedPasswordChange() {
+    if (document.getElementById('forcePasswordChangeOverlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'forcePasswordChangeOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:1rem;';
+    overlay.innerHTML = `
+      <div class="card" style="max-width:420px;width:100%;">
+        <div class="card-body">
+          <h3 class="card-title">Set a new password</h3>
+          <p class="text-muted">You signed in with a temporary password. Choose a new password to continue.</p>
+          <div id="forcePwError" class="alert alert-danger" style="display:none;"></div>
+          <form id="forcePasswordChangeForm">
+            <div class="mb-3">
+              <label class="form-label">Temporary password</label>
+              <input type="password" class="form-control" id="forcePwCurrent" autocomplete="current-password" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">New password</label>
+              <input type="password" class="form-control" id="forcePwNew" autocomplete="new-password" minlength="8" required>
+              <small class="form-hint">At least 8 characters.</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Confirm new password</label>
+              <input type="password" class="form-control" id="forcePwConfirm" autocomplete="new-password" minlength="8" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100" id="forcePwSubmit">Update password &amp; continue</button>
+          </form>
+          <div class="text-center mt-3">
+            <a href="#" id="forcePwLogout" class="text-muted small">Sign out</a>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('forcePwLogout').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/api/logout', { method: 'POST', credentials: 'include', headers: { 'X-XSRF-TOKEN': getXsrfToken() } }).catch(() => {});
+      localStorage.removeItem('userData');
+      currentUser = null;
+      location.reload();
+    });
+
+    document.getElementById('forcePasswordChangeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('forcePwError');
+      const btn = document.getElementById('forcePwSubmit');
+      const current = document.getElementById('forcePwCurrent').value;
+      const next = document.getElementById('forcePwNew').value;
+      const confirm = document.getElementById('forcePwConfirm').value;
+
+      err.style.display = 'none';
+      if (next !== confirm) {
+        err.textContent = 'The new passwords do not match.';
+        err.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Updating...';
+      try {
+        const response = await apiCall('/user/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: current, password: next, password_confirmation: confirm })
+        });
+
+        if (response.ok) {
+          overlay.remove();
+          location.reload();
+          return;
+        }
+
+        const body = await response.json().catch(() => ({}));
+        err.textContent = body.message || 'Could not update password. Check your temporary password and try again.';
+        err.style.display = 'block';
+      } catch (_) {
+        err.textContent = 'Could not update password. Please try again.';
+        err.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Update password & continue';
+      }
+    });
   }
 
   // Login Form
@@ -510,6 +609,11 @@
       currentUser = freshUser;
       localStorage.setItem('userData', JSON.stringify(freshUser));
       updateUserBadge();
+
+      // Signed in on a temporary password — block the app until it's changed
+      if (freshUser.must_change_password) {
+        showForcedPasswordChange();
+      }
     } catch (error) {
       // Network error — stay optimistic, API calls will handle 401s
     }

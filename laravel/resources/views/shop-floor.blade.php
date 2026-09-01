@@ -140,6 +140,8 @@
     /* ── not_required stage ── */
     .stage-btn.not_required { background: var(--tblr-blue-lt, #dce7f9); color: var(--tblr-blue, #2c5fc3); }
     [data-bs-theme="dark"] .stage-btn.not_required { background: #0d1f3c; color: #7aa7e9; }
+    .stage-btn.locked { opacity: .5; }
+    .stage-btn.locked:active { transform: none; filter: none; }
 
     /* ── PIN overlay ── */
     .sf-pin-overlay {
@@ -250,7 +252,11 @@
 
 <!-- ── Filter bar ── -->
 <div class="sf-filters">
-  <span class="sf-filter-label">User:</span>
+  <div class="d-flex gap-1 me-2">
+    <button class="pill active" id="view-all" onclick="sfSetView('all', this)">All Work Orders</button>
+    <button class="pill" id="view-mine" onclick="sfSetView('mine', this)">My Work</button>
+  </div>
+  <span class="sf-filter-label" id="user-pills-label">User:</span>
   <div id="user-pills" class="d-flex gap-1 flex-wrap">
     <button class="pill active" data-uid="" onclick="setUser('', this)">All</button>
   </div>
@@ -288,13 +294,18 @@
   </div>
 </div>
 
+<!-- ── My Work queue ── -->
+<div id="sf-myqueue" style="display:none;padding:.5rem 1rem 2rem"></div>
+
 <script>
 // ── State ─────────────────────────────────────────────────────────────────
 let sfWOs      = [];
 let sfUsers    = [];
 let activeUser = '';
 let hideDone   = false;
-let sfFabUser  = null;  // { user_id, name, initials }
+let sfFabUser  = null;  // { user_id, name, initials, role }
+let sfView     = 'all'; // 'all' | 'mine'
+let sfQueue    = [];
 const expandedWOs = new Set();
 
 const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked', not_required: 'N/R', on_hold: 'On Hold' };
@@ -424,6 +435,22 @@ function setUser(uid, btn) {
   render();
 }
 
+function sfSetView(view, btn) {
+  if (view === 'mine' && !sfFabUser) {
+    document.getElementById('sf-pin-overlay').style.display = 'flex';
+    return;
+  }
+  sfView = view;
+  document.getElementById('view-all').classList.toggle('active', view === 'all');
+  document.getElementById('view-mine').classList.toggle('active', view === 'mine');
+  // The operator filter only makes sense on the full board.
+  const showUserFilter = view === 'all';
+  document.getElementById('user-pills').style.display = showUserFilter ? '' : 'none';
+  document.getElementById('user-pills-label').style.display = showUserFilter ? '' : 'none';
+  document.getElementById('btn-hide-done').style.display = showUserFilter ? '' : 'none';
+  reload();
+}
+
 function toggleHideDone(btn) {
   hideDone = !hideDone;
   btn.classList.toggle('active', hideDone);
@@ -432,6 +459,8 @@ function toggleHideDone(btn) {
 
 // ── Render ─────────────────────────────────────────────────────────────────
 function render() {
+  document.getElementById('sf-myqueue').style.display = 'none';
+  document.getElementById('sf-content').style.display = '';
   const tbody = document.getElementById('sf-tbody');
   let   woCount = 0;
   const rows = [];
@@ -443,7 +472,9 @@ function render() {
     let woVisible = true;
     if (activeUser) {
       const woAssigned = (wo.assigned_users || []).some(u => String(u.id) === activeUser);
-      const stageAssigned = allStages.some(s => String(s.assigned_to_id) === activeUser);
+      const stageAssigned = allStages.some(s =>
+        String(s.assigned_to_id) === activeUser ||
+        (s.assignee_ids || []).map(String).includes(activeUser));
       woVisible = woAssigned || stageAssigned;
     }
     if (!woVisible) return;
@@ -520,17 +551,21 @@ function elevBlock(e) {
   const dateLabel = e.date_requested
     ? `<span class="small ${isPast(e.date_requested) ? 'text-danger' : 'text-muted'}">${e.date_requested}</span>` : '';
 
-  const stagesBtns = (e.stages || []).map(s => {
+  const allStages = e.stages || [];
+  const stagesBtns = allStages.map(s => {
     const who = s.completed_by_name || s.assigned_name || '';
-    const tip  = who ? `${who} · tap to advance` : 'tap to advance';
+    const blocker = sfStageBlocker(s, allStages);
+    const tip  = blocker
+      ? `Blocked by “${blocker.name}”`
+      : (who ? `${who} · tap to advance` : 'tap to advance');
     const byLine = s.completed_by_name
       ? `<span style="font-size:.6rem;opacity:.7">${esc(s.completed_by_name)}</span>`
       : '';
-    return `<button class="stage-btn ${s.status}"
+    return `<button class="stage-btn ${s.status}${blocker ? ' locked' : ''}"
         onclick="cycleStage(event, ${s.id})"
         title="${esc(tip)}">
       <span class="sname">${esc(s.name)}</span>
-      <span class="sstatus">${STATUS_LABEL[s.status] || s.status}</span>
+      <span class="sstatus">${blocker ? '🔒 ' : ''}${STATUS_LABEL[s.status] || s.status}</span>
       ${byLine}
     </button>`;
   }).join('');
@@ -556,6 +591,22 @@ function elevBlock(e) {
 
 function isPast(dateStr) {
   return dateStr && new Date(dateStr) < new Date(new Date().toDateString());
+}
+
+// The first earlier blocking stage in the same elevation that isn't done yet,
+// or null. Mirrors StageGateService::blockingStageFor on the server.
+function sfStageBlocker(stage, siblings) {
+  const done = st => st === 'complete' || st === 'not_required';
+  return (siblings || []).find(p =>
+    p.id !== stage.id &&
+    p.blocks_next &&
+    p.sort_order < stage.sort_order &&
+    !done(p.status)
+  ) || null;
+}
+
+function sfIsManager() {
+  return sfFabUser && (sfFabUser.role === 'manager' || sfFabUser.role === 'admin');
 }
 
 function esc(str) {
@@ -592,6 +643,27 @@ async function cycleStage(event, stageId) {
     if (!ok) return;
   }
 
+  // Sequential gate: a blocking earlier stage isn't done. Workers are stopped;
+  // managers/admins may override (logged server-side).
+  let override = false;
+  const gStage = sfFindStage(stageId);
+  const gElev  = sfFindElevForStage(stageId);
+  const gBlocker = gStage && gElev ? sfStageBlocker(gStage, gElev.stages || []) : null;
+  if (gBlocker) {
+    if (!sfIsManager()) {
+      fabToast(`Blocked by “${gBlocker.name}” — ask a manager to override.`, 'error');
+      return;
+    }
+    const ok = await fabConfirm({
+      title: 'Override gate',
+      message: `“${gBlocker.name}” isn’t complete. Proceed with this stage anyway?`,
+      confirmLabel: 'Override',
+      confirmClass: 'btn-warning',
+    });
+    if (!ok) return;
+    override = true;
+  }
+
   // Find the elevation for this stage to check if it's complete
   const elev = sfFindElevForStage(stageId);
   if (elev && elev.date_completed) {
@@ -608,13 +680,22 @@ async function cycleStage(event, stageId) {
 
   btn.disabled = true; btn.style.opacity = '.55';
   try {
-    const body = sfFabUser ? JSON.stringify({ fab_user_id: sfFabUser.user_id }) : '{}';
+    const payload = {};
+    if (sfFabUser) payload.fab_user_id = sfFabUser.user_id;
+    if (override)  payload.override = true;
     const r = await API(`/shop/stages/${stageId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body,
+      body: JSON.stringify(payload),
     });
     const result = await r.json();
+    if (!r.ok) {
+      fabToast(result.code === 'stage_gated'
+        ? `Blocked by “${result.blocking_stage?.name || 'an earlier stage'}”.`
+        : (result.message || 'Failed to update stage.'), 'error');
+      btn.disabled = false; btn.style.opacity = '';
+      return;
+    }
     _sfLastCycledStageId = stageId;
     _sfLastCycledStatus  = result.status;
     await reload();
@@ -643,12 +724,38 @@ async function bulkCompleteElevStages(event, elevId) {
 
   btn.disabled = true; btn.style.opacity = '.55';
   try {
-    const body = sfFabUser ? JSON.stringify({ fab_user_id: sfFabUser.user_id }) : '{}';
-    await API(`/shop/elevations/${elevId}/complete-stages`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
+    const send = async (override) => {
+      const payload = {};
+      if (sfFabUser) payload.fab_user_id = sfFabUser.user_id;
+      if (override)  payload.override = true;
+      const r = await API(`/shop/elevations/${elevId}/complete-stages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return { r, data: await r.json().catch(() => ({})) };
+    };
+
+    let { r, data } = await send(false);
+
+    if (!r.ok && data.code === 'stage_gated' && sfIsManager()) {
+      const ok = await fabConfirm({
+        title: 'Override gate',
+        message: `“${data.blocking_stage?.name || 'An earlier stage'}” isn’t complete. Complete all remaining stages anyway?`,
+        confirmLabel: 'Override & Complete',
+        confirmClass: 'btn-warning',
+      });
+      if (ok) ({ r, data } = await send(true));
+    }
+
+    if (!r.ok) {
+      fabToast(data.code === 'stage_gated'
+        ? `Blocked by “${data.blocking_stage?.name || 'an earlier stage'}”.`
+        : (data.message || 'Failed to complete stages.'), 'error');
+      btn.disabled = false; btn.style.opacity = '';
+      return;
+    }
+
     await reload();
     sfCheckElevationCompletionById(elevId);
     fabToast('Stages marked complete.', 'success');
@@ -667,6 +774,11 @@ function sfFindElevForStage(stageId) {
     }
   }
   return null;
+}
+
+function sfFindStage(stageId) {
+  const elev = sfFindElevForStage(stageId);
+  return elev ? (elev.stages || []).find(s => s.id === stageId) || null : null;
 }
 
 function sfCheckElevationCompletion() {
@@ -761,12 +873,56 @@ function sfDismissHold() {
 
 async function reload() {
   try {
+    if (sfView === 'mine' && sfFabUser) {
+      const r = await API(`/shop/my-queue?fab_user_id=${sfFabUser.user_id}`);
+      sfQueue = (await r.json()).queue || [];
+      renderMyQueue();
+      return;
+    }
     const r = await API('/shop/work-orders');
     sfWOs = (await r.json()).work_orders || [];
     render();
   } catch (e) {
     console.error(e);
   }
+}
+
+function renderMyQueue() {
+  document.getElementById('sf-content').style.display = 'none';
+  const box = document.getElementById('sf-myqueue');
+  box.style.display = '';
+  document.getElementById('sf-wo-count').textContent =
+    `${sfQueue.length} task${sfQueue.length !== 1 ? 's' : ''}`;
+
+  if (!sfQueue.length) {
+    box.innerHTML = `<div class="sf-empty"><i class="ti ti-checklist" style="font-size:3rem;opacity:.25"></i>
+      <p class="mt-2">Nothing in your queue — you're all caught up.</p></div>`;
+    return;
+  }
+
+  box.innerHTML = sfQueue.map(t => {
+    const due = t.due_date
+      ? `<span class="small ${isPast(t.due_date) ? 'text-danger' : 'text-muted'}">due ${t.due_date}</span>` : '';
+    const prio = t.priority != null
+      ? `<span style="font-size:.7rem;padding:.05rem .35rem;border-radius:4px;background:var(--tblr-gray-200,#e9ecef);color:var(--tblr-secondary)">#${t.priority}</span>` : '';
+    const mates = (t.assignee_names || []).filter(n => n && n !== sfFabUser?.name);
+    const shared = mates.length
+      ? `<span class="badge bg-purple-lt" style="font-size:.62rem" title="Working with ${esc(mates.join(', '))}">
+           <i class="ti ti-users"></i> with ${esc(mates.join(', '))}</span>` : '';
+    return `<button class="stage-btn ${t.status}" style="display:block;width:100%;text-align:left;margin-bottom:.5rem;padding:.7rem .9rem"
+        onclick="cycleStage(event, ${t.stage_id})">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        ${prio}
+        <strong>${esc(t.release_label)}</strong>
+        <span class="text-muted small">${esc(t.job_name || '')}</span>
+        <span class="badge bg-blue-lt" style="font-size:.62rem">${esc(t.elevation_tag)}</span>
+        ${due}
+        ${shared}
+        <span class="ms-auto sstatus">${STATUS_LABEL[t.status] || t.status}</span>
+      </div>
+      <div class="sname mt-1">${esc(t.name)}</div>
+    </button>`;
+  }).join('');
 }
 
 // ── Auto-refresh every 60 s ────────────────────────────────────────────────

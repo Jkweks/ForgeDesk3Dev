@@ -515,4 +515,186 @@ class InventoryTransactionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Update a transaction record (admin only).
+     *
+     * Metadata fields (date / reference / notes) can always be changed. If the
+     * signed quantity effect changes (via `quantity` or `type`), the difference
+     * is applied to inventory so the ledger and stock stay consistent.
+     */
+    public function update(Request $request, InventoryTransaction $transaction)
+    {
+        if (! $request->user()?->isAdmin()) {
+            return response()->json([
+                'message' => 'You do not have permission to perform this action.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'type' => 'required|in:issue,return,receipt,adjustment,transfer,cycle_count,shipment,job_issue,job_material_transfer',
+            'transaction_date' => 'required|date',
+            'reference_number' => 'required|string|max:255',
+            'notes' => 'nullable|string',
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        $removesInventory = in_array($validated['type'], ['issue', 'shipment', 'job_issue']);
+        $newSigned = $removesInventory ? -$validated['quantity'] : $validated['quantity'];
+        $oldSigned = (int) $transaction->quantity;
+        $delta = $newSigned - $oldSigned;
+
+        DB::beginTransaction();
+        try {
+            $product = $transaction->product;
+
+            if ($delta !== 0 && $product) {
+                $this->applyInventoryDelta($product, $delta);
+                $product->recalculateQuantitiesFromLocations();
+                $product->refresh();
+                $product->updateStatus();
+            }
+
+            $attributes = [
+                'type' => $validated['type'],
+                'reference_number' => $validated['reference_number'],
+                'notes' => $validated['notes'],
+                'transaction_date' => $validated['transaction_date'],
+            ];
+
+            // Only re-snapshot the before/after columns when the stock effect moved.
+            if ($delta !== 0) {
+                $quantityAfter = $product ? (int) $product->quantity_on_hand : (int) $transaction->quantity_after + $delta;
+                $attributes['quantity'] = $newSigned;
+                $attributes['quantity_after'] = $quantityAfter;
+                $attributes['quantity_before'] = $quantityAfter - $newSigned;
+            }
+
+            $transaction->update($attributes);
+
+            DB::commit();
+
+            $transaction->load(['product', 'user']);
+
+            return response()->json([
+                'message' => 'Transaction updated successfully',
+                'transaction' => $transaction,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Failed to update transaction',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a transaction record (admin only).
+     *
+     * The transaction's signed quantity effect is reversed out of inventory
+     * before the row is removed so on-hand totals stay consistent with the ledger.
+     */
+    public function destroy(Request $request, InventoryTransaction $transaction)
+    {
+        if (! $request->user()?->isAdmin()) {
+            return response()->json([
+                'message' => 'You do not have permission to perform this action.',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $product = $transaction->product;
+            $reversal = -1 * (int) $transaction->quantity;
+
+            if ($reversal !== 0 && $product) {
+                $this->applyInventoryDelta($product, $reversal);
+                $product->recalculateQuantitiesFromLocations();
+                $product->refresh();
+                $product->updateStatus();
+            }
+
+            $transaction->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Transaction deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Failed to delete transaction',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Apply a signed quantity change to a product's inventory locations.
+     * Positive adds to the primary location (creating a default one if needed);
+     * negative removes across locations, primary first. Mirrors the location
+     * handling in createManual().
+     */
+    private function applyInventoryDelta(Product $product, int $quantityChange): void
+    {
+        if ($quantityChange > 0) {
+            $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();
+
+            if (! $primaryLocation) {
+                $defaultLocation = \App\Models\StorageLocation::firstOrCreate(
+                    ['code' => 'DEFAULT'],
+                    ['name' => 'Default Storage', 'type' => 'warehouse', 'is_active' => true]
+                );
+
+                $primaryLocation = $product->inventoryLocations()->create([
+                    'storage_location_id' => $defaultLocation->id,
+                    'quantity' => 0,
+                    'quantity_committed' => 0,
+                    'is_primary' => true,
+                ]);
+            }
+
+            $primaryLocation->quantity += $quantityChange;
+            $primaryLocation->save();
+
+            return;
+        }
+
+        if ($quantityChange < 0) {
+            $remainingToRemove = abs($quantityChange);
+
+            $locations = $product->inventoryLocations()
+                ->orderByRaw('is_primary DESC')
+                ->orderByRaw('(quantity - quantity_committed) DESC')
+                ->get();
+
+            foreach ($locations as $location) {
+                if ($remainingToRemove <= 0) break;
+
+                $availableAtLocation = $location->quantity - $location->quantity_committed;
+                $toRemoveFromLocation = min($remainingToRemove, $availableAtLocation);
+
+                if ($toRemoveFromLocation > 0) {
+                    $location->quantity -= $toRemoveFromLocation;
+                    $location->save();
+                    $remainingToRemove -= $toRemoveFromLocation;
+                }
+            }
+
+            if ($remainingToRemove > 0) {
+                foreach ($locations as $location) {
+                    if ($remainingToRemove <= 0) break;
+
+                    if ($location->quantity > 0) {
+                        $toRemoveFromLocation = min($remainingToRemove, $location->quantity);
+                        $location->quantity -= $toRemoveFromLocation;
+                        $location->save();
+                        $remainingToRemove -= $toRemoveFromLocation;
+                    }
+                }
+            }
+        }
+    }
 }

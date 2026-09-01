@@ -6,11 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use App\Models\FdJobStep;
 
 class FdWorkOrder extends Model
 {
     protected $table = 'fd_work_orders';
+
+    /** Set true around bulk creates (seeders/importers) to skip auto-resequencing. */
+    public static bool $suspendResequence = false;
 
     protected static function boot(): void
     {
@@ -30,14 +34,81 @@ class FdWorkOrder extends Model
     }
 
     protected $fillable = [
-        'business_job_id', 'release_number', 'date_issued',
-        'material_delivery', 'notes', 'archived', 'priority',
+        'business_job_id', 'release_number', 'date_issued', 'due_date',
+        'material_delivery', 'notes', 'archived', 'priority', 'priority_locked',
     ];
 
     protected $casts = [
-        'date_issued' => 'date',
-        'archived'    => 'boolean',
+        'date_issued'     => 'date',
+        'due_date'        => 'date',
+        'archived'        => 'boolean',
+        'priority_locked' => 'boolean',
     ];
+
+    /**
+     * Rebuild the global `priority` ranking over non-archived work orders.
+     *
+     * Locked WOs keep the position their stored `priority` names (de-duped and
+     * clamped into range). Everything else is ordered by due date (nulls last),
+     * then issue date, then id, and slotted into the remaining positions.
+     */
+    public static function resequencePriorities(): void
+    {
+        if (self::$suspendResequence) {
+            return;
+        }
+
+        DB::transaction(function () {
+            $all = self::where('archived', false)->get();
+            $total = $all->count();
+            if ($total === 0) {
+                return;
+            }
+
+            $locked = $all->where('priority_locked', true)
+                ->sortBy(fn ($w) => [$w->priority === null, $w->priority ?? PHP_INT_MAX, $w->id])
+                ->values();
+
+            $reserved = [];   // position (1-based) => wo id
+            $cursor = 1;
+            foreach ($locked as $w) {
+                $want = ($w->priority >= 1 && $w->priority <= $total && ! isset($reserved[$w->priority]))
+                    ? (int) $w->priority
+                    : null;
+                if ($want === null) {
+                    while (isset($reserved[$cursor])) {
+                        $cursor++;
+                    }
+                    $want = $cursor;
+                }
+                $reserved[$want] = $w->id;
+            }
+
+            $auto = $all->where('priority_locked', false)
+                ->sortBy(fn ($w) => [
+                    $w->due_date === null,
+                    optional($w->due_date)->format('Y-m-d') ?? '9999-99-99',
+                    optional($w->date_issued)->format('Y-m-d') ?? '9999-99-99',
+                    $w->id,
+                ])
+                ->values();
+
+            $pos = 1;
+            foreach ($auto as $w) {
+                while (isset($reserved[$pos])) {
+                    $pos++;
+                }
+                if ((int) $w->priority !== $pos) {
+                    self::whereKey($w->id)->update(['priority' => $pos]);
+                }
+                $pos++;
+            }
+
+            foreach ($reserved as $p => $id) {
+                self::whereKey($id)->update(['priority' => $p]);
+            }
+        });
+    }
 
     public function businessJob(): BelongsTo
     {

@@ -13,7 +13,7 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Product::query()->with(['inventoryLocations.storageLocation', 'supplier', 'category']);
+        $query = Product::query()->with(['inventoryLocations.storageLocation', 'supplier', 'categories']);
 
         if ($request->has('search')) {
             $search = $request->search;
@@ -151,7 +151,6 @@ class ProductController extends Controller
         // Load relationships carefully to avoid errors
         $product->load([
             'categories',
-            'category',
             'supplier',
             'inventoryLocations.storageLocation',
         ]);
@@ -478,6 +477,7 @@ class ProductController extends Controller
         Product::withoutTrashed()->chunkById(100, function ($products) use (&$count) {
             foreach ($products as $product) {
                 $product->recalculateQuantitiesFromLocations();
+                $product->recalculateOnOrderFromPurchaseOrders();
                 $count++;
             }
         });

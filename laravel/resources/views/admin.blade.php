@@ -305,7 +305,7 @@
                         </div>
                         <div class="card-body">
                           <p class="text-muted mb-3">
-                            Recalculates <code>quantity_on_hand</code> and <code>quantity_committed</code> from inventory locations for every product, then re-evaluates each product's status (In Stock / Low / Critical / Out of Stock). Run this if statuses appear out of sync.
+                            Recalculates <code>quantity_on_hand</code> and <code>quantity_committed</code> from inventory locations, and <code>on_order_qty</code> from open purchase orders, for every product, then re-evaluates each product's status (In Stock / Low / Critical / Out of Stock / On Order). Run this if statuses appear out of sync or after editing a PO directly.
                           </p>
                           <div class="d-flex align-items-center gap-3">
                             <button class="btn btn-warning" id="btn-refresh-statuses" onclick="refreshInventoryStatuses()">
@@ -757,10 +757,7 @@
             <div class="mb-3">
               <label class="form-label required">Email</label>
               <input type="email" class="form-control" id="addUserEmail" placeholder="user@example.com">
-            </div>
-            <div class="mb-3">
-              <label class="form-label required">Password</label>
-              <input type="password" class="form-control" id="addUserPassword" placeholder="Password" autocomplete="new-password">
+              <small class="form-hint">A welcome email with a temporary password is sent to this address. The user must set a new password within 48 hours.</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
@@ -984,7 +981,6 @@
         document.getElementById('addUserFirstName').value = '';
         document.getElementById('addUserLastName').value = '';
         document.getElementById('addUserEmail').value = '';
-        document.getElementById('addUserPassword').value = '';
         document.getElementById('addUserRole').value = '';
         document.getElementById('addUserActive').checked = true;
 
@@ -1000,11 +996,10 @@
         const firstName = document.getElementById('addUserFirstName').value;
         const lastName = document.getElementById('addUserLastName').value;
         const email = document.getElementById('addUserEmail').value;
-        const password = document.getElementById('addUserPassword').value;
         const role = document.getElementById('addUserRole').value;
         const active = document.getElementById('addUserActive').checked;
 
-        if (!firstName || !lastName || !email || !password || !role) {
+        if (!firstName || !lastName || !email || !role) {
           showNotification('Please fill in all required fields', 'danger');
           return;
         }
@@ -1016,19 +1011,31 @@
               first_name: firstName,
               last_name: lastName,
               email: email,
-              password: password,
               role: role,
               is_active: active
             })
           });
 
-          showNotification('User created successfully', 'success');
+          showNotification(response.message || 'User created. Welcome email sent.', response.email_sent === false ? 'warning' : 'success');
           hideModal(document.getElementById('addUserModal'));
           loadUsers();
           loadStatistics();
         } catch (error) {
           console.error('Error creating user:', error);
           showNotification(error.message || 'Failed to create user', 'danger');
+        }
+      }
+
+      async function resendInvitation(userId) {
+        if (!confirm('Resend the welcome email with a new temporary password? The current temporary password will stop working.')) return;
+
+        try {
+          const response = await authenticatedFetch(`/users/${userId}/resend-invitation`, { method: 'POST' });
+          showNotification(response.message || 'Invitation resent.', response.email_sent === false ? 'warning' : 'success');
+          loadUsers();
+        } catch (error) {
+          console.error('Error resending invitation:', error);
+          showNotification(error.message || 'Failed to resend invitation', 'danger');
         }
       }
 
@@ -1377,14 +1384,26 @@
         };
 
         tbody.innerHTML = users.map(user => {
-          const statusBadge = user.is_active
+          let statusBadge = user.is_active
             ? '<span class="badge bg-success">Active</span>'
             : '<span class="badge text-bg-secondary">Inactive</span>';
+
+          if (user.must_change_password) {
+            statusBadge += user.temp_password_expired
+              ? ' <span class="badge bg-red" title="Temporary password expired">Invite expired</span>'
+              : ' <span class="badge bg-yellow" title="Waiting for the user to set a new password">Pending invite</span>';
+          }
 
           const roleBadge = roleBadges[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
 
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
+
+          const resendBtn = user.must_change_password
+            ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="resendInvitation(${user.id})" title="Resend invitation" data-permission="users.edit">
+                  <i class="ti ti-mail-forward"></i>
+                </button>`
+            : '';
 
           return `
             <tr>
@@ -1395,6 +1414,7 @@
               <td>${lastLogin}</td>
               <td>${createdAt}</td>
               <td>
+                ${resendBtn}
                 <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editUser(${user.id})" title="Edit" data-permission="users.edit">
                   <i class="ti ti-edit"></i>
                 </button>
@@ -2381,10 +2401,13 @@
       let tplCurrentTypeId = null;
       let tplCurrentTypeName = '';
       let tplUsers = [];
+      let tplSets = [];        // [{id,name,is_default,sort_order,stage_templates:[...]}]
+      let tplActiveSetId = null;
 
       async function openTypeTemplates(typeId, typeName) {
         tplCurrentTypeId = typeId;
         tplCurrentTypeName = typeName;
+        tplActiveSetId = null;
         document.getElementById('tplModalTypeName').textContent = typeName + ' — Stage Templates';
         document.getElementById('tplModalBody').innerHTML = '<p class="text-muted">Loading…</p>';
         showTplModal();
@@ -2400,17 +2423,42 @@
           ]);
           const typeData  = ((await tplRes.json()).elevation_types || []).find(t => t.id === tplCurrentTypeId);
           tplUsers        = (await uRes.json()).users || [];
-          const templates = typeData?.stage_templates || [];
-          renderTplModal(templates);
+          tplSets         = (typeData?.stage_template_sets || []).slice()
+                              .sort((a, b) => a.sort_order - b.sort_order);
+
+          if (!tplSets.some(s => s.id === tplActiveSetId)) {
+            tplActiveSetId = (tplSets.find(s => s.is_default) || tplSets[0])?.id || null;
+          }
+          renderTplModal();
         } catch (e) {
           console.error(e);
           document.getElementById('tplModalBody').innerHTML = '<p class="text-danger">Failed to load templates.</p>';
         }
       }
 
-      function renderTplModal(templates) {
+      function tplActiveSet() {
+        return tplSets.find(s => s.id === tplActiveSetId) || null;
+      }
+
+      function renderTplModal() {
+        const set = tplActiveSet();
+        const templates = set?.stage_templates || [];
         const userOpts = '<option value="">— No default —</option>' +
           tplUsers.map(u => `<option value="${u.id}">${escT(u.name)}</option>`).join('');
+
+        const tierTabs = tplSets.map(s => `
+          <button class="btn btn-sm ${s.id === tplActiveSetId ? 'btn-primary' : 'btn-ghost-secondary'}"
+              onclick="tplSelectSet(${s.id})">
+            ${escT(s.name)}${s.is_default ? ' <span class="badge bg-blue-lt ms-1">default</span>' : ''}
+          </button>`).join('');
+
+        const tierControls = set ? `
+          <button class="btn btn-sm btn-ghost-secondary" onclick="renameTplSet(${set.id})" title="Rename tier">
+            <i class="ti ti-pencil"></i>
+          </button>
+          ${set.is_default ? '' : `<button class="btn btn-sm btn-ghost-secondary" onclick="setDefaultTplSet(${set.id})" title="Make default tier"><i class="ti ti-star"></i></button>`}
+          ${tplSets.length > 1 ? `<button class="btn btn-sm btn-ghost-danger" onclick="deleteTplSet(${set.id})" title="Delete tier"><i class="ti ti-trash"></i></button>` : ''}
+        ` : '';
 
         const rows = templates.map((t, idx) => `
           <tr id="tpl-row-${t.id}">
@@ -2439,6 +2487,11 @@
                 onblur="saveTplField(${t.id}, 'description', this.value)"
                 onkeydown="if(event.key==='Enter')this.blur()">
             </td>
+            <td class="text-center" style="width:70px">
+              <input type="checkbox" class="form-check-input" ${t.blocks_next ? 'checked' : ''}
+                title="Blocks the next stage until this one is done"
+                onchange="saveTplField(${t.id}, 'blocks_next', this.checked)">
+            </td>
             <td>
               <select class="form-select form-select-sm" style="min-width:160px"
                   onchange="saveTplField(${t.id}, 'default_user_id', this.value || null)">
@@ -2453,9 +2506,18 @@
           </tr>`).join('');
 
         document.getElementById('tplModalBody').innerHTML = `
+          <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
+            <span class="text-muted small me-1">Tier:</span>
+            ${tierTabs}
+            <button class="btn btn-sm btn-ghost-primary" onclick="addTplSet()" title="Add complexity tier">
+              <i class="ti ti-plus"></i> Tier
+            </button>
+            <span class="ms-auto d-flex gap-1">${tierControls}</span>
+          </div>
           <p class="text-muted small mb-2">
-            Edit stage names, descriptions, and default assignees. Use arrows to reorder.
-            Changes to names and descriptions save on blur (click away or press Enter).
+            Each tier is an independent step list — pick it when creating an elevation, or bump an
+            elevation up later. “Blocks next” gates the following stage until this one is done.
+            Names/descriptions save on blur.
           </p>
           <div class="table-responsive">
             <table class="table table-sm table-vcenter align-middle mb-2">
@@ -2465,11 +2527,12 @@
                   <th style="width:36px">#</th>
                   <th>Stage Name</th>
                   <th>Description</th>
+                  <th style="width:70px" class="text-center">Blocks next</th>
                   <th>Default Assignee</th>
                   <th style="width:48px"></th>
                 </tr>
               </thead>
-              <tbody>${rows || '<tr><td colspan="6" class="text-muted text-center py-3">No stages yet. Add one below.</td></tr>'}</tbody>
+              <tbody>${rows || '<tr><td colspan="7" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
             </table>
           </div>
           <div class="border-top pt-3">
@@ -2482,14 +2545,20 @@
                 <label class="form-label mb-1 small">Description (optional)</label>
                 <input type="text" class="form-control form-control-sm" id="tpl-new-desc" placeholder="Brief description">
               </div>
-              <button class="btn btn-primary btn-sm" onclick="addTpl()">
+              <button class="btn btn-primary btn-sm" onclick="addTpl()" ${set ? '' : 'disabled'}>
                 <i class="ti ti-plus me-1"></i>Add Stage
               </button>
             </div>
           </div>`;
       }
 
+      function tplSelectSet(setId) {
+        tplActiveSetId = setId;
+        renderTplModal();
+      }
+
       async function saveTplField(id, field, value) {
+        const payload = { [field]: (typeof value === 'boolean') ? value : (value || null) };
         try {
           await fetch(`/api/v1/stage-templates/${id}`, {
             method: 'PATCH',
@@ -2498,26 +2567,20 @@
               'Content-Type': 'application/json',
               'X-CSRF-TOKEN': adminCsrfToken(),
             },
-            body: JSON.stringify({ [field]: value || null }),
+            body: JSON.stringify(payload),
           });
         } catch (e) { console.error(e); fabToast('Failed to save.', 'error'); }
       }
 
       async function moveTpl(id, direction) {
         try {
-          const r = await fetch('/api/v1/elevation-types?with_templates=1', {
-            credentials: 'include',
-            headers: { 'X-CSRF-TOKEN': adminCsrfToken() },
-          });
-          const typeData  = ((await r.json()).elevation_types || []).find(t => t.id === tplCurrentTypeId);
-          const templates = typeData?.stage_templates || [];
+          const templates = (tplActiveSet()?.stage_templates || []);
           const idx = templates.findIndex(t => t.id === id);
           if (idx < 0) return;
 
           const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
           if (swapIdx < 0 || swapIdx >= templates.length) return;
 
-          // Swap sort_orders
           const a = templates[idx];
           const b = templates[swapIdx];
           const tplHeaders = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': adminCsrfToken() };
@@ -2533,6 +2596,7 @@
         const name = document.getElementById('tpl-new-name').value.trim();
         const desc = document.getElementById('tpl-new-desc').value.trim();
         if (!name) { fabToast('Stage name is required.', 'info'); return; }
+        if (!tplActiveSetId) { fabToast('Add a tier first.', 'info'); return; }
         try {
           await fetch('/api/v1/stage-templates', {
             method: 'POST',
@@ -2541,7 +2605,12 @@
               'Content-Type': 'application/json',
               'X-CSRF-TOKEN': adminCsrfToken(),
             },
-            body: JSON.stringify({ elevation_type_id: tplCurrentTypeId, name, description: desc || null }),
+            body: JSON.stringify({
+              elevation_type_id: tplCurrentTypeId,
+              template_set_id: tplActiveSetId,
+              name,
+              description: desc || null,
+            }),
           });
           await reloadTplModal();
         } catch (e) { console.error(e); fabToast('Failed to add stage.', 'error'); }
@@ -2563,6 +2632,70 @@
           });
           await reloadTplModal();
         } catch (e) { console.error(e); fabToast('Failed to delete stage.', 'error'); }
+      }
+
+      // ── Complexity tiers ─────────────────────────────────────────────────
+      const tplSetHeaders = () => ({ 'Content-Type': 'application/json', 'X-CSRF-TOKEN': adminCsrfToken() });
+
+      async function addTplSet() {
+        const name = (prompt('New tier name (e.g. "Advanced"):') || '').trim();
+        if (!name) return;
+        try {
+          const r = await fetch('/api/v1/stage-template-sets', {
+            method: 'POST', credentials: 'include', headers: tplSetHeaders(),
+            body: JSON.stringify({ elevation_type_id: tplCurrentTypeId, name }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) { fabToast(data.message || 'Failed to add tier.', 'error'); return; }
+          tplActiveSetId = data.id;
+          await reloadTplModal();
+        } catch (e) { console.error(e); fabToast('Failed to add tier.', 'error'); }
+      }
+
+      async function renameTplSet(setId) {
+        const current = tplSets.find(s => s.id === setId);
+        const name = (prompt('Rename tier:', current?.name || '') || '').trim();
+        if (!name || name === current?.name) return;
+        try {
+          const r = await fetch(`/api/v1/stage-template-sets/${setId}`, {
+            method: 'PATCH', credentials: 'include', headers: tplSetHeaders(),
+            body: JSON.stringify({ name }),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); fabToast(d.message || 'Failed to rename.', 'error'); return; }
+          await reloadTplModal();
+        } catch (e) { console.error(e); fabToast('Failed to rename tier.', 'error'); }
+      }
+
+      async function setDefaultTplSet(setId) {
+        try {
+          await fetch(`/api/v1/stage-template-sets/${setId}`, {
+            method: 'PATCH', credentials: 'include', headers: tplSetHeaders(),
+            body: JSON.stringify({ is_default: true }),
+          });
+          await reloadTplModal();
+        } catch (e) { console.error(e); fabToast('Failed to set default.', 'error'); }
+      }
+
+      async function deleteTplSet(setId) {
+        const set = tplSets.find(s => s.id === setId);
+        const hasSteps = (set?.stage_templates || []).length > 0;
+        const ok = await fabConfirm({
+          title: 'Delete Tier',
+          message: hasSteps
+            ? `“${set.name}” has ${set.stage_templates.length} step(s). They will be moved to another tier. Existing work order stages are not affected. Continue?`
+            : `Delete the “${set?.name}” tier?`,
+          confirmLabel: 'Delete',
+          confirmClass: 'btn-danger',
+        });
+        if (!ok) return;
+        try {
+          const r = await fetch(`/api/v1/stage-template-sets/${setId}?force=1`, {
+            method: 'DELETE', credentials: 'include', headers: tplSetHeaders(),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); fabToast(d.message || 'Failed to delete tier.', 'error'); return; }
+          if (tplActiveSetId === setId) tplActiveSetId = null;
+          await reloadTplModal();
+        } catch (e) { console.error(e); fabToast('Failed to delete tier.', 'error'); }
       }
 
       function showTplModal() {

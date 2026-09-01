@@ -202,6 +202,34 @@ class Product extends Model
     }
 
     /**
+     * Recompute on_order_qty from the outstanding quantity on live purchase orders.
+     *
+     * "Live" = any PO that is neither cancelled nor fully received
+     * (draft, submitted, approved, partially_received). Outstanding per line is
+     * quantity_ordered - quantity_received. This is the source of truth for
+     * on_order_qty; PurchaseOrderController keeps a running +/- tally that drifts
+     * whenever a PO is edited outside the normal add/receive/cancel flow, and this
+     * method heals that drift. Call it before updateStatus() so the status can
+     * reflect inbound stock.
+     */
+    public function recalculateOnOrderFromPurchaseOrders()
+    {
+        $onOrder = $this->purchaseOrderItems()
+            ->whereColumn('quantity_received', '<', 'quantity_ordered')
+            ->whereHas('purchaseOrder', function ($q) {
+                $q->whereIn('status', ['draft', 'submitted', 'approved', 'partially_received']);
+            })
+            ->sum(DB::raw('quantity_ordered - quantity_received'));
+
+        $this->on_order_qty = (int) $onOrder;
+        $this->save();
+
+        $this->updateStatus();
+
+        return $this;
+    }
+
+    /**
      * Recalculate quantity_committed as the sum of active job-reservation commitments
      * (bin-aware) and sales-order commitments (CommittedInventory). This is the
      * canonical way to update quantity_committed — JobReservationItem and
@@ -285,17 +313,28 @@ class Product extends Model
         $available    = $this->quantity_available;
         $reorderPoint = $this->reorder_point ?? 0;
         $safetyStock  = $this->safety_stock ?? 0;
+        $onOrder      = $this->on_order_qty ?? 0;
 
         if ($available <= 0) {
             // Zero or overcommitted — critical if a reorder point is set, otherwise out_of_stock
-            $this->status = ($reorderPoint > 0) ? 'critical' : 'out_of_stock';
+            $status = ($reorderPoint > 0) ? 'critical' : 'out_of_stock';
         } elseif ($available > $reorderPoint) {
-            $this->status = 'in_stock';
+            $status = 'in_stock';
         } elseif ($available > $safetyStock) {
-            $this->status = 'low';
+            $status = 'low';
         } else {
-            $this->status = 'very_low';
+            $status = 'very_low';
         }
+
+        // A shortage that inbound purchase orders already cover is reported as
+        // on_order rather than as a stock-out, so buyers can tell "replenishment
+        // already placed" from "act now". Matches the needsReorder() threshold:
+        // available + on_order must clear the reorder point.
+        if ($status !== 'in_stock' && $onOrder > 0 && ($available + $onOrder) > $reorderPoint) {
+            $status = 'on_order';
+        }
+
+        $this->status = $status;
 
         $this->save();
     }

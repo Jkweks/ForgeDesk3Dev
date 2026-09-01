@@ -116,10 +116,14 @@ class WorkOrderController extends Controller
                 'business_job_id'   => $request->business_job_id,
                 'release_number'    => $nextRelease,
                 'date_issued'       => $request->date_issued,
+                'due_date'          => $request->due_date,
                 'material_delivery' => $request->material_delivery,
                 'notes'             => $request->notes,
                 'priority'          => $nextPriority,
             ]);
+
+            // Slot the new WO into the due-date ranking.
+            FdWorkOrder::resequencePriorities();
 
             $job = BusinessJob::find($request->business_job_id);
             $releaseLabel = $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}";
@@ -139,14 +143,64 @@ class WorkOrderController extends Controller
     {
         try {
             $wo = FdWorkOrder::findOrFail($id);
-            $wo->fill($request->only(['date_issued', 'material_delivery', 'notes', 'priority']));
+            $wo->fill($request->only([
+                'date_issued', 'due_date', 'material_delivery', 'notes', 'priority', 'priority_locked',
+            ]));
+
+            // Typing an explicit priority number is a manual pin.
+            if ($request->has('priority') && ! $request->has('priority_locked')) {
+                $wo->priority_locked = true;
+            }
             $wo->save();
+
+            // Re-derive the ranking for everything else (due-date move, pin/unpin).
+            if ($request->hasAny(['due_date', 'priority', 'priority_locked'])) {
+                FdWorkOrder::resequencePriorities();
+            }
 
             return response()->json(['updated' => $id]);
         } catch (\Exception $e) {
             Log::error('WorkOrderController@update failed', ['id' => $id, 'message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to update work order'], 500);
         }
+    }
+
+    /**
+     * Rebuild the whole priority ranking from due dates on demand
+     * ("Recalc from due dates" button). Optionally clear every lock first.
+     */
+    public function resequencePriority(Request $request)
+    {
+        if ($request->boolean('clear_locks')) {
+            FdWorkOrder::where('archived', false)->update(['priority_locked' => false]);
+        }
+
+        FdWorkOrder::resequencePriorities();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Apply a hand-dragged order from the Reorder Queue: each listed WO is pinned
+     * (priority_locked) at its new 1-based position, in one transaction.
+     */
+    public function reorder(Request $request)
+    {
+        $ids = $request->validate([
+            'ordered_ids'   => 'required|array|min:1',
+            'ordered_ids.*' => 'integer|distinct',
+        ])['ordered_ids'];
+
+        DB::transaction(function () use ($ids) {
+            foreach ($ids as $i => $id) {
+                FdWorkOrder::whereKey($id)->update([
+                    'priority'        => $i + 1,
+                    'priority_locked' => true,
+                ]);
+            }
+        });
+
+        return response()->json(['ok' => true]);
     }
 
     public function destroy(int $id)
@@ -291,10 +345,12 @@ class WorkOrderController extends Controller
             'release_number'      => $wo->release_number,
             'release_label'       => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}",
             'date_issued'         => $wo->date_issued?->format('Y-m-d'),
+            'due_date'            => $wo->due_date?->format('Y-m-d'),
             'material_delivery'   => $wo->material_delivery,
             'notes'               => $wo->notes,
             'archived'            => $wo->archived,
             'priority'            => $wo->priority,
+            'priority_locked'     => (bool) $wo->priority_locked,
             'elevation_count'     => $wo->elevations_count ?? 0,
             'elevations_complete' => $wo->elevations_complete ?? 0,
             'assigned_users'      => $users->map(fn($u) => [
@@ -321,6 +377,7 @@ class WorkOrderController extends Controller
         return [
             'id'                => $e->id,
             'elevation_type_id' => $e->elevation_type_id,
+            'template_set_id'   => $e->template_set_id,
             'elevation_type'    => $e->elevationType ? [
                 'id'    => $e->elevationType->id,
                 'name'  => $e->elevationType->name,
@@ -343,6 +400,7 @@ class WorkOrderController extends Controller
                 'name'              => $s->name,
                 'status'            => $s->status,
                 'sort_order'        => $s->sort_order,
+                'blocks_next'       => (bool) $s->blocks_next,
                 'assigned_name'     => $s->assignedTo?->name,
                 'completed_by_id'   => $s->completed_by_id,
                 'completed_by_name' => $s->completedBy?->name,

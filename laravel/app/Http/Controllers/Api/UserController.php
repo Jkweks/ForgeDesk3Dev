@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\WelcomeNewUserNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
@@ -55,6 +57,9 @@ class UserController extends Controller
                 'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
                 'is_active' => $user->is_active,
                 'status' => $user->is_active ? 'active' : 'inactive',
+                'must_change_password' => $user->must_change_password,
+                'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+                'temp_password_expired' => $user->temporaryPasswordExpired(),
                 'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
                 'created_at' => $user->created_at->format('Y-m-d H:i:s'),
                 'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
@@ -99,6 +104,9 @@ class UserController extends Controller
             'role' => $user->role,
             'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
             'is_active' => $user->is_active,
+            'must_change_password' => $user->must_change_password,
+            'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+            'temp_password_expired' => $user->temporaryPasswordExpired(),
             'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
             'created_at' => $user->created_at->format('Y-m-d H:i:s'),
             'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
@@ -114,7 +122,6 @@ class UserController extends Controller
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
             'role' => ['required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
         ]);
@@ -127,18 +134,78 @@ class UserController extends Controller
         // Generate full name from first and last name
         $validated['name'] = trim("{$validated['first_name']} {$validated['last_name']}");
 
+        // The admin never picks the password. We issue a random temporary one,
+        // email it to the user, and require a change within the configured window.
+        $temporaryPassword = Str::password((int) config('auth.temp_password.length', 16));
+        $validated['password'] = $temporaryPassword;
+        $validated['must_change_password'] = true;
+        $validated['password_set_at'] = now();
+
         $user = User::create($validated);
 
+        $emailSent = $this->sendWelcomeEmail($user, $temporaryPassword);
+
         return response()->json([
-            'message' => 'User created successfully',
+            'message' => $emailSent
+                ? 'User created. A welcome email with a temporary password has been sent.'
+                : 'User created, but the welcome email could not be sent. Use "Resend invitation" to try again.',
+            'email_sent' => $emailSent,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->full_name,
                 'email' => $user->email,
                 'role' => $user->role,
                 'is_active' => $user->is_active,
+                'must_change_password' => $user->must_change_password,
+                'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
             ],
         ], 201);
+    }
+
+    /**
+     * Re-issue a temporary password and resend the welcome email.
+     *
+     * Used when the original invitation expired (past the 48h window) or was lost.
+     */
+    public function resendInvitation(Request $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        if (! $user->is_active) {
+            return response()->json(['message' => 'Reactivate the account before resending an invitation.'], 422);
+        }
+
+        $temporaryPassword = $user->issueTemporaryPassword();
+
+        // A fresh temporary password invalidates any active sessions/tokens.
+        $user->tokens()->delete();
+
+        $emailSent = $this->sendWelcomeEmail($user, $temporaryPassword);
+
+        return response()->json([
+            'message' => $emailSent
+                ? 'Invitation resent with a new temporary password.'
+                : 'A new temporary password was set, but the email could not be sent.',
+            'email_sent' => $emailSent,
+            'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Deliver the welcome / temporary-password email. Never throws — a mail
+     * failure must not roll back user creation.
+     */
+    private function sendWelcomeEmail(User $user, string $temporaryPassword): bool
+    {
+        try {
+            $user->notify(new WelcomeNewUserNotification($temporaryPassword));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to send welcome email to ' . $user->email . ': ' . $e->getMessage());
+
+            return false;
+        }
     }
 
     /**
@@ -246,12 +313,18 @@ class UserController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
+        // An admin-chosen password is temporary by nature — force the user to
+        // replace it on next sign-in, and restart the change window.
         $user->update([
             'password' => $validated['password'],
+            'must_change_password' => true,
+            'password_set_at' => now(),
         ]);
 
+        $user->tokens()->delete();
+
         return response()->json([
-            'message' => 'Password reset successfully'
+            'message' => 'Password reset successfully. The user must set a new password on next sign-in.'
         ]);
     }
 
@@ -301,6 +374,8 @@ class UserController extends Controller
 
         $user->update([
             'password' => $request->password,
+            'must_change_password' => false,
+            'password_set_at' => now(),
         ]);
 
         return response()->json([

@@ -29,6 +29,8 @@ class User extends Authenticatable
         'role',
         'is_active',
         'last_login_at',
+        'must_change_password',
+        'password_set_at',
     ];
 
     /**
@@ -53,7 +55,54 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'is_active' => 'boolean',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
+            'password_set_at' => 'datetime',
         ];
+    }
+
+    /**
+     * When the current temporary password stops working.
+     *
+     * Returns null when the user is not on a temporary password.
+     */
+    public function passwordExpiresAt(): ?\Illuminate\Support\Carbon
+    {
+        if (! $this->must_change_password || ! $this->password_set_at) {
+            return null;
+        }
+
+        return $this->password_set_at->copy()->addHours(
+            (int) config('auth.temp_password.ttl_hours', 48)
+        );
+    }
+
+    /**
+     * True when the user still owes a password change and the 48h window has passed.
+     */
+    public function temporaryPasswordExpired(): bool
+    {
+        $expiresAt = $this->passwordExpiresAt();
+
+        return $expiresAt !== null && $expiresAt->isPast();
+    }
+
+    /**
+     * Issue a fresh temporary password and (re)start the change-within-48h clock.
+     * Returns the plaintext password so the caller can email it.
+     */
+    public function issueTemporaryPassword(): string
+    {
+        $plain = \Illuminate\Support\Str::password(
+            (int) config('auth.temp_password.length', 16)
+        );
+
+        $this->forceFill([
+            'password' => $plain,
+            'must_change_password' => true,
+            'password_set_at' => now(),
+        ])->save();
+
+        return $plain;
     }
 
     /**
