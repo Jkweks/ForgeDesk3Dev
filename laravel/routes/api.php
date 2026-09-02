@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AssetController;
 use App\Http\Controllers\Api\BusinessJobController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyLocationController;
+use App\Http\Controllers\Api\CompanySettingController;
 use App\Http\Controllers\Api\CycleCountController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DoorFrameConfigurationController;
@@ -234,6 +235,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/company-locations/{companyLocation}', [CompanyLocationController::class, 'update'])->middleware('permission:settings.edit');
         Route::delete('/company-locations/{companyLocation}', [CompanyLocationController::class, 'destroy'])->middleware('permission:settings.edit');
 
+        // Company-wide settings (branding)
+        Route::get('/company-settings', [CompanySettingController::class, 'show'])->middleware('permission:settings.view');
+        Route::post('/company-settings/logo', [CompanySettingController::class, 'uploadLogo'])->middleware('permission:settings.edit');
+        Route::delete('/company-settings/logo', [CompanySettingController::class, 'deleteLogo'])->middleware('permission:settings.edit');
+
         Route::get('/supplier-countries', [SupplierController::class, 'countries']);
         Route::get('/supplier-statistics', [SupplierController::class, 'statistics']);
         Route::get('/suppliers/{supplier}/products', [SupplierController::class, 'products']);
@@ -355,6 +361,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->middleware('permission:orders.receive');
         Route::post('/purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel'])->middleware('permission:orders.edit');
         Route::post('/purchase-orders/{purchaseOrder}/items', [PurchaseOrderController::class, 'addItem'])->middleware('permission:orders.edit');
+        Route::patch('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'updateItem'])->middleware('permission:orders.edit');
         Route::delete('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'removeItem'])->middleware('permission:orders.edit');
         Route::get('/purchase-orders/{purchaseOrder}/ez-estimate-export', [PurchaseOrderController::class, 'exportEzEstimate']);
         Route::get('/purchase-orders/{purchaseOrder}/pdf', [PurchaseOrderController::class, 'exportPdf'])->middleware('permission:orders.view');

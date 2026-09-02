@@ -213,6 +213,39 @@
                           </div>
                         </div>
                       </div>
+
+                      <div class="row mt-3">
+                        <div class="col-12">
+                          <div class="card">
+                            <div class="card-header">
+                              <h4 class="card-title mb-0">Company Branding</h4>
+                            </div>
+                            <div class="card-body">
+                              <div class="row align-items-center">
+                                <div class="col-md-4">
+                                  <div id="companyLogoPreview" class="border rounded d-flex align-items-center justify-content-center p-3"
+                                       style="min-height:120px; background:#f8fafc;">
+                                    <span class="text-muted">No logo uploaded</span>
+                                  </div>
+                                </div>
+                                <div class="col-md-8">
+                                  <label class="form-label">Company Logo</label>
+                                  <input type="file" class="form-control" id="companyLogoInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                                  <small class="form-hint">Printed on purchase order PDFs. PNG or JPG, up to 4&nbsp;MB.</small>
+                                  <div class="mt-2">
+                                    <button class="btn btn-primary btn-sm" onclick="uploadCompanyLogo()">
+                                      <i class="ti ti-upload me-1"></i>Upload
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" id="removeCompanyLogoBtn" onclick="removeCompanyLogo()" style="display:none;">
+                                      <i class="ti ti-trash me-1"></i>Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <!-- Company Location Modal -->
@@ -2868,9 +2901,72 @@
         }
       }
 
+      // ============================================================
+      // Company Branding (logo)
+      // ============================================================
+      async function loadCompanySettings() {
+        try {
+          const res = await authenticatedFetch('/company-settings');
+          renderCompanyLogo(res.logo_url || null);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      function renderCompanyLogo(url) {
+        const preview = document.getElementById('companyLogoPreview');
+        const removeBtn = document.getElementById('removeCompanyLogoBtn');
+        if (!preview) return;
+        if (url) {
+          preview.innerHTML = `<img src="${url}?t=${Date.now()}" alt="Company logo" style="max-height:96px; max-width:100%;">`;
+          removeBtn.style.display = '';
+        } else {
+          preview.innerHTML = '<span class="text-muted">No logo uploaded</span>';
+          removeBtn.style.display = 'none';
+        }
+      }
+
+      async function uploadCompanyLogo() {
+        const input = document.getElementById('companyLogoInput');
+        const file = input.files[0];
+        if (!file) { showNotification('Choose an image first', 'warning'); return; }
+
+        const fd = new FormData();
+        fd.append('logo', file);
+        try {
+          const res = await fetch(`${API_BASE}/company-settings/logo`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
+            body: fd,
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+          input.value = '';
+          renderCompanyLogo(json.company_setting?.logo_url || null);
+          showNotification('Logo updated', 'success');
+        } catch (e) {
+          showNotification(e.message || 'Failed to upload logo', 'danger');
+        }
+      }
+
+      async function removeCompanyLogo() {
+        if (!confirm('Remove the company logo?')) return;
+        try {
+          await authenticatedFetch('/company-settings/logo', { method: 'DELETE' });
+          renderCompanyLogo(null);
+          showNotification('Logo removed', 'success');
+        } catch (e) {
+          showNotification(e.message || 'Failed to remove logo', 'danger');
+        }
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
         const tab = document.querySelector('a[href="#tab-settings"]');
-        if (tab) tab.addEventListener('shown.bs.tab', loadCompanyLocations, { once: false });
+        if (tab) tab.addEventListener('shown.bs.tab', () => {
+          loadCompanyLocations();
+          loadCompanySettings();
+        }, { once: false });
       });
 
     </script>

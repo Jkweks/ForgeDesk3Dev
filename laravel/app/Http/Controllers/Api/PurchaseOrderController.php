@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CompanyLocation;
+use App\Models\CompanySetting;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Product;
@@ -20,6 +21,9 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class PurchaseOrderController extends Controller
 {
+    /** Statuses where the PO — its header, addresses, and line items — may still be edited. */
+    private const EDITABLE_STATUSES = ['draft', 'submitted'];
+
     /**
      * List all purchase orders
      */
@@ -175,10 +179,10 @@ class PurchaseOrderController extends Controller
      */
     public function update(Request $request, PurchaseOrder $purchaseOrder)
     {
-        // Only draft orders can be fully edited
-        if (!in_array($purchaseOrder->status, ['draft'])) {
+        // Editable up to (but not including) approval.
+        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json([
-                'message' => 'Only draft purchase orders can be edited'
+                'message' => 'Only draft or submitted purchase orders can be edited'
             ], 422);
         }
 
@@ -189,6 +193,9 @@ class PurchaseOrderController extends Controller
             'notes' => 'nullable|string',
             'ship_to' => 'nullable|string',
             'ship_to_location_id' => 'nullable|exists:company_locations,id',
+            'contact_name' => 'nullable|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'contact_phone' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -205,11 +212,14 @@ class PurchaseOrderController extends Controller
             'notes',
             'ship_to',
             'ship_to_location_id',
+            'contact_name',
+            'contact_email',
+            'contact_phone',
         ]));
 
         return response()->json([
             'message' => 'Purchase order updated successfully',
-            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product'])
+            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation'])
         ]);
     }
 
@@ -530,12 +540,12 @@ class PurchaseOrderController extends Controller
     }
 
     /**
-     * Add a line item to a draft purchase order
+     * Add a line item to an editable (draft/submitted) purchase order
      */
     public function addItem(Request $request, PurchaseOrder $purchaseOrder)
     {
-        if ($purchaseOrder->status !== 'draft') {
-            return response()->json(['message' => 'Line items can only be added to draft purchase orders'], 422);
+        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+            return response()->json(['message' => 'Line items can only be added to draft or submitted purchase orders'], 422);
         }
 
         $validator = Validator::make($request->all(), [
@@ -582,6 +592,76 @@ class PurchaseOrderController extends Controller
     }
 
     /**
+     * Update quantity / unit cost / destination of a line item on an editable
+     * (draft/submitted) purchase order. Keeps the product's on_order_qty and the
+     * PO total in sync.
+     */
+    public function updateItem(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
+    {
+        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+            return response()->json(['message' => 'Line items can only be edited on draft or submitted purchase orders'], 422);
+        }
+
+        if ($item->purchase_order_id !== $purchaseOrder->id) {
+            return response()->json(['message' => 'Item does not belong to this purchase order'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'quantity'             => 'sometimes|required|integer|min:1',
+            'unit_cost'            => 'sometimes|required|numeric|min:0',
+            'destination_location' => 'sometimes|nullable|string',
+            'notes'                => 'sometimes|nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $newQty = $request->has('quantity') ? (int) $request->quantity : (int) $item->quantity_ordered;
+
+        if ($newQty < $item->quantity_received) {
+            return response()->json([
+                'message' => "Quantity cannot be less than the {$item->quantity_received} already received",
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $delta = $newQty - (int) $item->quantity_ordered;
+
+            $item->fill([
+                'quantity_ordered'     => $newQty,
+                'unit_cost'            => $request->has('unit_cost') ? $request->unit_cost : $item->unit_cost,
+                'destination_location' => $request->has('destination_location') ? $request->destination_location : $item->destination_location,
+                'notes'                => $request->has('notes') ? $request->notes : $item->notes,
+            ]);
+            $item->save(); // model boot() recomputes total_cost
+
+            if ($delta !== 0) {
+                $product = Product::find($item->product_id);
+                if ($product) {
+                    $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) + $delta);
+                    $product->save();
+                }
+            }
+
+            $purchaseOrder->total_amount = $purchaseOrder->items()->sum('total_cost');
+            $purchaseOrder->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message'        => 'Line item updated successfully',
+                'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation']),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'Failed to update line item'], 500);
+        }
+    }
+
+    /**
      * Render a purchase order as a printable PDF. Works for any supplier.
      *
      * Header / order-from block  = the primary CompanyLocation
@@ -600,11 +680,21 @@ class PurchaseOrderController extends Controller
 
         $subtotal = $purchaseOrder->items->sum(fn ($i) => (float) $i->unit_cost * (int) $i->quantity_ordered);
 
+        // Embed the company logo as a data URI — dompdf can't reliably resolve
+        // storage paths or remote URLs.
+        $logo = null;
+        $logoPath = CompanySetting::current()->logo_path;
+        if ($logoPath && \Storage::disk('public')->exists($logoPath)) {
+            $logo = 'data:' . (\Storage::disk('public')->mimeType($logoPath) ?: 'image/png')
+                . ';base64,' . base64_encode(\Storage::disk('public')->get($logoPath));
+        }
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.purchase-order', [
             'po' => $purchaseOrder,
             'company' => $primary,
             'shipTo' => $shipTo,
             'subtotal' => $subtotal,
+            'logo' => $logo,
         ]);
 
         $pdf->setPaper('letter', 'portrait');
@@ -751,8 +841,8 @@ class PurchaseOrderController extends Controller
      */
     public function removeItem(PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
     {
-        if ($purchaseOrder->status !== 'draft') {
-            return response()->json(['message' => 'Line items can only be removed from draft purchase orders'], 422);
+        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+            return response()->json(['message' => 'Line items can only be removed from draft or submitted purchase orders'], 422);
         }
 
         if ($item->purchase_order_id !== $purchaseOrder->id) {

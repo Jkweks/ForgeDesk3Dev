@@ -291,6 +291,55 @@
           <p id="viewPONotes" class="text-muted"></p>
         </div>
 
+        <!-- Edit details panel (draft / submitted only) -->
+        <div class="card card-body bg-muted-lt mb-3" id="viewPOEditPanel" style="display:none;">
+          <h4 class="mb-3">Edit Details</h4>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label">Supplier</label>
+              <select class="form-select form-select-sm" id="editPOSupplier"></select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Order Date</label>
+              <input type="date" class="form-control form-control-sm" id="editPOOrderDate">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Expected Date</label>
+              <input type="date" class="form-control form-control-sm" id="editPOExpectedDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Ship To Location</label>
+              <select class="form-select form-select-sm" id="editPOShipToLocation">
+                <option value="">Primary company location</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Ship To (free text)</label>
+              <input type="text" class="form-control form-control-sm" id="editPOShipTo" placeholder="Only if not a saved location">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Buyer Contact</label>
+              <input type="text" class="form-control form-control-sm" id="editPOContactName" placeholder="Name">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Contact Email</label>
+              <input type="email" class="form-control form-control-sm" id="editPOContactEmail">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Contact Phone</label>
+              <input type="text" class="form-control form-control-sm" id="editPOContactPhone">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control form-control-sm" id="editPONotes" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="mt-3">
+            <button class="btn btn-sm btn-primary" onclick="savePODetails()"><i class="ti ti-device-floppy me-1"></i>Save Details</button>
+            <button class="btn btn-sm btn-link" onclick="togglePOEditPanel(false)">Cancel</button>
+          </div>
+        </div>
+
         <h4>Line Items</h4>
         <div class="table-responsive">
           <table class="table table-vcenter" id="viewPOItemsTable">
@@ -300,7 +349,7 @@
                 <th class="text-end">Ordered</th>
                 <th class="text-end">Received</th>
                 <th class="text-end">Remaining</th>
-                <th class="text-end">List Price</th>
+                <th class="text-end">Unit Price</th>
                 <th class="text-end">Total</th>
                 <th>Progress</th>
                 <th id="viewPOItemsActionCol" style="display:none"></th>
@@ -838,9 +887,9 @@ async function viewPODetails(poId) {
       document.getElementById('viewPONotesSection').style.display = 'none';
     }
 
-    // Items
-    const isDraft = po.status === 'draft';
-    document.getElementById('viewPOItemsActionCol').style.display = isDraft ? '' : 'none';
+    // Items — editable while draft or submitted (i.e. up to approval)
+    const isEditable = ['draft', 'submitted'].includes(po.status);
+    document.getElementById('viewPOItemsActionCol').style.display = isEditable ? '' : 'none';
 
     const itemsBody = document.getElementById('viewPOItems');
     const itemRows = po.items.map(item => {
@@ -848,6 +897,23 @@ async function viewPODetails(poId) {
       const progress = item.quantity_ordered > 0
         ? Math.round((item.quantity_received / item.quantity_ordered) * 100)
         : 0;
+      const rowEditable = isEditable && item.quantity_received === 0;
+
+      const qtyCell = rowEditable
+        ? `<input type="number" class="form-control form-control-sm text-end" id="editQty${item.id}" min="1"
+                  value="${item.quantity_ordered}" style="width:80px; display:inline-block"
+                  onchange="updateDraftLineItem(${po.id}, ${item.id})">
+           ${item.product.pack_size > 1 ? `<br><small class="text-muted">packs of ${item.product.pack_size} ${item.product.purchase_uom || 'EA'}</small>` : ''}`
+        : `${item.quantity_ordered}
+           ${item.product.pack_size > 1 ? `<br><small class="text-muted">packs of ${item.product.pack_size} ${item.product.purchase_uom || 'EA'}</small>` : ''}`;
+
+      const costCell = rowEditable
+        ? `<input type="number" class="form-control form-control-sm text-end" id="editCost${item.id}" min="0" step="0.01"
+                  value="${item.unit_cost}" style="width:100px; display:inline-block"
+                  onchange="updateDraftLineItem(${po.id}, ${item.id})">
+           ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}`
+        : `${formatCurrency(item.unit_cost)}
+           ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}`;
 
       return `
         <tr>
@@ -855,16 +921,10 @@ async function viewPODetails(poId) {
             <strong>${escapeHtml(item.product.sku)}</strong><br>
             <small class="text-muted">${escapeHtml(item.product.description)}</small>
           </td>
-          <td class="text-end">
-            ${item.quantity_ordered}
-            ${item.product.pack_size > 1 ? `<br><small class="text-muted">packs of ${item.product.pack_size} ${item.product.purchase_uom || 'EA'}</small>` : ''}
-          </td>
+          <td class="text-end">${qtyCell}</td>
           <td class="text-end text-success">${item.quantity_received}</td>
           <td class="text-end ${remaining > 0 ? 'text-warning' : ''}">${remaining}</td>
-          <td class="text-end">
-            ${formatCurrency(item.unit_cost)}
-            ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}
-          </td>
+          <td class="text-end">${costCell}</td>
           <td class="text-end">${formatCurrency(item.total_cost)}</td>
           <td>
             <div class="progress" style="height: 20px;">
@@ -873,13 +933,13 @@ async function viewPODetails(poId) {
               </div>
             </div>
           </td>
-          ${isDraft ? `<td><button class="btn btn-sm btn-ghost-danger" onclick="removeDraftLineItem(${po.id}, ${item.id})" title="Remove"><i class="ti ti-trash"></i></button></td>` : '<td></td>'}
+          ${isEditable ? `<td><button class="btn btn-sm btn-ghost-danger" onclick="removeDraftLineItem(${po.id}, ${item.id})" title="Remove"><i class="ti ti-trash"></i></button></td>` : '<td></td>'}
         </tr>
       `;
     });
 
-    // Add-item row for draft POs
-    if (isDraft) {
+    // Add-item row for editable POs
+    if (isEditable) {
       itemRows.push(`
         <tr id="addLineItemRow">
           <td style="min-width:260px; position:relative;">
@@ -910,11 +970,21 @@ async function viewPODetails(poId) {
 
     itemsBody.innerHTML = itemRows.join('');
 
-    if (isDraft) initDraftProductSearch();
+    if (isEditable) initDraftProductSearch();
+
+    // Edit-details panel — populate but keep hidden until toggled
+    togglePOEditPanel(false);
+    if (isEditable) populatePOEditPanel(po);
 
     // Action buttons
     const actionsDiv = document.getElementById('poActionButtons');
     actionsDiv.innerHTML = '';
+
+    const editDetailsBtn = isEditable
+      ? `<button class="btn btn-outline-primary" onclick="togglePOEditPanel()">
+           <i class="ti ti-edit me-1"></i>Edit Details
+         </button>`
+      : '';
 
     const tubeliteExportBtn = isTubelitePO(po)
       ? `<button class="btn btn-outline-secondary" onclick="exportEzEstimate(${po.id})">
@@ -930,6 +1000,7 @@ async function viewPODetails(poId) {
       actionsDiv.innerHTML = `
         ${pdfBtn}
         ${tubeliteExportBtn}
+        ${editDetailsBtn}
         <button class="btn btn-primary" onclick="submitPO(${po.id})">
           <i class="ti ti-send me-1"></i>Submit for Approval
         </button>
@@ -941,6 +1012,7 @@ async function viewPODetails(poId) {
       actionsDiv.innerHTML = `
         ${pdfBtn}
         ${tubeliteExportBtn}
+        ${editDetailsBtn}
         <button class="btn btn-success" onclick="approvePO(${po.id})">
           <i class="ti ti-check me-1"></i>Approve
         </button>
@@ -1152,7 +1224,7 @@ async function addDraftLineItem(poId) {
   }
 }
 
-// Remove a line item from a draft PO
+// Remove a line item from an editable PO
 async function removeDraftLineItem(poId, itemId) {
   if (!confirm('Remove this line item?')) return;
 
@@ -1164,6 +1236,83 @@ async function removeDraftLineItem(poId, itemId) {
     loadStatistics();
   } catch (error) {
     showNotification(error.message || 'Error removing line item', 'danger');
+  }
+}
+
+// Update qty / unit cost of an existing line item (draft or submitted PO)
+async function updateDraftLineItem(poId, itemId) {
+  const qty = parseInt(document.getElementById(`editQty${itemId}`)?.value, 10);
+  const cost = parseFloat(document.getElementById(`editCost${itemId}`)?.value);
+
+  if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
+  if (isNaN(cost) || cost < 0) { showNotification('Invalid unit cost', 'warning'); return; }
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${poId}/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity: qty, unit_cost: cost }),
+    });
+    showNotification('Line item updated', 'success');
+    viewPODetails(poId);
+    loadPurchaseOrders();
+    loadStatistics();
+  } catch (error) {
+    showNotification(error.message || 'Error updating line item', 'danger');
+  }
+}
+
+// ── Edit PO header / addresses / shipping (draft or submitted) ──────────────
+function togglePOEditPanel(show) {
+  const panel = document.getElementById('viewPOEditPanel');
+  if (!panel) return;
+  const visible = show === undefined ? panel.style.display === 'none' : show;
+  panel.style.display = visible ? 'block' : 'none';
+}
+
+function populatePOEditPanel(po) {
+  const supplierSel = document.getElementById('editPOSupplier');
+  supplierSel.innerHTML = (allSuppliers || [])
+    .map(s => `<option value="${s.id}" ${s.id === po.supplier_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`)
+    .join('');
+
+  const locSel = document.getElementById('editPOShipToLocation');
+  locSel.innerHTML = '<option value="">Primary company location</option>' + (allCompanyLocations || [])
+    .map(l => `<option value="${l.id}" ${l.id === po.ship_to_location_id ? 'selected' : ''}>${escapeHtml(l.name)}${l.is_primary ? ' (primary)' : ''}</option>`)
+    .join('');
+
+  document.getElementById('editPOOrderDate').value = po.order_date ? po.order_date.split('T')[0] : '';
+  document.getElementById('editPOExpectedDate').value = po.expected_date ? po.expected_date.split('T')[0] : '';
+  document.getElementById('editPOShipTo').value = po.ship_to || '';
+  document.getElementById('editPOContactName').value = po.contact_name || '';
+  document.getElementById('editPOContactEmail').value = po.contact_email || '';
+  document.getElementById('editPOContactPhone').value = po.contact_phone || '';
+  document.getElementById('editPONotes').value = po.notes || '';
+}
+
+async function savePODetails() {
+  if (!currentPO) return;
+  const payload = {
+    supplier_id: parseInt(document.getElementById('editPOSupplier').value, 10),
+    order_date: document.getElementById('editPOOrderDate').value,
+    expected_date: document.getElementById('editPOExpectedDate').value || null,
+    ship_to_location_id: parseInt(document.getElementById('editPOShipToLocation').value, 10) || null,
+    ship_to: document.getElementById('editPOShipTo').value || null,
+    contact_name: document.getElementById('editPOContactName').value || null,
+    contact_email: document.getElementById('editPOContactEmail').value || null,
+    contact_phone: document.getElementById('editPOContactPhone').value || null,
+    notes: document.getElementById('editPONotes').value || null,
+  };
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${currentPO.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    showNotification('Purchase order details saved', 'success');
+    viewPODetails(currentPO.id);
+    loadPurchaseOrders();
+  } catch (error) {
+    showNotification(error.message || 'Error saving details', 'danger');
   }
 }
 

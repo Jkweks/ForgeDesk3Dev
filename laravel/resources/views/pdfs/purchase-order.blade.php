@@ -96,6 +96,9 @@
 <table class="masthead">
     <tr>
         <td style="width:60%;">
+            @if (! empty($logo))
+                <img src="{{ $logo }}" alt="" style="max-height:64px; max-width:260px; margin-bottom:6px;">
+            @endif
             <div class="company-name">{{ $company->name ?? config('app.name') }}</div>
             <div class="company-meta">{{ $addr([
                 $company->address_line1 ?? null,
