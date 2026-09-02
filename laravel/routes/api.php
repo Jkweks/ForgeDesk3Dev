@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AssetController;
 use App\Http\Controllers\Api\BusinessJobController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CompanyLocationController;
 use App\Http\Controllers\Api\CycleCountController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DoorFrameConfigurationController;
@@ -227,6 +228,12 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor('store', 'permission:inventory.create')
             ->middlewareFor('update', 'permission:inventory.edit')
             ->middlewareFor('destroy', 'permission:inventory.delete');
+        // Company locations (the buying entity's own addresses; primary = PO order-from)
+        Route::get('/company-locations', [CompanyLocationController::class, 'index'])->middleware('permission:settings.view');
+        Route::post('/company-locations', [CompanyLocationController::class, 'store'])->middleware('permission:settings.edit');
+        Route::patch('/company-locations/{companyLocation}', [CompanyLocationController::class, 'update'])->middleware('permission:settings.edit');
+        Route::delete('/company-locations/{companyLocation}', [CompanyLocationController::class, 'destroy'])->middleware('permission:settings.edit');
+
         Route::get('/supplier-countries', [SupplierController::class, 'countries']);
         Route::get('/supplier-statistics', [SupplierController::class, 'statistics']);
         Route::get('/suppliers/{supplier}/products', [SupplierController::class, 'products']);
@@ -350,6 +357,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/purchase-orders/{purchaseOrder}/items', [PurchaseOrderController::class, 'addItem'])->middleware('permission:orders.edit');
         Route::delete('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'removeItem'])->middleware('permission:orders.edit');
         Route::get('/purchase-orders/{purchaseOrder}/ez-estimate-export', [PurchaseOrderController::class, 'exportEzEstimate']);
+        Route::get('/purchase-orders/{purchaseOrder}/pdf', [PurchaseOrderController::class, 'exportPdf'])->middleware('permission:orders.view');
         Route::get('/purchase-orders-open', [PurchaseOrderController::class, 'open']);
         Route::get('/purchase-orders-statistics', [PurchaseOrderController::class, 'statistics']);
 

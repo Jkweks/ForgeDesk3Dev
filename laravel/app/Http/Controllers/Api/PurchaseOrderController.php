@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CompanyLocation;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Product;
@@ -71,7 +72,8 @@ class PurchaseOrderController extends Controller
             'supplier',
             'items.product',
             'creator',
-            'approver'
+            'approver',
+            'shipToLocation',
         ]);
 
         return response()->json($purchaseOrder);
@@ -89,6 +91,7 @@ class PurchaseOrderController extends Controller
             'expected_date' => 'nullable|date|after_or_equal:order_date',
             'notes' => 'nullable|string',
             'ship_to' => 'nullable|string',
+            'ship_to_location_id' => 'nullable|exists:company_locations,id',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
@@ -120,6 +123,7 @@ class PurchaseOrderController extends Controller
                 'expected_date' => $request->expected_date,
                 'notes' => $request->notes,
                 'ship_to' => $request->ship_to,
+                'ship_to_location_id' => $request->ship_to_location_id,
                 'created_by' => auth()->id(),
             ]);
 
@@ -184,6 +188,7 @@ class PurchaseOrderController extends Controller
             'expected_date' => 'nullable|date',
             'notes' => 'nullable|string',
             'ship_to' => 'nullable|string',
+            'ship_to_location_id' => 'nullable|exists:company_locations,id',
         ]);
 
         if ($validator->fails()) {
@@ -199,6 +204,7 @@ class PurchaseOrderController extends Controller
             'expected_date',
             'notes',
             'ship_to',
+            'ship_to_location_id',
         ]));
 
         return response()->json([
@@ -573,6 +579,39 @@ class PurchaseOrderController extends Controller
             DB::rollBack();
             return response()->json(['message' => 'Failed to add line item'], 500);
         }
+    }
+
+    /**
+     * Render a purchase order as a printable PDF. Works for any supplier.
+     *
+     * Header / order-from block  = the primary CompanyLocation
+     * Ship-to block              = the PO's chosen CompanyLocation, else its
+     *                              free-text ship_to, else the primary location
+     * Line pricing               = each item's captured unit_cost, which the UI
+     *                              seeds from the product's net (calculated)
+     *                              price — never list price
+     */
+    public function exportPdf(PurchaseOrder $purchaseOrder)
+    {
+        $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation']);
+
+        $primary = CompanyLocation::primaryLocation();
+        $shipTo = $purchaseOrder->shipToLocation ?: $primary;
+
+        $subtotal = $purchaseOrder->items->sum(fn ($i) => (float) $i->unit_cost * (int) $i->quantity_ordered);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.purchase-order', [
+            'po' => $purchaseOrder,
+            'company' => $primary,
+            'shipTo' => $shipTo,
+            'subtotal' => $subtotal,
+        ]);
+
+        $pdf->setPaper('letter', 'portrait');
+
+        $filename = 'PO_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number) . '.pdf';
+
+        return $pdf->download($filename);
     }
 
     /**

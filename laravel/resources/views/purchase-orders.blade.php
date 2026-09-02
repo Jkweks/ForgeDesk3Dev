@@ -171,8 +171,15 @@
           </div>
           <div class="row mb-3">
             <div class="col-md-6">
-              <label class="form-label">Ship To</label>
-              <input type="text" class="form-control" id="poShipTo" placeholder="Warehouse location">
+              <label class="form-label">Ship To Location</label>
+              <select class="form-select" id="poShipToLocation">
+                <option value="">Primary company location</option>
+              </select>
+              <small class="form-hint">Company locations are managed in Admin &rarr; System Settings.</small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Ship To (free text)</label>
+              <input type="text" class="form-control" id="poShipTo" placeholder="Only if not a saved location">
             </div>
           </div>
           <div class="row mb-3">
@@ -430,6 +437,7 @@ function safeHideModal(modalId) {
 document.addEventListener('DOMContentLoaded', () => {
   loadSuppliers();
   loadProducts();
+  loadCompanyLocations();
   loadPurchaseOrders();
   loadStatistics();
 
@@ -504,6 +512,9 @@ function renderPurchaseOrders(orders) {
                 <i class="ti ti-package"></i>
               </button>
             ` : ''}
+            <button class="btn btn-sm btn-ghost-secondary" onclick="exportPurchaseOrderPdf(${po.id})" title="Download PDF">
+              <i class="ti ti-file-type-pdf"></i>
+            </button>
             ${isTubelitePO(po) ? `
               <button class="btn btn-sm btn-ghost-secondary" onclick="exportEzEstimate(${po.id})" title="Export as EZ Estimate">
                 <i class="ti ti-file-spreadsheet"></i>
@@ -544,6 +555,28 @@ async function loadSuppliers() {
     });
   } catch (error) {
     console.error('Error loading suppliers:', error);
+  }
+}
+
+// Load company locations for the Ship-To picker
+let allCompanyLocations = [];
+async function loadCompanyLocations() {
+  try {
+    const response = await authenticatedFetch('/company-locations');
+    allCompanyLocations = response.data || response || [];
+    const select = document.getElementById('poShipToLocation');
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">Primary company location</option>';
+    allCompanyLocations.forEach(loc => {
+      const option = document.createElement('option');
+      option.value = loc.id;
+      option.textContent = loc.name + (loc.is_primary ? ' (primary)' : '');
+      select.appendChild(option);
+    });
+    if (current) select.value = current;
+  } catch (error) {
+    console.error('Error loading company locations:', error);
   }
 }
 
@@ -760,6 +793,7 @@ async function savePurchaseOrder() {
       order_date: document.getElementById('poOrderDate').value,
       expected_date: document.getElementById('poExpectedDate').value || null,
       ship_to: document.getElementById('poShipTo').value || null,
+      ship_to_location_id: parseInt(document.getElementById('poShipToLocation').value) || null,
       notes: document.getElementById('poNotes').value || null,
       items: items,
     };
@@ -888,8 +922,13 @@ async function viewPODetails(poId) {
          </button>`
       : '';
 
+    const pdfBtn = `<button class="btn btn-outline-secondary" onclick="exportPurchaseOrderPdf(${po.id})">
+         <i class="ti ti-file-type-pdf me-1"></i>Download PDF
+       </button>`;
+
     if (po.status === 'draft') {
       actionsDiv.innerHTML = `
+        ${pdfBtn}
         ${tubeliteExportBtn}
         <button class="btn btn-primary" onclick="submitPO(${po.id})">
           <i class="ti ti-send me-1"></i>Submit for Approval
@@ -900,6 +939,7 @@ async function viewPODetails(poId) {
       `;
     } else if (po.status === 'submitted') {
       actionsDiv.innerHTML = `
+        ${pdfBtn}
         ${tubeliteExportBtn}
         <button class="btn btn-success" onclick="approvePO(${po.id})">
           <i class="ti ti-check me-1"></i>Approve
@@ -910,6 +950,7 @@ async function viewPODetails(poId) {
       `;
     } else if (po.status === 'approved' || po.status === 'partially_received') {
       actionsDiv.innerHTML = `
+        ${pdfBtn}
         ${tubeliteExportBtn}
         <button class="btn btn-success" onclick="showReceiveModal(${po.id})">
           <i class="ti ti-package me-1"></i>Receive Materials
@@ -919,7 +960,7 @@ async function viewPODetails(poId) {
         </button>
       `;
     } else {
-      actionsDiv.innerHTML = tubeliteExportBtn;
+      actionsDiv.innerHTML = `${pdfBtn} ${tubeliteExportBtn}`;
     }
 
     safeShowModal('viewPOModal');
@@ -1299,6 +1340,33 @@ function escapeHtml(text) {
 
 function isTubelitePO(po) {
   return (po.supplier?.name || '').toLowerCase().includes('tubelite');
+}
+
+async function exportPurchaseOrderPdf(poId) {
+  try {
+    showNotification('Generating purchase order PDF...', 'info');
+    const response = await apiCall(`/purchase-orders/${poId}/pdf`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      showNotification(err.message || 'PDF export failed', 'danger');
+      return;
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : `PO_${poId}.pdf`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('PO PDF export error:', err);
+    showNotification('Failed to export purchase order PDF', 'danger');
+  }
 }
 
 async function exportEzEstimate(poId) {
