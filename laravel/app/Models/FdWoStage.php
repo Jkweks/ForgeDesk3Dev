@@ -19,13 +19,14 @@ class FdWoStage extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_id', 'template_id', 'name', 'description',
-        'sort_order', 'blocks_next', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
+        'sort_order', 'blocks_next', 'minutes_per_joint', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
     ];
 
     protected $casts = [
-        'blocks_next'  => 'boolean',
-        'started_at'   => 'datetime',
-        'completed_at' => 'datetime',
+        'blocks_next'       => 'boolean',
+        'minutes_per_joint' => 'decimal:2',
+        'started_at'        => 'datetime',
+        'completed_at'      => 'datetime',
     ];
 
     public function isTerminal(): bool

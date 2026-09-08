@@ -18,7 +18,7 @@ class ElevationController extends Controller
     {
         $wo = FdWorkOrder::findOrFail($workOrderId);
         $elevations = $wo->elevations()
-            ->with(['elevationType', 'completedBy', 'stages.assignedTo'])
+            ->with(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo'])
             ->get()
             ->map(fn($e) => $this->formatElevation($e));
 
@@ -67,22 +67,29 @@ class ElevationController extends Controller
 
                 foreach ($templates as $tpl) {
                     FdWoStage::create([
-                        'elevation_id'   => $elevation->id,
-                        'work_order_id'  => null,
-                        'template_id'    => $tpl->id,
-                        'name'           => $tpl->name,
-                        'description'    => $tpl->description,
-                        'sort_order'     => $tpl->sort_order,
-                        'blocks_next'    => $tpl->blocks_next ?? true,
-                        'status'         => 'pending',
-                        'assigned_to_id' => $tpl->default_user_id,
+                        'elevation_id'      => $elevation->id,
+                        'work_order_id'     => null,
+                        'template_id'       => $tpl->id,
+                        'name'              => $tpl->name,
+                        'description'       => $tpl->description,
+                        'sort_order'        => $tpl->sort_order,
+                        'blocks_next'       => $tpl->blocks_next ?? true,
+                        'minutes_per_joint' => $tpl->minutes_per_joint,
+                        'status'            => 'pending',
+                        'assigned_to_id'    => $tpl->default_user_id,
                     ]);
                 }
             }
 
             DB::commit();
 
-            $elevation->load(['elevationType', 'completedBy', 'stages.assignedTo']);
+            // Elevation dates drive the work order's due date + ranking.
+            if ($wo = FdWorkOrder::find($workOrderId)) {
+                $wo->recalcDueDateFromElevations();
+                FdWorkOrder::resequencePriorities();
+            }
+
+            $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo']);
             return response()->json($this->formatElevation($elevation), 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -103,9 +110,14 @@ class ElevationController extends Controller
             $oldSetId = $elevation->template_set_id;
 
             $elevation->fill($request->only([
-                'elevation_type_id', 'template_set_id', 'elevation_tag', 'quantity',
+                'elevation_type_id', 'template_set_id', 'elevation_tag', 'quantity', 'joint_qty',
                 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
             ]));
+
+            // Empty string from the form clears the joint quantity.
+            if ($request->has('joint_qty') && ! $request->filled('joint_qty')) {
+                $elevation->joint_qty = null;
+            }
 
             $newSetId = $elevation->template_set_id;
             $resyncSummary = null;
@@ -113,12 +125,27 @@ class ElevationController extends Controller
             DB::transaction(function () use ($elevation, $request, $oldSetId, $newSetId, &$resyncSummary) {
                 // Bumping (or switching) the tier reconciles the stage list.
                 if ($request->has('template_set_id') && $newSetId && (int) $newSetId !== (int) $oldSetId) {
-                    $resyncSummary = $this->resyncStagesToSet($elevation, (int) $newSetId);
+                    // With nothing started/held/finished, drop every stage and
+                    // rebuild cleanly from the new tier. Otherwise fall back to
+                    // the non-destructive merge so progress is never lost.
+                    $hasProgress = $elevation->stages()
+                        ->whereIn('status', ['in_progress', 'on_hold', 'complete'])
+                        ->exists();
+
+                    $resyncSummary = $hasProgress
+                        ? $this->resyncStagesToSet($elevation, (int) $newSetId)
+                        : $this->rebuildStagesFromSet($elevation, (int) $newSetId);
                 }
                 $elevation->save();
             });
 
-            $elevation->load(['elevationType', 'completedBy', 'stages.assignedTo', 'stages.completedBy']);
+            // date_requested may have moved — keep the WO due date + ranking in step.
+            if ($wo = $elevation->workOrder()->first()) {
+                $wo->recalcDueDateFromElevations();
+                FdWorkOrder::resequencePriorities();
+            }
+
+            $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo', 'stages.completedBy']);
             $payload = $this->formatElevation($elevation);
             if ($resyncSummary !== null) {
                 $payload['resync_summary'] = $resyncSummary;
@@ -137,8 +164,8 @@ class ElevationController extends Controller
      * Reconcile an elevation's stages against a (new) tier's templates.
      *
      *  - match existing stages by template_id, then by case-insensitive name
-     *  - matched stages keep their status/assignee/timestamps; only sort_order
-     *    and blocks_next are re-pulled from the template
+     *  - matched stages keep their status/assignee/timestamps; only sort_order,
+     *    blocks_next and minutes_per_joint are re-pulled from the template
      *  - templates with no match are added as fresh `pending` stages
      *  - existing stages absent from the new tier: retired to `not_required` if
      *    untouched, left alone if they already have progress
@@ -158,23 +185,25 @@ class ElevationController extends Controller
                 ?? $existing->first(fn($s) => mb_strtolower($s->name) === mb_strtolower($tpl->name) && ! in_array($s->id, $keepIds, true));
 
             if ($match) {
-                $match->sort_order  = $tpl->sort_order;
-                $match->blocks_next = $tpl->blocks_next ?? true;
-                $match->template_id = $tpl->id;
+                $match->sort_order        = $tpl->sort_order;
+                $match->blocks_next       = $tpl->blocks_next ?? true;
+                $match->minutes_per_joint = $tpl->minutes_per_joint;
+                $match->template_id       = $tpl->id;
                 $match->save();
                 $keepIds[] = $match->id;
                 $carried[] = $match->name;
             } else {
                 $stage = FdWoStage::create([
-                    'elevation_id'   => $elevation->id,
-                    'work_order_id'  => null,
-                    'template_id'    => $tpl->id,
-                    'name'           => $tpl->name,
-                    'description'    => $tpl->description,
-                    'sort_order'     => $tpl->sort_order,
-                    'blocks_next'    => $tpl->blocks_next ?? true,
-                    'status'         => 'pending',
-                    'assigned_to_id' => $tpl->default_user_id,
+                    'elevation_id'      => $elevation->id,
+                    'work_order_id'     => null,
+                    'template_id'       => $tpl->id,
+                    'name'              => $tpl->name,
+                    'description'       => $tpl->description,
+                    'sort_order'        => $tpl->sort_order,
+                    'blocks_next'       => $tpl->blocks_next ?? true,
+                    'minutes_per_joint' => $tpl->minutes_per_joint,
+                    'status'            => 'pending',
+                    'assigned_to_id'    => $tpl->default_user_id,
                 ]);
                 $keepIds[] = $stage->id;
                 $added[] = $stage->name;
@@ -203,10 +232,72 @@ class ElevationController extends Controller
         ];
     }
 
+    /**
+     * Tear down every stage on an elevation and reseed from a tier's templates.
+     * Only safe when nothing has started — the caller checks that.
+     *
+     * Assignment: a template with a default operator hands the new stage to that
+     * operator outright; templates with no default inherit the work order's
+     * assigned crew (co-assigned).
+     *
+     * @return array{added: string[], carried: string[], retired: string[], kept_with_progress: string[]}
+     */
+    private function rebuildStagesFromSet(FdWoElevation $elevation, int $newSetId): array
+    {
+        $templates = FdStageTemplate::where('template_set_id', $newSetId)->orderBy('sort_order')->get();
+
+        $existing = $elevation->stages()->get();
+        $retired  = $existing->pluck('name')->values()->all();
+        foreach ($existing as $old) {
+            $old->assignees()->detach();
+            $old->delete();
+        }
+
+        $woUserIds = $elevation->workOrder
+            ? $elevation->workOrder->assignedUsers()->pluck('fd_users.id')->map(fn ($v) => (int) $v)->all()
+            : [];
+
+        $added = [];
+        foreach ($templates as $tpl) {
+            $stage = FdWoStage::create([
+                'elevation_id'      => $elevation->id,
+                'work_order_id'     => null,
+                'template_id'       => $tpl->id,
+                'name'              => $tpl->name,
+                'description'       => $tpl->description,
+                'sort_order'        => $tpl->sort_order,
+                'blocks_next'       => $tpl->blocks_next ?? true,
+                'minutes_per_joint' => $tpl->minutes_per_joint,
+                'status'            => 'pending',
+                'assigned_to_id'    => $tpl->default_user_id,
+            ]);
+
+            $ids = $tpl->default_user_id ? [(int) $tpl->default_user_id] : $woUserIds;
+            if ($ids) {
+                $stage->syncAssignees($ids);
+            }
+            $added[] = $stage->name;
+        }
+
+        return [
+            'added'              => $added,
+            'carried'            => [],
+            'retired'            => $retired,
+            'kept_with_progress' => [],
+        ];
+    }
+
     public function destroy(int $id)
     {
         $elevation = FdWoElevation::findOrFail($id);
+        $workOrderId = $elevation->work_order_id;
         $elevation->delete();
+
+        if ($workOrderId && ($wo = FdWorkOrder::find($workOrderId))) {
+            $wo->recalcDueDateFromElevations();
+            FdWorkOrder::resequencePriorities();
+        }
+
         return response()->json(['deleted' => $id]);
     }
 
@@ -217,6 +308,8 @@ class ElevationController extends Controller
         $stagesDone    = $stages->whereIn('status', ['complete', 'not_required'])->count();
         $stagesActive  = $stages->where('status', 'in_progress')->count();
         $stagesBlocked = $stages->where('status', 'blocked')->count();
+
+        $estimate = $e->estimateMinutes();
 
         return [
             'id'                => $e->id,
@@ -230,6 +323,9 @@ class ElevationController extends Controller
             ] : null,
             'elevation_tag'     => $e->elevation_tag,
             'quantity'          => $e->quantity,
+            'joint_qty'         => $e->joint_qty,
+            'minutes_per_joint' => round($estimate['rate'], 2),
+            'estimated_minutes' => $estimate['effective'],
             'date_requested'    => $e->date_requested?->format('Y-m-d'),
             'date_completed'    => $e->date_completed?->format('Y-m-d'),
             'completed_by_id'   => $e->completed_by_id,
@@ -246,6 +342,7 @@ class ElevationController extends Controller
                 'status'            => $s->status,
                 'sort_order'        => $s->sort_order,
                 'blocks_next'       => (bool) $s->blocks_next,
+                'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
                 'assigned_name'     => $s->assignedTo?->name,
                 'completed_by_id'   => $s->completed_by_id,
                 'completed_by_name' => $s->completedBy?->name,

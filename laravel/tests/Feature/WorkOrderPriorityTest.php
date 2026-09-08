@@ -142,6 +142,112 @@ class WorkOrderPriorityTest extends TestCase
         $this->assertSame(2, $a->fresh()->priority);
     }
 
+    public function test_due_date_is_derived_from_the_earliest_elevation_date(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
+        $wo = $this->wo();
+
+        $e1 = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
+            'elevation_tag' => 'A', 'date_requested' => '2026-09-10',
+        ])->json('id');
+        $this->assertSame('2026-09-10', $wo->fresh()->due_date->format('Y-m-d'));
+
+        // A closer elevation date pulls the WO's due date earlier.
+        $e2 = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
+            'elevation_tag' => 'B', 'date_requested' => '2026-09-01',
+        ])->json('id');
+        $this->assertSame('2026-09-01', $wo->fresh()->due_date->format('Y-m-d'));
+
+        // Removing the closer one falls back to what's left.
+        $this->deleteJson("/api/v1/elevations/{$e2}")->assertOk();
+        $this->assertSame('2026-09-10', $wo->fresh()->due_date->format('Y-m-d'));
+
+        // No dated elevations left -> no due date.
+        $this->deleteJson("/api/v1/elevations/{$e1}")->assertOk();
+        $this->assertNull($wo->fresh()->due_date);
+    }
+
+    public function test_work_order_list_exposes_first_and_last_elevation_due_dates(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
+        $wo = $this->wo();
+        $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", ['elevation_tag' => 'A', 'date_requested' => '2026-09-10']);
+        $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", ['elevation_tag' => 'B', 'date_requested' => '2026-09-20']);
+
+        $row = collect($this->getJson('/api/v1/work-orders')->json('work_orders'))->firstWhere('id', $wo->id);
+        $this->assertSame('2026-09-10', $row['due_date_first']);
+        $this->assertSame('2026-09-20', $row['due_date_last']);
+    }
+
+    public function test_assigning_a_worker_to_the_wo_co_assigns_open_stages_and_unassigning_removes_it(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
+        $wo = $this->wo();
+        $worker = FdUser::create(['name' => 'Worker', 'role' => 'worker', 'active' => true]);
+        $other  = FdUser::create(['name' => 'Other', 'role' => 'worker', 'active' => true]);
+
+        $elev = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'A']);
+        $open = FdWoStage::create(['elevation_id' => $elev->id, 'name' => 'Prep', 'sort_order' => 1, 'status' => 'pending', 'assigned_to_id' => $other->id]);
+        $open->syncAssignees([$other->id]);
+        $done = FdWoStage::create(['elevation_id' => $elev->id, 'name' => 'QC', 'sort_order' => 2, 'status' => 'complete']);
+
+        $this->putJson("/api/v1/work-orders/{$wo->id}/assignments", ['user_ids' => [$worker->id]])->assertOk();
+
+        $open->refresh();
+        $this->assertEqualsCanonicalizing([$other->id, $worker->id], $open->assignees->pluck('id')->all());
+        $this->assertEmpty($done->refresh()->assignees->pluck('id')->all(), 'terminal stages are left alone');
+
+        // Un-assigning the worker from the WO pulls them back out of the open stage.
+        $this->putJson("/api/v1/work-orders/{$wo->id}/assignments", ['user_ids' => []])->assertOk();
+        $this->assertEqualsCanonicalizing([$other->id], $open->refresh()->assignees->pluck('id')->all());
+    }
+
+    public function test_time_estimate_rolls_up_joints_times_per_joint_rate_with_wo_override(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
+        $wo = $this->wo();
+
+        // Elevation A: 10 joints, stage rates 3 + 4.5 min/joint  => 10 * 7.5 = 75
+        $a = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'A', 'joint_qty' => 10]);
+        FdWoStage::create(['elevation_id' => $a->id, 'name' => 'Cut', 'sort_order' => 1, 'status' => 'pending', 'minutes_per_joint' => 3]);
+        FdWoStage::create(['elevation_id' => $a->id, 'name' => 'Weld', 'sort_order' => 2, 'status' => 'pending', 'minutes_per_joint' => 4.5]);
+
+        // Elevation B: rates set but no joint count => contributes nothing yet
+        $b = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'B']);
+        FdWoStage::create(['elevation_id' => $b->id, 'name' => 'Pack', 'sort_order' => 1, 'status' => 'pending', 'minutes_per_joint' => 2]);
+
+        $show = fn () => $this->getJson("/api/v1/work-orders/{$wo->id}")->json();
+
+        $d = $show();
+        $this->assertSame(75, $d['estimated_minutes_computed']);
+        $this->assertSame(75, $d['estimated_minutes']);
+        $this->assertNull($d['estimated_minutes_override']);
+
+        // Give B a joint count -> it now adds 5 * 2 = 10.
+        $this->patchJson("/api/v1/elevations/{$b->id}", ['joint_qty' => 5])->assertOk();
+        $this->assertSame(85, $show()['estimated_minutes_computed']);
+
+        // WO-level override wins over the roll-up, then reverts on blank.
+        $this->patchJson("/api/v1/work-orders/{$wo->id}", ['estimated_minutes_override' => 999])->assertOk();
+        $d = $show();
+        $this->assertSame(999, $d['estimated_minutes']);
+        $this->assertSame(85, $d['estimated_minutes_computed']);
+
+        $this->patchJson("/api/v1/work-orders/{$wo->id}", ['estimated_minutes_override' => ''])->assertOk();
+        $d = $show();
+        $this->assertNull($d['estimated_minutes_override']);
+        $this->assertSame(85, $d['estimated_minutes']);
+
+        // List endpoint carries the same figures + the joint total.
+        $row = collect($this->getJson('/api/v1/work-orders')->json('work_orders'))->firstWhere('id', $wo->id);
+        $this->assertSame(85, $row['estimated_minutes']);
+        $this->assertSame(15, $row['joint_qty_total']);
+
+        // Clearing a joint count drops that line's contribution again.
+        $this->patchJson("/api/v1/elevations/{$a->id}", ['joint_qty' => ''])->assertOk();
+        $this->assertSame(10, $show()['estimated_minutes']);
+    }
+
     public function test_console_command_resequences(): void
     {
         $a = $this->wo(['due_date' => '2026-09-02']);

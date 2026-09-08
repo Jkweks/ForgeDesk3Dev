@@ -4,6 +4,8 @@
 
 @section('styles')
 .wq-board { display:flex; gap:.75rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start; }
+.wq-scroll-top { position:sticky; top:0; z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface, #fff); border-bottom:1px solid var(--tblr-border-color, #dbe0e5); }
+.wq-scroll-top-inner { height:1px; }
 .wq-col { min-width:280px; max-width:320px; flex:0 0 auto; background:var(--tblr-bg-surface-secondary, var(--tblr-light)); border-radius:8px; padding:.5rem; }
 .wq-col.drop-hover { outline:2px dashed var(--tblr-primary, #206bc4); outline-offset:-2px; }
 .wq-col-head { display:flex; align-items:center; gap:.4rem; font-weight:600; padding:.25rem .35rem .5rem; }
@@ -59,6 +61,9 @@
     <div class="container-xl">
       <div id="wq-loading" class="text-center text-muted py-5">
         <div class="spinner-border" role="status"></div>
+      </div>
+      <div id="wq-scroll-top" class="wq-scroll-top" style="display:none">
+        <div id="wq-scroll-top-inner" class="wq-scroll-top-inner"></div>
       </div>
       <div id="wq-board" class="wq-board" style="display:none"></div>
     </div>
@@ -256,6 +261,28 @@ function renderBoard() {
   });
 
   board.innerHTML = cols.join('');
+  wqSyncTopScroll();
+}
+
+// A sticky mirror scrollbar pinned to the top of the viewport, so left/right
+// navigation stays reachable even when the tallest column pushes the board's
+// own (bottom) scrollbar far down the page.
+function wqSyncTopScroll() {
+    const board = document.getElementById('wq-board');
+    const bar = document.getElementById('wq-scroll-top');
+    const inner = document.getElementById('wq-scroll-top-inner');
+    if (!board || !bar || !inner) return;
+
+    const overflow = board.scrollWidth > board.clientWidth + 1;
+    bar.style.display = overflow ? 'block' : 'none';
+    inner.style.width = board.scrollWidth + 'px';
+
+    if (!bar.dataset.bound) {
+        bar.addEventListener('scroll', () => { board.scrollLeft = bar.scrollLeft; });
+        board.addEventListener('scroll', () => { bar.scrollLeft = board.scrollLeft; });
+        window.addEventListener('resize', wqSyncTopScroll);
+        bar.dataset.bound = '1';
+    }
 }
 
 // ── drag & drop (hand-rolled HTML5, matches the Reorder Queue pattern) ──

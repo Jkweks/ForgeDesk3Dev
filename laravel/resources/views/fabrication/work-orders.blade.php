@@ -163,14 +163,24 @@
         </div>
         <div class="col-auto">
           <div class="subheader">Due Date</div>
-          <input type="date" class="form-control form-control-sm" id="d-due-date" style="width:150px"
-            onchange="patchWO('due_date', this.value || null)">
+          <div id="d-due-date" style="min-width:150px">—</div>
+          <div class="form-hint mt-1">Auto-set from the earliest elevation date</div>
         </div>
         <div class="col-auto">
           <div class="subheader">Priority</div>
           <input type="number" class="form-control form-control-sm" id="d-priority" style="width:80px"
             min="1" placeholder="—" onchange="patchWO('priority', this.value ? parseInt(this.value) : null)">
           <div class="form-hint mt-1" id="d-priority-hint"></div>
+        </div>
+        <div class="col-auto">
+          <div class="subheader">Est. Time</div>
+          <div class="input-group input-group-sm" style="width:170px">
+            <input type="number" class="form-control" id="d-est-minutes" min="0" placeholder="—"
+              title="Total estimated minutes — overrides the elevation roll-up when set"
+              onchange="saveWOEstimate(this.value)">
+            <span class="input-group-text" id="d-est-hours">– h</span>
+          </div>
+          <div class="form-hint mt-1" id="d-est-hint"></div>
         </div>
         <div class="col-auto">
           <div class="subheader">Material Delivery</div>
@@ -740,9 +750,7 @@ function renderWOList(wos) {
         const pinBtn = `<button class="btn btn-sm btn-ghost-${wo.priority_locked ? 'yellow' : 'secondary'} p-0 px-1"
             title="${wo.priority_locked ? 'Pinned — auto-ranking skips this WO' : 'Pin at this position'}"
             onclick="toggleWOPin(${wo.id}, event)"><i class="ti ti-pin${wo.priority_locked ? '-filled' : ''}"></i></button>`;
-        const dueCell = wo.due_date
-            ? `<span class="small ${new Date(wo.due_date) < new Date(new Date().toDateString()) ? 'text-danger' : 'text-muted'}">${wo.due_date}</span>`
-            : '<span class="text-muted">—</span>';
+        const dueCell = dueDateHtml(wo);
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
             <td class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</td>
             <td><strong>${esc(wo.release_label)}</strong></td>
@@ -934,13 +942,14 @@ function populateDetail(wo) {
     document.getElementById('d-pm').textContent = job.project_manager || '—';
     document.getElementById('d-division').textContent = job.division || '—';
     document.getElementById('d-date-issued').value = wo.date_issued || '';
-    document.getElementById('d-due-date').value = wo.due_date || '';
+    document.getElementById('d-due-date').innerHTML = dueDateHtml(wo);
     document.getElementById('d-priority').value = wo.priority != null ? wo.priority : '';
     document.getElementById('d-priority-hint').textContent = wo.priority_locked
         ? 'Pinned — auto-ranking skips this WO'
         : 'Auto-ranked by due date';
     document.getElementById('d-material').value = wo.material_delivery || '';
     document.getElementById('d-notes').value = wo.notes || '';
+    renderWOEstimate(wo);
 
     renderAssignedUsers(wo.assigned_users || []);
     renderWoSteps(wo.id, wo.steps || []);
@@ -979,6 +988,52 @@ async function patchWO(field, value) {
 function setMaterial(val) {
     document.getElementById('d-material').value = val;
     patchWO('material_delivery', val);
+}
+
+// ============================================================
+// WO time estimate (roll-up of elevation estimates, with an override)
+// ============================================================
+function renderWOEstimate(wo) {
+    const inp = document.getElementById('d-est-minutes');
+    const hrs = document.getElementById('d-est-hours');
+    const hint = document.getElementById('d-est-hint');
+    if (!inp) return;
+
+    const effective = wo.estimated_minutes;
+    const computed = wo.estimated_minutes_computed;
+    const override = wo.estimated_minutes_override;
+
+    inp.value = override != null ? override : '';
+    inp.placeholder = computed != null ? String(computed) : '—';
+    hrs.textContent = effective != null ? (effective / 60).toFixed(1) + ' h' : '– h';
+
+    const joints = wo.joint_qty_total;
+    const rollup = computed != null
+        ? `Rolled up from ${joints != null ? joints + ' joint' + (joints === 1 ? '' : 's') : 'elevations'}`
+        : 'Set joint counts + per-joint rates to estimate';
+
+    if (override != null) {
+        hint.innerHTML = 'Manual total. <a href="#" onclick="event.preventDefault();saveWOEstimate(\'\')">Revert</a>'
+            + (computed != null ? ` to ${computed} min` : '');
+    } else {
+        hint.textContent = rollup;
+    }
+}
+
+async function saveWOEstimate(val) {
+    if (!currentWO) return;
+    const clean = val === '' ? null : Math.max(0, parseInt(val) || 0);
+    try {
+        await API(`/work-orders/${currentWO.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estimated_minutes_override: clean }),
+        });
+        const rr = await API(`/work-orders/${currentWO.id}`);
+        currentWO = await rr.json();
+        renderWOEstimate(currentWO);
+        loadWorkOrders();
+    } catch (e) { console.error(e); fabToast('Failed to save estimate.', 'error'); }
 }
 
 // ============================================================
@@ -1310,6 +1365,8 @@ function renderElevations(elevations) {
         <table class="table table-sm table-vcenter">
             <thead><tr>
                 <th>Tag</th><th>Type</th><th>Qty</th>
+                <th title="Number of joints in this elevation">Joints</th>
+                <th title="Estimated labour — joints × the summed per-joint rate of its stages">Est.</th>
                 <th>Requested</th><th>Completed</th>
                 <th>Stages</th><th class="w-1"></th>
             </tr></thead>
@@ -1362,19 +1419,21 @@ function elevRow(e) {
                 </span>
             </td>
             <td class="text-muted small">${s.assigned_name ? esc(s.assigned_name) : '—'}</td>
+            <td class="text-muted small">${s.minutes_per_joint != null ? s.minutes_per_joint + ' min/jt' : '—'}</td>
             <td class="text-muted small">${s.started_at ? new Date(s.started_at).toLocaleDateString() : '—'}</td>
             <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}${s.completed_by_name ? `<br><span class="text-muted" style="font-size:.7rem">${esc(s.completed_by_name)}</span>` : ''}</td>
         </tr>`).join('');
 
     const stageDetailBlock = hasStages ? `
         <tr id="elev-stages-${e.id}" style="display:none">
-            <td colspan="7" class="p-0">
+            <td colspan="9" class="p-0">
                 <table class="table table-sm mb-0 bg-light">
                     <thead>
                         <tr class="text-muted" style="font-size:.7rem;text-transform:uppercase">
                             <th style="padding-left:2rem">Stage</th>
                             <th>Status</th>
                             <th>Assigned</th>
+                            <th>Min / joint</th>
                             <th>Started</th>
                             <th>Completed</th>
                         </tr>
@@ -1388,10 +1447,26 @@ function elevRow(e) {
         ? '<span class="badge bg-orange-lt ms-1">Kit</span>'
         : '';
 
+    const rate = e.minutes_per_joint || 0;
+    const estMin = e.estimated_minutes;
+    const jointTitle = rate > 0
+        ? `${rate} min/joint for this elevation (step rates, or its tier fallback) — set the joint count to estimate labour.`
+        : 'No per-joint rate on this elevation’s steps or its tier yet (Admin → Elevation Types).';
+    const estCell = estMin != null
+        ? `<span title="${estMin} min">${(estMin / 60).toFixed(1)} h</span>`
+        : '<span class="text-muted">—</span>';
+
     return `<tr class="elev-row">
         <td><strong>${esc(e.elevation_tag)}</strong>${scopeBadge}</td>
         <td>${typeBadge}</td>
         <td>${e.quantity}</td>
+        <td>
+            <input type="number" min="0" step="1" class="form-control form-control-sm"
+                style="width:76px" value="${e.joint_qty ?? ''}" placeholder="—"
+                title="${esc(jointTitle)}"
+                onchange="setElevJoints(${e.id}, this.value)">
+        </td>
+        <td class="small">${estCell}</td>
         <td class="text-muted small">${e.date_requested || '—'}</td>
         <td>${completedInfo}</td>
         <td>
@@ -1420,6 +1495,24 @@ function toggleStages(rowId, btn) {
     const isOpen = row.style.display !== 'none';
     row.style.display = isOpen ? 'none' : '';
     icon.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+// Per-line joint count. Empty string clears it (line then contributes nothing).
+async function setElevJoints(elevId, val) {
+    if (!currentWO) return;
+    try {
+        const r = await API(`/elevations/${elevId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ joint_qty: val === '' ? null : Math.max(0, parseInt(val) || 0) }),
+        });
+        if (!r.ok) { fabToast('Failed to save joint count.', 'error'); return; }
+        const wr = await API(`/work-orders/${currentWO.id}`);
+        currentWO = await wr.json();
+        renderElevations(currentWO.elevations || []);
+        renderWOEstimate(currentWO);
+        loadWorkOrders();
+    } catch (e) { console.error(e); fabToast('Failed to save joint count.', 'error'); }
 }
 
 // ============================================================
@@ -2205,6 +2298,27 @@ function esc(str) {
     return d.innerHTML;
 }
 
+// 'YYYY-MM-DD' -> 'MM/DD/YYYY'
+function fmtDate(d) {
+    if (!d) return '';
+    const [y, m, day] = String(d).slice(0, 10).split('-');
+    return (y && m && day) ? `${m}/${day}/${y}` : String(d);
+}
+
+// Bold due-date cell; adds an (i) tooltip with the first/final elevation dates
+// when a work order's elevations span more than one requested date.
+function dueDateHtml(wo, extraClass) {
+    const first = wo.due_date_first || wo.due_date;
+    const last = wo.due_date_last || first;
+    if (!first) return '<span class="text-muted">—</span>';
+    const past = new Date(first) < new Date(new Date().toDateString());
+    const info = (last && last !== first)
+        ? ` <i class="ti ti-info-circle text-muted" style="cursor:help"
+             title="First due date: ${fmtDate(first)}&#10;Final due date: ${fmtDate(last)}"></i>`
+        : '';
+    return `<span class="fw-bold ${past ? 'text-danger' : ''} ${extraClass || ''}">${fmtDate(first)}</span>${info}`;
+}
+
 function matBadge(mat) {
     if (!mat) return '<span class="badge bg-secondary-lt text-secondary">Pending</span>';
     if (mat === 'In Shop') return '<span class="badge bg-success-lt text-success">In Shop</span>';
@@ -2461,7 +2575,8 @@ async function saveQuickJob() {
         });
         if (!r.ok) {
             const err = await r.json();
-            throw new Error(err.message || 'Failed to create job');
+            const fieldErrors = err.errors ? Object.values(err.errors).flat().join(' ') : '';
+            throw new Error(fieldErrors || err.message || 'Failed to create job');
         }
         const data = await r.json();
         bootstrap.Modal.getInstance(document.getElementById('quickJobModal')).hide();

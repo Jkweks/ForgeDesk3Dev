@@ -103,10 +103,11 @@ Route::post('/logout', function (Request $request) {
     return response()->json(['message' => 'Logged out']);
 })->middleware('auth:sanctum');
 
-// Password Reset routes (public)
-Route::post('/password/forgot', [PasswordResetController::class, 'forgotPassword']);
-Route::post('/password/reset', [PasswordResetController::class, 'resetPassword']);
-Route::post('/password/verify-token', [PasswordResetController::class, 'verifyToken']);
+// Password Reset routes (public, CSRF-exempt — see bootstrap/app.php).
+// Rate-limited since they are unauthenticated and send mail / write tokens.
+Route::post('/password/forgot', [PasswordResetController::class, 'forgotPassword'])->middleware('throttle:6,1');
+Route::post('/password/reset', [PasswordResetController::class, 'resetPassword'])->middleware('throttle:6,1');
+Route::post('/password/verify-token', [PasswordResetController::class, 'verifyToken'])->middleware('throttle:30,1');
 
 // Fulfillment routes (public for internal use)
 Route::prefix('v1')->group(function () {

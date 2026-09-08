@@ -20,6 +20,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             \App\Http\Middleware\NormalizeApiErrorResponse::class,
         ]);
+
+        // Public, pre-authentication endpoints: the caller has no session or
+        // XSRF cookie yet, so Sanctum's stateful CSRF check only ever 419s them.
+        // Throttling (see routes/api.php) is the real protection here.
+        $middleware->validateCsrfTokens(except: [
+            'api/password/forgot',
+            'api/password/reset',
+            'api/password/verify-token',
+        ]);
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'password.current' => \App\Http\Middleware\EnsurePasswordIsCurrent::class,

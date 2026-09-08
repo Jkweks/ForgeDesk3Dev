@@ -34,6 +34,7 @@ class StageTemplateSetController extends Controller
             'elevation_type_id' => 'required|integer|exists:fd_elevation_types,id',
             'name'              => 'required|string|max:100',
             'is_default'        => 'sometimes|boolean',
+            'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
 
         if ($this->nameTaken($data['elevation_type_id'], $data['name'])) {
@@ -48,6 +49,9 @@ class StageTemplateSetController extends Controller
                 'name'       => $data['name'],
                 'sort_order' => $max + 1,
                 'is_default' => $data['is_default'] ?? false,
+                'minutes_per_joint' => isset($data['minutes_per_joint']) && $data['minutes_per_joint'] !== null
+                    ? max(0, round((float) $data['minutes_per_joint'], 2))
+                    : null,
             ]);
 
             if ($set->is_default) {
@@ -64,9 +68,10 @@ class StageTemplateSetController extends Controller
     {
         $set  = FdStageTemplateSet::findOrFail($id);
         $data = $request->validate([
-            'name'       => 'sometimes|required|string|max:100',
-            'sort_order' => 'sometimes|integer',
-            'is_default' => 'sometimes|boolean',
+            'name'              => 'sometimes|required|string|max:100',
+            'sort_order'        => 'sometimes|integer',
+            'is_default'        => 'sometimes|boolean',
+            'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
 
         if (isset($data['name']) && $this->nameTaken($set->elevation_type_id, $data['name'], $set->id)) {
@@ -79,6 +84,11 @@ class StageTemplateSetController extends Controller
             }
             if (array_key_exists('sort_order', $data)) {
                 $set->sort_order = (int) $data['sort_order'];
+            }
+            if (array_key_exists('minutes_per_joint', $data)) {
+                $set->minutes_per_joint = $data['minutes_per_joint'] !== null
+                    ? max(0, round((float) $data['minutes_per_joint'], 2))
+                    : null;
             }
             // Only ever promote a tier to default; demote the rest. To change the
             // default, promote a different tier.
@@ -159,15 +169,17 @@ class StageTemplateSetController extends Controller
             'name'              => $s->name,
             'sort_order'        => $s->sort_order,
             'is_default'        => $s->is_default,
+            'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
             'stage_templates'   => $s->relationLoaded('templates')
                 ? $s->templates->map(fn ($t) => [
-                    'id'              => $t->id,
-                    'name'            => $t->name,
-                    'description'     => $t->description,
-                    'sort_order'      => $t->sort_order,
-                    'blocks_next'     => (bool) $t->blocks_next,
-                    'default_user_id' => $t->default_user_id,
-                    'default_user'    => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
+                    'id'                => $t->id,
+                    'name'              => $t->name,
+                    'description'       => $t->description,
+                    'sort_order'        => $t->sort_order,
+                    'blocks_next'       => (bool) $t->blocks_next,
+                    'minutes_per_joint' => $t->minutes_per_joint !== null ? (float) $t->minutes_per_joint : null,
+                    'default_user_id'   => $t->default_user_id,
+                    'default_user'      => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
                 ])->values()
                 : [],
         ];

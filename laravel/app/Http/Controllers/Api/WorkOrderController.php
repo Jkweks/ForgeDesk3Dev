@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FdWorkOrder;
+use App\Models\FdWoStage;
 use App\Models\BusinessJob;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,11 +17,20 @@ class WorkOrderController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = FdWorkOrder::with(['businessJob', 'assignedUsers'])
+            $query = FdWorkOrder::with([
+                'businessJob',
+                'assignedUsers',
+                // Light columns only — enough for the time-estimate roll-up.
+                'elevations:id,work_order_id,joint_qty,template_set_id',
+                'elevations.stages:id,elevation_id,minutes_per_joint',
+                'elevations.templateSet:id,minutes_per_joint',
+            ])
                 ->withCount([
                     'elevations',
                     'elevations as elevations_complete' => fn($q) => $q->whereNotNull('date_completed'),
-                ]);
+                ])
+                ->withMin('elevations as elevation_due_first', 'date_requested')
+                ->withMax('elevations as elevation_due_last', 'date_requested');
 
             $archived = $request->boolean('archived', false);
             $query->where('archived', $archived);
@@ -70,6 +81,7 @@ class WorkOrderController extends Controller
                 'steps.completedBy',
                 'elevations.elevationType',
                 'elevations.completedBy',
+                'elevations.templateSet',
                 'elevations.stages.assignedTo',
                 'elevations.stages.completedBy',
             ])->findOrFail($id);
@@ -144,8 +156,14 @@ class WorkOrderController extends Controller
         try {
             $wo = FdWorkOrder::findOrFail($id);
             $wo->fill($request->only([
-                'date_issued', 'due_date', 'material_delivery', 'notes', 'priority', 'priority_locked',
+                'date_issued', 'due_date', 'material_delivery', 'estimated_minutes_override',
+                'notes', 'priority', 'priority_locked',
             ]));
+
+            // Empty string from the form reverts to the computed roll-up.
+            if ($request->has('estimated_minutes_override') && ! $request->filled('estimated_minutes_override')) {
+                $wo->estimated_minutes_override = null;
+            }
 
             // Typing an explicit priority number is a manual pin.
             if ($request->has('priority') && ! $request->has('priority_locked')) {
@@ -220,9 +238,44 @@ class WorkOrderController extends Controller
     public function updateAssignments(Request $request, int $id)
     {
         try {
-            $wo = FdWorkOrder::findOrFail($id);
-            $userIds = $request->input('user_ids', []);
-            $wo->assignedUsers()->sync($userIds);
+            $wo = FdWorkOrder::with('elevations.stages.assignees')->findOrFail($id);
+
+            $newIds = collect($request->input('user_ids', []))
+                ->map(fn ($v) => (int) $v)->filter()->unique()->values();
+            $oldIds = $wo->assignedUsers()->pluck('fd_users.id')->map(fn ($v) => (int) $v);
+
+            $added   = $newIds->diff($oldIds);   // now on the WO, weren't before
+            $removed = $oldIds->diff($newIds);   // dropped from the WO
+
+            DB::transaction(function () use ($wo, $newIds, $added, $removed) {
+                $wo->assignedUsers()->sync($newIds->all());
+
+                if ($added->isEmpty() && $removed->isEmpty()) {
+                    return;
+                }
+
+                // Push the delta down to every still-open elevation stage: added
+                // workers join the queue, removed workers drop out of it.
+                foreach ($wo->elevations as $elev) {
+                    foreach ($elev->stages as $stage) {
+                        if (in_array($stage->status, FdWoStage::TERMINAL, true)) {
+                            continue;
+                        }
+
+                        $current = $stage->assignees->pluck('id')->map(fn ($v) => (int) $v);
+                        if ($current->isEmpty() && $stage->assigned_to_id) {
+                            $current = collect([(int) $stage->assigned_to_id]);
+                        }
+
+                        $next = $current->diff($removed)->merge($added)->unique()->sort()->values();
+
+                        if ($next->all() !== $current->sort()->values()->all()) {
+                            $stage->syncAssignees($next->all());
+                        }
+                    }
+                }
+            });
+
             return response()->json(['updated' => $id]);
         } catch (\Exception $e) {
             Log::error('WorkOrderController@updateAssignments failed', ['id' => $id, 'message' => $e->getMessage()]);
@@ -333,11 +386,32 @@ class WorkOrderController extends Controller
         }
     }
 
+    private function normDate($v): ?string
+    {
+        if (! $v) {
+            return null;
+        }
+        return $v instanceof \DateTimeInterface ? $v->format('Y-m-d') : Carbon::parse($v)->format('Y-m-d');
+    }
+
     private function formatWo(FdWorkOrder $wo): array
     {
         $job = $wo->relationLoaded('businessJob') ? $wo->businessJob : $wo->businessJob()->first();
 
         $users = $wo->relationLoaded('assignedUsers') ? $wo->assignedUsers : collect();
+
+        // Earliest / latest elevation "Requested" date — from the aggregate on the
+        // list query, or straight off the loaded elevations on the detail call.
+        $dueFirst = $this->normDate(
+            $wo->elevation_due_first
+                ?? ($wo->relationLoaded('elevations') ? $wo->elevations->min('date_requested') : null)
+        );
+        $dueLast = $this->normDate(
+            $wo->elevation_due_last
+                ?? ($wo->relationLoaded('elevations') ? $wo->elevations->max('date_requested') : null)
+        );
+
+        $estimate = $wo->estimateMinutes();
 
         return [
             'id'                  => $wo->id,
@@ -346,7 +420,15 @@ class WorkOrderController extends Controller
             'release_label'       => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}",
             'date_issued'         => $wo->date_issued?->format('Y-m-d'),
             'due_date'            => $wo->due_date?->format('Y-m-d'),
+            'due_date_first'      => $dueFirst ?? $wo->due_date?->format('Y-m-d'),
+            'due_date_last'       => $dueLast ?? $wo->due_date?->format('Y-m-d'),
             'material_delivery'   => $wo->material_delivery,
+            'estimated_minutes'          => $estimate['effective'],
+            'estimated_minutes_computed' => $estimate['computed'],
+            'estimated_minutes_override' => $estimate['override'],
+            'joint_qty_total'            => $wo->relationLoaded('elevations')
+                ? ($wo->elevations->sum(fn ($e) => (int) $e->joint_qty) ?: null)
+                : null,
             'notes'               => $wo->notes,
             'archived'            => $wo->archived,
             'priority'            => $wo->priority,
@@ -374,6 +456,8 @@ class WorkOrderController extends Controller
     {
         $stages = $e->relationLoaded('stages') ? $e->stages : collect();
 
+        $estimate = $e->estimateMinutes();
+
         return [
             'id'                => $e->id,
             'elevation_type_id' => $e->elevation_type_id,
@@ -385,6 +469,9 @@ class WorkOrderController extends Controller
             ] : null,
             'elevation_tag'     => $e->elevation_tag,
             'quantity'          => $e->quantity,
+            'joint_qty'         => $e->joint_qty,
+            'minutes_per_joint' => round($estimate['rate'], 2),
+            'estimated_minutes' => $estimate['effective'],
             'date_requested'    => $e->date_requested?->format('Y-m-d'),
             'date_completed'    => $e->date_completed?->format('Y-m-d'),
             'completed_by_id'   => $e->completed_by_id,
@@ -401,6 +488,7 @@ class WorkOrderController extends Controller
                 'status'            => $s->status,
                 'sort_order'        => $s->sort_order,
                 'blocks_next'       => (bool) $s->blocks_next,
+                'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
                 'assigned_name'     => $s->assignedTo?->name,
                 'completed_by_id'   => $s->completed_by_id,
                 'completed_by_name' => $s->completedBy?->name,

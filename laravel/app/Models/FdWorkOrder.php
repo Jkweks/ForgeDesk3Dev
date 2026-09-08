@@ -35,15 +35,48 @@ class FdWorkOrder extends Model
 
     protected $fillable = [
         'business_job_id', 'release_number', 'date_issued', 'due_date',
-        'material_delivery', 'notes', 'archived', 'priority', 'priority_locked',
+        'material_delivery', 'estimated_minutes_override', 'notes', 'archived', 'priority', 'priority_locked',
     ];
 
     protected $casts = [
-        'date_issued'     => 'date',
-        'due_date'        => 'date',
-        'archived'        => 'boolean',
-        'priority_locked' => 'boolean',
+        'date_issued'                => 'date',
+        'due_date'                   => 'date',
+        'archived'                   => 'boolean',
+        'priority_locked'            => 'boolean',
+        'estimated_minutes_override' => 'integer',
     ];
+
+    /**
+     * The work order's labour-time estimate: every elevation's effective
+     * estimate summed, unless a manual override is set on the work order.
+     *
+     * @return array{computed: int|null, override: int|null, effective: int|null}
+     */
+    public function estimateMinutes(): array
+    {
+        $elevations = $this->relationLoaded('elevations')
+            ? $this->elevations
+            : $this->elevations()->with(['stages', 'templateSet'])->get();
+
+        $sum = 0;
+        $any = false;
+        foreach ($elevations as $elev) {
+            $eff = $elev->estimateMinutes()['effective'];
+            if ($eff !== null) {
+                $sum += $eff;
+                $any = true;
+            }
+        }
+
+        $computed = $any ? $sum : null;
+        $override = $this->estimated_minutes_override;
+
+        return [
+            'computed'  => $computed,
+            'override'  => $override,
+            'effective' => $override ?? $computed,
+        ];
+    }
 
     /**
      * Rebuild the global `priority` ranking over non-archived work orders.
@@ -108,6 +141,22 @@ class FdWorkOrder extends Model
                 self::whereKey($id)->update(['priority' => $p]);
             }
         });
+    }
+
+    /**
+     * Re-derive `due_date` from the elevations: the earliest elevation
+     * `date_requested` wins ("closest date"). Null when no elevation carries a
+     * date. Persists only on a real change. Callers should follow with
+     * resequencePriorities() so the ranking picks up the move.
+     */
+    public function recalcDueDateFromElevations(): void
+    {
+        $earliest = $this->elevations()->whereNotNull('date_requested')->min('date_requested');
+        $value = $earliest ? \Illuminate\Support\Carbon::parse($earliest)->format('Y-m-d') : null;
+
+        if (optional($this->due_date)->format('Y-m-d') !== $value) {
+            $this->forceFill(['due_date' => $value])->save();
+        }
     }
 
     public function businessJob(): BelongsTo

@@ -2566,6 +2566,13 @@
                 title="Blocks the next stage until this one is done"
                 onchange="saveTplField(${t.id}, 'blocks_next', this.checked)">
             </td>
+            <td style="width:92px">
+              <input type="number" min="0" step="0.25" class="form-control form-control-sm" style="width:82px"
+                value="${t.minutes_per_joint ?? ''}" placeholder="—"
+                title="Minutes of labour per joint for this step (optional)"
+                onblur="saveTplField(${t.id}, 'minutes_per_joint', this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </td>
             <td>
               <select class="form-select form-select-sm" style="min-width:160px"
                   onchange="saveTplField(${t.id}, 'default_user_id', this.value || null)">
@@ -2579,6 +2586,16 @@
             </td>
           </tr>`).join('');
 
+        const tierRate = set ? `
+          <span class="d-inline-flex align-items-center gap-1 ms-2">
+            <span class="text-muted small">Tier min / joint:</span>
+            <input type="number" min="0" step="0.25" class="form-control form-control-sm" style="width:82px"
+              value="${set.minutes_per_joint ?? ''}" placeholder="—"
+              title="Fallback labour rate for the whole tier — used only when no step sets its own"
+              onblur="saveTierField(${set.id}, 'minutes_per_joint', this.value)"
+              onkeydown="if(event.key==='Enter')this.blur()">
+          </span>` : '';
+
         document.getElementById('tplModalBody').innerHTML = `
           <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
             <span class="text-muted small me-1">Tier:</span>
@@ -2586,12 +2603,14 @@
             <button class="btn btn-sm btn-ghost-primary" onclick="addTplSet()" title="Add complexity tier">
               <i class="ti ti-plus"></i> Tier
             </button>
+            ${tierRate}
             <span class="ms-auto d-flex gap-1">${tierControls}</span>
           </div>
           <p class="text-muted small mb-2">
             Each tier is an independent step list — pick it when creating an elevation, or bump an
             elevation up later. “Blocks next” gates the following stage until this one is done.
-            Names/descriptions save on blur.
+            Set <strong>Min / joint</strong> per step, or leave the steps blank and set one
+            <strong>Tier min / joint</strong> for the whole list. Saves on blur.
           </p>
           <div class="table-responsive">
             <table class="table table-sm table-vcenter align-middle mb-2">
@@ -2602,11 +2621,12 @@
                   <th>Stage Name</th>
                   <th>Description</th>
                   <th style="width:70px" class="text-center">Blocks next</th>
+                  <th style="width:92px" title="Minutes of labour per joint for this step">Min / joint</th>
                   <th>Default Assignee</th>
                   <th style="width:48px"></th>
                 </tr>
               </thead>
-              <tbody>${rows || '<tr><td colspan="7" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
+              <tbody>${rows || '<tr><td colspan="8" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
             </table>
           </div>
           <div class="border-top pt-3">
@@ -2618,6 +2638,10 @@
               <div style="min-width:200px">
                 <label class="form-label mb-1 small">Description (optional)</label>
                 <input type="text" class="form-control form-control-sm" id="tpl-new-desc" placeholder="Brief description">
+              </div>
+              <div style="width:104px">
+                <label class="form-label mb-1 small">Min / joint</label>
+                <input type="number" min="0" step="0.25" class="form-control form-control-sm" id="tpl-new-mpj" placeholder="—">
               </div>
               <button class="btn btn-primary btn-sm" onclick="addTpl()" ${set ? '' : 'disabled'}>
                 <i class="ti ti-plus me-1"></i>Add Stage
@@ -2646,6 +2670,23 @@
         } catch (e) { console.error(e); fabToast('Failed to save.', 'error'); }
       }
 
+      // Tier-level field (currently just the fallback minutes/joint rate).
+      async function saveTierField(setId, field, value) {
+        const set = tplSets.find(s => s.id === setId);
+        if (set) set[field] = value === '' ? null : parseFloat(value);
+        try {
+          await fetch(`/api/v1/stage-template-sets/${setId}`, {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': adminCsrfToken(),
+            },
+            body: JSON.stringify({ [field]: value === '' ? null : Math.max(0, parseFloat(value) || 0) }),
+          });
+        } catch (e) { console.error(e); fabToast('Failed to save.', 'error'); }
+      }
+
       async function moveTpl(id, direction) {
         try {
           const templates = (tplActiveSet()?.stage_templates || []);
@@ -2669,6 +2710,7 @@
       async function addTpl() {
         const name = document.getElementById('tpl-new-name').value.trim();
         const desc = document.getElementById('tpl-new-desc').value.trim();
+        const mpj  = document.getElementById('tpl-new-mpj').value;
         if (!name) { fabToast('Stage name is required.', 'info'); return; }
         if (!tplActiveSetId) { fabToast('Add a tier first.', 'info'); return; }
         try {
@@ -2684,6 +2726,7 @@
               template_set_id: tplActiveSetId,
               name,
               description: desc || null,
+              minutes_per_joint: mpj === '' ? null : Math.max(0, parseFloat(mpj) || 0),
             }),
           });
           await reloadTplModal();
