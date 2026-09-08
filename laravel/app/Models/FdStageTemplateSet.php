@@ -14,9 +14,12 @@ class FdStageTemplateSet extends Model
 {
     protected $table = 'fd_stage_template_sets';
 
-    protected $fillable = ['elevation_type_id', 'name', 'sort_order', 'is_default'];
+    protected $fillable = ['elevation_type_id', 'name', 'sort_order', 'is_default', 'minutes_per_joint'];
 
-    protected $casts = ['is_default' => 'boolean'];
+    protected $casts = [
+        'is_default'        => 'boolean',
+        'minutes_per_joint' => 'decimal:2',
+    ];
 
     public function elevationType(): BelongsTo
     {

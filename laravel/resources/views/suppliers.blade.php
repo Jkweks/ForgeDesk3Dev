@@ -162,17 +162,21 @@
               <!-- Contact Information -->
               <h5 class="mb-3"><i class="ti ti-user me-2"></i>Contact Information</h5>
               <div class="row mb-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                   <label class="form-label">Contact Name</label>
                   <input type="text" class="form-control" id="supplierContactName" name="contact_name">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                   <label class="form-label">Email</label>
                   <input type="email" class="form-control" id="supplierContactEmail" name="contact_email">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                   <label class="form-label">Phone</label>
                   <input type="tel" class="form-control" id="supplierContactPhone" name="contact_phone">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Fax</label>
+                  <input type="tel" class="form-control" id="supplierFax" name="fax">
                 </div>
               </div>
 
@@ -563,6 +567,7 @@
         document.getElementById('supplierContactName').value = supplier.supplier.contact_name || '';
         document.getElementById('supplierContactEmail').value = supplier.supplier.contact_email || '';
         document.getElementById('supplierContactPhone').value = supplier.supplier.contact_phone || '';
+        document.getElementById('supplierFax').value = supplier.supplier.fax || '';
         document.getElementById('supplierAddress').value = supplier.supplier.address || '';
         document.getElementById('supplierCity').value = supplier.supplier.city || '';
         document.getElementById('supplierState').value = supplier.supplier.state || '';
@@ -611,6 +616,7 @@
                 <tr><th>Contact:</th><td>${supplier.contact_name ? escapeHtml(supplier.contact_name) : '-'}</td></tr>
                 <tr><th>Email:</th><td>${supplier.contact_email ? `<a href="mailto:${escapeHtml(supplier.contact_email)}">${escapeHtml(supplier.contact_email)}</a>` : '-'}</td></tr>
                 <tr><th>Phone:</th><td>${supplier.contact_phone ? escapeHtml(supplier.contact_phone) : '-'}</td></tr>
+                <tr><th>Fax:</th><td>${supplier.fax ? escapeHtml(supplier.fax) : '-'}</td></tr>
               </table>
             </div>
           </div>
@@ -721,6 +727,7 @@
         contact_name: document.getElementById('supplierContactName').value || null,
         contact_email: document.getElementById('supplierContactEmail').value || null,
         contact_phone: document.getElementById('supplierContactPhone').value || null,
+        fax: document.getElementById('supplierFax').value || null,
         address: document.getElementById('supplierAddress').value || null,
         city: document.getElementById('supplierCity').value || null,
         state: document.getElementById('supplierState').value || null,

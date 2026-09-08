@@ -20,6 +20,7 @@ class PurchaseOrder extends Model
         'total_amount',
         'notes',
         'ship_to',
+        'ship_to_location_id',
         'contact_name',
         'contact_email',
         'contact_phone',
@@ -40,6 +41,11 @@ class PurchaseOrder extends Model
     public function supplier()
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function shipToLocation()
+    {
+        return $this->belongsTo(CompanyLocation::class, 'ship_to_location_id');
     }
 
     public function items()

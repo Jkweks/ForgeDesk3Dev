@@ -659,7 +659,11 @@
     try {
       const response = await fetch('/api/password/forgot', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+        },
         body: JSON.stringify({ email })
       });
 
@@ -725,7 +729,11 @@
     try {
       const response = await fetch('/api/password/reset', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+        },
         body: JSON.stringify({
           email,
           token,
@@ -775,7 +783,11 @@
       // Verify token is valid
       fetch('/api/password/verify-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+        },
         body: JSON.stringify({ email, token })
       })
       .then(response => response.json())

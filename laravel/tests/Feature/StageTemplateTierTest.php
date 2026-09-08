@@ -95,6 +95,75 @@ class StageTemplateTierTest extends TestCase
         $this->assertCount(4, $res->json('stages'));
     }
 
+    public function test_stage_template_minutes_per_joint_round_trips_and_seeds_onto_stages(): void
+    {
+        // Create via API with a rate.
+        $created = $this->postJson('/api/v1/stage-templates', [
+            'elevation_type_id' => $this->type->id,
+            'template_set_id'   => $this->standard->id,
+            'name'              => 'Weld Out',
+            'minutes_per_joint' => 4.5,
+        ])->assertCreated()->json('template');
+        $this->assertEquals(4.5, $created['minutes_per_joint']);
+
+        // Edit an existing one.
+        $mc = FdStageTemplate::where('template_set_id', $this->standard->id)->where('name', 'Material Check')->first();
+        $this->patchJson("/api/v1/stage-templates/{$mc->id}", ['minutes_per_joint' => 2])
+            ->assertOk()->assertJsonPath('template.minutes_per_joint', 2);
+
+        // Blank clears it.
+        $this->patchJson("/api/v1/stage-templates/{$mc->id}", ['minutes_per_joint' => ''])
+            ->assertOk()->assertJsonPath('template.minutes_per_joint', null);
+        $this->patchJson("/api/v1/stage-templates/{$mc->id}", ['minutes_per_joint' => 2])->assertOk();
+
+        // Surfaced in the with_templates payload.
+        $payload = $this->getJson('/api/v1/elevation-types?with_templates=1')->json('elevation_types');
+        $tpls = collect($payload)->firstWhere('id', $this->type->id)['stage_templates'];
+        $this->assertEquals(2, collect($tpls)->firstWhere('name', 'Material Check')['minutes_per_joint']);
+
+        // A freshly seeded elevation copies the rate onto its stages.
+        $wo = $this->workOrder();
+        $stages = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
+            'elevation_tag' => 'CW-EM', 'elevation_type_id' => $this->type->id,
+        ])->assertCreated()->json('stages');
+        $this->assertEquals(2, collect($stages)->firstWhere('name', 'Material Check')['minutes_per_joint']);
+    }
+
+    public function test_tier_level_minutes_per_joint_is_the_fallback_when_no_step_sets_one(): void
+    {
+        // Rate on the tier, none on any step.
+        $this->patchJson("/api/v1/stage-template-sets/{$this->standard->id}", ['minutes_per_joint' => 5])
+            ->assertOk()->assertJsonPath('stage_template_set.minutes_per_joint', 5);
+
+        // Surfaced in the admin (with_templates) payload.
+        $sets = collect($this->getJson('/api/v1/elevation-types?with_templates=1')->json('elevation_types'))
+            ->firstWhere('id', $this->type->id)['stage_template_sets'];
+        $this->assertEquals(5, collect($sets)->firstWhere('id', $this->standard->id)['minutes_per_joint']);
+
+        $wo = $this->workOrder();
+        $elevId = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
+            'elevation_tag' => 'CW-TF', 'elevation_type_id' => $this->type->id,
+        ])->assertCreated()->json('id');
+
+        // 8 joints × the 5 min tier fallback = 40.
+        $this->patchJson("/api/v1/elevations/{$elevId}", ['joint_qty' => 8])
+            ->assertOk()->assertJsonPath('estimated_minutes', 40)->assertJsonPath('minutes_per_joint', 5);
+
+        // A step rate on this tier takes precedence over the tier fallback.
+        $mc = FdStageTemplate::where('template_set_id', $this->standard->id)->where('name', 'Material Check')->first();
+        $this->patchJson("/api/v1/stage-templates/{$mc->id}", ['minutes_per_joint' => 3])->assertOk();
+
+        // Existing elevation's stages aren't retro-updated, so it still uses the fallback…
+        $this->assertSame(40, $this->getJson("/api/v1/work-orders/{$wo->id}")->json('estimated_minutes'));
+
+        // …but a newly seeded elevation now sums step rates (3) and ignores the tier's 5.
+        $elev2 = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
+            'elevation_tag' => 'CW-TF2', 'elevation_type_id' => $this->type->id,
+        ])->assertCreated()->json('id');
+        $this->patchJson("/api/v1/elevations/{$elev2}", ['joint_qty' => 8])
+            ->assertOk()->assertJsonPath('minutes_per_joint', 3)->assertJsonPath('estimated_minutes', 24);
+    }
+
     // ── resync on tier bump ────────────────────────────────────────────────
 
     public function test_tier_bump_adds_carries_and_retires_stages(): void
@@ -148,6 +217,53 @@ class StageTemplateTierTest extends TestCase
         $this->assertContains('Member Fab', $summary['kept_with_progress']);
         $elev->load('stages');
         $this->assertSame('complete', $elev->stages->firstWhere('name', 'Member Fab')->status);
+    }
+
+    public function test_tier_bump_with_no_progress_hard_replaces_and_assigns(): void
+    {
+        $fabUser = \App\Models\FdUser::create(['name' => 'Fab', 'role' => 'worker', 'active' => true]);
+        $defaultUser = \App\Models\FdUser::create(['name' => 'Default', 'role' => 'worker', 'active' => true]);
+
+        $adv = FdStageTemplateSet::create(['elevation_type_id' => $this->type->id, 'name' => 'Advanced', 'sort_order' => 1]);
+        $this->tpl($adv, 'Material Check', 1);
+        FdStageTemplate::create([
+            'elevation_type_id' => $adv->elevation_type_id,
+            'template_set_id'   => $adv->id,
+            'name'              => 'Thermal Break',
+            'sort_order'        => 2,
+            'default_user_id'   => $defaultUser->id,
+        ]);
+
+        $wo = $this->workOrder();
+        $wo->assignedUsers()->sync([$fabUser->id]);
+
+        $elevId = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
+            'elevation_tag' => 'CW-5', 'elevation_type_id' => $this->type->id,
+        ])->json('id');
+        $elev = FdWoElevation::with('stages')->find($elevId);
+        $oldIds = $elev->stages->pluck('id')->all();
+        // Everything is still pending — nothing started, held, or completed.
+
+        $summary = $this->patchJson("/api/v1/elevations/{$elevId}", ['template_set_id' => $adv->id])
+            ->assertOk()->json('resync_summary');
+
+        $this->assertEmpty($summary['carried']);
+        $this->assertEmpty($summary['kept_with_progress']);
+        $this->assertContains('Material Check', $summary['added']);
+        $this->assertContains('Thermal Break', $summary['added']);
+
+        $elev->load('stages.assignees');
+        $newIds = $elev->stages->pluck('id')->all();
+        $this->assertEmpty(array_intersect($oldIds, $newIds), 'old stages should be gone, not reused');
+
+        // No default operator on the template -> inherits the WO's crew.
+        $materialCheck = $elev->stages->firstWhere('name', 'Material Check');
+        $this->assertSame([$fabUser->id], $materialCheck->assignees->pluck('id')->all());
+
+        // A template default operator wins outright (not co-assigned with the crew).
+        $thermalBreak = $elev->stages->firstWhere('name', 'Thermal Break');
+        $this->assertSame([$defaultUser->id], $thermalBreak->assignees->pluck('id')->all());
+        $this->assertSame($defaultUser->id, $thermalBreak->assigned_to_id);
     }
 
     // ── tier CRUD ─────────────────────────────────────────────────────────

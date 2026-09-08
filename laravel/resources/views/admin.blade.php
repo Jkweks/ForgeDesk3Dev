@@ -180,67 +180,34 @@
                       <h3 class="mb-4">System Settings</h3>
 
                       <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-12">
                           <div class="card">
-                            <div class="card-header">
-                              <h4 class="card-title">Application Settings</h4>
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                              <h4 class="card-title mb-0">Company Locations</h4>
+                              <button class="btn btn-sm btn-primary" onclick="openCompanyLocationModal()">
+                                <i class="ti ti-plus me-1"></i>Add Location
+                              </button>
                             </div>
                             <div class="card-body">
-                              <div class="mb-3">
-                                <label class="form-label">Company Name</label>
-                                <input type="text" class="form-control" value="ForgeDesk" placeholder="Company name">
-                              </div>
-                              <div class="mb-3">
-                                <label class="form-label">Default Currency</label>
-                                <select class="form-select">
-                                  <option value="USD" selected>USD ($)</option>
-                                  <option value="EUR">EUR (€)</option>
-                                  <option value="GBP">GBP (£)</option>
-                                </select>
-                              </div>
-                              <div class="mb-3">
-                                <label class="form-label">Timezone</label>
-                                <select class="form-select">
-                                  <option value="America/New_York" selected>Eastern Time (ET)</option>
-                                  <option value="America/Chicago">Central Time (CT)</option>
-                                  <option value="America/Denver">Mountain Time (MT)</option>
-                                  <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="col-md-6">
-                          <div class="card">
-                            <div class="card-header">
-                              <h4 class="card-title">Security Settings</h4>
-                            </div>
-                            <div class="card-body">
-                              <div class="mb-3">
-                                <label class="form-label">Session Timeout (minutes)</label>
-                                <input type="number" class="form-control" value="120" placeholder="Minutes">
-                              </div>
-                              <div class="mb-3">
-                                <label class="form-label">Password Requirements</label>
-                                <div class="form-selectgroup">
-                                  <label class="form-selectgroup-item">
-                                    <input type="checkbox" class="form-selectgroup-input" checked>
-                                    <span class="form-selectgroup-label">Minimum 8 characters</span>
-                                  </label>
-                                  <label class="form-selectgroup-item">
-                                    <input type="checkbox" class="form-selectgroup-input" checked>
-                                    <span class="form-selectgroup-label">Require uppercase</span>
-                                  </label>
-                                  <label class="form-selectgroup-item">
-                                    <input type="checkbox" class="form-selectgroup-input" checked>
-                                    <span class="form-selectgroup-label">Require numbers</span>
-                                  </label>
-                                  <label class="form-selectgroup-item">
-                                    <input type="checkbox" class="form-selectgroup-input">
-                                    <span class="form-selectgroup-label">Require special characters</span>
-                                  </label>
-                                </div>
+                              <p class="text-muted">
+                                The <strong>primary</strong> location prints as the order-from / bill-to address on
+                                purchase order PDFs. Any location can be picked as a PO's ship-to address.
+                              </p>
+                              <div class="table-responsive">
+                                <table class="table table-vcenter">
+                                  <thead>
+                                    <tr>
+                                      <th>Name</th>
+                                      <th>Address</th>
+                                      <th>Phone / Fax</th>
+                                      <th class="text-center">Primary</th>
+                                      <th class="w-1"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody id="companyLocationsBody">
+                                    <tr><td colspan="5" class="text-muted text-center py-3">Loading…</td></tr>
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           </div>
@@ -249,7 +216,114 @@
 
                       <div class="row mt-3">
                         <div class="col-12">
-                          <button class="btn btn-primary">Save Settings</button>
+                          <div class="card">
+                            <div class="card-header">
+                              <h4 class="card-title mb-0">Company Branding</h4>
+                            </div>
+                            <div class="card-body">
+                              <div class="row align-items-center">
+                                <div class="col-md-4">
+                                  <div id="companyLogoPreview" class="border rounded d-flex align-items-center justify-content-center p-3"
+                                       style="min-height:120px; background:#f8fafc;">
+                                    <span class="text-muted">No logo uploaded</span>
+                                  </div>
+                                </div>
+                                <div class="col-md-8">
+                                  <label class="form-label">Company Logo</label>
+                                  <input type="file" class="form-control" id="companyLogoInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                                  <small class="form-hint">Printed on purchase order PDFs. PNG or JPG, up to 4&nbsp;MB.</small>
+                                  <div class="mt-2">
+                                    <button class="btn btn-primary btn-sm" onclick="uploadCompanyLogo()">
+                                      <i class="ti ti-upload me-1"></i>Upload
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" id="removeCompanyLogoBtn" onclick="removeCompanyLogo()" style="display:none;">
+                                      <i class="ti ti-trash me-1"></i>Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Company Location Modal -->
+                    <div class="modal modal-blur fade" id="companyLocationModal" tabindex="-1">
+                      <div class="modal-dialog modal-lg" role="document">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title" id="companyLocationModalTitle">Add Company Location</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                          </div>
+                          <div class="modal-body">
+                            <input type="hidden" id="clId">
+                            <div class="row">
+                              <div class="col-md-8 mb-3">
+                                <label class="form-label required">Location Name</label>
+                                <input type="text" class="form-control" id="clName" placeholder="e.g. Main Plant">
+                              </div>
+                              <div class="col-md-4 mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <label class="form-check form-switch mt-2">
+                                  <input class="form-check-input" type="checkbox" id="clIsPrimary">
+                                  <span class="form-check-label">Primary (order-from) location</span>
+                                </label>
+                              </div>
+                            </div>
+                            <div class="row">
+                              <div class="col-md-6 mb-3">
+                                <label class="form-label">Address Line 1</label>
+                                <input type="text" class="form-control" id="clAddr1">
+                              </div>
+                              <div class="col-md-6 mb-3">
+                                <label class="form-label">Address Line 2</label>
+                                <input type="text" class="form-control" id="clAddr2">
+                              </div>
+                            </div>
+                            <div class="row">
+                              <div class="col-md-5 mb-3">
+                                <label class="form-label">City</label>
+                                <input type="text" class="form-control" id="clCity">
+                              </div>
+                              <div class="col-md-3 mb-3">
+                                <label class="form-label">State</label>
+                                <input type="text" class="form-control" id="clState">
+                              </div>
+                              <div class="col-md-4 mb-3">
+                                <label class="form-label">ZIP</label>
+                                <input type="text" class="form-control" id="clZip">
+                              </div>
+                            </div>
+                            <div class="row">
+                              <div class="col-md-4 mb-3">
+                                <label class="form-label">Country</label>
+                                <input type="text" class="form-control" id="clCountry" value="USA">
+                              </div>
+                              <div class="col-md-4 mb-3">
+                                <label class="form-label">Phone</label>
+                                <input type="text" class="form-control" id="clPhone">
+                              </div>
+                              <div class="col-md-4 mb-3">
+                                <label class="form-label">Fax</label>
+                                <input type="text" class="form-control" id="clFax">
+                              </div>
+                            </div>
+                            <div class="row">
+                              <div class="col-md-6 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="clEmail">
+                              </div>
+                              <div class="col-md-6 mb-3">
+                                <label class="form-label">Notes</label>
+                                <input type="text" class="form-control" id="clNotes">
+                              </div>
+                            </div>
+                          </div>
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-link link-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="saveCompanyLocation()">Save Location</button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2492,6 +2566,13 @@
                 title="Blocks the next stage until this one is done"
                 onchange="saveTplField(${t.id}, 'blocks_next', this.checked)">
             </td>
+            <td style="width:92px">
+              <input type="number" min="0" step="0.25" class="form-control form-control-sm" style="width:82px"
+                value="${t.minutes_per_joint ?? ''}" placeholder="—"
+                title="Minutes of labour per joint for this step (optional)"
+                onblur="saveTplField(${t.id}, 'minutes_per_joint', this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </td>
             <td>
               <select class="form-select form-select-sm" style="min-width:160px"
                   onchange="saveTplField(${t.id}, 'default_user_id', this.value || null)">
@@ -2505,6 +2586,16 @@
             </td>
           </tr>`).join('');
 
+        const tierRate = set ? `
+          <span class="d-inline-flex align-items-center gap-1 ms-2">
+            <span class="text-muted small">Tier min / joint:</span>
+            <input type="number" min="0" step="0.25" class="form-control form-control-sm" style="width:82px"
+              value="${set.minutes_per_joint ?? ''}" placeholder="—"
+              title="Fallback labour rate for the whole tier — used only when no step sets its own"
+              onblur="saveTierField(${set.id}, 'minutes_per_joint', this.value)"
+              onkeydown="if(event.key==='Enter')this.blur()">
+          </span>` : '';
+
         document.getElementById('tplModalBody').innerHTML = `
           <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
             <span class="text-muted small me-1">Tier:</span>
@@ -2512,12 +2603,14 @@
             <button class="btn btn-sm btn-ghost-primary" onclick="addTplSet()" title="Add complexity tier">
               <i class="ti ti-plus"></i> Tier
             </button>
+            ${tierRate}
             <span class="ms-auto d-flex gap-1">${tierControls}</span>
           </div>
           <p class="text-muted small mb-2">
             Each tier is an independent step list — pick it when creating an elevation, or bump an
             elevation up later. “Blocks next” gates the following stage until this one is done.
-            Names/descriptions save on blur.
+            Set <strong>Min / joint</strong> per step, or leave the steps blank and set one
+            <strong>Tier min / joint</strong> for the whole list. Saves on blur.
           </p>
           <div class="table-responsive">
             <table class="table table-sm table-vcenter align-middle mb-2">
@@ -2528,11 +2621,12 @@
                   <th>Stage Name</th>
                   <th>Description</th>
                   <th style="width:70px" class="text-center">Blocks next</th>
+                  <th style="width:92px" title="Minutes of labour per joint for this step">Min / joint</th>
                   <th>Default Assignee</th>
                   <th style="width:48px"></th>
                 </tr>
               </thead>
-              <tbody>${rows || '<tr><td colspan="7" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
+              <tbody>${rows || '<tr><td colspan="8" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
             </table>
           </div>
           <div class="border-top pt-3">
@@ -2544,6 +2638,10 @@
               <div style="min-width:200px">
                 <label class="form-label mb-1 small">Description (optional)</label>
                 <input type="text" class="form-control form-control-sm" id="tpl-new-desc" placeholder="Brief description">
+              </div>
+              <div style="width:104px">
+                <label class="form-label mb-1 small">Min / joint</label>
+                <input type="number" min="0" step="0.25" class="form-control form-control-sm" id="tpl-new-mpj" placeholder="—">
               </div>
               <button class="btn btn-primary btn-sm" onclick="addTpl()" ${set ? '' : 'disabled'}>
                 <i class="ti ti-plus me-1"></i>Add Stage
@@ -2572,6 +2670,23 @@
         } catch (e) { console.error(e); fabToast('Failed to save.', 'error'); }
       }
 
+      // Tier-level field (currently just the fallback minutes/joint rate).
+      async function saveTierField(setId, field, value) {
+        const set = tplSets.find(s => s.id === setId);
+        if (set) set[field] = value === '' ? null : parseFloat(value);
+        try {
+          await fetch(`/api/v1/stage-template-sets/${setId}`, {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': adminCsrfToken(),
+            },
+            body: JSON.stringify({ [field]: value === '' ? null : Math.max(0, parseFloat(value) || 0) }),
+          });
+        } catch (e) { console.error(e); fabToast('Failed to save.', 'error'); }
+      }
+
       async function moveTpl(id, direction) {
         try {
           const templates = (tplActiveSet()?.stage_templates || []);
@@ -2595,6 +2710,7 @@
       async function addTpl() {
         const name = document.getElementById('tpl-new-name').value.trim();
         const desc = document.getElementById('tpl-new-desc').value.trim();
+        const mpj  = document.getElementById('tpl-new-mpj').value;
         if (!name) { fabToast('Stage name is required.', 'info'); return; }
         if (!tplActiveSetId) { fabToast('Add a tier first.', 'info'); return; }
         try {
@@ -2610,6 +2726,7 @@
               template_set_id: tplActiveSetId,
               name,
               description: desc || null,
+              minutes_per_joint: mpj === '' ? null : Math.max(0, parseFloat(mpj) || 0),
             }),
           });
           await reloadTplModal();
@@ -2708,6 +2825,192 @@
         m.classList.remove('show'); m.style.display = '';
         document.body.classList.remove('modal-open');
       }
+
+      // ============================================================
+      // Company Locations (System Settings tab)
+      // ============================================================
+      let companyLocations = [];
+      const clEsc = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
+
+      async function loadCompanyLocations() {
+        const body = document.getElementById('companyLocationsBody');
+        if (!body) return;
+        try {
+          const res = await authenticatedFetch('/company-locations');
+          companyLocations = res.data || res || [];
+          if (!companyLocations.length) {
+            body.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No locations yet.</td></tr>';
+            return;
+          }
+          body.innerHTML = companyLocations.map(loc => {
+            const cityLine = [loc.city, [loc.state, loc.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+            const addr = [loc.address_line1, loc.address_line2, cityLine].filter(Boolean).join(', ') || '—';
+            const phone = [loc.phone ? 'P: ' + clEsc(loc.phone) : '', loc.fax ? 'F: ' + clEsc(loc.fax) : '']
+              .filter(Boolean).join('<br>') || '—';
+            return `
+              <tr>
+                <td class="fw-bold">${clEsc(loc.name)}</td>
+                <td class="text-muted">${clEsc(addr)}</td>
+                <td class="text-muted">${phone}</td>
+                <td class="text-center">${loc.is_primary
+                  ? '<span class="badge bg-green-lt">Primary</span>'
+                  : `<button class="btn btn-sm btn-ghost-secondary" onclick="makeCompanyLocationPrimary(${loc.id})">Make primary</button>`}</td>
+                <td>
+                  <div class="btn-list flex-nowrap">
+                    <button class="btn btn-sm btn-ghost-primary" onclick="openCompanyLocationModal(${loc.id})"><i class="ti ti-edit"></i></button>
+                    <button class="btn btn-sm btn-ghost-danger" onclick="deleteCompanyLocation(${loc.id})"><i class="ti ti-trash"></i></button>
+                  </div>
+                </td>
+              </tr>`;
+          }).join('');
+        } catch (e) {
+          console.error(e);
+          body.innerHTML = '<tr><td colspan="5" class="text-danger text-center py-3">Failed to load locations.</td></tr>';
+        }
+      }
+
+      function openCompanyLocationModal(id = null) {
+        const loc = id ? companyLocations.find(l => l.id === id) : null;
+        document.getElementById('companyLocationModalTitle').textContent = loc ? 'Edit Company Location' : 'Add Company Location';
+        document.getElementById('clId').value = loc?.id || '';
+        document.getElementById('clName').value = loc?.name || '';
+        document.getElementById('clIsPrimary').checked = !!loc?.is_primary;
+        document.getElementById('clAddr1').value = loc?.address_line1 || '';
+        document.getElementById('clAddr2').value = loc?.address_line2 || '';
+        document.getElementById('clCity').value = loc?.city || '';
+        document.getElementById('clState').value = loc?.state || '';
+        document.getElementById('clZip').value = loc?.zip || '';
+        document.getElementById('clCountry').value = loc?.country || 'USA';
+        document.getElementById('clPhone').value = loc?.phone || '';
+        document.getElementById('clFax').value = loc?.fax || '';
+        document.getElementById('clEmail').value = loc?.email || '';
+        document.getElementById('clNotes').value = loc?.notes || '';
+        showModal(document.getElementById('companyLocationModal'));
+      }
+
+      async function saveCompanyLocation() {
+        const id = document.getElementById('clId').value;
+        const payload = {
+          name: document.getElementById('clName').value.trim(),
+          is_primary: document.getElementById('clIsPrimary').checked,
+          address_line1: document.getElementById('clAddr1').value.trim() || null,
+          address_line2: document.getElementById('clAddr2').value.trim() || null,
+          city: document.getElementById('clCity').value.trim() || null,
+          state: document.getElementById('clState').value.trim() || null,
+          zip: document.getElementById('clZip').value.trim() || null,
+          country: document.getElementById('clCountry').value.trim() || null,
+          phone: document.getElementById('clPhone').value.trim() || null,
+          fax: document.getElementById('clFax').value.trim() || null,
+          email: document.getElementById('clEmail').value.trim() || null,
+          notes: document.getElementById('clNotes').value.trim() || null,
+        };
+        if (!payload.name) { showNotification('Location name is required', 'danger'); return; }
+        try {
+          await authenticatedFetch(id ? `/company-locations/${id}` : '/company-locations', {
+            method: id ? 'PATCH' : 'POST',
+            body: JSON.stringify(payload),
+          });
+          hideModal(document.getElementById('companyLocationModal'));
+          showNotification('Location saved', 'success');
+          loadCompanyLocations();
+        } catch (e) {
+          showNotification(e.message || 'Failed to save location', 'danger');
+        }
+      }
+
+      async function makeCompanyLocationPrimary(id) {
+        try {
+          await authenticatedFetch(`/company-locations/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ name: companyLocations.find(l => l.id === id)?.name, is_primary: true }),
+          });
+          showNotification('Primary location updated', 'success');
+          loadCompanyLocations();
+        } catch (e) {
+          showNotification(e.message || 'Failed to update', 'danger');
+        }
+      }
+
+      async function deleteCompanyLocation(id) {
+        if (!confirm('Delete this company location?')) return;
+        try {
+          await authenticatedFetch(`/company-locations/${id}`, { method: 'DELETE' });
+          showNotification('Location deleted', 'success');
+          loadCompanyLocations();
+        } catch (e) {
+          showNotification(e.message || 'Failed to delete location', 'danger');
+        }
+      }
+
+      // ============================================================
+      // Company Branding (logo)
+      // ============================================================
+      async function loadCompanySettings() {
+        try {
+          const res = await authenticatedFetch('/company-settings');
+          renderCompanyLogo(res.logo_url || null);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      function renderCompanyLogo(url) {
+        const preview = document.getElementById('companyLogoPreview');
+        const removeBtn = document.getElementById('removeCompanyLogoBtn');
+        if (!preview) return;
+        if (url) {
+          preview.innerHTML = `<img src="${url}?t=${Date.now()}" alt="Company logo" style="max-height:96px; max-width:100%;">`;
+          removeBtn.style.display = '';
+        } else {
+          preview.innerHTML = '<span class="text-muted">No logo uploaded</span>';
+          removeBtn.style.display = 'none';
+        }
+      }
+
+      async function uploadCompanyLogo() {
+        const input = document.getElementById('companyLogoInput');
+        const file = input.files[0];
+        if (!file) { showNotification('Choose an image first', 'warning'); return; }
+
+        const fd = new FormData();
+        fd.append('logo', file);
+        try {
+          const res = await fetch(`${API_BASE}/company-settings/logo`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
+            body: fd,
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+          input.value = '';
+          renderCompanyLogo(json.company_setting?.logo_url || null);
+          showNotification('Logo updated', 'success');
+        } catch (e) {
+          showNotification(e.message || 'Failed to upload logo', 'danger');
+        }
+      }
+
+      async function removeCompanyLogo() {
+        if (!confirm('Remove the company logo?')) return;
+        try {
+          await authenticatedFetch('/company-settings/logo', { method: 'DELETE' });
+          renderCompanyLogo(null);
+          showNotification('Logo removed', 'success');
+        } catch (e) {
+          showNotification(e.message || 'Failed to remove logo', 'danger');
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const tab = document.querySelector('a[href="#tab-settings"]');
+        if (tab) tab.addEventListener('shown.bs.tab', () => {
+          loadCompanyLocations();
+          loadCompanySettings();
+        }, { once: false });
+      });
 
     </script>
 

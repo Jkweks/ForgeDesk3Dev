@@ -18,13 +18,14 @@ class ElevationTypeController extends Controller
 
         if ($request->boolean('with_templates')) {
             $mapTpl = fn($t) => [
-                'id'              => $t->id,
-                'name'            => $t->name,
-                'description'     => $t->description,
-                'sort_order'      => $t->sort_order,
-                'blocks_next'     => (bool) $t->blocks_next,
-                'default_user_id' => $t->default_user_id,
-                'default_user'    => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
+                'id'                => $t->id,
+                'name'              => $t->name,
+                'description'       => $t->description,
+                'sort_order'        => $t->sort_order,
+                'blocks_next'       => (bool) $t->blocks_next,
+                'minutes_per_joint' => $t->minutes_per_joint !== null ? (float) $t->minutes_per_joint : null,
+                'default_user_id'   => $t->default_user_id,
+                'default_user'      => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
             ];
 
             $types = $types->map(function ($type) use ($mapTpl) {
@@ -34,11 +35,12 @@ class ElevationTypeController extends Controller
                     ->get();
 
                 $setsPayload = $sets->map(fn($s) => [
-                    'id'              => $s->id,
-                    'name'            => $s->name,
-                    'is_default'      => $s->is_default,
-                    'sort_order'      => $s->sort_order,
-                    'stage_templates' => $s->templates->map($mapTpl)->values(),
+                    'id'                => $s->id,
+                    'name'              => $s->name,
+                    'is_default'        => $s->is_default,
+                    'sort_order'        => $s->sort_order,
+                    'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
+                    'stage_templates'   => $s->templates->map($mapTpl)->values(),
                 ])->values();
 
                 // Back-compat: the flat `stage_templates` key is the default tier's list.
@@ -116,6 +118,11 @@ class ElevationTypeController extends Controller
         if ($request->has('blocks_next')) {
             $template->blocks_next = $request->boolean('blocks_next');
         }
+        if ($request->has('minutes_per_joint')) {
+            $template->minutes_per_joint = $request->filled('minutes_per_joint')
+                ? max(0, round((float) $request->minutes_per_joint, 2))
+                : null;
+        }
         if ($request->filled('template_set_id')) {
             $template->template_set_id = (int) $request->template_set_id;
         }
@@ -123,12 +130,13 @@ class ElevationTypeController extends Controller
         $template->save();
 
         return response()->json(['updated' => $id, 'template' => [
-            'id'              => $template->id,
-            'name'            => $template->name,
-            'description'     => $template->description,
-            'sort_order'      => $template->sort_order,
-            'blocks_next'     => (bool) $template->blocks_next,
-            'template_set_id' => $template->template_set_id,
+            'id'                => $template->id,
+            'name'              => $template->name,
+            'description'       => $template->description,
+            'sort_order'        => $template->sort_order,
+            'blocks_next'       => (bool) $template->blocks_next,
+            'minutes_per_joint' => $template->minutes_per_joint !== null ? (float) $template->minutes_per_joint : null,
+            'template_set_id'   => $template->template_set_id,
         ]]);
     }
 
@@ -140,6 +148,7 @@ class ElevationTypeController extends Controller
             'name'              => 'required|string|max:255',
             'template_set_id'   => 'sometimes|nullable|integer|exists:fd_stage_template_sets,id',
             'blocks_next'       => 'sometimes|boolean',
+            'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
 
         $setId = $request->template_set_id
@@ -157,18 +166,20 @@ class ElevationTypeController extends Controller
             'description'       => $request->description ?? null,
             'sort_order'        => $maxOrder + 1,
             'blocks_next'       => $request->boolean('blocks_next', true),
+            'minutes_per_joint' => $request->filled('minutes_per_joint') ? max(0, round((float) $request->minutes_per_joint, 2)) : null,
             'default_user_id'   => $request->default_user_id ?? null,
         ]);
 
         return response()->json(['id' => $template->id, 'template' => [
-            'id'              => $template->id,
-            'name'            => $template->name,
-            'description'     => $template->description,
-            'sort_order'      => $template->sort_order,
-            'blocks_next'     => (bool) $template->blocks_next,
-            'template_set_id' => $template->template_set_id,
-            'default_user_id' => $template->default_user_id,
-            'default_user'    => null,
+            'id'                => $template->id,
+            'name'              => $template->name,
+            'description'       => $template->description,
+            'sort_order'        => $template->sort_order,
+            'blocks_next'       => (bool) $template->blocks_next,
+            'minutes_per_joint' => $template->minutes_per_joint !== null ? (float) $template->minutes_per_joint : null,
+            'template_set_id'   => $template->template_set_id,
+            'default_user_id'   => $template->default_user_id,
+            'default_user'      => null,
         ]], 201);
     }
 

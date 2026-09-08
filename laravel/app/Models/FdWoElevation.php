@@ -12,13 +12,54 @@ class FdWoElevation extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_type_id', 'template_set_id', 'elevation_tag',
-        'quantity', 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
+        'quantity', 'joint_qty', 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
     ];
 
     protected $casts = [
         'date_requested' => 'date',
         'date_completed' => 'date',
+        'joint_qty'      => 'integer',
     ];
+
+    /**
+     * The line's effective "minutes per joint": the sum of the per-step rates
+     * when any step sets one, otherwise the tier-level fallback rate.
+     */
+    public function minutesPerJoint(): float
+    {
+        $stages = $this->relationLoaded('stages') ? $this->stages : $this->stages()->get();
+
+        $stepRates = $stages->map(fn ($s) => $s->minutes_per_joint)->filter(fn ($v) => $v !== null);
+        if ($stepRates->isNotEmpty()) {
+            return (float) $stepRates->sum();
+        }
+
+        $set = $this->relationLoaded('templateSet') ? $this->templateSet : $this->templateSet()->first();
+
+        return (float) ($set?->minutes_per_joint ?? 0);
+    }
+
+    /**
+     * Time estimate for this line: joint quantity x the summed per-joint rate.
+     * Null when either side is missing — nothing to contribute to the total.
+     *
+     * @return array{computed: int|null, rate: float, effective: int|null}
+     */
+    public function estimateMinutes(): array
+    {
+        $rate = $this->minutesPerJoint();
+        $joints = $this->joint_qty;
+
+        $computed = ($joints !== null && $rate > 0)
+            ? (int) round($joints * $rate)
+            : null;
+
+        return [
+            'computed'  => $computed,
+            'rate'      => $rate,
+            'effective' => $computed,
+        ];
+    }
 
     public function workOrder(): BelongsTo
     {
