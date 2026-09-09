@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\StageGatedException;
 use App\Http\Controllers\Controller;
 use App\Models\FdStageLog;
 use App\Models\FdUser;
 use App\Models\FdWoElevation;
-use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\FdWoStage;
 use App\Services\StageGateService;
 use App\Services\StageOverrideResolver;
 use Illuminate\Http\Request;
@@ -32,13 +33,13 @@ class WorkOrderStageController extends Controller
     public function bulkAssign(Request $request)
     {
         $data = $request->validate([
-            'work_order_id'                  => 'required_without:job_id|integer|exists:fd_work_orders,id',
-            'job_id'                         => 'required_without:work_order_id|integer|exists:business_jobs,id',
-            'assignments'                    => 'required|array|min:1',
-            'assignments.*.stage_name'       => 'required|string|max:255',
+            'work_order_id' => 'required_without:job_id|integer|exists:fd_work_orders,id',
+            'job_id' => 'required_without:work_order_id|integer|exists:business_jobs,id',
+            'assignments' => 'required|array|min:1',
+            'assignments.*.stage_name' => 'required|string|max:255',
             // Either a single id (back-compat) or a set of ids for co-assignment.
-            'assignments.*.assigned_to_id'   => 'nullable|integer|exists:fd_users,id',
-            'assignments.*.assigned_to_ids'  => 'sometimes|array',
+            'assignments.*.assigned_to_id' => 'nullable|integer|exists:fd_users,id',
+            'assignments.*.assigned_to_ids' => 'sometimes|array',
             'assignments.*.assigned_to_ids.*' => 'integer|exists:fd_users,id',
         ]);
 
@@ -52,7 +53,7 @@ class WorkOrderStageController extends Controller
             ))
             ->pluck('id');
 
-        $actor = trim(($request->user()?->name ?? 'Office user')) . ' (bulk assign)';
+        $actor = trim(($request->user()?->name ?? 'Office user')).' (bulk assign)';
 
         $byStage = [];
         $total = 0;
@@ -98,8 +99,8 @@ class WorkOrderStageController extends Controller
 
                     FdStageLog::create([
                         'stage_id' => $s->id,
-                        'user_id'  => null,
-                        'message'  => "Reassigned from {$prev} to {$new} via bulk assign by {$actor}",
+                        'user_id' => null,
+                        'message' => "Reassigned from {$prev} to {$new} via bulk assign by {$actor}",
                     ]);
                     $changed++;
                 }
@@ -112,6 +113,75 @@ class WorkOrderStageController extends Controller
         return response()->json(['updated' => $total, 'by_stage' => $byStage]);
     }
 
+    /**
+     * Complete every instance of a named stage across all elevations of a work
+     * order in one call. Stages already terminal, on hold or blocked are left
+     * alone; the rest are completed in sort order so per-stage gates clear as we
+     * go (a lingering gate can still be pushed past with `override`).
+     *
+     * Body: { stage_name, fab_user_id?, override? }
+     * `fab_user_id` credits a fabricator with the work and is honoured only for
+     * manager / admin app users — everyone else completes without a credit.
+     */
+    public function bulkComplete(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'stage_name' => 'required|string|max:255',
+            'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+            'override' => 'sometimes|boolean',
+        ]);
+
+        $wo = FdWorkOrder::with('elevations.stages')->findOrFail($id);
+
+        $isManager = in_array($request->user()?->role, ['admin', 'manager'], true);
+        $fabUserId = $isManager ? ($data['fab_user_id'] ?? null) : null;
+        $resolution = $this->overrides->resolve($request);
+        $actor = $resolution['actor_label'] ?: ($request->user()?->name ?? 'Office user');
+        $target = mb_strtolower($data['stage_name']);
+
+        try {
+            $updated = 0;
+
+            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $actor, &$updated) {
+                foreach ($wo->elevations as $elevation) {
+                    $stages = $elevation->stages
+                        ->filter(fn ($s) => mb_strtolower($s->name) === $target)
+                        ->whereIn('status', ['pending', 'in_progress'])
+                        ->sortBy('sort_order');
+
+                    foreach ($stages as $stage) {
+                        $this->gate->guardStageTransition(
+                            $stage,
+                            'complete',
+                            $resolution['allowed'],
+                            $this->overrides->stageLogger($stage, $resolution),
+                        );
+
+                        $stage->status = 'complete';
+                        $stage->completed_at = now();
+                        $stage->completed_by_id = $fabUserId;
+                        $stage->save();
+
+                        FdStageLog::create([
+                            'stage_id' => $stage->id,
+                            'user_id' => $resolution['log_user_id'] ?? null,
+                            'message' => "Completed via bulk stage complete by {$actor}",
+                        ]);
+                        $updated++;
+                    }
+                }
+            });
+
+            return response()->json(['updated' => $updated]);
+        } catch (StageGatedException $e) {
+            return $e->render();
+        } catch (\Exception $e) {
+            Log::error('WorkOrderStageController@bulkComplete failed', ['id' => $id, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to complete stages'], 500);
+        }
+    }
+
     public function index(Request $request)
     {
         $request->validate(['wo_id' => 'required|integer']);
@@ -121,11 +191,12 @@ class WorkOrderStageController extends Controller
                 ->where('work_order_id', $request->wo_id)
                 ->orderBy('sort_order')
                 ->get()
-                ->map(fn($s) => $this->formatStage($s));
+                ->map(fn ($s) => $this->formatStage($s));
 
             return response()->json(['stages' => $stages]);
         } catch (\Exception $e) {
             Log::error('WorkOrderStageController@index failed', ['message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to load stages'], 500);
         }
     }
@@ -133,11 +204,11 @@ class WorkOrderStageController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'work_order_id'      => 'required|integer|exists:fd_work_orders,id',
-            'name'               => 'required|string|max:255',
-            'assigned_to_id'     => 'sometimes|nullable|integer|exists:fd_users,id',
-            'assigned_to_ids'    => 'sometimes|array',
-            'assigned_to_ids.*'  => 'integer|exists:fd_users,id',
+            'work_order_id' => 'required|integer|exists:fd_work_orders,id',
+            'name' => 'required|string|max:255',
+            'assigned_to_id' => 'sometimes|nullable|integer|exists:fd_users,id',
+            'assigned_to_ids' => 'sometimes|array',
+            'assigned_to_ids.*' => 'integer|exists:fd_users,id',
         ]);
 
         try {
@@ -145,13 +216,13 @@ class WorkOrderStageController extends Controller
 
             $stage = FdWoStage::create([
                 'work_order_id' => $request->work_order_id,
-                'name'          => $request->name,
-                'description'   => $request->description,
-                'sort_order'    => $maxOrder + 1,
-                'blocks_next'   => $request->boolean('blocks_next', true),
-                'status'        => 'pending',
+                'name' => $request->name,
+                'description' => $request->description,
+                'sort_order' => $maxOrder + 1,
+                'blocks_next' => $request->boolean('blocks_next', true),
+                'status' => 'pending',
                 'assigned_to_id' => $request->assigned_to_id,
-                'notes'         => $request->notes,
+                'notes' => $request->notes,
             ]);
 
             if ($request->has('assigned_to_ids')) {
@@ -163,6 +234,7 @@ class WorkOrderStageController extends Controller
             return response()->json(['id' => $stage->id], 201);
         } catch (\Exception $e) {
             Log::error('WorkOrderStageController@store failed', ['message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to create stage'], 500);
         }
     }
@@ -172,11 +244,11 @@ class WorkOrderStageController extends Controller
         $stage = FdWoStage::findOrFail($id);
 
         $request->validate([
-            'status'            => ['sometimes', Rule::in(FdWoStage::STATUSES)],
-            'blocks_next'       => 'sometimes|boolean',
-            'override'          => 'sometimes|boolean',
-            'assigned_to_id'    => 'sometimes|nullable|integer|exists:fd_users,id',
-            'assigned_to_ids'   => 'sometimes|array',
+            'status' => ['sometimes', Rule::in(FdWoStage::STATUSES)],
+            'blocks_next' => 'sometimes|boolean',
+            'override' => 'sometimes|boolean',
+            'assigned_to_id' => 'sometimes|nullable|integer|exists:fd_users,id',
+            'assigned_to_ids' => 'sometimes|array',
             'assigned_to_ids.*' => 'integer|exists:fd_users,id',
         ]);
 
@@ -202,12 +274,15 @@ class WorkOrderStageController extends Controller
                     $stage->started_at = now();
                 }
                 if ($request->status === 'complete') {
-                    if (is_null($stage->completed_at)) $stage->completed_at = now();
-                    if (!$request->has('completed_by_id')) {} // leave existing if not sent
+                    if (is_null($stage->completed_at)) {
+                        $stage->completed_at = now();
+                    }
+                    if (! $request->has('completed_by_id')) {
+                    } // leave existing if not sent
                 }
                 if (in_array($request->status, ['pending', 'not_required', 'on_hold'])) {
-                    $stage->started_at    = null;
-                    $stage->completed_at  = null;
+                    $stage->started_at = null;
+                    $stage->completed_at = null;
                     $stage->completed_by_id = null;
                 }
             }
@@ -226,14 +301,15 @@ class WorkOrderStageController extends Controller
             if ($request->filled('log_message')) {
                 FdStageLog::create([
                     'stage_id' => $stage->id,
-                    'user_id'  => $request->user_id ?? null,
-                    'message'  => $request->log_message,
+                    'user_id' => $request->user_id ?? null,
+                    'message' => $request->log_message,
                 ]);
             }
 
             return response()->json(['updated' => $id]);
         } catch (\Exception $e) {
             Log::error('WorkOrderStageController@update failed', ['id' => $id, 'message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to update stage'], 500);
         }
     }
@@ -247,6 +323,7 @@ class WorkOrderStageController extends Controller
             return response()->json(['deleted' => $id]);
         } catch (\Exception $e) {
             Log::error('WorkOrderStageController@destroy failed', ['id' => $id, 'message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to delete stage'], 500);
         }
     }
@@ -254,31 +331,31 @@ class WorkOrderStageController extends Controller
     private function formatStage(FdWoStage $s): array
     {
         return [
-            'id'                => $s->id,
-            'work_order_id'     => $s->work_order_id,
-            'template_id'       => $s->template_id,
-            'name'              => $s->name,
-            'description'       => $s->description,
-            'sort_order'        => $s->sort_order,
-            'blocks_next'       => (bool) $s->blocks_next,
-            'status'            => $s->status,
-            'assigned_to_id'    => $s->assigned_to_id,
-            'assigned_name'     => $s->assignedTo?->name,
-            'assignee_ids'      => $s->relationLoaded('assignees') ? $s->assignees->pluck('id')->values() : [],
-            'assignee_names'    => $s->relationLoaded('assignees') ? $s->assignees->pluck('name')->values() : [],
-            'completed_by_id'   => $s->completed_by_id,
+            'id' => $s->id,
+            'work_order_id' => $s->work_order_id,
+            'template_id' => $s->template_id,
+            'name' => $s->name,
+            'description' => $s->description,
+            'sort_order' => $s->sort_order,
+            'blocks_next' => (bool) $s->blocks_next,
+            'status' => $s->status,
+            'assigned_to_id' => $s->assigned_to_id,
+            'assigned_name' => $s->assignedTo?->name,
+            'assignee_ids' => $s->relationLoaded('assignees') ? $s->assignees->pluck('id')->values() : [],
+            'assignee_names' => $s->relationLoaded('assignees') ? $s->assignees->pluck('name')->values() : [],
+            'completed_by_id' => $s->completed_by_id,
             'completed_by_name' => $s->completedBy?->name,
-            'started_at'        => $s->started_at?->toIso8601String(),
-            'completed_at'      => $s->completed_at?->toIso8601String(),
-            'notes'             => $s->notes,
-            'log'            => $s->log->map(fn($l) => [
-                'id'         => $l->id,
-                'user_id'    => $l->user_id,
-                'message'    => $l->message,
+            'started_at' => $s->started_at?->toIso8601String(),
+            'completed_at' => $s->completed_at?->toIso8601String(),
+            'notes' => $s->notes,
+            'log' => $s->log->map(fn ($l) => [
+                'id' => $l->id,
+                'user_id' => $l->user_id,
+                'message' => $l->message,
                 'created_at' => $l->created_at?->toIso8601String(),
             ])->values(),
-            'created_at'     => $s->created_at->toIso8601String(),
-            'updated_at'     => $s->updated_at->toIso8601String(),
+            'created_at' => $s->created_at->toIso8601String(),
+            'updated_at' => $s->updated_at->toIso8601String(),
         ];
     }
 }

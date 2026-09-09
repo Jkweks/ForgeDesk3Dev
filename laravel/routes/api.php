@@ -492,6 +492,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy'])->middleware('permission:fabrication.work-orders.delete');
             Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/work-orders/{id}/status', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateStatus'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/work-orders/{id}/completion-email', [\App\Http\Controllers\Api\WorkOrderController::class, 'sendCompletionEmail'])->middleware('permission:fabrication.work-orders.edit');
 
             // Work Order Drawings (shop drawings file uploads)
             Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
@@ -503,10 +505,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'index']);
             Route::post('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/elevations/{id}/complete-all-stages', [\App\Http\Controllers\Api\ElevationController::class, 'completeAllStages'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
             // Elevation Stage cycling (reuse existing stage controller)
             Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
+            Route::patch('/work-orders/{id}/stages/bulk-complete', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'bulkComplete'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-order-stages/bulk-assign', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'bulkAssign'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');

@@ -142,6 +142,22 @@
           <i class="ti ti-pencil me-1"></i>Edit Job
         </button>
       </div>
+
+      <!-- WO lifecycle status -->
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <span class="subheader">Status</span>
+        <select class="form-select form-select-sm" id="d-wo-status" style="width:130px" onchange="onWoStatusSelect(this.value)">
+          <option value="active">Active</option>
+          <option value="on_hold">On Hold</option>
+          <option value="complete">Complete</option>
+        </select>
+        <span id="d-wo-status-extra" class="text-muted small"></span>
+        <button class="btn btn-sm btn-ghost-primary ms-auto" id="d-wo-send-email-btn" style="display:none"
+          onclick="openWoCompletionEmail()"><i class="ti ti-mail me-1"></i>Send Completion Email</button>
+        <button class="btn btn-sm btn-ghost-secondary" id="d-wo-status-log-btn" style="display:none"
+          onclick="toggleWoStatusLog()" title="Status history"><i class="ti ti-history"></i></button>
+      </div>
+      <div id="d-wo-status-log" class="mb-2 small border rounded p-2" style="display:none;max-height:170px;overflow:auto"></div>
       <div class="row g-3">
         <div class="col-6 col-md-3">
           <div class="subheader">Job</div>
@@ -256,6 +272,9 @@
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0">Elevations</h5>
         <div class="btn-group btn-group-sm">
+          <button class="btn btn-ghost-success" onclick="openBulkCompleteStage()" title="Mark one stage complete on every elevation">
+            <i class="ti ti-checks me-1"></i>Bulk Complete Stage
+          </button>
           <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
             <i class="ti ti-door me-1"></i>Door Schedule
           </button>
@@ -279,7 +298,7 @@
      Create WO Wizard Modal (3-step)
      ============================================================ -->
 <div class="modal modal-blur fade" id="createWoModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">
 
       <!-- Header -->
@@ -291,13 +310,17 @@
         <button type="button" class="btn-close" onclick="closeWoWizard()"></button>
       </div>
 
-      <!-- Step indicators -->
+      <!-- Step indicators + progress bar -->
       <div class="px-3 pt-2">
-        <ul class="steps steps-green">
+        <ul class="steps steps-green mb-2">
           <li class="step-item active" id="wiz-ind-1">Work Order</li>
           <li class="step-item" id="wiz-ind-2">Elevations</li>
           <li class="step-item" id="wiz-ind-3">Doors &amp; Frames</li>
         </ul>
+        <div class="progress" style="height:4px">
+          <div class="progress-bar bg-green" id="wiz-progress-bar" role="progressbar"
+            style="width:33%;transition:width .25s ease"></div>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -326,7 +349,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label required">Job</label>
-            <select class="form-select" id="new-wo-job" required>
+            <select class="form-select" id="new-wo-job" required onchange="refreshWizardDivisionBadge()">
               <option value="">— Select a job —</option>
             </select>
             <div class="mt-1">
@@ -361,12 +384,13 @@
             <table class="table table-sm align-middle">
               <thead>
                 <tr>
-                  <th style="width:22%">Tag</th>
-                  <th style="width:22%">Type</th>
-                  <th style="width:10%">Qty</th>
-                  <th style="width:20%">Date Requested</th>
-                  <th style="width:14%" title="Checked = Assemble, Unchecked = Kit">Assemble</th>
-                  <th style="width:12%"></th>
+                  <th style="width:16%">Tag</th>
+                  <th style="width:16%">Type</th>
+                  <th style="width:20%" title="Fabrication system / complexity tier">System</th>
+                  <th style="width:9%">Qty</th>
+                  <th style="width:17%">Date Requested</th>
+                  <th style="width:12%" title="Checked = Assemble, Unchecked = Kit">Assemble</th>
+                  <th style="width:10%"></th>
                 </tr>
               </thead>
               <tbody id="wiz-bulk-body"></tbody>
@@ -440,7 +464,7 @@
             </select>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Complexity Tier</label>
+            <label class="form-label" id="elev-tier-label">Complexity Tier</label>
             <select class="form-select" id="elev-tier"></select>
             <small class="form-hint" id="elev-tier-hint"></small>
           </div>
@@ -492,7 +516,7 @@
      Bulk Add Elevations Modal
      ============================================================ -->
 <div class="modal modal-blur fade" id="bulkElevModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Add Elevations</h5>
@@ -503,12 +527,13 @@
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th style="width:22%">Tag</th>
-                <th style="width:22%">Type</th>
-                <th style="width:10%">Qty</th>
-                <th style="width:20%">Date Requested</th>
-                <th style="width:14%" title="Checked = Assemble, Unchecked = Kit">Assemble</th>
-                <th style="width:12%"></th>
+                <th style="width:16%">Tag</th>
+                <th style="width:16%">Type</th>
+                <th style="width:20%" title="Fabrication system / complexity tier">System</th>
+                <th style="width:9%">Qty</th>
+                <th style="width:17%">Date Requested</th>
+                <th style="width:12%" title="Checked = Assemble, Unchecked = Kit">Assemble</th>
+                <th style="width:10%"></th>
               </tr>
             </thead>
             <tbody id="bulk-elev-body"></tbody>
@@ -824,9 +849,14 @@ function renderWOList(wos) {
             title="${wo.priority_locked ? 'Pinned — auto-ranking skips this WO' : 'Pin at this position'}"
             onclick="toggleWOPin(${wo.id}, event)"><i class="ti ti-pin${wo.priority_locked ? '-filled' : ''}"></i></button>`;
         const dueCell = dueDateHtml(wo);
+        const statusBadge = wo.status === 'complete'
+            ? '<span class="badge bg-green-lt text-green ms-1">Complete</span>'
+            : wo.status === 'on_hold'
+                ? '<span class="badge bg-orange-lt text-orange ms-1">On Hold</span>'
+                : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
             <td class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</td>
-            <td><strong>${esc(wo.release_label)}</strong></td>
+            <td><strong>${esc(wo.release_label)}</strong>${statusBadge}</td>
             <td>${esc(wo.job?.job_name || '—')}</td>
             <td class="text-muted">${esc(wo.job?.project_manager || '—')}</td>
             <td>${dueCell}</td>
@@ -1027,6 +1057,7 @@ function populateDetail(wo) {
         : 'Auto-ranked by due date';
     document.getElementById('d-material').value = wo.material_delivery || '';
     document.getElementById('d-notes').value = wo.notes || '';
+    renderWoStatusBar(wo);
     renderWOEstimate(wo);
 
     renderAssignedUsers(wo.assigned_users || []);
@@ -1292,6 +1323,208 @@ function archiveCurrentWO() {
 }
 
 // ============================================================
+// WO lifecycle status (Active / On Hold / Complete)
+// ============================================================
+const WO_STATUS_BADGE = { active: 'bg-blue-lt', on_hold: 'bg-orange-lt', complete: 'bg-green-lt' };
+let _woPromptBusy = false;
+
+function renderWoStatusBar(wo) {
+    const sel = document.getElementById('d-wo-status');
+    const extra = document.getElementById('d-wo-status-extra');
+    const emailBtn = document.getElementById('d-wo-send-email-btn');
+    const logBtn = document.getElementById('d-wo-status-log-btn');
+    if (!sel) return;
+
+    sel.value = wo.status || 'active';
+
+    let msg = '';
+    if (wo.status === 'complete') {
+        const when = wo.completed_at ? new Date(wo.completed_at).toLocaleDateString() : '';
+        msg = `Completed${wo.completed_by_name ? ' by ' + wo.completed_by_name : ''}${when ? ' · ' + when : ''}`;
+        if (wo.completion_email_sent_at) {
+            msg += ` · email sent ${new Date(wo.completion_email_sent_at).toLocaleDateString()}`;
+        }
+    } else if (wo.status === 'on_hold') {
+        const hold = (wo.status_log || []).find(l => l.to_status === 'on_hold');
+        msg = hold && hold.note ? `On hold: ${hold.note}` : 'On hold';
+    } else if (wo.is_ready_to_complete) {
+        msg = 'All elevations & steps done — ready to complete';
+    }
+    extra.textContent = msg;
+
+    // Manager/admin escape hatch: offer the completion email while the WO is
+    // complete and the notice hasn't gone out yet.
+    emailBtn.style.display = (wo.status === 'complete' && !wo.completion_email_sent_at && isManagerOrAbove())
+        ? '' : 'none';
+
+    logBtn.style.display = (wo.status_log && wo.status_log.length) ? '' : 'none';
+    renderWoStatusLog(wo);
+}
+
+function renderWoStatusLog(wo) {
+    const box = document.getElementById('d-wo-status-log');
+    if (!box) return;
+    const rows = wo.status_log || [];
+    box.innerHTML = rows.length
+        ? rows.map(l => {
+            const t = l.created_at ? new Date(l.created_at).toLocaleString() : '';
+            const who = l.user_name ? ` · ${esc(l.user_name)}` : '';
+            const move = l.from_status && l.from_status !== l.to_status
+                ? `${esc(l.from_status)} → ${esc(l.to_status)}` : esc(l.to_status);
+            return `<div class="mb-1"><span class="text-muted">${t}${who}</span> — <strong>${move}</strong>${l.note ? '<br>' + esc(l.note) : ''}</div>`;
+        }).join('')
+        : '<span class="text-muted">No status changes yet.</span>';
+}
+
+function toggleWoStatusLog() {
+    const box = document.getElementById('d-wo-status-log');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+// Dropdown pick → route to the right flow. Reverts the <select> on cancel/failure.
+async function onWoStatusSelect(next) {
+    if (!currentWO) return;
+    const cur = currentWO.status || 'active';
+    if (next === cur) return;
+
+    if (next === 'on_hold') return openWoHoldPrompt();
+    if (next === 'complete') {
+        if (!currentWO.is_ready_to_complete) {
+            const blk = (currentWO.completion_blockers || []).join(' ');
+            fabToast(blk || 'This work order is not ready to be completed.', 'info');
+            document.getElementById('d-wo-status').value = cur;
+            return;
+        }
+        return showWoCompletePrompt();
+    }
+    // → active (release a hold / re-open a completed WO)
+    const ok = await applyWoStatus('active', null);
+    if (!ok) document.getElementById('d-wo-status').value = cur;
+}
+
+// PATCH /work-orders/{id}/status, refresh the panel + list. Returns success bool.
+async function applyWoStatus(status, note) {
+    if (!currentWO) return false;
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status, note: note || null }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            fabToast(data.error || 'Failed to update status.', 'error');
+            return false;
+        }
+        // Re-fetch the full detail payload so the status log / on-hold note refresh.
+        try {
+            currentWO = await (await API(`/work-orders/${currentWO.id}`)).json();
+        } catch (_) {
+            currentWO = data.work_order || currentWO;
+        }
+        renderWoStatusBar(currentWO);
+        loadWorkOrders();
+        return true;
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to update status.', 'error');
+        return false;
+    }
+}
+
+// ── On-hold prompt (note required) ──
+function openWoHoldPrompt() {
+    document.getElementById('wo-hold-note').value = '';
+    document.getElementById('wo-hold-prompt').style.display = 'flex';
+    setTimeout(() => document.getElementById('wo-hold-note').focus(), 50);
+}
+function dismissWoHoldPrompt() {
+    document.getElementById('wo-hold-prompt').style.display = 'none';
+    document.getElementById('d-wo-status').value = currentWO?.status || 'active';
+}
+async function confirmWoHold() {
+    const note = document.getElementById('wo-hold-note').value.trim();
+    if (!note) { fabToast('A note is required to place a work order on hold.', 'info'); return; }
+    if (await applyWoStatus('on_hold', note)) {
+        document.getElementById('wo-hold-prompt').style.display = 'none';
+    }
+}
+
+// ── Completion prompt: step 1 (mark complete) → step 2 (send email) ──
+function showWoCompletePrompt() {
+    document.getElementById('wo-complete-note').value = '';
+    document.getElementById('wo-complete-prompt').style.display = 'flex';
+}
+function dismissWoCompletePrompt() {
+    document.getElementById('wo-complete-prompt').style.display = 'none';
+    document.getElementById('d-wo-status').value = currentWO?.status || 'active';
+}
+async function confirmWoComplete() {
+    const note = document.getElementById('wo-complete-note').value.trim();
+    const ok = await applyWoStatus('complete', note);
+    document.getElementById('wo-complete-prompt').style.display = 'none';
+    if (!ok) { document.getElementById('d-wo-status').value = currentWO?.status || 'active'; return; }
+
+    if (isManagerOrAbove()) {
+        openWoCompletionEmail(note);
+    } else {
+        fabToast('Work order marked complete. A manager or admin can send the completion email.', 'success');
+    }
+}
+
+// ── Completion email prompt (manager/admin) ──
+function openWoCompletionEmail(prefillNote) {
+    document.getElementById('wo-email-note').value = prefillNote || '';
+    document.getElementById('wo-completion-email-prompt').style.display = 'flex';
+}
+function dismissWoCompletionEmail() {
+    document.getElementById('wo-completion-email-prompt').style.display = 'none';
+}
+async function sendWoCompletionEmail() {
+    if (!currentWO) return;
+    const note = document.getElementById('wo-email-note').value.trim();
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/completion-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: note || null }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { fabToast(data.error || 'Failed to send completion email.', 'error'); return; }
+        document.getElementById('wo-completion-email-prompt').style.display = 'none';
+        fabToast(`Completion email sent to ${(data.recipients || []).length} recipient(s).`, 'success');
+        const wo = await (await API(`/work-orders/${currentWO.id}`)).json();
+        currentWO = wo;
+        renderWoStatusBar(wo);
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to send completion email.', 'error');
+    }
+}
+
+// Called after any stage / step / elevation change that could finish the WO.
+// Refreshes readiness and, the first time the WO becomes ready, prompts.
+async function maybePromptWoComplete() {
+    if (!currentWO || _woPromptBusy) return;
+    // Don't stack on top of the elevation prompt.
+    if (document.getElementById('elev-complete-prompt')?.style.display === 'flex') return;
+    _woPromptBusy = true;
+    try {
+        const wo = await (await API(`/work-orders/${currentWO.id}`)).json();
+        currentWO = wo;
+        renderWoStatusBar(wo);
+        if (wo.is_ready_to_complete && wo.status !== 'complete'
+            && document.getElementById('wo-complete-prompt').style.display !== 'flex') {
+            showWoCompletePrompt();
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _woPromptBusy = false;
+    }
+}
+
+// ============================================================
 // WO Steps
 // ============================================================
 function renderWoSteps(woId, steps) {
@@ -1377,6 +1610,7 @@ async function reloadWoSteps() {
         const r = await API(`/work-orders/${currentWO.id}/steps`);
         const data = await r.json();
         renderWoSteps(currentWO.id, data.steps || []);
+        maybePromptWoComplete();
     } catch (e) { console.error(e); }
 }
 
@@ -1476,20 +1710,24 @@ function renderDrawings(drawings) {
 async function uploadDrawings(files) {
     if (!currentWO || !files.length) return;
     document.getElementById('drawings-loading').style.display = 'block';
+    let failed = 0;
     for (const file of files) {
         const fd = new FormData();
         fd.append('file', file);
         try {
-            await fetch(`/api/v1/work-orders/${currentWO.id}/drawings`, {
-                method: 'POST',
-                body: fd,
-            });
+            const r = await authenticatedUpload(`/work-orders/${currentWO.id}/drawings`, fd);
+            if (!r.ok) {
+                failed++;
+                console.error('Drawing upload failed:', r.status, await r.text().catch(() => ''));
+            }
         } catch (e) {
+            failed++;
             console.error('Upload failed:', e);
         }
     }
     document.getElementById('drawings-loading').style.display = 'none';
     document.getElementById('drawing-upload').value = '';
+    if (failed) fabToast(`${failed} drawing${failed !== 1 ? 's' : ''} failed to upload.`, 'error');
     // Reload detail to get fresh drawings list
     const r = await API(`/work-orders/${currentWO.id}`);
     const wo = await r.json();
@@ -1538,7 +1776,7 @@ function renderElevations(elevations) {
 
 function elevRow(e) {
     const typeBadge = e.elevation_type
-        ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')}">${esc(e.elevation_type.name)}</span>`
+        ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')};color:#fff">${esc(e.elevation_type.name)}</span>`
         : '<span class="text-muted">—</span>';
 
     const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset', on_hold: 'Reset' };
@@ -1636,6 +1874,10 @@ function elevRow(e) {
         </td>
         <td>
             <div class="btn-group btn-group-sm">
+                ${stages.some(s => s.status === 'pending' || s.status === 'in_progress')
+                    ? `<button class="btn btn-ghost-success" onclick="bulkCompleteElevation(${e.id})" title="Complete all stages & close this elevation">
+                    <i class="ti ti-checks"></i>
+                </button>` : ''}
                 <button class="btn btn-ghost-secondary" onclick="openEditElev(${e.id})" title="Edit">
                     <i class="ti ti-pencil"></i>
                 </button>
@@ -1694,25 +1936,54 @@ async function loadElevTypes() {
     }
 }
 
-// Populate the complexity-tier picker for the selected elevation type.
+// Elevation types whose "complexity tier" is a fabrication *system* (Curtainwall,
+// Storefront, Window Wall). These are matched by name (case-insensitive) so it
+// also works in environments where "WW" exists but this one where it doesn't.
+const SYSTEM_TYPE_NAMES = ['cw', 'sf', 'ww'];
+
+function elevTypeById(typeId) {
+    return elevTypes.find(t => t.id === parseInt(typeId)) || null;
+}
+function isSystemType(typeId) {
+    const t = elevTypeById(typeId);
+    return !!t && SYSTEM_TYPE_NAMES.includes(String(t.name).trim().toLowerCase());
+}
+// "System" for CW/SF/WW, "Complexity Tier" otherwise. Same underlying
+// template_set_id either way — this is only a label.
+function tierNoun(typeId) {
+    return isSystemType(typeId) ? 'System' : 'Complexity Tier';
+}
+function tierSetsForType(typeId) {
+    const t = elevTypeById(typeId);
+    return (t?.stage_template_sets || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+}
+function defaultTierId(typeId) {
+    const sets = tierSetsForType(typeId);
+    if (!sets.length) return null;
+    return (sets.find(s => s.is_default) || sets[0]).id;
+}
+
+// Populate the complexity-tier / system picker for the selected elevation type.
 // `preselectId` keeps the elevation's current tier when editing.
 function refreshElevTierOptions(preselectId) {
     const typeId = parseInt(document.getElementById('elev-type').value) || null;
     const tierSel = document.getElementById('elev-tier');
     const hint = document.getElementById('elev-tier-hint');
-    const type = elevTypes.find(t => t.id === typeId);
-    const sets = (type?.stage_template_sets || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+    const label = document.getElementById('elev-tier-label');
+    const noun = tierNoun(typeId);
+    if (label) label.textContent = noun;
+    const sets = tierSetsForType(typeId);
 
     tierSel.innerHTML = '';
     if (!sets.length) {
         tierSel.disabled = true;
-        hint.textContent = typeId ? 'This type has no tiers yet.' : 'Pick a type first.';
+        hint.textContent = typeId ? `This type has no ${noun.toLowerCase()} set up yet.` : 'Pick a type first.';
         return;
     }
     tierSel.disabled = false;
     const chosen = sets.some(s => s.id === preselectId)
         ? preselectId
-        : (sets.find(s => s.is_default) || sets[0]).id;
+        : defaultTierId(typeId);
     sets.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s.id;
@@ -1720,7 +1991,7 @@ function refreshElevTierOptions(preselectId) {
         if (s.id === chosen) opt.selected = true;
         tierSel.appendChild(opt);
     });
-    hint.textContent = 'Changing the tier on an existing elevation re-syncs its stages.';
+    hint.textContent = `Changing the ${noun.toLowerCase()} on an existing elevation re-syncs its stages.`;
 }
 
 function onElevTypeChange() {
@@ -1801,6 +2072,7 @@ async function setStageStatus(stageId, status) {
         restoreExpandedElevations(expanded);
         loadWorkOrders();
         checkElevationCompletion(stageId, status);
+        maybePromptWoComplete();
     } catch (e) {
         console.error(e);
     }
@@ -1829,20 +2101,15 @@ function checkElevationCompletion(stageId, newStatus) {
     }
 }
 
+// Prompt shown after the last stage of an elevation is cycled complete one at a
+// time. No "completed by" here — a fabricator credit is only collected on the
+// bulk "complete all stages" flow (openBulkCompletePrompt), and only for
+// managers/admins.
 function showElevCompletePrompt(elev) {
     _elevPromptId = elev.id;
     document.getElementById('elev-cp-msg').textContent =
         `All stages for "${elev.elevation_tag}" are done — mark elevation as complete?`;
-    // Populate completed-by with fab users
-    const sel = document.getElementById('elev-cp-user');
-    sel.innerHTML = '<option value="">— select —</option>';
-    fabUsers.forEach(u => {
-        const o = document.createElement('option');
-        o.value = u.id; o.textContent = u.name;
-        sel.appendChild(o);
-    });
-    const prompt = document.getElementById('elev-complete-prompt');
-    prompt.style.display = 'flex';
+    document.getElementById('elev-complete-prompt').style.display = 'flex';
 }
 
 function showElevReopenPrompt(elev) {
@@ -1859,14 +2126,14 @@ function dismissElevPrompt(which) {
 
 async function confirmElevComplete() {
     if (!_elevPromptId) return;
-    const completedById = document.getElementById('elev-cp-user').value || null;
     try {
+        // Only the completion date — `completed_by_id` is left untouched (the
+        // bulk flow is the only place a fabricator credit is captured).
         await API(`/elevations/${_elevPromptId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                date_completed:  new Date().toISOString().slice(0, 10),
-                completed_by_id: completedById,
+                date_completed: new Date().toISOString().slice(0, 10),
             }),
         });
         document.getElementById('elev-complete-prompt').style.display = 'none';
@@ -1878,6 +2145,7 @@ async function confirmElevComplete() {
         renderElevations(wo.elevations || []);
         restoreExpandedElevations(expanded);
         loadWorkOrders();
+        maybePromptWoComplete();
     } catch (e) { console.error(e); }
 }
 
@@ -1936,6 +2204,157 @@ function restoreExpandedElevations(ids) {
             if (btn) btn.querySelector('i').style.transform = 'rotate(90deg)';
         }
     });
+}
+
+// ============================================================
+// Bulk complete — stage (across a WO) and elevation (all stages)
+// ============================================================
+
+// True when the signed-in app user is a manager or admin. Only they may credit
+// a specific fabricator with bulk-completed work.
+function isManagerOrAbove() {
+    return typeof currentUser !== 'undefined' && !!currentUser
+        && ['admin', 'manager'].includes(currentUser.role);
+}
+
+// Reload the open WO detail, preserving which elevation stage rows are expanded.
+async function reloadWODetailKeepExpanded() {
+    if (!currentWO) return;
+    const expanded = getExpandedElevationIds();
+    const wo = await (await API(`/work-orders/${currentWO.id}`)).json();
+    currentWO = wo;
+    renderElevations(wo.elevations || []);
+    restoreExpandedElevations(expanded);
+    renderWoStatusBar(wo);
+    renderWOEstimate(wo);
+    loadWorkOrders();
+    maybePromptWoComplete();
+}
+
+// Distinct stage names across the current WO's elevations, in stage order.
+function distinctStageNames() {
+    const seen = new Map();
+    (currentWO?.elevations || []).forEach(e => (e.stages || []).forEach(s => {
+        const k = s.name.toLowerCase();
+        if (!seen.has(k)) seen.set(k, { name: s.name, order: s.sort_order ?? 999 });
+    }));
+    return [...seen.values()].sort((a, b) => a.order - b.order).map(v => v.name);
+}
+
+// Shared prompt for both bulk-complete flows. Resolves to
+// { stageName, fabUserId } on confirm, or null on cancel.
+let _bcpResolve = null;
+function openBulkCompletePrompt({ title, message, allowUser, stageNames }) {
+    document.getElementById('bcp-title').textContent = title;
+    document.getElementById('bcp-msg').textContent = message;
+
+    const stageWrap = document.getElementById('bcp-stage-wrap');
+    const stageSel  = document.getElementById('bcp-stage');
+    if (stageNames && stageNames.length) {
+        stageWrap.style.display = '';
+        stageSel.innerHTML = stageNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    } else {
+        stageWrap.style.display = 'none';
+        stageSel.innerHTML = '';
+    }
+
+    const userWrap = document.getElementById('bcp-user-wrap');
+    const userSel  = document.getElementById('bcp-user');
+    if (allowUser) {
+        userWrap.style.display = '';
+        userSel.innerHTML = '<option value="">— none —</option>' +
+            fabUsers.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+    } else {
+        userWrap.style.display = 'none';
+        userSel.innerHTML = '';
+    }
+
+    document.getElementById('bulk-complete-prompt').style.display = 'flex';
+    return new Promise(res => { _bcpResolve = res; });
+}
+
+function _bcpDone(confirmed) {
+    const stageSel = document.getElementById('bcp-stage');
+    const userSel  = document.getElementById('bcp-user');
+    document.getElementById('bulk-complete-prompt').style.display = 'none';
+    const res = _bcpResolve; _bcpResolve = null;
+    if (!res) return;
+    res(confirmed
+        ? { stageName: stageSel.value || null, fabUserId: userSel.value || null }
+        : null);
+}
+
+// Send a bulk-complete request, retrying once with an override if a stage gate
+// blocks it and the user agrees.
+async function sendBulkComplete(url, payload, failMsg) {
+    const send = (override) => API(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(override ? { ...payload, override: true } : payload),
+    });
+    let r = await send(false);
+    if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        if (err.code === 'stage_gated'
+            && confirm(`"${err.blocking_stage?.name || 'An earlier stage'}" isn't complete. Override the gate and complete anyway?`)) {
+            r = await send(true);
+        }
+        if (!r.ok) { fabToast(failMsg, 'error'); return null; }
+    }
+    return r.json().catch(() => ({}));
+}
+
+async function openBulkCompleteStage() {
+    if (!currentWO) return;
+    const names = distinctStageNames();
+    if (!names.length) { fabToast('This work order has no stages yet.', 'info'); return; }
+
+    const res = await openBulkCompletePrompt({
+        title: 'Bulk Complete Stage',
+        message: 'Mark the selected stage complete on every elevation of this work order. Stages on hold or blocked are left untouched.',
+        allowUser: isManagerOrAbove(),
+        stageNames: names,
+    });
+    if (!res || !res.stageName) return;
+
+    try {
+        const data = await sendBulkComplete(
+            `/work-orders/${currentWO.id}/stages/bulk-complete`,
+            { stage_name: res.stageName, fab_user_id: res.fabUserId },
+            'Failed to complete stages.',
+        );
+        if (!data) return;
+        await reloadWODetailKeepExpanded();
+        fabToast(data.updated
+            ? `Completed ${data.updated} “${res.stageName}” stage${data.updated !== 1 ? 's' : ''}.`
+            : 'No open stages matched.', data.updated ? 'success' : 'info');
+    } catch (e) { console.error(e); fabToast('Failed to complete stages.', 'error'); }
+}
+
+async function bulkCompleteElevation(elevId) {
+    if (!currentWO) return;
+    const elev = (currentWO.elevations || []).find(e => e.id === elevId);
+    if (!elev) return;
+    const open = (elev.stages || []).filter(s => ['pending', 'in_progress'].includes(s.status)).length;
+    if (!open) { fabToast('No open stages on this elevation.', 'info'); return; }
+
+    const res = await openBulkCompletePrompt({
+        title: 'Complete Elevation',
+        message: `Complete all ${open} open stage${open !== 1 ? 's' : ''} on “${elev.elevation_tag}” and close the line?`,
+        allowUser: isManagerOrAbove(),
+    });
+    if (!res) return;
+
+    try {
+        const data = await sendBulkComplete(
+            `/elevations/${elevId}/complete-all-stages`,
+            { fab_user_id: res.fabUserId },
+            'Failed to complete the elevation.',
+        );
+        if (!data) return;
+        await reloadWODetailKeepExpanded();
+        fabToast('Elevation completed.', 'success');
+    } catch (e) { console.error(e); fabToast('Failed to complete the elevation.', 'error'); }
 }
 
 function openAddElev() {
@@ -2046,6 +2465,33 @@ function deleteElev(elevId) {
 // Create WO Wizard — Excel Import
 // ============================================================
 let _wizardImportedElevations = [];
+let _wizardImportMeta = { division: null, jobNumber: null };
+
+// First numeric character of a string, or '' when there is none.
+function firstDigit(s) {
+    const m = String(s ?? '').match(/\d/);
+    return m ? m[0] : '';
+}
+
+// The job number of the job picked in wizard step 1. The option label is
+// "<job_number> – <job_name>", so take everything before the first dash.
+function selectedWizardJobNumber() {
+    const sel = document.getElementById('new-wo-job');
+    const opt = sel && sel.selectedOptions ? sel.selectedOptions[0] : null;
+    if (!opt || !sel.value) return '';
+    return opt.textContent.split(/[–—-]/)[0].trim();
+}
+
+// Division badge: the value parsed from the sheet, else the first digit of the
+// sheet's job-number cell, else the first digit of the job picked in step 1.
+function refreshWizardDivisionBadge() {
+    const el = document.getElementById('wo-excel-division');
+    if (!el) return;
+    const div = _wizardImportMeta.division
+        || firstDigit(_wizardImportMeta.jobNumber)
+        || firstDigit(selectedWizardJobNumber());
+    el.textContent = div || '—';
+}
 
 async function importWOExcel(input) {
     const file = input.files[0];
@@ -2075,8 +2521,9 @@ async function importWOExcel(input) {
         }
 
         _wizardImportedElevations = data.elevations || [];
+        _wizardImportMeta = { division: data.division || null, jobNumber: data.job_number || null };
+        refreshWizardDivisionBadge();
 
-        document.getElementById('wo-excel-division').textContent = data.division || '—';
         const doorRows  = _wizardImportedElevations.filter(e => (e.type || '').toLowerCase() === 'door');
         const doorCount = doorRows.reduce((sum, e) => sum + Math.max(1, parseInt(e.quantity) || 1), 0);
         const elevCount = _wizardImportedElevations.length - doorRows.length;
@@ -2109,12 +2556,15 @@ async function openCreateWO() {
     wizardWoLabel = '';
     wizardBulkRowId = 0;
     wizardDoorRowId = 0;
+    _wizardSystemPrompted = new Set();
     _wizardImportedElevations = [];
+    _wizardImportMeta = { division: null, jobNumber: null };
 
     // Reset excel import UI
     document.getElementById('wo-excel-upload').value = '';
     document.getElementById('wo-excel-status').textContent = '';
     document.getElementById('wo-excel-hint').style.display = 'none';
+    document.getElementById('wo-excel-division').textContent = '—';
 
     // Reset step 1
     const sel = document.getElementById('new-wo-job');
@@ -2152,6 +2602,8 @@ function showWizardStep(step) {
         const ind = document.getElementById(`wiz-ind-${s}`);
         ind.classList.toggle('active', s <= step);
     });
+    const bar = document.getElementById('wiz-progress-bar');
+    if (bar) bar.style.width = Math.round((step / 3) * 100) + '%';
     const titles    = ['New Work Order', 'Add Elevations', 'Door & Frame Schedule'];
     const subtitles = ['Step 1 of 3 — Work order details', 'Step 2 of 3 — Optional', 'Step 3 of 3 — Optional'];
     document.getElementById('wo-wizard-title').textContent    = titles[step - 1];
@@ -2280,6 +2732,7 @@ async function wizardSaveElevations() {
         creates.push({
             elevation_tag:     tag,
             elevation_type_id: row.querySelector('.wiz-bulk-type')?.value || null,
+            template_set_id:   row.querySelector('.wiz-bulk-system')?.value || null,
             quantity:          parseInt(row.querySelector('.wiz-bulk-qty')?.value) || 1,
             date_requested:    row.querySelector('.wiz-bulk-date')?.value || null,
             scope:             row.querySelector('.wiz-bulk-scope')?.checked ? 'assemble' : 'kit',
@@ -2377,6 +2830,110 @@ function wizardComplete() {
 
 // ── Wizard step 2: bulk elevation row builder ──
 // prefill: optional { type, tag, quantity, scope } from Excel import
+// Resolve an imported "Type" cell to a configured elevation type id, using each
+// type's name plus its admin-defined linked names (aliases). Case- and
+// whitespace-insensitive. Tries a whole-cell match first, then falls back to
+// "the cell contains this term" — longest matching term wins so "Curtain Wall"
+// beats a bare "CW". Returns null when nothing matches.
+function resolveElevTypeId(raw) {
+    const cell = String(raw ?? '').trim().toLowerCase();
+    if (!cell) return null;
+    const termsOf = t => [t.name, ...(t.aliases || [])]
+        .map(s => String(s).trim().toLowerCase())
+        .filter(Boolean);
+
+    for (const t of elevTypes) {
+        if (termsOf(t).includes(cell)) return t.id;
+    }
+    let bestId = null, bestLen = 0;
+    for (const t of elevTypes) {
+        for (const term of termsOf(t)) {
+            if (term.length > bestLen && cell.includes(term)) {
+                bestId = t.id;
+                bestLen = term.length;
+            }
+        }
+    }
+    return bestId;
+}
+
+// Types for which a system/tier was already offered "apply to all" — so we
+// prompt only on the *first* pick per type. One set per row-builder, reset when
+// the modal opens.
+let _wizardSystemPrompted = new Set();
+let _bulkElevSystemPrompted = new Set();
+
+// (Re)build one elevation row's System dropdown from its type's tiers.
+// `tr` is the row; `typeCls`/`sysCls` are the select class names.
+function fillRowSystemSelect(tr, typeCls, sysCls, preselectId) {
+    const typeSel = tr.querySelector('.' + typeCls);
+    const sysSel  = tr.querySelector('.' + sysCls);
+    if (!typeSel || !sysSel) return;
+    const typeId = parseInt(typeSel.value) || null;
+    const sets = tierSetsForType(typeId);
+    const noun = tierNoun(typeId);
+
+    if (!typeId) {
+        sysSel.innerHTML = '<option value="">— Pick a type —</option>';
+        sysSel.disabled = true;
+        return;
+    }
+    if (!sets.length) {
+        sysSel.innerHTML = `<option value="">No ${noun.toLowerCase()} set up</option>`;
+        sysSel.disabled = true;
+        return;
+    }
+    sysSel.disabled = false;
+    const keep = sets.some(s => s.id === preselectId) ? preselectId : '';
+    sysSel.innerHTML = `<option value="">— ${noun}: use default —</option>` +
+        sets.map(s => `<option value="${s.id}"${s.id === keep ? ' selected' : ''}>${esc(s.name)}${s.is_default ? ' · default' : ''}</option>`).join('');
+}
+
+// First time a System is chosen for a type in this modal, offer to apply it to
+// every other row of the same type that has no System set yet.
+async function offerApplySystemToAll(sysSel, bodySel, typeCls, sysCls, promptedSet) {
+    const tr = sysSel.closest('tr');
+    const typeId = parseInt(tr.querySelector('.' + typeCls)?.value) || null;
+    const setId = sysSel.value;
+    if (!typeId || !setId || promptedSet.has(typeId)) return;
+    promptedSet.add(typeId);
+
+    const blanks = [...document.querySelectorAll(`${bodySel} tr`)].filter(row => {
+        if (row === tr) return false;
+        const t = parseInt(row.querySelector('.' + typeCls)?.value) || null;
+        const s = row.querySelector('.' + sysCls);
+        return t === typeId && s && !s.disabled && !s.value;
+    });
+    if (!blanks.length) return;
+
+    const typeName = elevTypeById(typeId)?.name || 'this type';
+    const sysName = sysSel.options[sysSel.selectedIndex]?.textContent.replace(/ · default$/, '') || 'this system';
+    const n = blanks.length;
+    const ok = await fabConfirm({
+        title: `Apply ${tierNoun(typeId)} to all ${typeName}?`,
+        message: `Set "${sysName}" on the ${n} other ${typeName} elevation${n !== 1 ? 's' : ''} that ${n !== 1 ? "don't" : "doesn't"} have one yet?`,
+        confirmLabel: 'Apply to all',
+        confirmClass: 'btn-primary',
+    });
+    if (!ok) return;
+    blanks.forEach(row => { row.querySelector('.' + sysCls).value = setId; });
+}
+
+// Wizard step 2 row hooks
+function onWizardRowTypeChange(typeSel) {
+    fillRowSystemSelect(typeSel.closest('tr'), 'wiz-bulk-type', 'wiz-bulk-system', null);
+}
+function onWizardSystemChange(sysSel) {
+    offerApplySystemToAll(sysSel, '#wiz-bulk-body', 'wiz-bulk-type', 'wiz-bulk-system', _wizardSystemPrompted);
+}
+// "Add Elevations" (existing WO) row hooks
+function onBulkElevTypeChange(typeSel) {
+    fillRowSystemSelect(typeSel.closest('tr'), 'bulk-type', 'bulk-system', null);
+}
+function onBulkElevSystemChange(sysSel) {
+    offerApplySystemToAll(sysSel, '#bulk-elev-body', 'bulk-type', 'bulk-system', _bulkElevSystemPrompted);
+}
+
 function addWizardBulkRow(prefill) {
     const id = ++wizardBulkRowId;
     const typeOptions = elevTypes.map(t =>
@@ -2386,7 +2943,8 @@ function addWizardBulkRow(prefill) {
     tr.id = `wiz-bulk-row-${id}`;
     tr.innerHTML = `
         <td><input type="text" class="form-control form-control-sm wiz-bulk-tag" placeholder="e.g. A1" autocomplete="off"></td>
-        <td><select class="form-select form-select-sm wiz-bulk-type"><option value="">— None —</option>${typeOptions}</select></td>
+        <td><select class="form-select form-select-sm wiz-bulk-type" onchange="onWizardRowTypeChange(this)"><option value="">— None —</option>${typeOptions}</select></td>
+        <td><select class="form-select form-select-sm wiz-bulk-system" onchange="onWizardSystemChange(this)" disabled><option value="">— Pick a type —</option></select></td>
         <td><input type="number" class="form-control form-control-sm wiz-bulk-qty" value="1" min="1" style="width:70px"></td>
         <td><input type="date" class="form-control form-control-sm wiz-bulk-date"></td>
         <td class="text-center"><input type="checkbox" class="form-check-input wiz-bulk-scope" checked title="Checked = Assemble, Unchecked = Kit"></td>
@@ -2397,12 +2955,13 @@ function addWizardBulkRow(prefill) {
         tr.querySelector('.wiz-bulk-tag').value = prefill.tag || '';
         tr.querySelector('.wiz-bulk-qty').value = prefill.quantity || 1;
         tr.querySelector('.wiz-bulk-scope').checked = (prefill.scope !== 'kit');
-        // Match type name to elevTypes list (case-insensitive)
-        if (prefill.type) {
-            const match = elevTypes.find(t => t.name.toLowerCase() === prefill.type.toLowerCase());
-            if (match) tr.querySelector('.wiz-bulk-type').value = match.id;
-        }
+        // Match the imported type against each elevation type's name + linked names.
+        const matchId = resolveElevTypeId(prefill.type);
+        if (matchId) tr.querySelector('.wiz-bulk-type').value = matchId;
     }
+    // Fill the system dropdown for the row's (possibly prefilled) type. Leave it
+    // unset so the user's first pick drives the "apply to all" prompt.
+    fillRowSystemSelect(tr, 'wiz-bulk-type', 'wiz-bulk-system', null);
 }
 
 // ── Wizard step 3: door/frame row builder ──
@@ -2502,6 +3061,7 @@ let bulkElevRowId = 0;
 function openBulkElev() {
     document.getElementById('bulk-elev-body').innerHTML = '';
     bulkElevRowId = 0;
+    _bulkElevSystemPrompted = new Set();
     addBulkElevRow();
     showModal(document.getElementById('bulkElevModal'));
 }
@@ -2520,9 +3080,14 @@ function addBulkElevRow() {
                 placeholder="e.g. A1" autocomplete="off">
         </td>
         <td>
-            <select class="form-select form-select-sm bulk-type">
+            <select class="form-select form-select-sm bulk-type" onchange="onBulkElevTypeChange(this)">
                 <option value="">— None —</option>
                 ${typeOptions}
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm bulk-system" onchange="onBulkElevSystemChange(this)" disabled>
+                <option value="">— Pick a type —</option>
             </select>
         </td>
         <td>
@@ -2561,6 +3126,7 @@ async function saveBulkElev() {
         creates.push({
             elevation_tag:     tag,
             elevation_type_id: row.querySelector('.bulk-type')?.value || null,
+            template_set_id:   row.querySelector('.bulk-system')?.value || null,
             quantity:          parseInt(row.querySelector('.bulk-qty')?.value) || 1,
             date_requested:    row.querySelector('.bulk-date')?.value || null,
             scope:             row.querySelector('.bulk-scope')?.checked ? 'assemble' : 'kit',
@@ -2822,13 +3388,7 @@ async function saveQuickJob() {
       <h5 class="card-title mb-0"><i class="ti ti-circle-check text-success me-2"></i>Elevation Complete?</h5>
     </div>
     <div class="card-body">
-      <p class="mb-3" id="elev-cp-msg">All stages are done — mark this elevation as complete?</p>
-      <div class="mb-0">
-        <label class="form-label form-label-sm mb-1">Completed by</label>
-        <select class="form-select form-select-sm" id="elev-cp-user">
-          <option value="">— select —</option>
-        </select>
-      </div>
+      <p class="mb-0" id="elev-cp-msg">All stages are done — mark this elevation as complete?</p>
     </div>
     <div class="card-footer d-flex justify-content-end gap-2">
       <button class="btn btn-ghost-secondary" onclick="dismissElevPrompt('complete')">Not Yet</button>
@@ -2849,6 +3409,88 @@ async function saveQuickJob() {
     <div class="card-footer d-flex justify-content-end gap-2">
       <button class="btn btn-ghost-secondary" onclick="dismissElevPrompt('reopen')">Keep Complete</button>
       <button class="btn btn-warning" onclick="confirmElevReopen()">Yes, Reopen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bulk complete prompt (stage across WO / all stages on an elevation) ── -->
+<div id="bulk-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(420px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-checks text-success me-2"></i><span id="bcp-title">Bulk Complete</span></h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-3" id="bcp-msg"></p>
+      <div class="mb-3" id="bcp-stage-wrap" style="display:none">
+        <label class="form-label form-label-sm mb-1">Stage</label>
+        <select class="form-select form-select-sm" id="bcp-stage"></select>
+      </div>
+      <div class="mb-0" id="bcp-user-wrap" style="display:none">
+        <label class="form-label form-label-sm mb-1">Completed by</label>
+        <select class="form-select form-select-sm" id="bcp-user">
+          <option value="">— none —</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="_bcpDone(false)">Cancel</button>
+      <button class="btn btn-success" onclick="_bcpDone(true)">Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── WO on-hold prompt (note required) ── -->
+<div id="wo-hold-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(440px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-player-pause text-orange me-2"></i>Place Work Order On Hold</h5>
+    </div>
+    <div class="card-body">
+      <label class="form-label form-label-sm mb-1">Reason for hold <span class="text-danger">*</span></label>
+      <textarea class="form-control form-control-sm" id="wo-hold-note" rows="3"
+        placeholder="Why is this work order on hold?"></textarea>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissWoHoldPrompt()">Cancel</button>
+      <button class="btn btn-warning" onclick="confirmWoHold()">Place On Hold</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── WO completion prompt — step 1: mark complete ── -->
+<div id="wo-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(440px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-circle-check text-success me-2"></i>Mark Work Order Complete?</h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-3">All elevations and work-order steps are complete. Mark this work order as complete?</p>
+      <label class="form-label form-label-sm mb-1">Completion notes <span class="text-muted">(optional)</span></label>
+      <textarea class="form-control form-control-sm" id="wo-complete-note" rows="2"
+        placeholder="Any notes about this completion…"></textarea>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissWoCompletePrompt()">Not Yet</button>
+      <button class="btn btn-success" onclick="confirmWoComplete()">Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── WO completion prompt — step 2: send email (manager/admin) ── -->
+<div id="wo-completion-email-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;">
+  <div class="card shadow-lg" style="width:min(460px,92vw);margin:0">
+    <div class="card-header">
+      <h5 class="card-title mb-0"><i class="ti ti-mail text-primary me-2"></i>Send Completion Email?</h5>
+    </div>
+    <div class="card-body">
+      <p class="mb-3">Email the project manager and admins that this work order is complete?</p>
+      <label class="form-label form-label-sm mb-1">Message <span class="text-muted">(optional)</span></label>
+      <textarea class="form-control form-control-sm" id="wo-email-note" rows="3"
+        placeholder="Add a note to include in the email…"></textarea>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button class="btn btn-ghost-secondary" onclick="dismissWoCompletionEmail()">Skip</button>
+      <button class="btn btn-primary" onclick="sendWoCompletionEmail()">Send Email</button>
     </div>
   </div>
 </div>

@@ -466,6 +466,31 @@
     return response.json();
   }
 
+  // File upload against the stateful API. Must NOT set Content-Type — the browser
+  // adds the multipart boundary itself. Sends BOTH CSRF headers (the <meta> token
+  // needs only the session cookie; the XSRF-TOKEN cookie is the SPA style) and,
+  // on a 419, refreshes the CSRF cookie and retries once. Returns the Response.
+  async function authenticatedUpload(endpoint, formData, options = {}) {
+    const send = () => fetch(`${API_BASE}${endpoint}`, {
+      method: options.method || 'POST',
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+        'X-XSRF-TOKEN': getXsrfToken(),
+        ...(options.headers || {}),
+      },
+      body: formData,
+    });
+
+    let response = await send();
+    if (response.status === 419) {
+      await fetch('/sanctum/csrf-cookie', { credentials: 'include' });
+      response = await send();
+    }
+    return response;
+  }
+
   // Authentication
   function showApp() {
     document.getElementById('loginPage').classList.remove('active');

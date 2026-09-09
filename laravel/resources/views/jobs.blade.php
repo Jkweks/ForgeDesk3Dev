@@ -1433,6 +1433,9 @@
                 return '-';
             }
 
+            // Guard against a fractional value from the API — show whole days.
+            days = Math.floor(Number(days));
+
             if (days < 0) {
                 return `<span class="text-danger">${Math.abs(days)} days overdue</span>`;
             } else if (days === 0) {

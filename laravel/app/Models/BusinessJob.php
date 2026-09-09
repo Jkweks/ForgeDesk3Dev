@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BusinessJob extends Model
@@ -34,7 +33,6 @@ class BusinessJob extends Model
         'target_completion_date' => 'date',
         'actual_completion_date' => 'date',
     ];
-
 
     // Status configuration
     public static $statuses = [
@@ -132,7 +130,7 @@ class BusinessJob extends Model
             ->count();
 
         $nonArchivedWOs = $this->workOrders()->where('archived', false)->with('elevations.stages')->get();
-        $openWorkOrders = $nonArchivedWOs->filter(fn($wo) => !$wo->isComplete())->count();
+        $openWorkOrders = $nonArchivedWOs->filter(fn ($wo) => ! $wo->isComplete())->count();
 
         $totalItems = $this->jobReservations()->count() + $this->workOrders()->count();
 
@@ -144,14 +142,18 @@ class BusinessJob extends Model
     }
 
     /**
-     * Get days until target completion
+     * Whole days until the target completion date (negative when overdue).
+     * Measured from the start of today so it lands on a whole day rather than a
+     * fractional value like 12.457.
      */
     public function getDaysUntilCompletionAttribute()
     {
-        if (!$this->target_completion_date || $this->isCompleted()) {
+        if (! $this->target_completion_date || $this->isCompleted()) {
             return null;
         }
 
-        return now()->diffInDays($this->target_completion_date, false);
+        return (int) floor(
+            now()->startOfDay()->diffInDays($this->target_completion_date, false)
+        );
     }
 }

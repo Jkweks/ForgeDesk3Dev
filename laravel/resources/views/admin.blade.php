@@ -726,6 +726,15 @@
               <label class="form-label">Sort Order</label>
               <input type="number" class="form-control" id="elevTypeSortOrder" value="99" min="1">
             </div>
+            <div class="mb-1">
+              <label class="form-label">Linked names</label>
+              <textarea class="form-control" id="elevTypeAliases" rows="3"
+                placeholder="One per line or comma-separated — e.g. Curtainwall, Curtain Wall, CWall"></textarea>
+              <div class="form-text">
+                Work-order imports match a row to this type when its Type cell equals or contains
+                any of these, or the type name itself. Case doesn’t matter.
+              </div>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -2235,7 +2244,12 @@
         tbody.innerHTML = elevationTypes.map(t => `
           <tr>
             <td><span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:${locEscHtml(t.color)}"></span></td>
-            <td><strong>${locEscHtml(t.name)}</strong></td>
+            <td>
+              <strong>${locEscHtml(t.name)}</strong>
+              ${(t.aliases && t.aliases.length)
+                ? `<div class="text-muted small">${t.aliases.map(locEscHtml).join(', ')}</div>`
+                : ''}
+            </td>
             <td>${t.sort_order}</td>
             <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
             <td>
@@ -2261,6 +2275,7 @@
         document.getElementById('elevTypeColor').value = '#3b82f6';
         document.getElementById('elevTypeColorHex').value = '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = (elevationTypes.length + 1);
+        document.getElementById('elevTypeAliases').value = '';
         // Use data-bs-dismiss or manual show
         const modal = document.getElementById('elevTypeModal');
         if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
@@ -2276,6 +2291,7 @@
         document.getElementById('elevTypeColor').value = t.color || '#3b82f6';
         document.getElementById('elevTypeColorHex').value = t.color || '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = t.sort_order;
+        document.getElementById('elevTypeAliases').value = (t.aliases || []).join('\n');
         const modal = document.getElementById('elevTypeModal');
         if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
         else modal.classList.add('show'), modal.style.display = 'block', document.body.classList.add('modal-open');
@@ -2284,10 +2300,13 @@
       async function saveElevType() {
         const id = document.getElementById('elevTypeId').value;
         const color = document.getElementById('elevTypeColorHex').value || document.getElementById('elevTypeColor').value;
+        const aliases = document.getElementById('elevTypeAliases').value
+          .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         const body = {
           name: document.getElementById('elevTypeName').value,
           color: color,
           sort_order: parseInt(document.getElementById('elevTypeSortOrder').value) || 99,
+          aliases: aliases,
         };
         if (!body.name) { fabToast('Name is required.', 'info'); return; }
         try {
@@ -3051,12 +3070,7 @@
         const fd = new FormData();
         fd.append('logo', file);
         try {
-          const res = await fetch(`${API_BASE}/company-settings/logo`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
-            body: fd,
-          });
+          const res = await authenticatedUpload('/company-settings/logo', fd);
           const json = await res.json();
           if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
           input.value = '';

@@ -2,25 +2,33 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\StageGatedException;
 use App\Http\Controllers\Controller;
-use App\Models\FdWoElevation;
-use App\Models\FdWoStage;
 use App\Models\FdStageTemplate;
 use App\Models\FdStageTemplateSet;
+use App\Models\FdWoElevation;
 use App\Models\FdWorkOrder;
+use App\Models\FdWoStage;
+use App\Services\StageGateService;
+use App\Services\StageOverrideResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ElevationController extends Controller
 {
+    public function __construct(
+        private StageGateService $gate,
+        private StageOverrideResolver $overrides,
+    ) {}
+
     public function index(int $workOrderId)
     {
         $wo = FdWorkOrder::findOrFail($workOrderId);
         $elevations = $wo->elevations()
             ->with(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo'])
             ->get()
-            ->map(fn($e) => $this->formatElevation($e));
+            ->map(fn ($e) => $this->formatElevation($e));
 
         return response()->json(['elevations' => $elevations]);
     }
@@ -28,9 +36,9 @@ class ElevationController extends Controller
     public function store(Request $request, int $workOrderId)
     {
         $request->validate([
-            'elevation_tag'     => 'required|string|max:100',
+            'elevation_tag' => 'required|string|max:100',
             'elevation_type_id' => 'nullable|integer|exists:fd_elevation_types,id',
-            'template_set_id'   => 'nullable|integer|exists:fd_stage_template_sets,id',
+            'template_set_id' => 'nullable|integer|exists:fd_stage_template_sets,id',
         ]);
 
         FdWorkOrder::findOrFail($workOrderId);
@@ -49,14 +57,14 @@ class ElevationController extends Controller
             }
 
             $elevation = FdWoElevation::create([
-                'work_order_id'     => $workOrderId,
+                'work_order_id' => $workOrderId,
                 'elevation_type_id' => $request->elevation_type_id,
-                'template_set_id'   => $setId,
-                'elevation_tag'     => $request->elevation_tag,
-                'quantity'          => $request->quantity ?? 1,
-                'date_requested'    => $request->date_requested,
-                'notes'             => $request->notes,
-                'scope'             => $request->scope ?? 'assemble',
+                'template_set_id' => $setId,
+                'elevation_tag' => $request->elevation_tag,
+                'quantity' => $request->quantity ?? 1,
+                'date_requested' => $request->date_requested,
+                'notes' => $request->notes,
+                'scope' => $request->scope ?? 'assemble',
             ]);
 
             // Auto-seed stages from the chosen tier's templates
@@ -67,16 +75,16 @@ class ElevationController extends Controller
 
                 foreach ($templates as $tpl) {
                     FdWoStage::create([
-                        'elevation_id'      => $elevation->id,
-                        'work_order_id'     => null,
-                        'template_id'       => $tpl->id,
-                        'name'              => $tpl->name,
-                        'description'       => $tpl->description,
-                        'sort_order'        => $tpl->sort_order,
-                        'blocks_next'       => $tpl->blocks_next ?? true,
+                        'elevation_id' => $elevation->id,
+                        'work_order_id' => null,
+                        'template_id' => $tpl->id,
+                        'name' => $tpl->name,
+                        'description' => $tpl->description,
+                        'sort_order' => $tpl->sort_order,
+                        'blocks_next' => $tpl->blocks_next ?? true,
                         'minutes_per_joint' => $tpl->minutes_per_joint,
-                        'status'            => 'pending',
-                        'assigned_to_id'    => $tpl->default_user_id,
+                        'status' => 'pending',
+                        'assigned_to_id' => $tpl->default_user_id,
                     ]);
                 }
             }
@@ -90,10 +98,12 @@ class ElevationController extends Controller
             }
 
             $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo']);
+
             return response()->json($this->formatElevation($elevation), 201);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('ElevationController@store failed', ['message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to create elevation'], 500);
         }
     }
@@ -156,6 +166,7 @@ class ElevationController extends Controller
             throw $e;
         } catch (\Exception $e) {
             Log::error('ElevationController@update failed', ['id' => $id, 'message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to update elevation'], 500);
         }
     }
@@ -175,35 +186,35 @@ class ElevationController extends Controller
     private function resyncStagesToSet(FdWoElevation $elevation, int $newSetId): array
     {
         $templates = FdStageTemplate::where('template_set_id', $newSetId)->orderBy('sort_order')->get();
-        $existing  = $elevation->stages()->get();
+        $existing = $elevation->stages()->get();
 
         $added = $carried = $retired = $keptWithProgress = [];
         $keepIds = [];
 
         foreach ($templates as $tpl) {
-            $match = $existing->first(fn($s) => $s->template_id === $tpl->id && ! in_array($s->id, $keepIds, true))
-                ?? $existing->first(fn($s) => mb_strtolower($s->name) === mb_strtolower($tpl->name) && ! in_array($s->id, $keepIds, true));
+            $match = $existing->first(fn ($s) => $s->template_id === $tpl->id && ! in_array($s->id, $keepIds, true))
+                ?? $existing->first(fn ($s) => mb_strtolower($s->name) === mb_strtolower($tpl->name) && ! in_array($s->id, $keepIds, true));
 
             if ($match) {
-                $match->sort_order        = $tpl->sort_order;
-                $match->blocks_next       = $tpl->blocks_next ?? true;
+                $match->sort_order = $tpl->sort_order;
+                $match->blocks_next = $tpl->blocks_next ?? true;
                 $match->minutes_per_joint = $tpl->minutes_per_joint;
-                $match->template_id       = $tpl->id;
+                $match->template_id = $tpl->id;
                 $match->save();
                 $keepIds[] = $match->id;
                 $carried[] = $match->name;
             } else {
                 $stage = FdWoStage::create([
-                    'elevation_id'      => $elevation->id,
-                    'work_order_id'     => null,
-                    'template_id'       => $tpl->id,
-                    'name'              => $tpl->name,
-                    'description'       => $tpl->description,
-                    'sort_order'        => $tpl->sort_order,
-                    'blocks_next'       => $tpl->blocks_next ?? true,
+                    'elevation_id' => $elevation->id,
+                    'work_order_id' => null,
+                    'template_id' => $tpl->id,
+                    'name' => $tpl->name,
+                    'description' => $tpl->description,
+                    'sort_order' => $tpl->sort_order,
+                    'blocks_next' => $tpl->blocks_next ?? true,
                     'minutes_per_joint' => $tpl->minutes_per_joint,
-                    'status'            => 'pending',
-                    'assigned_to_id'    => $tpl->default_user_id,
+                    'status' => 'pending',
+                    'assigned_to_id' => $tpl->default_user_id,
                 ]);
                 $keepIds[] = $stage->id;
                 $added[] = $stage->name;
@@ -225,9 +236,9 @@ class ElevationController extends Controller
         }
 
         return [
-            'added'              => $added,
-            'carried'            => $carried,
-            'retired'            => $retired,
+            'added' => $added,
+            'carried' => $carried,
+            'retired' => $retired,
             'kept_with_progress' => $keptWithProgress,
         ];
     }
@@ -247,7 +258,7 @@ class ElevationController extends Controller
         $templates = FdStageTemplate::where('template_set_id', $newSetId)->orderBy('sort_order')->get();
 
         $existing = $elevation->stages()->get();
-        $retired  = $existing->pluck('name')->values()->all();
+        $retired = $existing->pluck('name')->values()->all();
         foreach ($existing as $old) {
             $old->assignees()->detach();
             $old->delete();
@@ -260,16 +271,16 @@ class ElevationController extends Controller
         $added = [];
         foreach ($templates as $tpl) {
             $stage = FdWoStage::create([
-                'elevation_id'      => $elevation->id,
-                'work_order_id'     => null,
-                'template_id'       => $tpl->id,
-                'name'              => $tpl->name,
-                'description'       => $tpl->description,
-                'sort_order'        => $tpl->sort_order,
-                'blocks_next'       => $tpl->blocks_next ?? true,
+                'elevation_id' => $elevation->id,
+                'work_order_id' => null,
+                'template_id' => $tpl->id,
+                'name' => $tpl->name,
+                'description' => $tpl->description,
+                'sort_order' => $tpl->sort_order,
+                'blocks_next' => $tpl->blocks_next ?? true,
                 'minutes_per_joint' => $tpl->minutes_per_joint,
-                'status'            => 'pending',
-                'assigned_to_id'    => $tpl->default_user_id,
+                'status' => 'pending',
+                'assigned_to_id' => $tpl->default_user_id,
             ]);
 
             $ids = $tpl->default_user_id ? [(int) $tpl->default_user_id] : $woUserIds;
@@ -280,11 +291,85 @@ class ElevationController extends Controller
         }
 
         return [
-            'added'              => $added,
-            'carried'            => [],
-            'retired'            => $retired,
+            'added' => $added,
+            'carried' => [],
+            'retired' => $retired,
             'kept_with_progress' => [],
         ];
+    }
+
+    /**
+     * Complete every outstanding stage on one elevation (in sort order so gates
+     * clear as we go), then stamp the line itself as complete once all its
+     * stages are terminal. Stages on hold / blocked / not-required are left as
+     * they are; a lingering gate can be pushed past with `override`.
+     *
+     * Body: { fab_user_id?, override? }
+     * `fab_user_id` is credited on both the stages and the elevation, and is
+     * honoured only for manager / admin app users.
+     */
+    public function completeAllStages(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+            'override' => 'sometimes|boolean',
+        ]);
+
+        $elevation = FdWoElevation::with('stages')->findOrFail($id);
+        $isManager = in_array($request->user()?->role, ['admin', 'manager'], true);
+        $fabUserId = $isManager ? ($data['fab_user_id'] ?? null) : null;
+        $resolution = $this->overrides->resolve($request);
+
+        try {
+            $updated = 0;
+
+            DB::transaction(function () use ($elevation, $fabUserId, $resolution, &$updated) {
+                $stages = $elevation->stages
+                    ->whereIn('status', ['pending', 'in_progress'])
+                    ->sortBy('sort_order');
+
+                foreach ($stages as $stage) {
+                    $this->gate->guardStageTransition(
+                        $stage,
+                        'complete',
+                        $resolution['allowed'],
+                        $this->overrides->stageLogger($stage, $resolution),
+                    );
+
+                    $stage->status = 'complete';
+                    $stage->completed_at = now();
+                    $stage->completed_by_id = $fabUserId;
+                    $stage->save();
+                    $updated++;
+                }
+
+                // Close the line if every stage is now terminal.
+                $elevation->load('stages');
+                $allTerminal = $elevation->stages->every(
+                    fn ($s) => in_array($s->status, ['complete', 'not_required'], true)
+                );
+                if ($allTerminal && ! $elevation->date_completed) {
+                    $elevation->date_completed = now()->toDateString();
+                    $elevation->completed_by_id = $fabUserId;
+                    $elevation->save();
+                }
+            });
+
+            if ($wo = $elevation->workOrder()->first()) {
+                $wo->recalcDueDateFromElevations();
+                FdWorkOrder::resequencePriorities();
+            }
+
+            $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo', 'stages.completedBy']);
+
+            return response()->json($this->formatElevation($elevation));
+        } catch (StageGatedException $e) {
+            return $e->render();
+        } catch (\Exception $e) {
+            Log::error('ElevationController@completeAllStages failed', ['id' => $id, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to complete stages'], 500);
+        }
     }
 
     public function destroy(int $id)
@@ -304,53 +389,53 @@ class ElevationController extends Controller
     private function formatElevation(FdWoElevation $e): array
     {
         $stages = $e->relationLoaded('stages') ? $e->stages : $e->stages()->with(['assignedTo', 'completedBy'])->get();
-        $stageCount    = $stages->count();
-        $stagesDone    = $stages->whereIn('status', ['complete', 'not_required'])->count();
-        $stagesActive  = $stages->where('status', 'in_progress')->count();
+        $stageCount = $stages->count();
+        $stagesDone = $stages->whereIn('status', ['complete', 'not_required'])->count();
+        $stagesActive = $stages->where('status', 'in_progress')->count();
         $stagesBlocked = $stages->where('status', 'blocked')->count();
 
         $estimate = $e->estimateMinutes();
 
         return [
-            'id'                => $e->id,
-            'work_order_id'     => $e->work_order_id,
+            'id' => $e->id,
+            'work_order_id' => $e->work_order_id,
             'elevation_type_id' => $e->elevation_type_id,
-            'template_set_id'   => $e->template_set_id,
-            'elevation_type'    => $e->elevationType ? [
-                'id'    => $e->elevationType->id,
-                'name'  => $e->elevationType->name,
+            'template_set_id' => $e->template_set_id,
+            'elevation_type' => $e->elevationType ? [
+                'id' => $e->elevationType->id,
+                'name' => $e->elevationType->name,
                 'color' => $e->elevationType->color,
             ] : null,
-            'elevation_tag'     => $e->elevation_tag,
-            'quantity'          => $e->quantity,
-            'joint_qty'         => $e->joint_qty,
+            'elevation_tag' => $e->elevation_tag,
+            'quantity' => $e->quantity,
+            'joint_qty' => $e->joint_qty,
             'minutes_per_joint' => round($estimate['rate'], 2),
             'estimated_minutes' => $estimate['effective'],
-            'date_requested'    => $e->date_requested?->format('Y-m-d'),
-            'date_completed'    => $e->date_completed?->format('Y-m-d'),
-            'completed_by_id'   => $e->completed_by_id,
+            'date_requested' => $e->date_requested?->format('Y-m-d'),
+            'date_completed' => $e->date_completed?->format('Y-m-d'),
+            'completed_by_id' => $e->completed_by_id,
             'completed_by_name' => $e->completedBy?->name,
-            'notes'             => $e->notes,
-            'scope'             => $e->scope ?? 'assemble',
-            'stage_count'       => $stageCount,
-            'stages_done'       => $stagesDone,
-            'stages_active'     => $stagesActive,
-            'stages_blocked'    => $stagesBlocked,
-            'stages'            => $stages->map(fn($s) => [
-                'id'                => $s->id,
-                'name'              => $s->name,
-                'status'            => $s->status,
-                'sort_order'        => $s->sort_order,
-                'blocks_next'       => (bool) $s->blocks_next,
+            'notes' => $e->notes,
+            'scope' => $e->scope ?? 'assemble',
+            'stage_count' => $stageCount,
+            'stages_done' => $stagesDone,
+            'stages_active' => $stagesActive,
+            'stages_blocked' => $stagesBlocked,
+            'stages' => $stages->map(fn ($s) => [
+                'id' => $s->id,
+                'name' => $s->name,
+                'status' => $s->status,
+                'sort_order' => $s->sort_order,
+                'blocks_next' => (bool) $s->blocks_next,
                 'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
-                'assigned_name'     => $s->assignedTo?->name,
-                'completed_by_id'   => $s->completed_by_id,
+                'assigned_name' => $s->assignedTo?->name,
+                'completed_by_id' => $s->completed_by_id,
                 'completed_by_name' => $s->completedBy?->name,
-                'started_at'        => $s->started_at?->toIso8601String(),
-                'completed_at'      => $s->completed_at?->toIso8601String(),
+                'started_at' => $s->started_at?->toIso8601String(),
+                'completed_at' => $s->completed_at?->toIso8601String(),
             ])->values(),
-            'created_at'        => $e->created_at->toIso8601String(),
-            'updated_at'        => $e->updated_at->toIso8601String(),
+            'created_at' => $e->created_at->toIso8601String(),
+            'updated_at' => $e->updated_at->toIso8601String(),
         ];
     }
 }
