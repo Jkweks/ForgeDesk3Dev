@@ -12,6 +12,44 @@
     console.error('Error parsing user data:', e);
   }
 
+  // ── People picker (Requested by / Project manager) ──────────────────────
+  // Shared across pages. Populates a <select> with active users as
+  // "Lastname, Firstname". Keeps an unlinked legacy label visible.
+  let _peopleCache = null;
+  async function fetchPeople() {
+    if (_peopleCache) return _peopleCache;
+    try {
+      const r = await fetch(API_BASE + '/people', {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      _peopleCache = r.ok ? await r.json() : [];
+    } catch (e) {
+      console.error('Failed to load people list:', e);
+      _peopleCache = [];
+    }
+    return _peopleCache;
+  }
+
+  async function populatePeopleSelect(select, selectedId, options = {}) {
+    if (!select) return;
+    const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+    const people = await fetchPeople();
+    const placeholder = options.placeholder || '— Select —';
+    const sel = selectedId != null && selectedId !== '' ? String(selectedId) : '';
+    const known = people.some((p) => String(p.id) === sel);
+
+    let html = `<option value="">${esc(placeholder)}</option>`;
+    // A legacy free-text value with no linked user — keep it visible but unlinked.
+    if (!known && options.legacyLabel) {
+      html += `<option value="" selected disabled>${esc(options.legacyLabel)} — not linked</option>`;
+    }
+    html += people.map((p) =>
+      `<option value="${p.id}"${String(p.id) === sel ? ' selected' : ''}>${esc(p.label)}</option>`
+    ).join('');
+    select.innerHTML = html;
+  }
+
   // Update user badge in header
   function updateUserBadge() {
     if (currentUser) {

@@ -67,6 +67,7 @@ class JobReservationController extends Controller
                         'release_number' => $reservation->release_number,
                         'job_name' => $reservation->job_name,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'status' => $reservation->status,
                         'status_label' => $reservation->status_label,
@@ -146,6 +147,7 @@ class JobReservationController extends Controller
                     'release_number' => $reservation->release_number,
                     'job_name' => $reservation->job_name,
                     'requested_by' => $reservation->requested_by,
+                    'requested_by_id' => $reservation->requested_by_id,
                     'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                     'status' => $reservation->status,
                     'status_label' => $reservation->status_label,
@@ -513,6 +515,7 @@ class JobReservationController extends Controller
             $validator = Validator::make($request->all(), [
                 'job_name' => 'sometimes|nullable|string|max:255',
                 'requested_by' => 'sometimes|nullable|string|max:255',
+                'requested_by_id' => 'sometimes|nullable|integer|exists:users,id',
                 'needed_by' => 'sometimes|nullable|date',
                 'notes' => 'sometimes|nullable|string',
             ]);
@@ -541,8 +544,14 @@ class JobReservationController extends Controller
                 if ($request->has('job_name')) {
                     $reservation->job_name = $request->job_name;
                 }
-                if ($request->has('requested_by')) {
-                    $reservation->requested_by = $request->requested_by;
+                if ($request->has('requested_by_id')) {
+                    $resolved = \App\Models\User::resolvePersonField($request->input('requested_by_id'), $request->input('requested_by'));
+                    $reservation->requested_by = $resolved['label'] ?? '';
+                    $reservation->requested_by_id = $resolved['id'];
+                } elseif ($request->has('requested_by')) {
+                    $resolved = \App\Models\User::resolvePersonField(null, $request->input('requested_by'));
+                    $reservation->requested_by = $resolved['label'] ?? '';
+                    $reservation->requested_by_id = $resolved['id'];
                 }
                 if ($request->has('needed_by')) {
                     $reservation->needed_by = $request->needed_by;
@@ -569,6 +578,7 @@ class JobReservationController extends Controller
                         'release_number' => $reservation->release_number,
                         'job_name' => $reservation->job_name,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'notes' => $reservation->notes,
                         'status' => $reservation->status,
@@ -1095,7 +1105,8 @@ class JobReservationController extends Controller
                 'job_number' => 'required|string|max:100',
                 'release_number' => 'nullable|integer|min:1',
                 'job_name' => 'required|string|max:255',
-                'requested_by' => 'required|string|max:255',
+                'requested_by' => 'required_without:requested_by_id|nullable|string|max:255',
+                'requested_by_id' => 'nullable|integer|exists:users,id',
                 'needed_by' => 'nullable|date',
                 'notes' => 'nullable|string',
                 'items' => 'required|array|min:1',
@@ -1111,6 +1122,8 @@ class JobReservationController extends Controller
                 ], 422);
             }
 
+            $requestedBy = \App\Models\User::resolvePersonField($request->requested_by_id, $request->requested_by);
+
             DB::beginTransaction();
 
             try {
@@ -1122,7 +1135,8 @@ class JobReservationController extends Controller
                     'job_number' => $request->job_number,
                     'release_number' => $request->release_number ?: null,
                     'job_name' => $request->job_name,
-                    'requested_by' => $request->requested_by,
+                    'requested_by' => $requestedBy['label'] ?? '',
+                    'requested_by_id' => $requestedBy['id'],
                     'needed_by' => $request->needed_by,
                     'notes' => $request->notes,
                     'status' => $initialStatus,
@@ -1206,6 +1220,7 @@ class JobReservationController extends Controller
                         'release_number' => $reservation->release_number,
                         'job_name' => $reservation->job_name,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'status' => $reservation->status,
                         'status_label' => $reservation->status_label,

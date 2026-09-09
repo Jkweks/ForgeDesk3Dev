@@ -17,6 +17,7 @@ class JobReservation extends Model
         'release_number',
         'job_name',
         'requested_by',
+        'requested_by_id',
         'needed_by',
         'status',
         'notes',
@@ -90,6 +91,15 @@ class JobReservation extends Model
     public function businessJob()
     {
         return $this->belongsTo(BusinessJob::class, 'business_job_id');
+    }
+
+    /**
+     * The user account this reservation's requester points to (nullable — the
+     * `requested_by` string stays as the display label).
+     */
+    public function requestedByUser()
+    {
+        return $this->belongsTo(User::class, 'requested_by_id');
     }
 
     /**

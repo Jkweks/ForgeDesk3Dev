@@ -31,6 +31,7 @@ class User extends Authenticatable
         'last_login_at',
         'must_change_password',
         'password_set_at',
+        'welcome_email_sent_at',
     ];
 
     /**
@@ -57,6 +58,43 @@ class User extends Authenticatable
             'password' => 'hashed',
             'must_change_password' => 'boolean',
             'password_set_at' => 'datetime',
+            'welcome_email_sent_at' => 'datetime',
+        ];
+    }
+
+    /** Accounts created but not yet emailed their invitation. */
+    public function scopePendingWelcome($query)
+    {
+        return $query->whereNull('welcome_email_sent_at');
+    }
+
+    /** "Lastname, Firstname" for people pickers; falls back to name / email. */
+    public function getSortNameAttribute(): string
+    {
+        $last = trim((string) $this->last_name);
+        $first = trim((string) $this->first_name);
+
+        if ($last !== '' && $first !== '') {
+            return "{$last}, {$first}";
+        }
+
+        return $this->name ?: trim("{$first} {$last}") ?: (string) $this->email;
+    }
+
+    /**
+     * Resolve a person-picker submission to a [id, label] pair. A valid user id
+     * wins and sets the label to that user's sort name; otherwise the supplied
+     * free-text fallback is kept and the id is null.
+     *
+     * @return array{id: int|null, label: string|null}
+     */
+    public static function resolvePersonField($id, ?string $fallbackLabel = null): array
+    {
+        $user = $id ? static::find($id) : null;
+
+        return [
+            'id'    => $user?->id,
+            'label' => $user?->sort_name ?? ($fallbackLabel !== null && trim($fallbackLabel) !== '' ? trim($fallbackLabel) : null),
         ];
     }
 
@@ -72,12 +110,12 @@ class User extends Authenticatable
         }
 
         return $this->password_set_at->copy()->addHours(
-            (int) config('auth.temp_password.ttl_hours', 48)
+            (int) config('auth.temp_password.ttl_hours', 168)
         );
     }
 
     /**
-     * True when the user still owes a password change and the 48h window has passed.
+     * True when the user still owes a password change and the TTL window has passed.
      */
     public function temporaryPasswordExpired(): bool
     {
@@ -87,7 +125,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Issue a fresh temporary password and (re)start the change-within-48h clock.
+     * Issue a fresh temporary password and (re)start the change-within-TTL clock.
      * Returns the plaintext password so the caller can email it.
      */
     public function issueTemporaryPassword(): string

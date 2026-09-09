@@ -60,6 +60,8 @@ class UserController extends Controller
                 'must_change_password' => $user->must_change_password,
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
                 'temp_password_expired' => $user->temporaryPasswordExpired(),
+                'welcome_email_sent_at' => $user->welcome_email_sent_at?->toIso8601String(),
+                'invitation_pending' => $user->welcome_email_sent_at === null,
                 'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
                 'created_at' => $user->created_at->format('Y-m-d H:i:s'),
                 'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
@@ -67,6 +69,24 @@ class UserController extends Controller
         });
 
         return response()->json($users);
+    }
+
+    /**
+     * Lightweight people list for "Requested by" / "Project manager" pickers.
+     * Any authenticated user may load this (no users.view needed).
+     */
+    public function people()
+    {
+        $people = User::query()
+            ->where('is_active', true)
+            ->orderByRaw('LOWER(last_name)')
+            ->orderByRaw('LOWER(first_name)')
+            ->orderBy('name')
+            ->get(['id', 'first_name', 'last_name', 'name'])
+            ->map(fn ($u) => ['id' => $u->id, 'label' => $u->sort_name])
+            ->values();
+
+        return response()->json($people);
     }
 
     /**
@@ -79,6 +99,7 @@ class UserController extends Controller
             'active_users' => User::where('is_active', true)->count(),
             'inactive_users' => User::where('is_active', false)->count(),
             'admin_users' => User::where('role', 'admin')->count(),
+            'pending_invitations' => User::pendingWelcome()->count(),
             'by_role' => User::selectRaw('role, count(*) as count')
                 ->groupBy('role')
                 ->get()
@@ -107,6 +128,8 @@ class UserController extends Controller
             'must_change_password' => $user->must_change_password,
             'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
             'temp_password_expired' => $user->temporaryPasswordExpired(),
+            'welcome_email_sent_at' => $user->welcome_email_sent_at?->toIso8601String(),
+            'invitation_pending' => $user->welcome_email_sent_at === null,
             'last_login_at' => $user->last_login_at?->format('Y-m-d H:i:s'),
             'created_at' => $user->created_at->format('Y-m-d H:i:s'),
             'email_verified_at' => $user->email_verified_at?->format('Y-m-d H:i:s'),
@@ -124,7 +147,12 @@ class UserController extends Controller
             'email' => 'required|email|unique:users,email',
             'role' => ['required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
+            // Hold the welcome email so profile / roles / permissions can be set
+            // up first, then send it (individually or in bulk) later.
+            'send_welcome_email' => 'sometimes|boolean',
         ]);
+
+        $sendWelcome = $request->boolean('send_welcome_email', true);
 
         // Only an admin may create another admin.
         if ($validated['role'] === 'admin' && ! $request->user()->isAdmin()) {
@@ -134,61 +162,152 @@ class UserController extends Controller
         // Generate full name from first and last name
         $validated['name'] = trim("{$validated['first_name']} {$validated['last_name']}");
 
-        // The admin never picks the password. We issue a random temporary one,
-        // email it to the user, and require a change within the configured window.
+        // The admin never picks the password. We issue a random temporary one and
+        // require a change within the configured window. When the welcome email
+        // is held, a fresh temporary password is minted at send time (the TTL
+        // would otherwise expire before the invite goes out), so the value here
+        // is just a placeholder until then.
         $temporaryPassword = Str::password((int) config('auth.temp_password.length', 16));
         $validated['password'] = $temporaryPassword;
         $validated['must_change_password'] = true;
         $validated['password_set_at'] = now();
+        unset($validated['send_welcome_email']);
 
         $user = User::create($validated);
 
+        if (! $sendWelcome) {
+            return response()->json([
+                'message' => 'User created. The welcome email is held — send it from the Users list once the profile and permissions are set.',
+                'email_sent' => false,
+                'welcome_held' => true,
+                'user' => $this->inviteUserPayload($user),
+            ], 201);
+        }
+
         $emailSent = $this->sendWelcomeEmail($user, $temporaryPassword);
+        if ($emailSent) {
+            $user->forceFill(['welcome_email_sent_at' => now()])->save();
+        }
 
         return response()->json([
             'message' => $emailSent
                 ? 'User created. A welcome email with a temporary password has been sent.'
-                : 'User created, but the welcome email could not be sent. Use "Resend invitation" to try again.',
+                : 'User created, but the welcome email could not be sent. Use "Send invitation" to try again.',
             'email_sent' => $emailSent,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->full_name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'is_active' => $user->is_active,
-                'must_change_password' => $user->must_change_password,
-                'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
-            ],
+            'user' => $this->inviteUserPayload($user),
         ], 201);
     }
 
     /**
-     * Re-issue a temporary password and resend the welcome email.
-     *
-     * Used when the original invitation expired (past the 48h window) or was lost.
+     * Issue a fresh temporary password and (re)send the welcome email to one
+     * user — the first send for a held invitation, or a resend after the
+     * temporary-password window lapsed / the mail was lost.
      */
     public function resendInvitation(Request $request, $id)
     {
         $user = User::findOrFail($id);
 
         if (! $user->is_active) {
-            return response()->json(['message' => 'Reactivate the account before resending an invitation.'], 422);
+            return response()->json(['message' => 'Reactivate the account before sending an invitation.'], 422);
         }
 
-        $temporaryPassword = $user->issueTemporaryPassword();
+        $firstSend = $user->welcome_email_sent_at === null;
+        $emailSent = $this->issueAndSendInvitation($user);
 
-        // A fresh temporary password invalidates any active sessions/tokens.
-        $user->tokens()->delete();
-
-        $emailSent = $this->sendWelcomeEmail($user, $temporaryPassword);
+        if (! $emailSent) {
+            return response()->json([
+                'message' => 'A new temporary password was set, but the email could not be sent.',
+                'email_sent' => false,
+                'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+            ]);
+        }
 
         return response()->json([
-            'message' => $emailSent
-                ? 'Invitation resent with a new temporary password.'
-                : 'A new temporary password was set, but the email could not be sent.',
-            'email_sent' => $emailSent,
+            'message' => $firstSend
+                ? 'Invitation sent with a temporary password.'
+                : 'Invitation resent with a new temporary password.',
+            'email_sent' => true,
             'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Send every held welcome email at once (bulk onboarding). Optionally limit
+     * to a subset via `user_ids`. Inactive accounts are skipped.
+     */
+    public function sendPendingInvitations(Request $request)
+    {
+        $data = $request->validate([
+            'user_ids'   => 'sometimes|array',
+            'user_ids.*' => 'integer',
+        ]);
+
+        $query = User::pendingWelcome();
+        if (! empty($data['user_ids'])) {
+            $query->whereIn('id', $data['user_ids']);
+        }
+
+        $sent = 0;
+        $skippedInactive = 0;
+        $failed = [];
+
+        foreach ($query->get() as $user) {
+            if (! $user->is_active) {
+                $skippedInactive++;
+                continue;
+            }
+
+            if ($this->issueAndSendInvitation($user)) {
+                $sent++;
+            } else {
+                $failed[] = $user->email;
+            }
+        }
+
+        return response()->json([
+            'sent'             => $sent,
+            'failed'           => $failed,
+            'skipped_inactive' => $skippedInactive,
+            'message'          => $sent === 0 && ! $failed && ! $skippedInactive
+                ? 'No held invitations to send.'
+                : "Sent {$sent} invitation(s)."
+                    . ($failed ? ' ' . count($failed) . ' failed.' : '')
+                    . ($skippedInactive ? " {$skippedInactive} skipped (inactive)." : ''),
+        ]);
+    }
+
+    /**
+     * Mint a fresh temporary password, drop any live sessions/tokens, send the
+     * welcome mail, and — on success — stamp the invitation as delivered.
+     */
+    private function issueAndSendInvitation(User $user): bool
+    {
+        $temporaryPassword = $user->issueTemporaryPassword();
+        $user->tokens()->delete();
+
+        if (! $this->sendWelcomeEmail($user, $temporaryPassword)) {
+            return false;
+        }
+
+        $user->forceFill(['welcome_email_sent_at' => now()])->save();
+
+        return true;
+    }
+
+    /** Shared shape for a user in create / invitation responses. */
+    private function inviteUserPayload(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'is_active' => $user->is_active,
+            'must_change_password' => $user->must_change_password,
+            'welcome_email_sent_at' => $user->welcome_email_sent_at?->toIso8601String(),
+            'invitation_pending' => $user->welcome_email_sent_at === null,
+            'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+        ];
     }
 
     /**

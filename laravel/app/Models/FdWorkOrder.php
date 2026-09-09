@@ -34,7 +34,7 @@ class FdWorkOrder extends Model
     }
 
     protected $fillable = [
-        'business_job_id', 'release_number', 'date_issued', 'due_date',
+        'business_job_id', 'release_number', 'release_code', 'date_issued', 'due_date',
         'material_delivery', 'estimated_minutes_override', 'notes', 'archived', 'priority', 'priority_locked',
     ];
 
@@ -174,10 +174,22 @@ class FdWorkOrder extends Model
         return $this->hasMany(FdWoDrawing::class, 'work_order_id')->orderBy('created_at');
     }
 
+    /**
+     * The release token — a custom `release_code` when set, otherwise the auto
+     * "R{release_number}". Used to build the release label.
+     */
+    public function getReleaseTokenAttribute(): string
+    {
+        $code = trim((string) $this->release_code);
+
+        return $code !== '' ? $code : 'R' . $this->release_number;
+    }
+
     public function releaseLabel(): string
     {
         $jobNumber = $this->businessJob?->job_number ?? '?';
-        return "{$jobNumber}-R{$this->release_number}";
+
+        return "{$jobNumber}-{$this->release_token}";
     }
 
     public function assignedUsers(): BelongsToMany

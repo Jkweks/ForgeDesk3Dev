@@ -137,6 +137,11 @@
 
     <!-- WO Header -->
     <div class="p-3 border-bottom wo-detail-header">
+      <div class="d-flex justify-content-end mb-1">
+        <button class="btn btn-sm btn-ghost-primary" onclick="openEditJobFromWO()" data-permission="jobs.edit-core">
+          <i class="ti ti-pencil me-1"></i>Edit Job
+        </button>
+      </div>
       <div class="row g-3">
         <div class="col-6 col-md-3">
           <div class="subheader">Job</div>
@@ -156,6 +161,12 @@
         </div>
       </div>
       <div class="row g-3 mt-1">
+        <div class="col-auto">
+          <div class="subheader">Release #</div>
+          <input type="text" class="form-control form-control-sm" id="d-release-code" style="width:130px"
+            maxlength="50" onchange="saveReleaseCode(this.value)">
+          <div class="form-hint mt-1" id="d-release-code-hint"></div>
+        </div>
         <div class="col-auto">
           <div class="subheader">Date Issued</div>
           <input type="date" class="form-control form-control-sm" id="d-date-issued" style="width:150px"
@@ -323,6 +334,11 @@
                 <i class="ti ti-plus me-1"></i>Create New Job
               </button>
             </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Custom Release #</label>
+            <input type="text" class="form-control" id="new-wo-release-code" maxlength="50" placeholder="Leave blank for R1, R2, …">
+            <div class="form-hint">Optional — replaces the auto “R#” in the release label.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Material Delivery</label>
@@ -594,6 +610,63 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('addStepModal'))">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveWoStep()">Add Step</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Edit Job Modal (parent job of this work order)
+     ============================================================ -->
+<div class="modal modal-blur fade" id="editJobModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Job</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('editJobModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Job Number</label>
+            <input type="text" class="form-control" id="ej-number">
+            <div class="form-hint" id="ej-number-hint"></div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Job Name</label>
+            <input type="text" class="form-control" id="ej-name">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Customer</label>
+            <input type="text" class="form-control" id="ej-customer">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Project Manager</label>
+            <select class="form-select" id="ej-pm"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="ej-status">
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Start Date</label>
+            <input type="date" class="form-control" id="ej-start">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Target Completion</label>
+            <input type="date" class="form-control" id="ej-target">
+          </div>
+        </div>
+        <div class="text-muted small mt-2">Changes apply to the job and every work order and reservation under it.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('editJobModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveEditJobFromWO()">Save Job</button>
       </div>
     </div>
   </div>
@@ -941,6 +1014,11 @@ function populateDetail(wo) {
     document.getElementById('d-job-name').textContent = job.job_name || '—';
     document.getElementById('d-pm').textContent = job.project_manager || '—';
     document.getElementById('d-division').textContent = job.division || '—';
+    document.getElementById('d-release-code').value = wo.release_code || '';
+    document.getElementById('d-release-code').placeholder = 'R' + wo.release_number;
+    document.getElementById('d-release-code-hint').textContent = wo.release_code
+        ? `Default: R${wo.release_number}`
+        : 'Blank = R' + wo.release_number;
     document.getElementById('d-date-issued').value = wo.date_issued || '';
     document.getElementById('d-due-date').innerHTML = dueDateHtml(wo);
     document.getElementById('d-priority').value = wo.priority != null ? wo.priority : '';
@@ -955,6 +1033,66 @@ function populateDetail(wo) {
     renderWoSteps(wo.id, wo.steps || []);
     renderDrawings(wo.drawings || []);
     renderElevations(wo.elevations || []);
+}
+
+// ============================================================
+// Edit parent Job (from the WO detail panel) — needs jobs.edit-core
+// ============================================================
+async function openEditJobFromWO() {
+    const jobId = currentWO?.business_job_id;
+    if (!jobId) { fabToast('This work order has no linked job.', 'info'); return; }
+    try {
+        const r = await API(`/business-jobs/${jobId}`);
+        const job = (await r.json()).job;
+        document.getElementById('ej-number').value = job.job_number || '';
+        document.getElementById('ej-name').value = job.job_name || '';
+        document.getElementById('ej-customer').value = job.customer_name || '';
+        document.getElementById('ej-status').value = job.status || 'active';
+        document.getElementById('ej-start').value = job.start_date || '';
+        document.getElementById('ej-target').value = job.target_completion_date || '';
+        await populatePeopleSelect(document.getElementById('ej-pm'), job.project_manager_id,
+            { placeholder: '— Select PM —', legacyLabel: job.project_manager });
+        document.getElementById('ej-number-hint').textContent =
+            'Renaming carries across every reservation on this job.';
+        showModal(document.getElementById('editJobModal'));
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to load the job.', 'error');
+    }
+}
+
+async function saveEditJobFromWO() {
+    const jobId = currentWO?.business_job_id;
+    if (!jobId) return;
+    const body = {
+        job_number: document.getElementById('ej-number').value.trim(),
+        job_name: document.getElementById('ej-name').value.trim(),
+        customer_name: document.getElementById('ej-customer').value.trim() || null,
+        project_manager_id: document.getElementById('ej-pm').value || null,
+        status: document.getElementById('ej-status').value,
+        start_date: document.getElementById('ej-start').value || null,
+        target_completion_date: document.getElementById('ej-target').value || null,
+    };
+    if (!body.job_number || !body.job_name) {
+        fabToast('Job number and name are required.', 'info');
+        return;
+    }
+    try {
+        const r = await API(`/business-jobs/${jobId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { fabToast(data.message || 'Failed to save the job.', 'error'); return; }
+        hideModal(document.getElementById('editJobModal'));
+        fabToast(data.message || 'Job updated.', 'success');
+        await openWODetail(currentWO.id);   // refresh the panel
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to save the job.', 'error');
+    }
 }
 
 // ============================================================
@@ -988,6 +1126,27 @@ async function patchWO(field, value) {
 function setMaterial(val) {
     document.getElementById('d-material').value = val;
     patchWO('material_delivery', val);
+}
+
+// Custom release code — replaces the "R{n}" token in the release label. Blank reverts.
+async function saveReleaseCode(val) {
+    if (!currentWO) return;
+    const code = (val || '').trim();
+    try {
+        const r = await API(`/work-orders/${currentWO.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ release_code: code || null }),
+        });
+        if (!r.ok) { fabToast('Failed to save the release number.', 'error'); return; }
+        const wr = await API(`/work-orders/${currentWO.id}`);
+        currentWO = await wr.json();
+        document.getElementById('wo-detail-title').textContent = currentWO.release_label || `WO #${currentWO.id}`;
+        document.getElementById('d-release-code-hint').textContent = currentWO.release_code
+            ? `Default: R${currentWO.release_number}`
+            : 'Blank = R' + currentWO.release_number;
+        loadWorkOrders();
+    } catch (e) { console.error(e); fabToast('Failed to save the release number.', 'error'); }
 }
 
 // ============================================================
@@ -1970,6 +2129,7 @@ async function openCreateWO() {
             sel.appendChild(opt);
         });
     } catch (e) { console.error(e); }
+    document.getElementById('new-wo-release-code').value = '';
     document.getElementById('new-wo-material').value = '';
     document.getElementById('new-wo-notes').value = '';
 
@@ -2040,6 +2200,7 @@ async function wizardCreateWO() {
             body: JSON.stringify({
                 business_job_id:   parseInt(jobId),
                 date_issued:       today,
+                release_code:      document.getElementById('new-wo-release-code').value.trim() || null,
                 material_delivery: document.getElementById('new-wo-material').value || null,
                 notes:             document.getElementById('new-wo-notes').value || null,
             }),
@@ -2542,7 +2703,7 @@ function openQuickJobCreate() {
     document.getElementById('qj-number').value = '';
     document.getElementById('qj-name').value = '';
     document.getElementById('qj-customer').value = '';
-    document.getElementById('qj-pm').value = '';
+    populatePeopleSelect(document.getElementById('qj-pm'), '', { placeholder: '— Select PM —' });
     document.getElementById('qj-start').value = '';
     document.getElementById('qj-target').value = '';
     document.getElementById('qj-status').value = 'active';
@@ -2566,7 +2727,7 @@ async function saveQuickJob() {
                 job_number: jobNumber,
                 job_name: jobName,
                 customer_name: document.getElementById('qj-customer').value || null,
-                project_manager: document.getElementById('qj-pm').value || null,
+                project_manager_id: document.getElementById('qj-pm').value || null,
                 start_date: document.getElementById('qj-start').value || null,
                 target_completion_date: document.getElementById('qj-target').value || null,
                 status: document.getElementById('qj-status').value,
@@ -2622,7 +2783,7 @@ async function saveQuickJob() {
           </div>
           <div class="col-md-6">
             <label class="form-label">Project Manager</label>
-            <input type="text" class="form-control" id="qj-pm">
+            <select class="form-select" id="qj-pm"></select>
           </div>
         </div>
         <div class="row mb-3">

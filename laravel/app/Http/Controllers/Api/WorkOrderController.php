@@ -124,9 +124,12 @@ class WorkOrderController extends Controller
             $nextRelease  = FdWorkOrder::where('business_job_id', $request->business_job_id)->max('release_number') + 1;
             $nextPriority = FdWorkOrder::where('archived', false)->max('priority') + 1;
 
+            $releaseCode = trim((string) $request->input('release_code'));
+
             $wo = FdWorkOrder::create([
                 'business_job_id'   => $request->business_job_id,
                 'release_number'    => $nextRelease,
+                'release_code'      => $releaseCode !== '' ? mb_substr($releaseCode, 0, 50) : null,
                 'date_issued'       => $request->date_issued,
                 'due_date'          => $request->due_date,
                 'material_delivery' => $request->material_delivery,
@@ -138,11 +141,12 @@ class WorkOrderController extends Controller
             FdWorkOrder::resequencePriorities();
 
             $job = BusinessJob::find($request->business_job_id);
-            $releaseLabel = $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}";
+            $releaseLabel = $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo->release_token}";
 
             return response()->json([
                 'id'            => $wo->id,
                 'release_number' => $wo->release_number,
+                'release_code'  => $wo->release_code,
                 'release_label' => $releaseLabel,
             ], 201);
         } catch (\Exception $e) {
@@ -163,6 +167,12 @@ class WorkOrderController extends Controller
             // Empty string from the form reverts to the computed roll-up.
             if ($request->has('estimated_minutes_override') && ! $request->filled('estimated_minutes_override')) {
                 $wo->estimated_minutes_override = null;
+            }
+
+            // Custom release code — blank reverts the label to "R{release_number}".
+            if ($request->has('release_code')) {
+                $code = trim((string) $request->input('release_code'));
+                $wo->release_code = $code !== '' ? mb_substr($code, 0, 50) : null;
             }
 
             // Typing an explicit priority number is a manual pin.
@@ -417,7 +427,8 @@ class WorkOrderController extends Controller
             'id'                  => $wo->id,
             'business_job_id'     => $wo->business_job_id,
             'release_number'      => $wo->release_number,
-            'release_label'       => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo->release_number}",
+            'release_code'        => $wo->release_code,
+            'release_label'       => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo->release_token}",
             'date_issued'         => $wo->date_issued?->format('Y-m-d'),
             'due_date'            => $wo->due_date?->format('Y-m-d'),
             'due_date_first'      => $dueFirst ?? $wo->due_date?->format('Y-m-d'),
@@ -445,6 +456,7 @@ class WorkOrderController extends Controller
                 'job_number'      => $job->job_number,
                 'job_name'        => $job->job_name,
                 'project_manager' => $job->project_manager,
+                'project_manager_id' => $job->project_manager_id,
                 'division'        => substr($job->job_number ?? '', 0, 1) ?: '—',
             ] : null,
             'created_at'          => $wo->created_at->toIso8601String(),

@@ -181,9 +181,14 @@ Route::middleware('auth:sanctum')->group(function () {
             ];
         });
 
+        // People picker (Requested by / Project manager) — any signed-in user.
+        Route::get('/people', [\App\Http\Controllers\Api\UserController::class, 'people']);
+
         // User Management
         Route::get('/users', [\App\Http\Controllers\Api\UserController::class, 'index'])->middleware('permission:users.view');
         Route::get('/users/statistics', [\App\Http\Controllers\Api\UserController::class, 'statistics'])->middleware('permission:users.view');
+        // Static path before the /users/{user} wildcard.
+        Route::post('/users/send-pending-invitations', [\App\Http\Controllers\Api\UserController::class, 'sendPendingInvitations'])->middleware('permission:users.create');
         Route::get('/users/{user}', [\App\Http\Controllers\Api\UserController::class, 'show'])->middleware('permission:users.view');
         Route::post('/users', [\App\Http\Controllers\Api\UserController::class, 'store'])->middleware('permission:users.create');
         Route::put('/users/{user}', [\App\Http\Controllers\Api\UserController::class, 'update'])->middleware('permission:users.edit');

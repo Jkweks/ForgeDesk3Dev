@@ -266,7 +266,7 @@
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By</label>
-                      <input type="text" class="form-control" id="editRequestedBy" placeholder="Enter requester name">
+                      <select class="form-select" id="editRequestedBy"></select>
                     </div>
                   </div>
                 </div>
@@ -461,7 +461,7 @@
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By <span class="text-danger">*</span></label>
-                      <input type="text" class="form-control" id="manualRequestedBy" required>
+                      <select class="form-select" id="manualRequestedBy" required></select>
                     </div>
                   </div>
                 </div>
@@ -1217,7 +1217,7 @@
             document.getElementById('editJobNumber').value = res.job_number;
             document.getElementById('editReleaseNumber').value = res.release_number;
             document.getElementById('editJobName').value = res.job_name || '';
-            document.getElementById('editRequestedBy').value = res.requested_by || '';
+            await populatePeopleSelect(document.getElementById('editRequestedBy'), res.requested_by_id, { legacyLabel: res.requested_by });
             document.getElementById('editNeededBy').value = res.needed_by || '';
             document.getElementById('editStatus').value = res.status_label || res.status;
             document.getElementById('editNotes').value = res.notes || '';
@@ -1412,7 +1412,7 @@
         async function saveReservation() {
             const id = document.getElementById('editReservationId').value;
             const jobName = document.getElementById('editJobName').value;
-            const requestedBy = document.getElementById('editRequestedBy').value;
+            const requestedById = document.getElementById('editRequestedBy').value;
             const neededBy = document.getElementById('editNeededBy').value;
             const notes = document.getElementById('editNotes').value;
 
@@ -1427,7 +1427,7 @@
                     },
                     body: JSON.stringify({
                         job_name: jobName,
-                        requested_by: requestedBy,
+                        requested_by_id: requestedById || null,
                         needed_by: neededBy,
                         notes: notes
                     })
@@ -1661,7 +1661,7 @@
             document.getElementById('manualReleaseNumber').value = '';
             document.getElementById('manualReleaseNumberHint').textContent = '';
             document.getElementById('manualJobName').value = '';
-            document.getElementById('manualRequestedBy').value = '';
+            populatePeopleSelect(document.getElementById('manualRequestedBy'), (typeof currentUser !== 'undefined' && currentUser) ? currentUser.id : '', { placeholder: '— Select requester —' });
             document.getElementById('manualNeededBy').value = '';
             document.getElementById('manualNotes').value = '';
 
@@ -1864,7 +1864,7 @@
             const releaseNumberRaw = document.getElementById('manualReleaseNumber').value.trim();
             const releaseNumber = releaseNumberRaw ? parseInt(releaseNumberRaw) : null;
             const jobName = document.getElementById('manualJobName').value.trim();
-            const requestedBy = document.getElementById('manualRequestedBy').value.trim();
+            const requestedById = document.getElementById('manualRequestedBy').value;
             const neededBy = document.getElementById('manualNeededBy').value;
             const notes = document.getElementById('manualNotes').value.trim();
 
@@ -1878,7 +1878,7 @@
                 return;
             }
 
-            if (!requestedBy) {
+            if (!requestedById) {
                 alert('Requested By is required');
                 return;
             }
@@ -1900,7 +1900,7 @@
                         job_number: jobNumber,
                         ...(releaseNumber ? { release_number: releaseNumber } : {}),
                         job_name: jobName,
-                        requested_by: requestedBy,
+                        requested_by_id: requestedById,
                         needed_by: neededBy || null,
                         notes: notes || null,
                         items: manualItems

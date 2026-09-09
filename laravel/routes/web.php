@@ -7,6 +7,12 @@ Route::get('/login', function () {
     return view('dashboard'); // The dashboard view handles login UI
 })->name('login');
 
+// Password reset landing — the app layout's JS reads ?token & ?email from the
+// query string, verifies via /api/password/verify-token, and opens the reset modal.
+Route::get('/password/reset', function () {
+    return view('dashboard');
+})->name('password.reset');
+
 Route::get('/', function () {
     return view('dashboard');
 });

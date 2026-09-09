@@ -160,6 +160,11 @@
             <form id="jobForm">
               <input type="hidden" id="jobId">
 
+              <div id="jobCoreLockNote" class="alert alert-info py-2 mb-3" style="display:none">
+                You can edit status and notes. Changing the job number, name, customer,
+                project manager or dates needs the <strong>Jobs: Edit Core Details</strong> permission.
+              </div>
+
               <!-- Basic Information -->
               <div class="card mb-3">
                 <div class="card-header">
@@ -185,7 +190,7 @@
                     </div>
                     <div class="col-md-6">
                       <label class="form-label">Project Manager</label>
-                      <input type="text" class="form-control" id="projectManager" placeholder="PM name">
+                      <select class="form-select" id="projectManager"></select>
                     </div>
                   </div>
 
@@ -316,7 +321,7 @@
               <div class="row mb-3">
                 <div class="col-md-6">
                   <label class="form-label required">Requested By</label>
-                  <input type="text" class="form-control" id="reservationRequestedBy" required>
+                  <select class="form-select" id="reservationRequestedBy" required></select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Needed By</label>
@@ -526,7 +531,7 @@
           <div class="modal-body">
             <div class="mb-3">
               <label class="form-label required">Requested By</label>
-              <input type="text" class="form-control" id="mcRequestedBy" required>
+              <select class="form-select" id="mcRequestedBy" required></select>
             </div>
             <div class="mb-3">
               <label class="form-label">Needed By</label>
@@ -660,7 +665,7 @@
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By</label>
-                      <input type="text" class="form-control" id="editResRequestedBy" placeholder="Requester name">
+                      <select class="form-select" id="editResRequestedBy"></select>
                     </div>
                   </div>
                   <div class="col-md-6">
@@ -887,7 +892,7 @@
                     <td>${getDaysRemaining(job.days_until_completion)}</td>
                     <td class="action-buttons">
                         <div class="btn-list flex-nowrap">
-                            <button class="btn btn-sm btn-icon btn-primary" onclick="editJob(${job.id})" title="Edit">
+                            <button class="btn btn-sm btn-icon btn-primary" onclick="editJob(${job.id})" title="Edit" data-permission="jobs.edit">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
                             </button>
                             <button class="btn btn-sm btn-icon btn-danger" onclick="deleteJob(${job.id})" title="Delete">
@@ -1285,12 +1290,25 @@
             }
         }
 
+        // Job identity fields — editing these on an existing job needs jobs.edit-core.
+        const JOB_CORE_FIELDS = ['jobNumber', 'jobName', 'customerName', 'siteAddress',
+            'contactName', 'contactPhone', 'contactEmail', 'projectManager', 'startDate', 'targetCompletionDate'];
+
+        function setJobCoreFieldsEnabled(enabled) {
+            JOB_CORE_FIELDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = !enabled;
+            });
+            document.getElementById('jobCoreLockNote').style.display = enabled ? 'none' : '';
+        }
+
         function showAddJobModal() {
             currentJob = null;
             document.getElementById('jobModalTitle').textContent = 'Add Job';
             document.getElementById('jobForm').reset();
             document.getElementById('jobId').value = '';
             document.getElementById('status').value = 'active';
+            setJobCoreFieldsEnabled(true); // creating a job always allows the core fields
 
             showModal(document.getElementById('jobModal'));
         }
@@ -1316,11 +1334,15 @@
                 document.getElementById('contactName').value = currentJob.contact_name || '';
                 document.getElementById('contactPhone').value = currentJob.contact_phone || '';
                 document.getElementById('contactEmail').value = currentJob.contact_email || '';
-                document.getElementById('projectManager').value = currentJob.project_manager || '';
+                populatePeopleSelect(document.getElementById('projectManager'), currentJob.project_manager_id, { placeholder: '— Select PM —', legacyLabel: currentJob.project_manager });
                 document.getElementById('status').value = currentJob.status;
                 document.getElementById('startDate').value = currentJob.start_date || '';
                 document.getElementById('targetCompletionDate').value = currentJob.target_completion_date || '';
                 document.getElementById('notes').value = currentJob.notes || '';
+
+                setJobCoreFieldsEnabled(
+                    typeof hasPermission === 'function' ? hasPermission('jobs.edit-core') : true
+                );
 
                 showModal(document.getElementById('jobModal'));
             } catch (error) {
@@ -1337,7 +1359,7 @@
                 job_number: document.getElementById('jobNumber').value,
                 job_name: document.getElementById('jobName').value,
                 customer_name: document.getElementById('customerName').value || null,
-                project_manager: document.getElementById('projectManager').value || null,
+                project_manager_id: document.getElementById('projectManager').value || null,
                 site_address: document.getElementById('siteAddress').value || null,
                 contact_name: document.getElementById('contactName').value || null,
                 contact_phone: document.getElementById('contactPhone').value || null,
@@ -1358,15 +1380,15 @@
                     body: JSON.stringify(jobData),
                 });
 
+                const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || 'Failed to save job');
+                    throw new Error(data.message || 'Failed to save job');
                 }
 
                 hideModal(document.getElementById('jobModal'));
 
                 await loadJobs();
-                alert(isEdit ? 'Job updated successfully' : 'Job created successfully');
+                alert(data.message || (isEdit ? 'Job updated successfully' : 'Job created successfully'));
             } catch (error) {
                 console.error('Error saving job:', error);
                 alert(error.message);
@@ -1740,7 +1762,7 @@
             if (!currentJobForReservations) return;
 
             document.getElementById('reservationJobId').value = currentJobForReservations.id;
-            document.getElementById('reservationRequestedBy').value = '';
+            populatePeopleSelect(document.getElementById('reservationRequestedBy'), (typeof currentUser!=='undefined'&&currentUser)?currentUser.id:'', { placeholder: '— Select requester —' });
             document.getElementById('reservationNeededBy').value = '';
             document.getElementById('reservationNotes').value = '';
             reservationItems = [];
@@ -1895,11 +1917,11 @@
 
         async function createJobReservation() {
             const jobId = document.getElementById('reservationJobId').value;
-            const requestedBy = document.getElementById('reservationRequestedBy').value;
+            const requestedById = document.getElementById('reservationRequestedBy').value;
             const neededBy = document.getElementById('reservationNeededBy').value;
             const notes = document.getElementById('reservationNotes').value;
 
-            if (!requestedBy) {
+            if (!requestedById) {
                 alert('Please enter who requested this reservation');
                 return;
             }
@@ -1914,7 +1936,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        requested_by: requestedBy,
+                        requested_by_id: requestedById,
                         needed_by: neededBy || null,
                         notes: notes || null,
                         items: reservationItems.map(item => ({
@@ -2250,7 +2272,7 @@
                 editingResItems = data.items;
 
                 document.getElementById('editResId').value = editingResReservation.id;
-                document.getElementById('editResRequestedBy').value = editingResReservation.requested_by || '';
+                populatePeopleSelect(document.getElementById('editResRequestedBy'), editingResReservation.requested_by_id, { legacyLabel: editingResReservation.requested_by });
                 document.getElementById('editResNeededBy').value = editingResReservation.needed_by || '';
                 document.getElementById('editResNotes').value = editingResReservation.notes || '';
 
@@ -2393,7 +2415,7 @@
 
         async function saveEditedReservation() {
             const id = document.getElementById('editResId').value;
-            const requestedBy = document.getElementById('editResRequestedBy').value;
+            const requestedById = document.getElementById('editResRequestedBy').value;
             const neededBy = document.getElementById('editResNeededBy').value;
             const notes = document.getElementById('editResNotes').value;
 
@@ -2401,7 +2423,7 @@
                 const headerResponse = await jobsAPI(`/api/v1/job-reservations/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ requested_by: requestedBy, needed_by: neededBy || null, notes: notes || null })
+                    body: JSON.stringify({ requested_by_id: requestedById || null, needed_by: neededBy || null, notes: notes || null })
                 });
 
                 if (!headerResponse.ok) {
@@ -2775,7 +2797,7 @@
             document.getElementById('mcSelectedCount').textContent = selectedMaterialItems.size;
 
             // Reset form
-            document.getElementById('mcRequestedBy').value = '';
+            populatePeopleSelect(document.getElementById('mcRequestedBy'), (typeof currentUser!=='undefined'&&currentUser)?currentUser.id:'', { placeholder: '— Select requester —' });
             document.getElementById('mcNeededBy').value = '';
             document.getElementById('mcNotes').value = '';
 
@@ -2788,11 +2810,11 @@
                 return;
             }
 
-            const requestedBy = document.getElementById('mcRequestedBy').value;
+            const requestedById = document.getElementById('mcRequestedBy').value;
             const neededBy = document.getElementById('mcNeededBy').value;
             const notes = document.getElementById('mcNotes').value;
 
-            if (!requestedBy) {
+            if (!requestedById) {
                 alert('Please enter who requested this reservation');
                 return;
             }
@@ -2824,7 +2846,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        requested_by: requestedBy,
+                        requested_by_id: requestedById,
                         needed_by: neededBy || null,
                         notes: notes || null,
                         items: items

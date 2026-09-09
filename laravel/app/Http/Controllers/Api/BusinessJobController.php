@@ -50,6 +50,7 @@ class BusinessJobController extends Controller
                         'job_name' => $job->job_name,
                         'customer_name' => $job->customer_name,
                         'project_manager' => $job->project_manager,
+                        'project_manager_id' => $job->project_manager_id,
                         'division' => substr($job->job_number ?? '', 0, 1) ?: '—',
                         'status' => $job->status,
                         'status_label' => $job->status_label,
@@ -101,6 +102,8 @@ class BusinessJobController extends Controller
                     'job_number' => $job->job_number,
                     'job_name' => $job->job_name,
                     'customer_name' => $job->customer_name,
+                    'project_manager' => $job->project_manager,
+                    'project_manager_id' => $job->project_manager_id,
                     'site_address' => $job->site_address,
                     'contact_name' => $job->contact_name,
                     'contact_phone' => $job->contact_phone,
@@ -154,6 +157,7 @@ class BusinessJobController extends Controller
                 'start_date' => 'nullable|date',
                 'target_completion_date' => 'nullable|date',
                 'notes' => 'nullable|string',
+                'project_manager_id' => 'nullable|integer|exists:users,id',
             ]);
 
             if ($validator->fails()) {
@@ -163,11 +167,14 @@ class BusinessJobController extends Controller
                 ], 422);
             }
 
+            $pm = \App\Models\User::resolvePersonField($request->project_manager_id, $request->project_manager);
+
             $job = BusinessJob::create([
                 'job_number' => $request->job_number,
                 'job_name' => $request->job_name,
                 'customer_name' => $request->customer_name,
-                'project_manager' => $request->project_manager,
+                'project_manager' => $pm['label'],
+                'project_manager_id' => $pm['id'],
                 'site_address' => $request->site_address,
                 'contact_name' => $request->contact_name,
                 'contact_phone' => $request->contact_phone,
@@ -228,6 +235,7 @@ class BusinessJobController extends Controller
                 'target_completion_date' => 'nullable|date',
                 'actual_completion_date' => 'nullable|date',
                 'notes' => 'nullable|string',
+                'project_manager_id' => 'sometimes|nullable|integer|exists:users,id',
             ]);
 
             if ($validator->fails()) {
@@ -237,11 +245,20 @@ class BusinessJobController extends Controller
                 ], 422);
             }
 
-            $job->update($request->only([
+            // Changing a job's identity fields (once it exists) needs jobs.edit-core.
+            // Lighter edits (status / notes) only need jobs.edit.
+            if ($this->coreFieldsChanged($request, $job) && ! $request->user()?->hasPermission('jobs.edit-core')) {
+                return response()->json([
+                    'message' => 'Editing the job number, name, customer, project manager or dates requires the "Jobs: Edit Core Details" permission.',
+                ], 403);
+            }
+
+            $oldJobNumber = $job->job_number;
+
+            $job->fill($request->only([
                 'job_number',
                 'job_name',
                 'customer_name',
-                'project_manager',
                 'site_address',
                 'contact_name',
                 'contact_phone',
@@ -253,13 +270,42 @@ class BusinessJobController extends Controller
                 'notes',
             ]));
 
+            // Project manager: an explicit `project_manager_id` (even null) is
+            // authoritative; a bare `project_manager` string is the legacy path.
+            if ($request->has('project_manager_id')) {
+                $pm = \App\Models\User::resolvePersonField($request->input('project_manager_id'), $request->input('project_manager'));
+                $job->project_manager = $pm['label'];
+                $job->project_manager_id = $pm['id'];
+            } elseif ($request->has('project_manager')) {
+                $pm = \App\Models\User::resolvePersonField(null, $request->input('project_manager'));
+                $job->project_manager = $pm['label'];
+                $job->project_manager_id = $pm['id'];
+            }
+
+            $renamedReservations = 0;
+            DB::transaction(function () use ($job, $oldJobNumber, &$renamedReservations) {
+                $job->save();
+
+                // Reservations key on the job_number string — carry the rename across.
+                if ($job->job_number !== $oldJobNumber && $oldJobNumber) {
+                    $renamedReservations = JobReservation::where(function ($q) use ($job, $oldJobNumber) {
+                        $q->where('business_job_id', $job->id)->orWhere('job_number', $oldJobNumber);
+                    })->update(['job_number' => $job->job_number]);
+                }
+            });
+
             Log::info('Job updated', [
                 'job_id' => $job->id,
                 'updated_by' => auth()->id(),
+                'job_number_changed' => $job->job_number !== $oldJobNumber ? "{$oldJobNumber} → {$job->job_number}" : null,
+                'reservations_renamed' => $renamedReservations,
             ]);
 
             return response()->json([
-                'message' => 'Job updated successfully',
+                'message' => $renamedReservations > 0
+                    ? "Job updated. Renamed {$renamedReservations} linked reservation(s) to {$job->job_number}."
+                    : 'Job updated successfully',
+                'reservations_renamed' => $renamedReservations,
                 'job' => [
                     'id' => $job->id,
                     'job_number' => $job->job_number,
@@ -278,6 +324,44 @@ class BusinessJobController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * True when the request would change one of a job's identity fields — the
+     * ones gated behind jobs.edit-core.
+     */
+    private function coreFieldsChanged(Request $request, BusinessJob $job): bool
+    {
+        $stringFields = [
+            'job_number', 'job_name', 'customer_name', 'site_address',
+            'contact_name', 'contact_phone', 'contact_email',
+        ];
+        foreach ($stringFields as $field) {
+            if ($request->has($field) && trim((string) $request->input($field)) !== trim((string) $job->{$field})) {
+                return true;
+            }
+        }
+
+        foreach (['start_date', 'target_completion_date'] as $field) {
+            if ($request->has($field)) {
+                $new = $request->input($field) ? \Illuminate\Support\Carbon::parse($request->input($field))->format('Y-m-d') : null;
+                $old = optional($job->{$field})->format('Y-m-d');
+                if ($new !== $old) {
+                    return true;
+                }
+            }
+        }
+
+        if ($request->has('project_manager_id')
+            && (int) $request->input('project_manager_id') !== (int) $job->project_manager_id) {
+            return true;
+        }
+        if ($request->has('project_manager') && ! $request->has('project_manager_id')
+            && trim((string) $request->input('project_manager')) !== trim((string) $job->project_manager)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -348,6 +432,7 @@ class BusinessJobController extends Controller
                         'status' => $reservation->status,
                         'status_label' => $reservation->status_label,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'items_count' => $reservation->items->count(),
                         'total_requested' => $reservation->total_requested,
@@ -421,6 +506,7 @@ class BusinessJobController extends Controller
                     'status' => $reservation->status,
                     'status_label' => $reservation->status_label,
                     'requested_by' => $reservation->requested_by,
+                    'requested_by_id' => $reservation->requested_by_id,
                     'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                     'notes' => $reservation->notes,
                     'created_at' => $reservation->created_at->format('Y-m-d H:i:s'),
@@ -454,7 +540,8 @@ class BusinessJobController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'job_name' => 'nullable|string|max:255',
-                'requested_by' => 'required|string|max:255',
+                'requested_by' => 'required_without:requested_by_id|nullable|string|max:255',
+                'requested_by_id' => 'nullable|integer|exists:users,id',
                 'needed_by' => 'nullable|date',
                 'notes' => 'nullable|string',
                 'items' => 'required|array|min:1',
@@ -470,6 +557,8 @@ class BusinessJobController extends Controller
                 ], 422);
             }
 
+            $requestedBy = \App\Models\User::resolvePersonField($request->requested_by_id, $request->requested_by);
+
             DB::beginTransaction();
 
             // Create the reservation
@@ -477,7 +566,8 @@ class BusinessJobController extends Controller
                 'business_job_id' => $job->id,
                 'job_number' => $job->job_number,
                 'job_name' => $request->job_name ?? $job->job_name,
-                'requested_by' => $request->requested_by,
+                'requested_by' => $requestedBy['label'] ?? '',
+                'requested_by_id' => $requestedBy['id'],
                 'needed_by' => $request->needed_by,
                 'notes' => $request->notes,
                 'status' => 'active',
@@ -666,7 +756,8 @@ class BusinessJobController extends Controller
             ->map(fn($wo) => [
                 'id'                  => $wo->id,
                 'release_number'      => $wo->release_number,
-                'release_label'       => "{$job->job_number}-R{$wo->release_number}",
+                'release_code'        => $wo->release_code,
+                'release_label'       => "{$job->job_number}-{$wo->release_token}",
                 'date_issued'         => $wo->date_issued?->format('Y-m-d'),
                 'material_delivery'   => $wo->material_delivery,
                 'notes'               => $wo->notes,

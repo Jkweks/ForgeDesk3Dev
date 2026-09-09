@@ -70,7 +70,7 @@ class WorkQueueController extends Controller
                 'date_requested'     => $s->elevation->date_requested?->format('Y-m-d'),
                 'work_order_id'      => $wo?->id,
                 'business_job_id'    => $wo?->business_job_id,
-                'release_label'      => $job ? "{$job->job_number}-R{$wo->release_number}" : "R{$wo?->release_number}",
+                'release_label'      => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo?->release_token}",
                 'job_name'           => $job?->job_name,
                 'priority'           => $wo?->priority,
                 'due_date'           => $wo?->due_date?->format('Y-m-d'),

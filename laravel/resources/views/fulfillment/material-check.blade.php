@@ -191,7 +191,7 @@
               <div class="row mb-3">
                 <div class="col-md-6">
                   <label class="form-label required">Requested By</label>
-                  <input type="text" class="form-control" id="requestedBy" required>
+                  <select class="form-select" id="requestedBy" required></select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Needed By</label>
@@ -222,6 +222,15 @@
         let checkResults = [];
         let filteredResults = [];
         let selectedItems = new Set();
+
+        // Populate the "Requested By" picker, defaulting to the signed-in user.
+        document.addEventListener('DOMContentLoaded', () => {
+            populatePeopleSelect(
+                document.getElementById('requestedBy'),
+                (typeof currentUser !== 'undefined' && currentUser) ? currentUser.id : '',
+                { placeholder: '— Select requester —' }
+            );
+        });
 
         async function checkMaterials() {
             const fileInput = document.getElementById('estimateFile');
@@ -502,7 +511,7 @@
                 job_number: document.getElementById('jobNumber').value,
                 release_number: parseInt(document.getElementById('releaseNumber').value),
                 job_name: document.getElementById('jobName').value,
-                requested_by: document.getElementById('requestedBy').value,
+                requested_by_id: document.getElementById('requestedBy').value || null,
                 needed_by: document.getElementById('neededBy').value || null,
                 notes: document.getElementById('notes').value || null,
                 items: items

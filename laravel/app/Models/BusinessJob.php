@@ -16,6 +16,7 @@ class BusinessJob extends Model
         'job_name',
         'customer_name',
         'project_manager',
+        'project_manager_id',
         'site_address',
         'contact_name',
         'contact_phone',
@@ -49,6 +50,15 @@ class BusinessJob extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    /**
+     * The user account this job's project manager points to (nullable — the
+     * `project_manager` string stays as the display label).
+     */
+    public function projectManager()
+    {
+        return $this->belongsTo(User::class, 'project_manager_id');
     }
 
     /**

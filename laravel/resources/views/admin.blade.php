@@ -109,9 +109,15 @@
                     <div class="tab-pane active show" id="tab-users" role="tabpanel">
                       <div class="mb-3 d-flex justify-content-between align-items-center">
                         <h3 class="mb-0">Users</h3>
-                        <button class="btn btn-primary" onclick="showAddUserModal()" data-permission="users.create">
-                          <i class="ti ti-plus me-1"></i>Add User
-                        </button>
+                        <div class="btn-list">
+                          <button class="btn btn-outline-primary" id="sendPendingInvitesBtn" onclick="sendPendingInvites()"
+                                  data-permission="users.create" style="display:none">
+                            <i class="ti ti-mail-fast me-1"></i><span id="sendPendingInvitesLabel">Send held invitations</span>
+                          </button>
+                          <button class="btn btn-primary" onclick="showAddUserModal()" data-permission="users.create">
+                            <i class="ti ti-plus me-1"></i>Add User
+                          </button>
+                        </div>
                       </div>
 
                       <div class="row mb-3">
@@ -831,7 +837,7 @@
             <div class="mb-3">
               <label class="form-label required">Email</label>
               <input type="email" class="form-control" id="addUserEmail" placeholder="user@example.com">
-              <small class="form-hint">A welcome email with a temporary password is sent to this address. The user must set a new password within 48 hours.</small>
+              <small class="form-hint">The welcome email carries a temporary password the user must change within 7 days. A held invitation gets a fresh temporary password when you finally send it.</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
@@ -845,6 +851,13 @@
                 <input class="form-check-input" type="checkbox" id="addUserActive" checked>
                 <span class="form-check-label">Active</span>
               </label>
+            </div>
+            <div class="mb-1">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" id="addUserSendWelcome" checked>
+                <span class="form-check-label">Send welcome email now</span>
+              </label>
+              <small class="form-hint">Uncheck to hold it — set up the profile, roles and permissions first, then send held invitations one by one or all at once from the Users list.</small>
             </div>
           </div>
           <div class="modal-footer">
@@ -1057,6 +1070,7 @@
         document.getElementById('addUserEmail').value = '';
         document.getElementById('addUserRole').value = '';
         document.getElementById('addUserActive').checked = true;
+        document.getElementById('addUserSendWelcome').checked = true;
 
         // Ensure role dropdown is populated
         if (roles.length > 0) {
@@ -1072,6 +1086,7 @@
         const email = document.getElementById('addUserEmail').value;
         const role = document.getElementById('addUserRole').value;
         const active = document.getElementById('addUserActive').checked;
+        const sendWelcome = document.getElementById('addUserSendWelcome').checked;
 
         if (!firstName || !lastName || !email || !role) {
           showNotification('Please fill in all required fields', 'danger');
@@ -1086,11 +1101,13 @@
               last_name: lastName,
               email: email,
               role: role,
-              is_active: active
+              is_active: active,
+              send_welcome_email: sendWelcome
             })
           });
 
-          showNotification(response.message || 'User created. Welcome email sent.', response.email_sent === false ? 'warning' : 'success');
+          const tone = response.welcome_held ? 'info' : (response.email_sent === false ? 'warning' : 'success');
+          showNotification(response.message || 'User created.', tone);
           hideModal(document.getElementById('addUserModal'));
           loadUsers();
           loadStatistics();
@@ -1462,7 +1479,9 @@
             ? '<span class="badge bg-success">Active</span>'
             : '<span class="badge text-bg-secondary">Inactive</span>';
 
-          if (user.must_change_password) {
+          if (user.invitation_pending) {
+            statusBadge += ' <span class="badge bg-azure" title="Account created — welcome email not sent yet">Not invited</span>';
+          } else if (user.must_change_password) {
             statusBadge += user.temp_password_expired
               ? ' <span class="badge bg-red" title="Temporary password expired">Invite expired</span>'
               : ' <span class="badge bg-yellow" title="Waiting for the user to set a new password">Pending invite</span>';
@@ -1473,11 +1492,15 @@
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
 
-          const resendBtn = user.must_change_password
-            ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="resendInvitation(${user.id})" title="Resend invitation" data-permission="users.edit">
+          const resendBtn = user.invitation_pending
+            ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="sendInvitation(${user.id})" title="Send welcome email now" data-permission="users.create">
+                  <i class="ti ti-send"></i>
+                </button>`
+            : (user.must_change_password
+              ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="resendInvitation(${user.id})" title="Resend invitation" data-permission="users.edit">
                   <i class="ti ti-mail-forward"></i>
                 </button>`
-            : '';
+              : '');
 
           return `
             <tr>
@@ -1500,9 +1523,60 @@
           `;
         }).join('');
 
+        updatePendingInvitesButton();
+
         // Apply action permissions to dynamically created buttons
         if (typeof applyActionPermissions === 'function') {
           applyActionPermissions();
+        }
+      }
+
+      // Show/label the bulk "Send held invitations" button from the loaded users.
+      function updatePendingInvitesButton() {
+        const btn = document.getElementById('sendPendingInvitesBtn');
+        if (!btn) return;
+        const n = (users || []).filter(u => u.invitation_pending && u.is_active).length;
+        document.getElementById('sendPendingInvitesLabel').textContent =
+          n ? `Send ${n} held invitation${n === 1 ? '' : 's'}` : 'Send held invitations';
+        btn.style.display = n ? '' : 'none';
+      }
+
+      async function sendInvitation(userId) {
+        const user = (users || []).find(u => u.id === userId);
+        const who = user ? `${user.name} <${user.email}>` : 'this user';
+        if (!confirm(`Send the welcome email to ${who} now? A fresh temporary password will be issued.`)) return;
+        try {
+          const res = await authenticatedFetch(`/users/${userId}/resend-invitation`, { method: 'POST' });
+          showNotification(res.message || 'Invitation sent.', res.email_sent === false ? 'warning' : 'success');
+          loadUsers();
+          loadStatistics();
+        } catch (error) {
+          console.error('Error sending invitation:', error);
+          showNotification(error.message || 'Failed to send invitation', 'danger');
+        }
+      }
+
+      async function sendPendingInvites() {
+        const n = (users || []).filter(u => u.invitation_pending && u.is_active).length;
+        if (!n) { showNotification('No held invitations to send.', 'info'); return; }
+        if (!confirm(`Send ${n} held welcome email${n === 1 ? '' : 's'} now? Each user gets a fresh temporary password valid for 7 days.`)) return;
+
+        const btn = document.getElementById('sendPendingInvitesBtn');
+        btn.disabled = true;
+        try {
+          const res = await authenticatedFetch('/users/send-pending-invitations', { method: 'POST', body: JSON.stringify({}) });
+          const tone = res.failed && res.failed.length ? 'warning' : 'success';
+          showNotification(res.message || `Sent ${res.sent} invitation(s).`, tone);
+          if (res.failed && res.failed.length) {
+            console.warn('Invitations that failed to send:', res.failed);
+          }
+          loadUsers();
+          loadStatistics();
+        } catch (error) {
+          console.error('Error sending held invitations:', error);
+          showNotification(error.message || 'Failed to send held invitations', 'danger');
+        } finally {
+          btn.disabled = false;
         }
       }
 
