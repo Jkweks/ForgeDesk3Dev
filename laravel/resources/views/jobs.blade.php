@@ -13,6 +13,47 @@
 .card.bg-light {
     background: var(--tblr-bg-surface-secondary) !important;
 }
+
+/* --- Jobs dashboard polish --- */
+.jobs-stats .card { border: 0; box-shadow: var(--tblr-card-box-shadow, 0 1px 2px rgba(0,0,0,.06)); }
+.jobs-stats .card-body { padding: .85rem 1rem; }
+.jobs-stats .stat-value { font-size: 1.65rem; font-weight: 600; line-height: 1.1; }
+.jobs-stats .stat-label { font-size: .8rem; }
+
+#jobsTable table { margin-bottom: 0; }
+#jobsTable thead th {
+    font-size: .7rem; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--tblr-secondary, #667382); font-weight: 600;
+    border-bottom: 1px solid var(--tblr-border-color);
+    white-space: nowrap;
+}
+#jobsTable tbody tr.job-row { cursor: pointer; }
+#jobsTable tbody tr.job-row:hover > td { background: var(--tblr-bg-surface-secondary, #f6f7f9); }
+#jobsTable td.col-meta { color: var(--tblr-secondary, #667382); white-space: nowrap; }
+#jobsTable .chevron { transition: transform .15s ease; font-size: .85rem; color: var(--tblr-secondary); }
+#jobsTable .job-count { min-width: 1.6rem; display: inline-block; text-align: center; }
+
+.job-expand-wrap .job-expand-head {
+    background: var(--tblr-bg-surface, var(--tblr-body-bg));
+    border-bottom: 1px solid var(--tblr-border-color);
+}
+.job-expand-wrap .nav-tabs { border-bottom: 1px solid var(--tblr-border-color); }
+.job-expand-wrap .nav-tabs .nav-link { padding: .5rem .85rem; }
+.job-expand-wrap .job-detail-table { margin-bottom: 0; }
+.job-expand-wrap .job-detail-table thead th {
+    font-size: .68rem; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--tblr-secondary, #667382); font-weight: 600; white-space: nowrap;
+}
+.job-expand-wrap .job-detail-table td.col-meta { color: var(--tblr-secondary, #667382); white-space: nowrap; }
+.job-expand-wrap .job-detail-empty { color: var(--tblr-secondary); font-size: .875rem; padding: .75rem .25rem; }
+.job-tx-form-wrap .tx-results { max-height: 240px; overflow-y: auto; }
+
+.jobs-toolbar { gap: .5rem; }
+.jobs-toolbar .search-wrap { min-width: 200px; }
+@media (max-width: 575.98px) {
+    .jobs-toolbar { width: 100%; }
+    .jobs-toolbar .search-wrap { flex: 1 1 auto; }
+}
 @endsection
 
 @section('content')
@@ -38,41 +79,37 @@
 
       <main id="content" class="page-body">
         <div class="container-xl">
-          <!-- Stats Cards -->
-          <div class="row row-deck row-cards mb-3">
-            <div class="col-sm-6 col-lg-3">
+          <!-- Stats -->
+          <div class="row row-cards jobs-stats mb-3">
+            <div class="col-6 col-lg-3">
               <div class="card">
                 <div class="card-body">
-                  <div class="subheader">Total Jobs</div>
-                  <div class="h1 mb-3" id="statTotalJobs">-</div>
-                  <div class="text-muted">All jobs in system</div>
+                  <div class="stat-value" id="statTotalJobs">–</div>
+                  <div class="stat-label text-secondary">Total jobs</div>
                 </div>
               </div>
             </div>
-            <div class="col-sm-6 col-lg-3">
+            <div class="col-6 col-lg-3">
               <div class="card">
                 <div class="card-body">
-                  <div class="subheader">Active Jobs</div>
-                  <div class="h1 mb-3 text-success" id="statActiveJobs">-</div>
-                  <div class="text-muted">In progress</div>
+                  <div class="stat-value text-success" id="statActiveJobs">–</div>
+                  <div class="stat-label text-secondary">Active</div>
                 </div>
               </div>
             </div>
-            <div class="col-sm-6 col-lg-3">
+            <div class="col-6 col-lg-3">
               <div class="card">
                 <div class="card-body">
-                  <div class="subheader">On Hold</div>
-                  <div class="h1 mb-3 text-warning" id="statOnHoldJobs">-</div>
-                  <div class="text-muted">Pending action</div>
+                  <div class="stat-value text-warning" id="statOnHoldJobs">–</div>
+                  <div class="stat-label text-secondary">On hold</div>
                 </div>
               </div>
             </div>
-            <div class="col-sm-6 col-lg-3">
+            <div class="col-6 col-lg-3">
               <div class="card">
                 <div class="card-body">
-                  <div class="subheader">Completed</div>
-                  <div class="h1 mb-3 text-info" id="statCompletedJobs">-</div>
-                  <div class="text-muted">Finished</div>
+                  <div class="stat-value text-info" id="statCompletedJobs">–</div>
+                  <div class="stat-label text-secondary">Completed</div>
                 </div>
               </div>
             </div>
@@ -82,17 +119,22 @@
           <div class="row">
             <div class="col-12">
               <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title">Jobs</h3>
-                  <div class="ms-auto d-flex gap-2">
-                    <select class="form-select form-select-sm" id="filterStatus" style="width: auto;">
-                      <option value="">All Status</option>
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                  <h3 class="card-title mb-0">Jobs</h3>
+                  <div class="jobs-toolbar d-flex flex-wrap align-items-center ms-sm-auto">
+                    <select class="form-select form-select-sm w-auto" id="filterStatus">
+                      <option value="">All statuses</option>
                       <option value="active">Active</option>
                       <option value="on_hold">On Hold</option>
                       <option value="completed">Completed</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
-                    <input type="text" class="form-control form-control-sm" placeholder="Search jobs..." id="searchInput" style="width: 250px;">
+                    <div class="input-group input-group-sm search-wrap">
+                      <span class="input-group-text">
+                        <i class="ti ti-search"></i>
+                      </span>
+                      <input type="text" class="form-control" placeholder="Search job #, name, customer…" id="searchInput">
+                    </div>
                   </div>
                 </div>
                 <div class="card-body">
@@ -102,19 +144,19 @@
 
                   <div id="jobsTable" style="display: none;">
                     <div class="table-responsive">
-                      <table class="table table-vcenter card-table table-striped">
+                      <table class="table table-vcenter card-table table-hover">
                         <thead>
                           <tr>
-                            <th>Job Number</th>
-                            <th>Job Name</th>
+                            <th>Job&nbsp;#</th>
+                            <th>Name</th>
                             <th>Customer</th>
                             <th>Status</th>
-                            <th>Reservations</th>
-                            <th>Work Orders</th>
-                            <th>Start Date</th>
-                            <th>Target Completion</th>
-                            <th>Days Remaining</th>
-                            <th class="w-1">Actions</th>
+                            <th class="text-center">Res.</th>
+                            <th class="text-center">WOs</th>
+                            <th>Start</th>
+                            <th>Target</th>
+                            <th class="text-end">Days&nbsp;left</th>
+                            <th class="w-1"></th>
                           </tr>
                         </thead>
                         <tbody id="jobsTableBody">
@@ -874,33 +916,36 @@
 
                 // Main row
                 const tr = document.createElement('tr');
-                tr.style.cursor = 'pointer';
+                tr.className = 'job-row';
                 tr.dataset.jobId = job.id;
                 tr.onclick = function(e) {
                     if (!e.target.closest('.action-buttons')) {
                         toggleJobRow(job.id);
                     }
                 };
+                const countCell = (n, cls) => n > 0
+                    ? `<span class="badge ${cls} job-count">${n}</span>`
+                    : `<span class="text-secondary job-count">–</span>`;
                 tr.innerHTML = `
-                    <td>
-                        <i id="chevron-${job.id}" class="ti ti-chevron-right me-1" style="transition:transform .2s; font-size:.8rem;"></i>
+                    <td class="text-nowrap">
+                        <i id="chevron-${job.id}" class="ti ti-chevron-right me-1 chevron"></i>
                         <strong>${escapeHtml(job.job_number)}</strong>
                     </td>
                     <td>${escapeHtml(job.job_name)}</td>
-                    <td>${escapeHtml(job.customer_name || '-')}</td>
+                    <td class="col-meta">${escapeHtml(job.customer_name || '–')}</td>
                     <td><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
-                    <td><span class="badge ${resCount > 0 ? 'bg-info' : 'bg-secondary-lt text-secondary'}">${resCount}</span></td>
-                    <td><span class="badge ${woCount > 0 ? 'bg-purple' : 'bg-secondary-lt text-secondary'}">${woCount}</span></td>
-                    <td>${job.start_date || '-'}</td>
-                    <td>${job.target_completion_date || '-'}</td>
-                    <td>${getDaysRemaining(job.days_until_completion)}</td>
-                    <td class="action-buttons">
-                        <div class="btn-list flex-nowrap">
-                            <button class="btn btn-sm btn-icon btn-primary" onclick="editJob(${job.id})" title="Edit" data-permission="jobs.edit">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
+                    <td class="text-center">${countCell(resCount, 'bg-blue-lt text-blue')}</td>
+                    <td class="text-center">${countCell(woCount, 'bg-purple-lt text-purple')}</td>
+                    <td class="col-meta">${jobDate(job.start_date)}</td>
+                    <td class="col-meta">${jobDate(job.target_completion_date)}</td>
+                    <td class="text-end">${getDaysRemaining(job.days_until_completion)}</td>
+                    <td class="action-buttons text-end">
+                        <div class="btn-list flex-nowrap justify-content-end">
+                            <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editJob(${job.id})" title="Edit" data-permission="jobs.edit">
+                                <i class="ti ti-pencil"></i>
                             </button>
-                            <button class="btn btn-sm btn-icon btn-danger" onclick="deleteJob(${job.id})" title="Delete">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+                            <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteJob(${job.id})" title="Delete">
+                                <i class="ti ti-trash"></i>
                             </button>
                         </div>
                     </td>
@@ -915,8 +960,14 @@
                     <td colspan="10" id="job-detail-cell-${job.id}" class="p-0">
                         <div class="border-top border-bottom job-expand-wrap">
                             <!-- Job header bar -->
-                            <div class="d-flex align-items-center gap-3 px-3 pt-2 pb-1">
-                                <span class="text-muted small">${escapeHtml(job.customer_name || '')}${job.project_manager ? ' · PM: ' + escapeHtml(job.project_manager) : ''}</span>
+                            <div class="job-expand-head d-flex flex-wrap align-items-center gap-2 px-3 py-2">
+                                <strong>${escapeHtml(job.job_number)}</strong>
+                                <span class="text-truncate">${escapeHtml(job.job_name)}</span>
+                                <span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span>
+                                <span class="text-secondary small">
+                                    ${job.customer_name ? escapeHtml(job.customer_name) : 'No customer'}${job.project_manager ? ' · PM: ' + escapeHtml(job.project_manager) : ''}${job.superintendent ? ' · Super: ' + escapeHtml(job.superintendent) : ''}
+                                </span>
+                                <span class="text-secondary small">${jobDate(job.start_date)} → ${jobDate(job.target_completion_date)}</span>
                                 <div class="ms-auto btn-list" id="job-tab-actions-${job.id}"></div>
                             </div>
                             <!-- Tabs -->
@@ -966,18 +1017,18 @@
                                     </div>
                                     <div id="detail-tx-content-${job.id}" style="display:none;"></div>
                                     <!-- Add transaction inline form -->
-                                    <div id="job-tx-form-${job.id}" style="display:none;" class="mt-2 p-2 rounded job-tx-form-wrap">
+                                    <div id="job-tx-form-${job.id}" style="display:none;" class="mt-2 p-3 rounded job-tx-form-wrap">
                                         <h6 class="mb-2">New Transaction</h6>
-                                        <div class="row g-2 align-items-end">
-                                            <div class="col-md-4">
+                                        <div class="row g-2">
+                                            <div class="col-12">
                                                 <label class="form-label form-label-sm mb-1">Product</label>
                                                 <input type="text" class="form-control form-control-sm" id="job-tx-product-search-${job.id}"
-                                                    placeholder="Search SKU, Part#…" autocomplete="off">
+                                                    placeholder="Search SKU, part #, description…" autocomplete="off">
                                                 <input type="hidden" id="job-tx-product-id-${job.id}">
-                                                <div id="job-tx-product-results-${job.id}" class="list-group mt-1" style="display:none; max-height:160px; overflow-y:auto; position:absolute; z-index:100; min-width:320px;"></div>
+                                                <div id="job-tx-product-results-${job.id}" class="list-group tx-results mt-1 border rounded" style="display:none;"></div>
                                                 <div id="job-tx-product-selected-${job.id}" class="text-success small mt-1" style="display:none;"></div>
                                             </div>
-                                            <div class="col-md-2">
+                                            <div class="col-6 col-md-4">
                                                 <label class="form-label form-label-sm mb-1">Type</label>
                                                 <select class="form-select form-select-sm" id="job-tx-type-${job.id}">
                                                     <option value="job_issue">Issue (remove)</option>
@@ -986,19 +1037,20 @@
                                                     <option value="job_material_transfer">Return</option>
                                                 </select>
                                             </div>
-                                            <div class="col-md-2">
+                                            <div class="col-6 col-md-3">
                                                 <label class="form-label form-label-sm mb-1">Quantity</label>
-                                                <input type="number" class="form-control form-control-sm" id="job-tx-qty-${job.id}" min="1" value="1">
+                                                <input type="number" class="form-control form-control-sm" id="job-tx-qty-${job.id}"
+                                                    inputmode="numeric" min="1" value="1">
                                             </div>
-                                            <div class="col-md-3">
+                                            <div class="col-12 col-md-5">
                                                 <label class="form-label form-label-sm mb-1">Notes</label>
                                                 <input type="text" class="form-control form-control-sm" id="job-tx-notes-${job.id}" placeholder="Optional">
                                             </div>
-                                            <div class="col-md-1">
-                                                <button class="btn btn-primary btn-sm w-100" onclick="submitJobTransaction(${job.id})">Save</button>
-                                            </div>
                                         </div>
-                                        <button class="btn btn-link btn-sm text-muted mt-1 p-0" onclick="hideJobTxForm(${job.id})">Cancel</button>
+                                        <div class="d-flex gap-2 mt-2">
+                                            <button class="btn btn-primary btn-sm" onclick="submitJobTransaction(${job.id})">Save transaction</button>
+                                            <button class="btn btn-link btn-sm text-secondary p-0" onclick="hideJobTxForm(${job.id})">Cancel</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1058,20 +1110,20 @@
 
             if (tab === 'wo') {
                 actionsEl.innerHTML = typeof openNewWOForJob === 'function' ? `
-                    <button class="btn btn-sm btn-outline-secondary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); openNewWOForJob()" data-permission="fabrication.work-orders.create">
-                        <i class="ti ti-tool me-1"></i>New Work Order
+                    <button class="btn btn-sm btn-outline-primary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); openNewWOForJob()" data-permission="fabrication.work-orders.create">
+                        <i class="ti ti-plus me-1"></i>New Work Order
                     </button>` : '';
             } else if (tab === 'res') {
                 actionsEl.innerHTML = `
-                    <button class="btn btn-sm btn-success" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showMaterialCheckModal()">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showMaterialCheckModal()">
                         <i class="ti ti-clipboard-check me-1"></i>Material Check
                     </button>
-                    <button class="btn btn-sm btn-primary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showAddReservationModal()">
+                    <button class="btn btn-sm btn-outline-primary" onclick="currentJobForReservations = allJobs.find(j=>j.id===${jobId}); showAddReservationModal()">
                         <i class="ti ti-plus me-1"></i>New Reservation
                     </button>`;
             } else if (tab === 'tx') {
                 actionsEl.innerHTML = `
-                    <button class="btn btn-sm btn-primary" onclick="showJobTxForm(${jobId})">
+                    <button class="btn btn-sm btn-outline-primary" onclick="showJobTxForm(${jobId})">
                         <i class="ti ti-plus me-1"></i>Add Transaction
                     </button>`;
             }
@@ -1436,6 +1488,15 @@
             return colors[status] || 'secondary';
         }
 
+        // 'YYYY-MM-DD' -> 'MMM D, YYYY'; em-dash when empty.
+        function jobDate(d) {
+            if (!d) return '–';
+            const [y, m, day] = String(d).slice(0, 10).split('-').map(Number);
+            if (!y || !m || !day) return String(d);
+            const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
+            return `${mon} ${day}, ${y}`;
+        }
+
         function getDaysRemaining(days) {
             if (days === null || days === undefined) {
                 return '-';
@@ -1551,55 +1612,57 @@
             contentEl.style.display = 'block';
 
             if (jobReservations.length === 0) {
-                contentEl.innerHTML = '<p class="text-muted small mb-0">No reservations yet.</p>';
+                contentEl.innerHTML = '<div class="job-detail-empty">No reservations yet.</div>';
                 return;
             }
 
             contentEl.innerHTML = `
                 <div class="table-responsive">
-                    <table class="table table-sm table-vcenter mb-0">
+                    <table class="table table-sm table-vcenter card-table job-detail-table">
                         <thead>
                             <tr>
-                                <th>#</th><th>Status</th><th>Requested By</th>
-                                <th>Needed By</th><th>Items</th><th>Committed</th><th>Consumed</th>
+                                <th>#</th><th>Status</th><th>Requested by</th><th>Needed</th>
+                                <th class="text-center">Items</th><th class="text-center">Committed</th><th class="text-center">Consumed</th>
                                 <th class="w-1"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${jobReservations.map(res => `
+                            ${jobReservations.map(res => {
+                                const editable = res.status !== 'fulfilled' && res.status !== 'cancelled';
+                                return `
                                 <tr>
                                     <td><strong>#${res.reservation_id}</strong></td>
                                     <td><span class="badge bg-${getReservationStatusColor(res.status)}">${res.status_label}</span></td>
-                                    <td>${escapeHtml(res.requested_by)}</td>
-                                    <td>${res.needed_by || '-'}</td>
-                                    <td>${res.items_count}</td>
-                                    <td>${res.total_committed}</td>
-                                    <td>${res.total_consumed}</td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-sm btn-info" onclick="viewReservationDetails(${res.id})" title="View">
+                                    <td class="col-meta">${escapeHtml(res.requested_by || '–')}</td>
+                                    <td class="col-meta">${jobDate(res.needed_by)}</td>
+                                    <td class="text-center">${res.items_count}</td>
+                                    <td class="text-center">${res.total_committed}</td>
+                                    <td class="text-center">${res.total_consumed}</td>
+                                    <td class="text-end">
+                                        <div class="btn-list flex-nowrap justify-content-end">
+                                            <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="viewReservationDetails(${res.id})" title="View">
                                                 <i class="ti ti-eye"></i>
                                             </button>
-                                            ${res.status !== 'fulfilled' && res.status !== 'cancelled' ? `
-                                                <button class="btn btn-sm btn-primary" onclick="openEditReservationModal(${res.id})" title="Edit">
-                                                    <i class="ti ti-edit"></i>
+                                            ${editable ? `
+                                                <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="openEditReservationModal(${res.id})" title="Edit">
+                                                    <i class="ti ti-pencil"></i>
                                                 </button>
-                                                <button class="btn btn-sm btn-secondary" onclick="showReservationStatusModal(${res.id}, '${res.status}')" title="Status">
+                                                <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="showReservationStatusModal(${res.id}, '${res.status}')" title="Change status">
                                                     <i class="ti ti-arrows-exchange"></i>
                                                 </button>
                                                 ${res.status === 'in_progress' ? `
-                                                    <button class="btn btn-sm btn-success" onclick="showReservationCompleteModal(${res.id})" title="Complete">
+                                                    <button class="btn btn-sm btn-icon btn-ghost-success" onclick="showReservationCompleteModal(${res.id})" title="Complete">
                                                         <i class="ti ti-check"></i>
                                                     </button>
                                                 ` : ''}
-                                                <button class="btn btn-sm btn-danger" onclick="deleteReservation(${res.reservation_id})" title="Delete">
+                                                <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteReservation(${res.reservation_id})" title="Delete">
                                                     <i class="ti ti-trash"></i>
                                                 </button>
                                             ` : ''}
                                         </div>
                                     </td>
-                                </tr>
-                            `).join('')}
+                                </tr>`;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -1614,55 +1677,39 @@
             contentEl.style.display = 'block';
 
             if (jobWorkOrders.length === 0) {
-                contentEl.innerHTML = '<p class="text-muted small mb-0">No work orders yet.</p>';
+                contentEl.innerHTML = '<div class="job-detail-empty">No work orders yet.</div>';
                 return;
             }
 
             contentEl.innerHTML = `
                 <div class="table-responsive">
-                    <table class="table table-sm table-vcenter mb-0">
+                    <table class="table table-sm table-vcenter card-table job-detail-table">
                         <thead>
-                            <tr><th>Release</th><th>Date Issued</th><th>Material</th><th>Progress</th><th class="w-1"></th></tr>
+                            <tr>
+                                <th>Release</th><th>Issued</th><th>Material</th>
+                                <th class="text-center">Elevations</th><th class="w-1"></th>
+                            </tr>
                         </thead>
                         <tbody>
                             ${jobWorkOrders.map(wo => {
                                 const mat = wo.material_delivery;
-                                let matBadge = '<span class="badge bg-secondary-lt text-secondary">Pending</span>';
-                                if (mat === 'In Shop') matBadge = '<span class="badge bg-success">In Shop</span>';
-                                else if (mat === 'SOF') matBadge = '<span class="badge bg-warning text-dark">SOF</span>';
-                                else if (mat) matBadge = `<span class="badge bg-info">${escapeHtml(mat)}</span>`;
+                                let matBadge = '<span class="text-secondary">–</span>';
+                                if (mat === 'In Shop') matBadge = '<span class="badge bg-green-lt text-green">In Shop</span>';
+                                else if (mat === 'SOF') matBadge = '<span class="badge bg-orange-lt text-orange">SOF</span>';
+                                else if (mat) matBadge = `<span class="badge bg-blue-lt text-blue">${escapeHtml(mat)}</span>`;
+                                const done = wo.elevation_count > 0 && wo.elevations_complete >= wo.elevation_count;
                                 const progress = wo.elevation_count > 0
-                                    ? `${wo.elevations_complete}/${wo.elevation_count}`
-                                    : '<span class="text-muted">—</span>';
-                                const steps = wo.steps || [];
-                                const stepsHtml = steps.map(s => FabStep.stepBadgeHtml(s, {
-                                    esc: escapeHtml,
-                                    fontSize: '.72rem',
-                                    padding: '.22rem .5rem',
-                                    onClick: `cycleWoStepInJob(${s.id}, '${s.status}', ${jobId})`,
-                                })).join('');
-                                const pendingStepCount = steps.filter(s => s.status === 'pending').length;
-                                const bulkStepBtn = pendingStepCount > 0
-                                    ? `<button class="btn btn-ghost-success btn-sm px-2 py-0 ms-1" style="font-size:.66rem"
-                                           onclick="bulkCompleteWoStepsInJob(${wo.id}, ${jobId})" title="Mark all pending steps complete">
-                                           <i class="ti ti-checks"></i> Complete All (${pendingStepCount})
-                                       </button>`
-                                    : '';
+                                    ? `<span class="badge ${done ? 'bg-green-lt text-green' : 'bg-blue-lt text-blue'}">${wo.elevations_complete}/${wo.elevation_count}</span>`
+                                    : '<span class="text-secondary">–</span>';
                                 return `<tr>
                                     <td><strong>${escapeHtml(wo.release_label)}</strong></td>
-                                    <td>${wo.date_issued || '—'}</td>
+                                    <td class="col-meta">${jobDate(wo.date_issued)}</td>
                                     <td>${matBadge}</td>
-                                    <td>${progress}</td>
-                                    <td><a href="/fabrication/work-orders?wo=${wo.id}" class="btn btn-sm btn-outline-secondary">Open</a></td>
-                                </tr>
-                                <tr class="border-0">
-                                    <td colspan="5" class="pt-0 pb-2 border-0">
-                                        <div class="d-flex align-items-center gap-1 flex-wrap ms-1">
-                                            ${stepsHtml}
-                                            <button class="btn btn-ghost-secondary btn-sm px-1 py-0 ms-1" style="font-size:.66rem"
-                                                onclick="addWoStepInJob(${wo.id}, ${jobId})" title="Add step"><i class="ti ti-plus"></i></button>
-                                            ${bulkStepBtn}
-                                        </div>
+                                    <td class="text-center">${progress}</td>
+                                    <td class="text-end">
+                                        <a href="/fabrication/work-orders?wo=${wo.id}" class="btn btn-sm btn-ghost-secondary">
+                                            Open <i class="ti ti-external-link ms-1"></i>
+                                        </a>
                                     </td>
                                 </tr>`;
                             }).join('')}
@@ -1670,57 +1717,6 @@
                     </table>
                 </div>
             `;
-        }
-
-        async function cycleWoStepInJob(stepId, currentStatus, jobId) {
-            const nextStatus = await FabStep.cycleStepStatus(currentStatus);
-            if (!nextStatus) return;
-            try {
-                await jobsAPI(`/api/v1/job-steps/${stepId}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: nextStatus }),
-                });
-                // Force-reload the WO tab to reflect the new step status
-                delete jobTabLoaded[`${jobId}-wo`];
-                await loadJobWorkOrders(jobId);
-            } catch (e) {
-                console.error(e);
-                fabToast('Failed to update step status.', 'error');
-            }
-        }
-
-        async function bulkCompleteWoStepsInJob(woId, jobId) {
-            const ok = await fabConfirm({
-                title: 'Complete All Steps',
-                message: 'Mark all pending steps on this work order complete? Steps on hold are left untouched.',
-                confirmLabel: 'Mark All Complete',
-                confirmClass: 'btn-success',
-            });
-            if (!ok) return;
-            try {
-                await jobsAPI(`/api/v1/work-orders/${woId}/steps/complete-all`, { method: 'PATCH' });
-                delete jobTabLoaded[`${jobId}-wo`];
-                await loadJobWorkOrders(jobId);
-                fabToast('Steps marked complete.', 'success');
-            } catch (e) {
-                console.error(e);
-                fabToast('Failed to complete steps.', 'error');
-            }
-        }
-
-        async function addWoStepInJob(woId, jobId) {
-            const name = prompt('Step name:');
-            if (!name) return;
-            try {
-                await jobsAPI('/api/v1/job-steps', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ work_order_id: woId, name: name.trim() }),
-                });
-                delete jobTabLoaded[`${jobId}-wo`];
-                await loadJobWorkOrders(jobId);
-            } catch (e) { console.error(e); }
         }
 
         function openNewWOForJob() {

@@ -15,13 +15,26 @@ class ProductController extends Controller
     {
         $query = Product::query()->with(['inventoryLocations.storageLocation', 'supplier', 'categories']);
 
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('sku', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%")
-                    ->orWhere('part_number', 'like', "%{$search}%");
-            });
+        if ($request->filled('search')) {
+            // Loose, "regex-style" matching: split the query into whitespace
+            // tokens; every token must appear (case-insensitively) in one of the
+            // searchable columns, in any order. Each token is also matched with
+            // separators stripped, so "ab-123 blk" finds SKU "AB123BLK".
+            $terms = preg_split('/\s+/', trim($request->search), -1, PREG_SPLIT_NO_EMPTY);
+            $cols = ['sku', 'part_number', 'description', 'finish'];
+            $stripExpr = fn (string $col) => "REPLACE(REPLACE(REPLACE(REPLACE(LOWER($col), '-', ''), ' ', ''), '.', ''), '/', '')";
+
+            foreach ($terms as $term) {
+                $like = '%'.mb_strtolower($term).'%';
+                $likeStripped = '%'.preg_replace('/[^a-z0-9]/', '', mb_strtolower($term)).'%';
+
+                $query->where(function ($q) use ($cols, $like, $likeStripped, $stripExpr) {
+                    foreach ($cols as $col) {
+                        $q->orWhereRaw("LOWER($col) LIKE ?", [$like])
+                            ->orWhereRaw($stripExpr($col).' LIKE ?', [$likeStripped]);
+                    }
+                });
+            }
         }
 
         if ($request->has('status')) {

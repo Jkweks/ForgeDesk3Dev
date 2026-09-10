@@ -2,6 +2,26 @@
 
 @section('title', 'Transaction History - ForgeDesk')
 
+@section('styles')
+/* Manual-transaction product picker — tablet friendly */
+#addTransactionModal .product-search-results {
+  position: static;           /* flow inline so it can't be clipped/hidden */
+  width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--tblr-border-color, #dadce0);
+  border-radius: .375rem;
+  margin-top: .25rem;
+}
+#addTransactionModal .product-search-results .list-group-item {
+  padding: .7rem .9rem;       /* larger tap targets */
+  line-height: 1.3;
+}
+#addTransactionModal .product-search-results .list-group-item strong { font-size: 1rem; }
+#addTransactionModal .tx-line .form-control,
+#addTransactionModal .tx-line .form-select { min-height: 2.6rem; }
+@endsection
+
 @section('content')
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -146,7 +166,7 @@
 
   <!-- Add Manual Transaction Modal -->
   <div class="modal modal-blur fade" id="addTransactionModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-dialog modal-xl modal-fullscreen-lg-down modal-dialog-centered modal-dialog-scrollable" role="document">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Add Manual Transaction</h5>
@@ -751,39 +771,49 @@
       document.getElementById('noProductsMessage').style.display = 'none';
 
       const lineHtml = `
-        <div class="card mb-2" id="productLine${lineId}">
+        <div class="card mb-2 tx-line" id="productLine${lineId}">
           <div class="card-body">
-            <div class="row align-items-start">
-              <div class="col-md-6">
-                <label class="form-label required">Product</label>
-                <input type="text" class="form-control product-search-input"
-                       id="productSearch${lineId}"
-                       placeholder="Search by SKU or description..."
-                       autocomplete="off">
-                <div class="product-search-results list-group mt-1"
-                     id="productSearchResults${lineId}"
-                     style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: calc(100% - 30px);"></div>
-                <div class="selected-product-info mt-2"
-                     id="selectedProductInfo${lineId}"
-                     style="display: none;">
-                  <div class="alert alert-info mb-0 py-1 px-2 small">
-                    <strong class="selected-product-display"></strong>
-                    <div class="small selected-product-available"></div>
-                  </div>
+            <div class="mb-2">
+              <label class="form-label required">Product</label>
+              <input type="text" class="form-control product-search-input"
+                     id="productSearch${lineId}"
+                     placeholder="Search — SKU, part #, description, finish (any order, any case)"
+                     autocomplete="off">
+              <div class="product-search-results list-group"
+                   id="productSearchResults${lineId}"
+                   style="display: none;"></div>
+              <div class="selected-product-info mt-2"
+                   id="selectedProductInfo${lineId}"
+                   style="display: none;">
+                <div class="alert alert-info mb-0 py-1 px-2 small">
+                  <strong class="selected-product-display"></strong>
+                  <div class="small selected-product-available"></div>
                 </div>
               </div>
-              <div class="col-md-4">
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-5 col-sm-4">
                 <label class="form-label required">Quantity</label>
                 <input type="number" class="form-control"
                        id="productQuantity${lineId}"
-                       placeholder="Enter quantity"
-                       min="1"
-                       required>
+                       inputmode="numeric" placeholder="Qty" min="1" step="1" required
+                       oninput="updateLineUnitHint(${lineId})">
               </div>
-              <div class="col-md-2 d-flex align-items-end">
-                <button type="button" class="btn btn-danger w-100" onclick="removeProductLine(${lineId})">
+              <div class="col-4 col-sm-3">
+                <label class="form-label">Unit</label>
+                <select class="form-select" id="productUnit${lineId}" disabled
+                        onchange="updateLineUnitHint(${lineId})">
+                  <option value="each">Each</option>
+                  <option value="pack">Pack</option>
+                </select>
+              </div>
+              <div class="col-3 col-sm-2 d-flex">
+                <button type="button" class="btn btn-danger w-100" onclick="removeProductLine(${lineId})" title="Remove part">
                   <i class="ti ti-trash"></i>
                 </button>
+              </div>
+              <div class="col-12">
+                <div class="form-hint mt-1" id="productUnitHint${lineId}"></div>
               </div>
             </div>
           </div>
@@ -815,6 +845,15 @@
       const searchInput = document.getElementById(`productSearch${lineId}`);
       let searchTimeout = null;
 
+      // Close the results when focus leaves the field (delay so a tap on a
+      // result still registers).
+      searchInput.addEventListener('blur', function() {
+        setTimeout(() => {
+          const rc = document.getElementById(`productSearchResults${lineId}`);
+          if (rc) rc.style.display = 'none';
+        }, 200);
+      });
+
       searchInput.addEventListener('input', function(e) {
         const searchTerm = e.target.value.trim();
 
@@ -840,19 +879,27 @@
               return;
             }
 
-            resultsContainer.innerHTML = products.map(product => `
+            resultsContainer.innerHTML = products.map(product => {
+              const packSize = parseInt(product.pack_size) || 1;
+              const availEa = Math.round(product.quantity_available || 0);
+              const availStr = packSize > 1
+                ? `${Math.round(product.quantity_available_packs ?? (availEa / packSize))} pk (${availEa} ea) · ${packSize}/pack`
+                : `${availEa} ea`;
+              const meta = [product.part_number, product.finish].filter(Boolean).map(escapeHtml).join(' · ');
+              return `
               <a href="#" class="list-group-item list-group-item-action"
                  data-line-id="${lineId}"
                  data-product-id="${product.id}"
                  data-product-sku="${escapeHtml(product.sku)}"
                  data-product-description="${escapeHtml(product.description)}"
-                 data-product-available="${product.quantity_available || 0}">
-                <div>
-                  <strong>${escapeHtml(product.sku)}</strong> - ${escapeHtml(product.description)}
-                  <div class="small text-muted">Available: ${product.quantity_available || 0}</div>
-                </div>
-              </a>
-            `).join('');
+                 data-product-available="${availEa}"
+                 data-product-available-packs="${product.quantity_available_packs ?? ''}"
+                 data-product-pack-size="${packSize}">
+                <strong>${escapeHtml(product.sku)}</strong>${meta ? ` <span class="text-muted">${meta}</span>` : ''}
+                <div>${escapeHtml(product.description)}</div>
+                <div class="small text-muted">Available: ${availStr}</div>
+              </a>`;
+            }).join('');
             resultsContainer.style.display = 'block';
 
             // Add click handlers
@@ -864,7 +911,9 @@
                   parseInt(this.dataset.productId),
                   this.dataset.productSku,
                   this.dataset.productDescription,
-                  parseInt(this.dataset.productAvailable)
+                  parseInt(this.dataset.productAvailable),
+                  parseInt(this.dataset.productPackSize) || 1,
+                  this.dataset.productAvailablePacks === '' ? null : parseFloat(this.dataset.productAvailablePacks)
                 );
               });
             });
@@ -875,16 +924,10 @@
       });
     }
 
-    function selectProductForLine(lineId, productId, sku, description, available) {
-      // Update or add to productLines array
+    function selectProductForLine(lineId, productId, sku, description, available, packSize = 1, availablePacks = null) {
+      packSize = parseInt(packSize) || 1;
       const existingIndex = productLines.findIndex(line => line.lineId === lineId);
-      const lineData = {
-        lineId,
-        productId,
-        sku,
-        description,
-        available
-      };
+      const lineData = { lineId, productId, sku, description, available, packSize, availablePacks };
 
       if (existingIndex >= 0) {
         productLines[existingIndex] = lineData;
@@ -896,12 +939,45 @@
       const searchInput = document.getElementById(`productSearch${lineId}`);
       const selectedInfo = document.getElementById(`selectedProductInfo${lineId}`);
       const resultsContainer = document.getElementById(`productSearchResults${lineId}`);
+      const unitSelect = document.getElementById(`productUnit${lineId}`);
 
       searchInput.value = `${sku} - ${description}`;
+      const availStr = packSize > 1
+        ? `${availablePacks != null ? Math.round(availablePacks) : Math.round(available / packSize)} pk (${Math.round(available)} ea) · ${packSize} per pack`
+        : `${Math.round(available)} ea`;
       selectedInfo.querySelector('.selected-product-display').textContent = `${sku} - ${description}`;
-      selectedInfo.querySelector('.selected-product-available').textContent = `Available: ${available}`;
+      selectedInfo.querySelector('.selected-product-available').textContent = `Available: ${availStr}`;
       selectedInfo.style.display = 'block';
       resultsContainer.style.display = 'none';
+
+      // Enable the Each/Pack toggle only for pack-tracked products.
+      if (packSize > 1) {
+        unitSelect.disabled = false;
+        unitSelect.value = 'each';
+      } else {
+        unitSelect.disabled = true;
+        unitSelect.value = 'each';
+      }
+      updateLineUnitHint(lineId);
+    }
+
+    // "= N ea" helper shown under the quantity field for pack-tracked products.
+    function updateLineUnitHint(lineId) {
+      const line = productLines.find(l => l.lineId === lineId);
+      const hint = document.getElementById(`productUnitHint${lineId}`);
+      if (!hint) return;
+      const qty = parseInt(document.getElementById(`productQuantity${lineId}`).value) || 0;
+      const unit = document.getElementById(`productUnit${lineId}`).value;
+      const packSize = line?.packSize || 1;
+
+      if (!line || packSize <= 1) { hint.textContent = ''; return; }
+      if (unit === 'pack') {
+        hint.textContent = qty > 0 ? `= ${qty * packSize} ea  (${packSize} per pack)` : `${packSize} per pack`;
+      } else {
+        hint.textContent = qty >= packSize && qty % packSize === 0
+          ? `= ${qty / packSize} pk`
+          : `${packSize} per pack`;
+      }
     }
 
     // Submit manual transaction
@@ -919,8 +995,9 @@
       let hasError = false;
 
       for (const line of productLines) {
-        const quantityInput = document.getElementById(`productQuantity${line.lineId}`);
-        const quantity = parseInt(quantityInput.value);
+        const quantity = parseInt(document.getElementById(`productQuantity${line.lineId}`).value);
+        const unit = document.getElementById(`productUnit${line.lineId}`)?.value || 'each';
+        const packSize = line.packSize || 1;
 
         if (!quantity || quantity < 1) {
           showNotification(`Please enter a valid quantity for ${line.sku}`, 'danger');
@@ -928,9 +1005,12 @@
           break;
         }
 
+        // Transactions are recorded in eaches; a "pack" quantity is expanded.
+        const eaches = unit === 'pack' ? quantity * packSize : quantity;
+
         products.push({
           product_id: line.productId,
-          quantity: quantity
+          quantity: eaches
         });
       }
 

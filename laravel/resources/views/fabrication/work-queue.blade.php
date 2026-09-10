@@ -145,16 +145,27 @@ async function wqLoadFilters() {
     wqWOs  = (await wr.json()).work_orders || [];
   } catch (e) { console.error(e); }
 
+  // The queue only concerns active work orders — restrict the job (and work
+  // order) pickers to jobs that have at least one. `/work-orders` already
+  // excludes archived ones; older rows with no status fall back to "active".
+  const isActiveWo = w => (w.status ?? 'active') === 'active';
+  const activeJobIds = new Set(wqWOs.filter(isActiveWo).map(w => String(w.business_job_id)));
+
   const jobSel = document.getElementById('wq-job');
   jobSel.innerHTML = '<option value="">All jobs</option>' +
-    wqJobs.map(j => `<option value="${j.id}">${esc(j.job_number)} – ${esc(j.job_name)}</option>`).join('');
+    wqJobs
+      .filter(j => activeJobIds.has(String(j.id)))
+      .map(j => `<option value="${j.id}">${esc(j.job_number)} – ${esc(j.job_name)}</option>`)
+      .join('');
   wqFillWorkOrderOptions();
 }
 
 function wqFillWorkOrderOptions() {
   const jobId = document.getElementById('wq-job').value;
   const woSel = document.getElementById('wq-wo');
-  const list = jobId ? wqWOs.filter(w => String(w.business_job_id) === jobId) : wqWOs;
+  const isActiveWo = w => (w.status ?? 'active') === 'active';
+  let list = wqWOs.filter(isActiveWo);
+  if (jobId) list = list.filter(w => String(w.business_job_id) === jobId);
   woSel.innerHTML = '<option value="">All work orders</option>' +
     list.map(w => `<option value="${w.id}">${esc(w.release_label)}${w.job?.job_name ? ' – ' + esc(w.job.job_name) : ''}</option>`).join('');
 }
