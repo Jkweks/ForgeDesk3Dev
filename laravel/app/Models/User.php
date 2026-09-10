@@ -9,11 +9,10 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -93,7 +92,7 @@ class User extends Authenticatable
         $user = $id ? static::find($id) : null;
 
         return [
-            'id'    => $user?->id,
+            'id' => $user?->id,
             'label' => $user?->sort_name ?? ($fallbackLabel !== null && trim($fallbackLabel) !== '' ? trim($fallbackLabel) : null),
         ];
     }
@@ -173,7 +172,7 @@ class User extends Authenticatable
             return true;
         }
 
-        if (!$this->roleModel) {
+        if (! $this->roleModel) {
             return false;
         }
 
@@ -189,7 +188,7 @@ class User extends Authenticatable
             return true;
         }
 
-        if (!$this->roleModel) {
+        if (! $this->roleModel) {
             return false;
         }
 
@@ -237,4 +236,3 @@ class User extends Authenticatable
         return $query->where('role', $role);
     }
 }
-

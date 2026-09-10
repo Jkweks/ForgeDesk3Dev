@@ -3,22 +3,21 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
-use App\Models\User;
-use App\Models\Machine;
 use App\Models\Asset;
-use App\Models\MaintenanceTask;
-use App\Models\MaintenanceRecord;
-use App\Models\Supplier;
 use App\Models\Category;
-use App\Models\Order;
-use App\Models\PurchaseOrder;
-use App\Models\JobReservation;
 use App\Models\CycleCountSession;
 use App\Models\InventoryTransaction;
+use App\Models\JobReservation;
+use App\Models\Machine;
+use App\Models\MaintenanceRecord;
+use App\Models\MaintenanceTask;
+use App\Models\Product;
+use App\Models\PurchaseOrder;
 use App\Models\StorageLocation;
-use Illuminate\Support\Facades\DB;
+use App\Models\Supplier;
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class StatusController extends Controller
 {
@@ -69,18 +68,18 @@ class StatusController extends Controller
                 $dbName = config('database.connections.pgsql.database');
 
                 // Database size
-                $size = DB::select("SELECT pg_database_size(?) as size", [$dbName]);
+                $size = DB::select('SELECT pg_database_size(?) as size', [$dbName]);
                 $dbInfo['size'] = $size[0]->size ?? 0;
                 $dbInfo['size_human'] = $this->formatBytes($dbInfo['size']);
 
                 // Table sizes
-                $tables = DB::select("
+                $tables = DB::select('
                     SELECT relname as table_name,
                            n_live_tup as row_count,
                            pg_total_relation_size(quote_ident(relname)) as total_size
                     FROM pg_stat_user_tables
                     ORDER BY pg_total_relation_size(quote_ident(relname)) DESC
-                ");
+                ');
 
                 $dbInfo['tables'] = collect($tables)->map(function ($table) {
                     return [
@@ -101,6 +100,7 @@ class StatusController extends Controller
                 $tables = DB::select("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
                 $dbInfo['tables'] = collect($tables)->map(function ($table) {
                     $count = DB::table($table->name)->count();
+
                     return [
                         'name' => $table->name,
                         'rows' => $count,
@@ -112,21 +112,21 @@ class StatusController extends Controller
             } elseif ($driver === 'mysql' || $driver === 'mariadb') {
                 $dbName = config("database.connections.{$driver}.database");
 
-                $size = DB::select("
+                $size = DB::select('
                     SELECT SUM(data_length + index_length) as size
                     FROM information_schema.tables
                     WHERE table_schema = ?
-                ", [$dbName]);
+                ', [$dbName]);
                 $dbInfo['size'] = $size[0]->size ?? 0;
                 $dbInfo['size_human'] = $this->formatBytes($dbInfo['size']);
 
-                $tables = DB::select("
+                $tables = DB::select('
                     SELECT table_name, table_rows as row_count,
                            (data_length + index_length) as total_size
                     FROM information_schema.tables
                     WHERE table_schema = ?
                     ORDER BY (data_length + index_length) DESC
-                ", [$dbName]);
+                ', [$dbName]);
 
                 $dbInfo['tables'] = collect($tables)->map(function ($table) {
                     return [
@@ -229,28 +229,32 @@ class StatusController extends Controller
     private function getOperationsStats()
     {
         $safe = function (callable $fn, $fallback = null) {
-            try { return $fn(); } catch (\Exception $e) { return $fallback; }
+            try {
+                return $fn();
+            } catch (\Exception $e) {
+                return $fallback;
+            }
         };
 
         return [
             'purchase_orders' => [
-                'total' => $safe(fn() => PurchaseOrder::count(), 0),
-                'open'  => $safe(fn() => PurchaseOrder::whereIn('status', ['draft', 'submitted', 'approved'])->count(), 0),
+                'total' => $safe(fn () => PurchaseOrder::count(), 0),
+                'open' => $safe(fn () => PurchaseOrder::whereIn('status', ['draft', 'submitted', 'approved'])->count(), 0),
             ],
             'job_reservations' => [
-                'total'  => $safe(fn() => JobReservation::count(), 0),
-                'active' => $safe(fn() => JobReservation::whereIn('status', ['active', 'in_progress', 'on_hold'])->count(), 0),
+                'total' => $safe(fn () => JobReservation::count(), 0),
+                'active' => $safe(fn () => JobReservation::whereIn('status', ['active', 'in_progress', 'on_hold'])->count(), 0),
             ],
             'cycle_counts' => [
-                'total'  => $safe(fn() => CycleCountSession::count(), 0),
-                'active' => $safe(fn() => CycleCountSession::whereIn('status', ['planned', 'in_progress'])->count(), 0),
+                'total' => $safe(fn () => CycleCountSession::count(), 0),
+                'active' => $safe(fn () => CycleCountSession::whereIn('status', ['planned', 'in_progress'])->count(), 0),
             ],
             'maintenance' => [
-                'machines'      => $safe(fn() => Machine::count(), 0),
-                'assets'        => $safe(fn() => Asset::count(), 0),
-                'active_tasks'  => $safe(fn() => MaintenanceTask::where('status', 'active')->count(), 0),
-                'total_records' => $safe(fn() => MaintenanceRecord::count(), 0),
-                'last_service'  => $safe(fn() => MaintenanceRecord::latest('performed_at')->value('performed_at')),
+                'machines' => $safe(fn () => Machine::count(), 0),
+                'assets' => $safe(fn () => Asset::count(), 0),
+                'active_tasks' => $safe(fn () => MaintenanceTask::where('status', 'active')->count(), 0),
+                'total_records' => $safe(fn () => MaintenanceRecord::count(), 0),
+                'last_service' => $safe(fn () => MaintenanceRecord::latest('performed_at')->value('performed_at')),
             ],
         ];
     }
@@ -270,11 +274,13 @@ class StatusController extends Controller
         try {
             if (PHP_OS_FAMILY === 'Linux' && file_exists('/proc/uptime')) {
                 $uptime = (float) explode(' ', file_get_contents('/proc/uptime'))[0];
+
                 return $this->formatUptime($uptime);
             }
         } catch (\Exception $e) {
             // ignore
         }
+
         return null;
     }
 
@@ -285,18 +291,25 @@ class StatusController extends Controller
         $minutes = floor(($seconds % 3600) / 60);
 
         $parts = [];
-        if ($days > 0) $parts[] = $days . 'd';
-        if ($hours > 0) $parts[] = $hours . 'h';
-        $parts[] = $minutes . 'm';
+        if ($days > 0) {
+            $parts[] = $days.'d';
+        }
+        if ($hours > 0) {
+            $parts[] = $hours.'h';
+        }
+        $parts[] = $minutes.'m';
 
         return implode(' ', $parts);
     }
 
     private function formatBytes($bytes)
     {
-        if ($bytes === null || $bytes == 0) return '0 B';
+        if ($bytes === null || $bytes == 0) {
+            return '0 B';
+        }
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $i = floor(log($bytes, 1024));
-        return round($bytes / pow(1024, $i), 2) . ' ' . $units[$i];
+
+        return round($bytes / pow(1024, $i), 2).' '.$units[$i];
     }
 }

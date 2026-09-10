@@ -68,6 +68,29 @@ class PersonLinkTest extends TestCase
         $this->assertNull($job->fresh()->project_manager);
     }
 
+    public function test_creating_and_editing_a_job_superintendent_links_and_syncs_the_label(): void
+    {
+        Sanctum::actingAs($this->admin(), ['*']);
+        $super = User::factory()->create(['role' => 'viewer', 'is_active' => true, 'first_name' => 'Sam', 'last_name' => 'Park', 'name' => 'Sam Park']);
+
+        $this->postJson('/api/v1/business-jobs', [
+            'job_number' => 'J-300', 'job_name' => 'Super Test', 'superintendent_id' => $super->id,
+        ])->assertCreated()
+            ->assertJsonPath('job.superintendent', 'Park, Sam')
+            ->assertJsonPath('job.superintendent_id', $super->id);
+
+        $job = BusinessJob::where('job_number', 'J-300')->first();
+        $this->assertSame($super->id, $job->superintendent_id);
+
+        $row = collect($this->getJson('/api/v1/business-jobs')->json('jobs'))->firstWhere('job_number', 'J-300');
+        $this->assertSame($super->id, $row['superintendent_id']);
+        $this->assertSame('Park, Sam', $row['superintendent']);
+
+        $this->putJson("/api/v1/business-jobs/{$job->id}", ['superintendent_id' => null])->assertOk();
+        $this->assertNull($job->fresh()->superintendent_id);
+        $this->assertNull($job->fresh()->superintendent);
+    }
+
     public function test_a_bare_pm_string_still_works_unlinked(): void
     {
         Sanctum::actingAs($this->admin(), ['*']);

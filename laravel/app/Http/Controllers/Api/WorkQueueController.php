@@ -18,7 +18,7 @@ class WorkQueueController extends Controller
     public function index(Request $request)
     {
         $request->validate([
-            'job_id'        => 'sometimes|integer',
+            'job_id' => 'sometimes|integer',
             'work_order_id' => 'sometimes|integer',
         ]);
 
@@ -53,27 +53,27 @@ class WorkQueueController extends Controller
         $rows = $stages;
 
         $card = function (FdWoStage $s) {
-            $wo  = $s->elevation->workOrder;
+            $wo = $s->elevation->workOrder;
             $job = $wo?->businessJob;
 
             return [
-                'stage_id'            => $s->id,
-                'name'               => $s->name,
-                'status'             => $s->status,
-                'gated'              => (bool) $s->is_gated,
+                'stage_id' => $s->id,
+                'name' => $s->name,
+                'status' => $s->status,
+                'gated' => (bool) $s->is_gated,
                 'blocking_stage_name' => $s->blocking_stage_name,
-                'assigned_to_id'     => $s->assigned_to_id,
-                'assignee_ids'       => $s->assignees->pluck('id')->values(),
-                'assignee_names'     => $s->assignees->pluck('name')->values(),
-                'elevation_id'       => $s->elevation_id,
-                'elevation_tag'      => $s->elevation->elevation_tag,
-                'date_requested'     => $s->elevation->date_requested?->format('Y-m-d'),
-                'work_order_id'      => $wo?->id,
-                'business_job_id'    => $wo?->business_job_id,
-                'release_label'      => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo?->release_token}",
-                'job_name'           => $job?->job_name,
-                'priority'           => $wo?->priority,
-                'due_date'           => $wo?->due_date?->format('Y-m-d'),
+                'assigned_to_id' => $s->assigned_to_id,
+                'assignee_ids' => $s->assignees->pluck('id')->values(),
+                'assignee_names' => $s->assignees->pluck('name')->values(),
+                'elevation_id' => $s->elevation_id,
+                'elevation_tag' => $s->elevation->elevation_tag,
+                'date_requested' => $s->elevation->date_requested?->format('Y-m-d'),
+                'work_order_id' => $wo?->id,
+                'business_job_id' => $wo?->business_job_id,
+                'release_label' => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo?->release_token}",
+                'job_name' => $job?->job_name,
+                'priority' => $wo?->priority,
+                'due_date' => $wo?->due_date?->format('Y-m-d'),
             ];
         };
 
@@ -114,14 +114,14 @@ class WorkQueueController extends Controller
 
                 return [
                     'user' => [
-                        'id'       => (int) $uid,
-                        'name'     => $u->name ?? 'Unknown',
+                        'id' => (int) $uid,
+                        'name' => $u->name ?? 'Unknown',
                         'initials' => $u->initials ?? '?',
                     ],
-                    'count'                 => $g->count(),
-                    'ready_count'           => $g->where('is_gated', false)->count(),
+                    'count' => $g->count(),
+                    'ready_count' => $g->where('is_gated', false)->count(),
                     'oldest_date_requested' => $oldest($g),
-                    'stages'                => $g->map($card)->values(),
+                    'stages' => $g->map($card)->values(),
                 ];
             })
             ->sortBy('user.name')
@@ -130,15 +130,15 @@ class WorkQueueController extends Controller
         $unassignedGroup = $grouped->get(0, collect());
 
         return response()->json([
-            'operators'  => $operators,
+            'operators' => $operators,
             'unassigned' => [
-                'count'                 => $unassignedGroup->count(),
-                'ready_count'           => $unassignedGroup->where('is_gated', false)->count(),
+                'count' => $unassignedGroup->count(),
+                'ready_count' => $unassignedGroup->where('is_gated', false)->count(),
                 'oldest_date_requested' => $oldest($unassignedGroup),
-                'stages'                => $unassignedGroup->map($card)->values(),
+                'stages' => $unassignedGroup->map($card)->values(),
             ],
             // Every active fab user, so the board can show empty columns to drop onto.
-            'fab_users'  => FdUser::where('active', true)->orderBy('name')->get(['id', 'name', 'initials']),
+            'fab_users' => FdUser::where('active', true)->orderBy('name')->get(['id', 'name', 'initials']),
         ]);
     }
 }

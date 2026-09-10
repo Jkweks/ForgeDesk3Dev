@@ -184,13 +184,17 @@
                   </div>
 
                   <div class="row mb-3">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                       <label class="form-label">Customer Name</label>
                       <input type="text" class="form-control" id="customerName">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                       <label class="form-label">Project Manager</label>
                       <select class="form-select" id="projectManager"></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Superintendent</label>
+                      <select class="form-select" id="superintendent"></select>
                     </div>
                   </div>
 
@@ -1292,7 +1296,7 @@
 
         // Job identity fields — editing these on an existing job needs jobs.edit-core.
         const JOB_CORE_FIELDS = ['jobNumber', 'jobName', 'customerName', 'siteAddress',
-            'contactName', 'contactPhone', 'contactEmail', 'projectManager', 'startDate', 'targetCompletionDate'];
+            'contactName', 'contactPhone', 'contactEmail', 'projectManager', 'superintendent', 'startDate', 'targetCompletionDate'];
 
         function setJobCoreFieldsEnabled(enabled) {
             JOB_CORE_FIELDS.forEach(id => {
@@ -1308,6 +1312,8 @@
             document.getElementById('jobForm').reset();
             document.getElementById('jobId').value = '';
             document.getElementById('status').value = 'active';
+            populatePeopleSelect(document.getElementById('projectManager'), '', { placeholder: '— Select PM —' });
+            populatePeopleSelect(document.getElementById('superintendent'), '', { placeholder: '— Select superintendent —' });
             setJobCoreFieldsEnabled(true); // creating a job always allows the core fields
 
             showModal(document.getElementById('jobModal'));
@@ -1335,6 +1341,7 @@
                 document.getElementById('contactPhone').value = currentJob.contact_phone || '';
                 document.getElementById('contactEmail').value = currentJob.contact_email || '';
                 populatePeopleSelect(document.getElementById('projectManager'), currentJob.project_manager_id, { placeholder: '— Select PM —', legacyLabel: currentJob.project_manager });
+                populatePeopleSelect(document.getElementById('superintendent'), currentJob.superintendent_id, { placeholder: '— Select superintendent —', legacyLabel: currentJob.superintendent });
                 document.getElementById('status').value = currentJob.status;
                 document.getElementById('startDate').value = currentJob.start_date || '';
                 document.getElementById('targetCompletionDate').value = currentJob.target_completion_date || '';
@@ -1360,6 +1367,7 @@
                 job_name: document.getElementById('jobName').value,
                 customer_name: document.getElementById('customerName').value || null,
                 project_manager_id: document.getElementById('projectManager').value || null,
+                superintendent_id: document.getElementById('superintendent').value || null,
                 site_address: document.getElementById('siteAddress').value || null,
                 contact_name: document.getElementById('contactName').value || null,
                 contact_phone: document.getElementById('contactPhone').value || null,

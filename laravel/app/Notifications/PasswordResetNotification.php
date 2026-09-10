@@ -46,7 +46,7 @@ class PasswordResetNotification extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject('Reset Your ForgeDesk Password')
-            ->greeting('Hello ' . ($notifiable->first_name ?: $notifiable->name) . '!')
+            ->greeting('Hello '.($notifiable->first_name ?: $notifiable->name).'!')
             ->line('You are receiving this email because we received a password reset request for your account.')
             ->action('Reset Password', $resetUrl)
             ->line("This password reset link will expire in {$expiryMinutes} minutes.")
@@ -62,7 +62,7 @@ class PasswordResetNotification extends Notification implements ShouldQueue
         $appUrl = config('app.url', 'http://localhost:8000');
 
         // Build reset URL with token and email
-        return $appUrl . '/password/reset?' . http_build_query([
+        return $appUrl.'/password/reset?'.http_build_query([
             'token' => $this->token,
             'email' => $notifiable->email,
         ]);

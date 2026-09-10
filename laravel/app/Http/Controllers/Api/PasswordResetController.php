@@ -24,17 +24,17 @@ class PasswordResetController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
+        if (! $user) {
             // For security, don't reveal if email exists
             return response()->json([
-                'message' => 'If an account exists with this email, you will receive a password reset link shortly.'
+                'message' => 'If an account exists with this email, you will receive a password reset link shortly.',
             ], 200);
         }
 
         // Check if user account is active
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             return response()->json([
-                'message' => 'Your account has been deactivated. Please contact an administrator.'
+                'message' => 'Your account has been deactivated. Please contact an administrator.',
             ], 403);
         }
 
@@ -57,12 +57,12 @@ class PasswordResetController extends Controller
         try {
             $user->notify(new PasswordResetNotification($token));
         } catch (\Exception $e) {
-            \Log::error('Failed to send password reset email: ' . $e->getMessage());
+            \Log::error('Failed to send password reset email: '.$e->getMessage());
             // Continue anyway to not reveal if email exists
         }
 
         return response()->json([
-            'message' => 'If an account exists with this email, you will receive a password reset link shortly.'
+            'message' => 'If an account exists with this email, you will receive a password reset link shortly.',
         ], 200);
     }
 
@@ -82,7 +82,7 @@ class PasswordResetController extends Controller
             ->where('email', $request->email)
             ->first();
 
-        if (!$resetRecord) {
+        if (! $resetRecord) {
             throw ValidationException::withMessages([
                 'email' => ['Invalid or expired password reset token.'],
             ]);
@@ -102,7 +102,7 @@ class PasswordResetController extends Controller
         }
 
         // Verify token
-        if (!Hash::check($request->token, $resetRecord->token)) {
+        if (! Hash::check($request->token, $resetRecord->token)) {
             throw ValidationException::withMessages([
                 'email' => ['Invalid password reset token.'],
             ]);
@@ -111,16 +111,16 @@ class PasswordResetController extends Controller
         // Find user
         $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
+        if (! $user) {
             throw ValidationException::withMessages([
                 'email' => ['User not found.'],
             ]);
         }
 
         // Check if user is active
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             return response()->json([
-                'message' => 'Your account has been deactivated. Please contact an administrator.'
+                'message' => 'Your account has been deactivated. Please contact an administrator.',
             ], 403);
         }
 
@@ -137,7 +137,7 @@ class PasswordResetController extends Controller
         $user->tokens()->delete();
 
         return response()->json([
-            'message' => 'Password has been reset successfully. You can now login with your new password.'
+            'message' => 'Password has been reset successfully. You can now login with your new password.',
         ], 200);
     }
 
@@ -155,7 +155,7 @@ class PasswordResetController extends Controller
             ->where('email', $request->email)
             ->first();
 
-        if (!$resetRecord) {
+        if (! $resetRecord) {
             return response()->json([
                 'valid' => false,
                 'message' => 'Invalid or expired token.',
@@ -176,7 +176,7 @@ class PasswordResetController extends Controller
         }
 
         // Verify token
-        if (!Hash::check($request->token, $resetRecord->token)) {
+        if (! Hash::check($request->token, $resetRecord->token)) {
             return response()->json([
                 'valid' => false,
                 'message' => 'Invalid token.',

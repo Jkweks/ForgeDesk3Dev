@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Mail;
 /**
  * Works out who hears about a completed work order and sends the notice.
  *
- * Recipients: the parent job's linked project-manager user (if any) plus every
- * active admin. The list is not user-editable — see the completion prompt.
+ * Recipients: the parent job's linked project-manager and site-superintendent
+ * users (if any) plus every active admin. The list is not user-editable — see
+ * the completion prompt.
  */
 class WorkOrderCompletionService
 {
@@ -25,9 +26,13 @@ class WorkOrderCompletionService
     {
         $emails = collect();
 
-        $pm = $workOrder->businessJob?->projectManager;
-        if ($pm?->email) {
-            $emails->push($pm->email);
+        $job = $workOrder->businessJob;
+
+        if ($job?->projectManager?->email) {
+            $emails->push($job->projectManager->email);
+        }
+        if ($job?->superintendentUser?->email) {
+            $emails->push($job->superintendentUser->email);
         }
 
         $emails = $emails->merge(

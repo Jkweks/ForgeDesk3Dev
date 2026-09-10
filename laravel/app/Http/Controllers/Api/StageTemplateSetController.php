@@ -32,8 +32,8 @@ class StageTemplateSetController extends Controller
     {
         $data = $request->validate([
             'elevation_type_id' => 'required|integer|exists:fd_elevation_types,id',
-            'name'              => 'required|string|max:100',
-            'is_default'        => 'sometimes|boolean',
+            'name' => 'required|string|max:100',
+            'is_default' => 'sometimes|boolean',
             'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
 
@@ -46,7 +46,7 @@ class StageTemplateSetController extends Controller
 
             $set = FdStageTemplateSet::create([
                 'elevation_type_id' => $data['elevation_type_id'],
-                'name'       => $data['name'],
+                'name' => $data['name'],
                 'sort_order' => $max + 1,
                 'is_default' => $data['is_default'] ?? false,
                 'minutes_per_joint' => isset($data['minutes_per_joint']) && $data['minutes_per_joint'] !== null
@@ -66,11 +66,11 @@ class StageTemplateSetController extends Controller
 
     public function update(Request $request, int $id)
     {
-        $set  = FdStageTemplateSet::findOrFail($id);
+        $set = FdStageTemplateSet::findOrFail($id);
         $data = $request->validate([
-            'name'              => 'sometimes|required|string|max:100',
-            'sort_order'        => 'sometimes|integer',
-            'is_default'        => 'sometimes|boolean',
+            'name' => 'sometimes|required|string|max:100',
+            'sort_order' => 'sometimes|integer',
+            'is_default' => 'sometimes|boolean',
             'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
 
@@ -123,7 +123,7 @@ class StageTemplateSetController extends Controller
         if ($templateCount > 0 && ! $request->boolean('force')) {
             return response()->json([
                 'message' => "This tier has {$templateCount} step(s). Delete with force=1 to move them to \"{$siblings->first()->name}\".",
-                'code'    => 'tier_not_empty',
+                'code' => 'tier_not_empty',
             ], 422);
         }
 
@@ -164,22 +164,22 @@ class StageTemplateSetController extends Controller
     private function fmt(FdStageTemplateSet $s): array
     {
         return [
-            'id'                => $s->id,
+            'id' => $s->id,
             'elevation_type_id' => $s->elevation_type_id,
-            'name'              => $s->name,
-            'sort_order'        => $s->sort_order,
-            'is_default'        => $s->is_default,
+            'name' => $s->name,
+            'sort_order' => $s->sort_order,
+            'is_default' => $s->is_default,
             'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
-            'stage_templates'   => $s->relationLoaded('templates')
+            'stage_templates' => $s->relationLoaded('templates')
                 ? $s->templates->map(fn ($t) => [
-                    'id'                => $t->id,
-                    'name'              => $t->name,
-                    'description'       => $t->description,
-                    'sort_order'        => $t->sort_order,
-                    'blocks_next'       => (bool) $t->blocks_next,
+                    'id' => $t->id,
+                    'name' => $t->name,
+                    'description' => $t->description,
+                    'sort_order' => $t->sort_order,
+                    'blocks_next' => (bool) $t->blocks_next,
                     'minutes_per_joint' => $t->minutes_per_joint !== null ? (float) $t->minutes_per_joint : null,
-                    'default_user_id'   => $t->default_user_id,
-                    'default_user'      => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
+                    'default_user_id' => $t->default_user_id,
+                    'default_user' => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
                 ])->values()
                 : [],
         ];

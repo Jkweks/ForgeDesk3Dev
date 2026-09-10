@@ -23,10 +23,10 @@ class FdWoStage extends Model
     ];
 
     protected $casts = [
-        'blocks_next'       => 'boolean',
+        'blocks_next' => 'boolean',
         'minutes_per_joint' => 'decimal:2',
-        'started_at'        => 'datetime',
-        'completed_at'      => 'datetime',
+        'started_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     public function isTerminal(): bool

@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\StorageLocation;
 
 class CycleCountItem extends Model
 {
@@ -87,6 +86,7 @@ class CycleCountItem extends Model
         if ($this->hasPackSize()) {
             return $this->product?->purchase_uom ?? 'packs';
         }
+
         return $this->product?->stock_uom ?? 'EA';
     }
 
@@ -98,6 +98,7 @@ class CycleCountItem extends Model
         if ($this->hasPackSize()) {
             return $this->system_quantity * $this->pack_size;
         }
+
         return $this->system_quantity;
     }
 
@@ -112,6 +113,7 @@ class CycleCountItem extends Model
         if ($this->hasPackSize()) {
             return $this->counted_quantity * $this->pack_size;
         }
+
         return $this->counted_quantity;
     }
 
@@ -123,6 +125,7 @@ class CycleCountItem extends Model
         if ($this->hasPackSize()) {
             return $this->variance * $this->pack_size;
         }
+
         return $this->variance;
     }
 
@@ -131,6 +134,7 @@ class CycleCountItem extends Model
         if ($this->system_quantity == 0) {
             return $this->counted_quantity > 0 ? 100 : 0;
         }
+
         return round(($this->variance / $this->system_quantity) * 100, 1);
     }
 
@@ -144,6 +148,7 @@ class CycleCountItem extends Model
         // For pack-based items, use a smaller threshold (e.g., 1 pack)
         // For each-based items, use 5 eaches
         $threshold = $this->hasPackSize() ? 1 : 5;
+
         return abs($this->variance) > $threshold;
     }
 
@@ -179,6 +184,7 @@ class CycleCountItem extends Model
     {
         if ($this->variance == 0) {
             $this->update(['variance_status' => 'approved']);
+
             return null;
         }
 
@@ -189,8 +195,8 @@ class CycleCountItem extends Model
 
         // Build notes with pack information if applicable
         $notes = $this->hasPackSize()
-            ? "Cycle count adjustment: Expected {$this->system_quantity} packs ({$systemEaches} ea), Counted {$this->counted_quantity} packs ({$countedEaches} ea). " . ($this->count_notes ?? '')
-            : "Cycle count adjustment: Expected {$this->system_quantity}, Counted {$this->counted_quantity}. " . ($this->count_notes ?? '');
+            ? "Cycle count adjustment: Expected {$this->system_quantity} packs ({$systemEaches} ea), Counted {$this->counted_quantity} packs ({$countedEaches} ea). ".($this->count_notes ?? '')
+            : "Cycle count adjustment: Expected {$this->system_quantity}, Counted {$this->counted_quantity}. ".($this->count_notes ?? '');
 
         // Cycle counts are now location-based
         // Update the specific inventory location quantity (in eaches)
@@ -217,7 +223,7 @@ class CycleCountItem extends Model
                 'reference_number' => $this->session->session_number,
                 'reference_type' => 'cycle_count',
                 'reference_id' => $this->session_id,
-                'notes' => $notes . " [Location-based count: {$location->storageLocation->name}]",
+                'notes' => $notes." [Location-based count: {$location->storageLocation->name}]",
                 'user_id' => $userId,
                 'transaction_date' => now(),
             ]);
@@ -251,8 +257,8 @@ class CycleCountItem extends Model
                 $unassigned = StorageLocation::where('code', 'UNASSIGNED')->first();
                 $product->inventoryLocations()->create([
                     'storage_location_id' => $unassigned?->id ?? null,
-                    'quantity'            => $countedEaches,
-                    'is_primary'          => true,
+                    'quantity' => $countedEaches,
+                    'is_primary' => true,
                 ]);
             }
 
@@ -268,7 +274,7 @@ class CycleCountItem extends Model
                 'reference_number' => $this->session->session_number,
                 'reference_type' => 'cycle_count',
                 'reference_id' => $this->session_id,
-                'notes' => $notes . " [Legacy product-level count]",
+                'notes' => $notes.' [Legacy product-level count]',
                 'user_id' => $userId,
                 'transaction_date' => now(),
             ]);

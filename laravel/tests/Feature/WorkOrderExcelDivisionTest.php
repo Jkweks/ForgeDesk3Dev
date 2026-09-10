@@ -98,4 +98,56 @@ class WorkOrderExcelDivisionTest extends TestCase
 
         $this->assertNull($data['division']);
     }
+
+    public function test_job_name_is_read_from_a_job_name_or_project_label(): void
+    {
+        $byJobName = $this->parse($this->workbook([
+            ['Job Number', '24-1099'],
+            ['Job Name', 'Acme HQ Tower'],
+            [],
+            ['Type', 'Elevation'],
+            ['SF', 'A1'],
+        ]));
+        $this->assertSame('Acme HQ Tower', $byJobName['job_name']);
+
+        $byProject = $this->parse($this->workbook([
+            ['Project:', 'Riverside Medical'],
+            [],
+            ['Type', 'Elevation'],
+            ['CW', 'B1'],
+        ]));
+        $this->assertSame('Riverside Medical', $byProject['job_name']);
+
+        $none = $this->parse($this->workbook([
+            ['Job Number', '24-1099'],
+            [],
+            ['Type', 'Elevation'],
+            ['SF', 'A1'],
+        ]));
+        $this->assertNull($none['job_name']);
+    }
+
+    public function test_project_manager_and_superintendent_are_read_from_their_labels(): void
+    {
+        $data = $this->parse($this->workbook([
+            ['Job Number', '24-1099'],
+            ['Project Manager', 'Dana Lee'],
+            ['Superintendent:', 'Sam Park'],
+            [],
+            ['Type', 'Elevation'],
+            ['SF', 'A1'],
+        ]));
+
+        $this->assertSame('Dana Lee', $data['project_manager']);
+        $this->assertSame('Sam Park', $data['superintendent']);
+
+        $none = $this->parse($this->workbook([
+            ['Job Number', '24-1099'],
+            [],
+            ['Type', 'Elevation'],
+            ['SF', 'A1'],
+        ]));
+        $this->assertNull($none['project_manager']);
+        $this->assertNull($none['superintendent']);
+    }
 }

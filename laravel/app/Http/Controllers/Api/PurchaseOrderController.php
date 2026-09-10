@@ -5,19 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CompanyLocation;
 use App\Models\CompanySetting;
+use App\Models\InventoryTransaction;
+use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
-use App\Models\Product;
-use App\Models\InventoryTransaction;
 use App\Models\StorageLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class PurchaseOrderController extends Controller
 {
@@ -52,12 +50,12 @@ class PurchaseOrderController extends Controller
         // Search
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('po_number', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%")
-                  ->orWhereHas('supplier', function($sq) use ($search) {
-                      $sq->where('name', 'like', "%{$search}%");
-                  });
+                    ->orWhere('notes', 'like', "%{$search}%")
+                    ->orWhereHas('supplier', function ($sq) use ($search) {
+                        $sq->where('name', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -89,7 +87,7 @@ class PurchaseOrderController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'po_number'   => 'nullable|string|max:50|unique:purchase_orders,po_number',
+            'po_number' => 'nullable|string|max:50|unique:purchase_orders,po_number',
             'supplier_id' => 'required|exists:suppliers,id',
             'order_date' => 'required|date',
             'expected_date' => 'nullable|date|after_or_equal:order_date',
@@ -107,7 +105,7 @@ class PurchaseOrderController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -162,14 +160,15 @@ class PurchaseOrderController extends Controller
 
             return response()->json([
                 'message' => 'Purchase order created successfully',
-                'purchase_order' => $po
+                'purchase_order' => $po,
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error creating purchase order',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -180,9 +179,9 @@ class PurchaseOrderController extends Controller
     public function update(Request $request, PurchaseOrder $purchaseOrder)
     {
         // Editable up to (but not including) approval.
-        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+        if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json([
-                'message' => 'Only draft or submitted purchase orders can be edited'
+                'message' => 'Only draft or submitted purchase orders can be edited',
             ], 422);
         }
 
@@ -201,7 +200,7 @@ class PurchaseOrderController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -219,7 +218,7 @@ class PurchaseOrderController extends Controller
 
         return response()->json([
             'message' => 'Purchase order updated successfully',
-            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation'])
+            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation']),
         ]);
     }
 
@@ -230,13 +229,13 @@ class PurchaseOrderController extends Controller
     {
         if ($purchaseOrder->status !== 'draft') {
             return response()->json([
-                'message' => 'Only draft orders can be submitted'
+                'message' => 'Only draft orders can be submitted',
             ], 422);
         }
 
         if ($purchaseOrder->items()->count() === 0) {
             return response()->json([
-                'message' => 'Cannot submit order with no items'
+                'message' => 'Cannot submit order with no items',
             ], 422);
         }
 
@@ -244,7 +243,7 @@ class PurchaseOrderController extends Controller
 
         return response()->json([
             'message' => 'Purchase order submitted successfully',
-            'purchase_order' => $purchaseOrder
+            'purchase_order' => $purchaseOrder,
         ]);
     }
 
@@ -255,7 +254,7 @@ class PurchaseOrderController extends Controller
     {
         if ($purchaseOrder->status !== 'submitted') {
             return response()->json([
-                'message' => 'Only submitted orders can be approved'
+                'message' => 'Only submitted orders can be approved',
             ], 422);
         }
 
@@ -267,7 +266,7 @@ class PurchaseOrderController extends Controller
 
         return response()->json([
             'message' => 'Purchase order approved successfully',
-            'purchase_order' => $purchaseOrder
+            'purchase_order' => $purchaseOrder,
         ]);
     }
 
@@ -276,9 +275,9 @@ class PurchaseOrderController extends Controller
      */
     public function receive(Request $request, PurchaseOrder $purchaseOrder)
     {
-        if (!in_array($purchaseOrder->status, ['approved', 'partially_received'])) {
+        if (! in_array($purchaseOrder->status, ['approved', 'partially_received'])) {
             return response()->json([
-                'message' => 'Order must be approved before receiving'
+                'message' => 'Order must be approved before receiving',
             ], 422);
         }
 
@@ -294,7 +293,7 @@ class PurchaseOrderController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -307,7 +306,7 @@ class PurchaseOrderController extends Controller
 
                 // Verify item belongs to this PO
                 if ($poItem->purchase_order_id !== $purchaseOrder->id) {
-                    throw new \Exception("Item does not belong to this purchase order");
+                    throw new \Exception('Item does not belong to this purchase order');
                 }
 
                 $quantityToReceive = $itemData['quantity'];
@@ -332,7 +331,7 @@ class PurchaseOrderController extends Controller
                 // from inventory_locations (the canonical source of truth) instead of
                 // incrementing quantity_on_hand directly — this self-corrects any
                 // pre-existing drift instead of compounding it.
-                if (!empty($itemData['storage_location_id'])) {
+                if (! empty($itemData['storage_location_id'])) {
                     $location = $product->inventoryLocations()
                         ->where('storage_location_id', $itemData['storage_location_id'])
                         ->first();
@@ -366,8 +365,8 @@ class PurchaseOrderController extends Controller
                         $unassigned = StorageLocation::where('code', 'UNASSIGNED')->first();
                         $product->inventoryLocations()->create([
                             'storage_location_id' => $unassigned?->id ?? null,
-                            'quantity'            => $quantityToReceive,
-                            'is_primary'          => true,
+                            'quantity' => $quantityToReceive,
+                            'is_primary' => true,
                         ]);
                     }
                 }
@@ -408,14 +407,15 @@ class PurchaseOrderController extends Controller
 
             return response()->json([
                 'message' => 'Items received successfully',
-                'purchase_order' => $purchaseOrder
+                'purchase_order' => $purchaseOrder,
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error receiving items',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -427,13 +427,13 @@ class PurchaseOrderController extends Controller
     {
         if ($purchaseOrder->status === 'cancelled') {
             return response()->json([
-                'message' => 'Order is already cancelled'
+                'message' => 'Order is already cancelled',
             ], 422);
         }
 
         if ($purchaseOrder->status === 'received') {
             return response()->json([
-                'message' => 'Cannot cancel fully received orders'
+                'message' => 'Cannot cancel fully received orders',
             ], 422);
         }
 
@@ -455,14 +455,15 @@ class PurchaseOrderController extends Controller
 
             return response()->json([
                 'message' => 'Purchase order cancelled successfully',
-                'purchase_order' => $purchaseOrder
+                'purchase_order' => $purchaseOrder,
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error cancelling purchase order',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -474,7 +475,7 @@ class PurchaseOrderController extends Controller
     {
         if ($purchaseOrder->status !== 'draft') {
             return response()->json([
-                'message' => 'Only draft orders can be deleted'
+                'message' => 'Only draft orders can be deleted',
             ], 422);
         }
 
@@ -492,14 +493,15 @@ class PurchaseOrderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Purchase order deleted successfully'
+                'message' => 'Purchase order deleted successfully',
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error deleting purchase order',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -544,16 +546,16 @@ class PurchaseOrderController extends Controller
      */
     public function addItem(Request $request, PurchaseOrder $purchaseOrder)
     {
-        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+        if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json(['message' => 'Line items can only be added to draft or submitted purchase orders'], 422);
         }
 
         $validator = Validator::make($request->all(), [
-            'product_id'           => 'required|exists:products,id',
-            'quantity'             => 'required|integer|min:1',
-            'unit_cost'            => 'required|numeric|min:0',
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1',
+            'unit_cost' => 'required|numeric|min:0',
             'destination_location' => 'nullable|string',
-            'notes'                => 'nullable|string',
+            'notes' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -563,13 +565,13 @@ class PurchaseOrderController extends Controller
         DB::beginTransaction();
         try {
             $item = $purchaseOrder->items()->create([
-                'product_id'           => $request->product_id,
-                'quantity_ordered'     => $request->quantity,
-                'quantity_received'    => 0,
-                'unit_cost'            => $request->unit_cost,
-                'total_cost'           => $request->quantity * $request->unit_cost,
+                'product_id' => $request->product_id,
+                'quantity_ordered' => $request->quantity,
+                'quantity_received' => 0,
+                'unit_cost' => $request->unit_cost,
+                'total_cost' => $request->quantity * $request->unit_cost,
                 'destination_location' => $request->destination_location,
-                'notes'                => $request->notes,
+                'notes' => $request->notes,
             ]);
 
             $product = Product::find($request->product_id);
@@ -582,11 +584,12 @@ class PurchaseOrderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message'        => 'Line item added successfully',
+                'message' => 'Line item added successfully',
                 'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver']),
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['message' => 'Failed to add line item'], 500);
         }
     }
@@ -598,7 +601,7 @@ class PurchaseOrderController extends Controller
      */
     public function updateItem(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
     {
-        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+        if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json(['message' => 'Line items can only be edited on draft or submitted purchase orders'], 422);
         }
 
@@ -607,10 +610,10 @@ class PurchaseOrderController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'quantity'             => 'sometimes|required|integer|min:1',
-            'unit_cost'            => 'sometimes|required|numeric|min:0',
+            'quantity' => 'sometimes|required|integer|min:1',
+            'unit_cost' => 'sometimes|required|numeric|min:0',
             'destination_location' => 'sometimes|nullable|string',
-            'notes'                => 'sometimes|nullable|string',
+            'notes' => 'sometimes|nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -630,10 +633,10 @@ class PurchaseOrderController extends Controller
             $delta = $newQty - (int) $item->quantity_ordered;
 
             $item->fill([
-                'quantity_ordered'     => $newQty,
-                'unit_cost'            => $request->has('unit_cost') ? $request->unit_cost : $item->unit_cost,
+                'quantity_ordered' => $newQty,
+                'unit_cost' => $request->has('unit_cost') ? $request->unit_cost : $item->unit_cost,
                 'destination_location' => $request->has('destination_location') ? $request->destination_location : $item->destination_location,
-                'notes'                => $request->has('notes') ? $request->notes : $item->notes,
+                'notes' => $request->has('notes') ? $request->notes : $item->notes,
             ]);
             $item->save(); // model boot() recomputes total_cost
 
@@ -651,7 +654,7 @@ class PurchaseOrderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message'        => 'Line item updated successfully',
+                'message' => 'Line item updated successfully',
                 'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation']),
             ]);
         } catch (\Exception $e) {
@@ -685,8 +688,8 @@ class PurchaseOrderController extends Controller
         $logo = null;
         $logoPath = CompanySetting::current()->logo_path;
         if ($logoPath && \Storage::disk('public')->exists($logoPath)) {
-            $logo = 'data:' . (\Storage::disk('public')->mimeType($logoPath) ?: 'image/png')
-                . ';base64,' . base64_encode(\Storage::disk('public')->get($logoPath));
+            $logo = 'data:'.(\Storage::disk('public')->mimeType($logoPath) ?: 'image/png')
+                .';base64,'.base64_encode(\Storage::disk('public')->get($logoPath));
         }
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.purchase-order', [
@@ -699,7 +702,7 @@ class PurchaseOrderController extends Controller
 
         $pdf->setPaper('letter', 'portrait');
 
-        $filename = 'PO_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number) . '.pdf';
+        $filename = 'PO_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number).'.pdf';
 
         return $pdf->download($filename);
     }
@@ -711,7 +714,7 @@ class PurchaseOrderController extends Controller
     {
         $purchaseOrder->load(['supplier', 'items.product']);
 
-        if (!str_contains(strtolower($purchaseOrder->supplier->name ?? ''), 'tubelite')) {
+        if (! str_contains(strtolower($purchaseOrder->supplier->name ?? ''), 'tubelite')) {
             return response()->json(['message' => 'EZ Estimate export is only available for Tubelite purchase orders'], 422);
         }
 
@@ -730,7 +733,7 @@ class PurchaseOrderController extends Controller
 
         $templatePath = storage_path('app/templates/ez_estimate_template.xlsm');
 
-        if (!file_exists($templatePath)) {
+        if (! file_exists($templatePath)) {
             \Log::error('EZ Estimate export failed: template file missing', ['path' => $templatePath]);
 
             return response()->json(['message' => 'EZ Estimate template is missing on the server'], 500);
@@ -766,7 +769,7 @@ class PurchaseOrderController extends Controller
 
             $spreadsheet->setActiveSheetIndexByName('Stock Lengths');
 
-            $filename = 'EZ_Estimate_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number) . '_' . date('Ymd') . '.xlsx';
+            $filename = 'EZ_Estimate_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number).'_'.date('Ymd').'.xlsx';
             $tempFile = tempnam(sys_get_temp_dir(), 'po_ez_');
 
             $writer = new Xlsx($spreadsheet);
@@ -821,7 +824,7 @@ class PurchaseOrderController extends Controller
         $itemIndex = 0;
         foreach ($sheetNames as $sheetName) {
             $sheet = $spreadsheet->getSheetByName($sheetName);
-            if (!$sheet) {
+            if (! $sheet) {
                 throw new \Exception("EZ Estimate template sheet not found: {$sheetName}");
             }
 
@@ -841,7 +844,7 @@ class PurchaseOrderController extends Controller
      */
     public function removeItem(PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
     {
-        if (!in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
+        if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json(['message' => 'Line items can only be removed from draft or submitted purchase orders'], 422);
         }
 
@@ -865,11 +868,12 @@ class PurchaseOrderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message'        => 'Line item removed successfully',
+                'message' => 'Line item removed successfully',
                 'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver']),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['message' => 'Failed to remove line item'], 500);
         }
     }

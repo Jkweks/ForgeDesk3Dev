@@ -16,6 +16,8 @@ class BusinessJob extends Model
         'customer_name',
         'project_manager',
         'project_manager_id',
+        'superintendent',
+        'superintendent_id',
         'site_address',
         'contact_name',
         'contact_phone',
@@ -57,6 +59,16 @@ class BusinessJob extends Model
     public function projectManager()
     {
         return $this->belongsTo(User::class, 'project_manager_id');
+    }
+
+    /**
+     * The user account this job's site superintendent points to (nullable — the
+     * `superintendent` string stays as the display label). Named *User to avoid
+     * colliding with the `superintendent` string column.
+     */
+    public function superintendentUser()
+    {
+        return $this->belongsTo(User::class, 'superintendent_id');
     }
 
     /**

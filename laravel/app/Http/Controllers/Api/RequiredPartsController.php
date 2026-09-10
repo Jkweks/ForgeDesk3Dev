@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\RequiredPart;
 use App\Models\Product;
+use App\Models\RequiredPart;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -42,14 +42,14 @@ class RequiredPartsController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         // Prevent circular dependencies
         if ($this->wouldCreateCircularDependency($product->id, $request->required_product_id)) {
             return response()->json([
-                'message' => 'Cannot add this part - would create circular dependency'
+                'message' => 'Cannot add this part - would create circular dependency',
             ], 422);
         }
 
@@ -60,7 +60,7 @@ class RequiredPartsController extends Controller
 
         if ($existing) {
             return response()->json([
-                'message' => 'This part is already in the BOM'
+                'message' => 'This part is already in the BOM',
             ], 422);
         }
 
@@ -69,7 +69,7 @@ class RequiredPartsController extends Controller
 
         return response()->json([
             'message' => 'Required part added successfully',
-            'required_part' => $requiredPart
+            'required_part' => $requiredPart,
         ], 201);
     }
 
@@ -81,7 +81,7 @@ class RequiredPartsController extends Controller
         // Verify the required part belongs to this product
         if ($requiredPart->parent_product_id !== $product->id) {
             return response()->json([
-                'message' => 'Required part does not belong to this product'
+                'message' => 'Required part does not belong to this product',
             ], 404);
         }
 
@@ -97,7 +97,7 @@ class RequiredPartsController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -106,7 +106,7 @@ class RequiredPartsController extends Controller
 
         return response()->json([
             'message' => 'Required part updated successfully',
-            'required_part' => $requiredPart
+            'required_part' => $requiredPart,
         ]);
     }
 
@@ -118,14 +118,14 @@ class RequiredPartsController extends Controller
         // Verify the required part belongs to this product
         if ($requiredPart->parent_product_id !== $product->id) {
             return response()->json([
-                'message' => 'Required part does not belong to this product'
+                'message' => 'Required part does not belong to this product',
             ], 404);
         }
 
         $requiredPart->delete();
 
         return response()->json([
-            'message' => 'Required part removed successfully'
+            'message' => 'Required part removed successfully',
         ]);
     }
 
@@ -172,7 +172,7 @@ class RequiredPartsController extends Controller
             $available = $partProduct->quantity_available;
             $isAvailable = $available >= $required;
 
-            if (!$isAvailable) {
+            if (! $isAvailable) {
                 $allAvailable = false;
             }
 
@@ -207,7 +207,7 @@ class RequiredPartsController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -218,7 +218,7 @@ class RequiredPartsController extends Controller
         }
 
         return response()->json([
-            'message' => 'Sort order updated successfully'
+            'message' => 'Sort order updated successfully',
         ]);
     }
 
@@ -310,9 +310,9 @@ class RequiredPartsController extends Controller
         $summary = [];
 
         foreach ($explosion as $part) {
-            $key = $part['product_id'] . '-' . ($part['finish'] ?? 'any');
+            $key = $part['product_id'].'-'.($part['finish'] ?? 'any');
 
-            if (!isset($summary[$key])) {
+            if (! isset($summary[$key])) {
                 $summary[$key] = [
                     'product_id' => $part['product_id'],
                     'sku' => $part['sku'],
@@ -346,7 +346,7 @@ class RequiredPartsController extends Controller
 
         // Check if the child product has the parent in its BOM
         $childProduct = Product::find($childId);
-        if (!$childProduct) {
+        if (! $childProduct) {
             return false;
         }
 

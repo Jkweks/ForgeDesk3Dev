@@ -3,15 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\JobReservation;
 use App\Models\JobReservationItem;
+use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class MaterialCheckController extends Controller
 {
@@ -183,7 +183,7 @@ class MaterialCheckController extends Controller
             Log::info('Material check started');
 
             // Check if file was uploaded
-            if (!$request->hasFile('file')) {
+            if (! $request->hasFile('file')) {
                 return response()->json([
                     'error' => 'No file uploaded',
                     'request_has_file' => $request->hasFile('file'),
@@ -197,6 +197,7 @@ class MaterialCheckController extends Controller
 
             if ($validator->fails()) {
                 Log::warning('Validation failed', ['errors' => $validator->errors()]);
+
                 return response()->json([
                     'error' => 'Validation failed',
                     'details' => $validator->errors(),
@@ -218,12 +219,13 @@ class MaterialCheckController extends Controller
             // This only loads Stock Lengths & Accessories sheets, columns A-C, rows 11-47/11-46
             $reader = IOFactory::createReaderForFile($file->getRealPath());
             $reader->setReadDataOnly(true);
-            $reader->setReadFilter(new EzEstimateReadFilter());
+            $reader->setReadFilter(new EzEstimateReadFilter);
 
             $spreadsheet = $reader->load($file->getRealPath());
 
             if ($mode === 'ez_estimate') {
                 $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
+
                 return $this->checkEzEstimate($spreadsheet, $boneyardSharedOnly);
             } else {
                 return $this->checkGenericEstimate($request, $spreadsheet);
@@ -235,8 +237,9 @@ class MaterialCheckController extends Controller
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return response()->json([
-                'error' => 'Failed to read the Excel file: ' . $e->getMessage(),
+                'error' => 'Failed to read the Excel file: '.$e->getMessage(),
                 'file' => basename($e->getFile()),
                 'line' => $e->getLine(),
             ], 500);
@@ -247,8 +250,9 @@ class MaterialCheckController extends Controller
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return response()->json([
-                'error' => 'Material check failed: ' . $e->getMessage(),
+                'error' => 'Material check failed: '.$e->getMessage(),
                 'file' => basename($e->getFile()),
                 'line' => $e->getLine(),
                 'trace_preview' => substr($e->getTraceAsString(), 0, 500),
@@ -259,8 +263,9 @@ class MaterialCheckController extends Controller
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return response()->json([
-                'error' => 'Fatal error: ' . $e->getMessage(),
+                'error' => 'Fatal error: '.$e->getMessage(),
                 'file' => basename($e->getFile()),
                 'line' => $e->getLine(),
             ], 500);
@@ -372,6 +377,7 @@ class MaterialCheckController extends Controller
         if ($cell->getDataType() === DataType::TYPE_FORMULA) {
             return $cell->getOldCalculatedValue();
         }
+
         return $cell->getValue();
     }
 
@@ -391,8 +397,8 @@ class MaterialCheckController extends Controller
                 $finishCell = $sheet->getCell("C{$row}");
 
                 $qtyPacks = floatval($this->getCellEffectiveValue($qtyCell));
-                $partNumber = trim((string)$this->getCellEffectiveValue($partNumberCell));
-                $finish = trim((string)$this->getCellEffectiveValue($finishCell));
+                $partNumber = trim((string) $this->getCellEffectiveValue($partNumberCell));
+                $finish = trim((string) $this->getCellEffectiveValue($finishCell));
 
                 // Skip rows where quantity is 0 or negative
                 if ($qtyPacks <= 0) {
@@ -410,19 +416,19 @@ class MaterialCheckController extends Controller
                 }
 
                 foreach ($this->applyPartRules($partNumber, $finish, $qtyPacks) as $line) {
-                    $pn      = $line['part_number'];
-                    $fin     = $line['finish'];
+                    $pn = $line['part_number'];
+                    $fin = $line['finish'];
                     $lineQty = $line['qty'];
 
                     // Combine Part Number and Finish to create SKU (format: PartNumber-Finish)
-                    $sku = $pn . '-' . $fin;
+                    $sku = $pn.'-'.$fin;
 
                     $summary['total']++;
 
                     // Look up the part in inventory
                     $product = $this->findProduct($sku);
 
-                    if (!$product) {
+                    if (! $product) {
                         $results[] = [
                             'part_number' => $pn,
                             'finish' => $fin,
@@ -441,6 +447,7 @@ class MaterialCheckController extends Controller
                             'row' => $row,
                         ];
                         $summary['not_found']++;
+
                         continue;
                     }
 
@@ -504,16 +511,17 @@ class MaterialCheckController extends Controller
                 }
             } catch (\Exception $e) {
                 // Log error but continue processing other rows
-                Log::warning("Error processing row", [
+                Log::warning('Error processing row', [
                     'sheet' => $sheetName,
                     'row' => $row,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
+
                 continue;
             }
         }
 
-        Log::info("Completed processing sheet", ['name' => $sheetName]);
+        Log::info('Completed processing sheet', ['name' => $sheetName]);
     }
 
     /**
@@ -521,153 +529,155 @@ class MaterialCheckController extends Controller
      */
     private function checkGenericEstimate(Request $request, $spreadsheet)
     {
-            $sheetName = $request->input('sheet_name');
-            $headerRow = $request->input('header_row', 1);
-            $dataStartRow = $request->input('data_start_row', $headerRow + 1);
-            $partNumberColumn = $request->input('part_number_column', 'Part Number');
-            $quantityColumn = $request->input('quantity_column', 'Quantity');
-            $descriptionColumn = $request->input('description_column', 'Description');
+        $sheetName = $request->input('sheet_name');
+        $headerRow = $request->input('header_row', 1);
+        $dataStartRow = $request->input('data_start_row', $headerRow + 1);
+        $partNumberColumn = $request->input('part_number_column', 'Part Number');
+        $quantityColumn = $request->input('quantity_column', 'Quantity');
+        $descriptionColumn = $request->input('description_column', 'Description');
 
-            // Select the worksheet
-            if ($sheetName) {
-                try {
-                    $worksheet = $spreadsheet->getSheetByName($sheetName);
-                    if (!$worksheet) {
-                        $availableSheets = array_map(fn($sheet) => $sheet->getTitle(), $spreadsheet->getAllSheets());
-                        return response()->json([
-                            'error' => "Sheet '{$sheetName}' not found. Available sheets: " . implode(', ', $availableSheets),
-                        ], 400);
-                    }
-                } catch (\Exception $e) {
+        // Select the worksheet
+        if ($sheetName) {
+            try {
+                $worksheet = $spreadsheet->getSheetByName($sheetName);
+                if (! $worksheet) {
+                    $availableSheets = array_map(fn ($sheet) => $sheet->getTitle(), $spreadsheet->getAllSheets());
+
                     return response()->json([
-                        'error' => "Failed to load sheet '{$sheetName}': " . $e->getMessage(),
+                        'error' => "Sheet '{$sheetName}' not found. Available sheets: ".implode(', ', $availableSheets),
                     ], 400);
                 }
-            } else {
-                $worksheet = $spreadsheet->getActiveSheet();
-            }
-
-            $rows = $worksheet->toArray();
-            Log::info('Spreadsheet loaded', ['sheet' => $worksheet->getTitle(), 'row_count' => count($rows)]);
-
-            if (empty($rows)) {
+            } catch (\Exception $e) {
                 return response()->json([
-                    'error' => 'The uploaded file is empty',
+                    'error' => "Failed to load sheet '{$sheetName}': ".$e->getMessage(),
                 ], 400);
             }
+        } else {
+            $worksheet = $spreadsheet->getActiveSheet();
+        }
 
-            // Get headers from specified row (1-indexed)
-            if ($headerRow > count($rows)) {
-                return response()->json([
-                    'error' => "Header row {$headerRow} is beyond the file's row count (" . count($rows) . ")",
-                ], 400);
+        $rows = $worksheet->toArray();
+        Log::info('Spreadsheet loaded', ['sheet' => $worksheet->getTitle(), 'row_count' => count($rows)]);
+
+        if (empty($rows)) {
+            return response()->json([
+                'error' => 'The uploaded file is empty',
+            ], 400);
+        }
+
+        // Get headers from specified row (1-indexed)
+        if ($headerRow > count($rows)) {
+            return response()->json([
+                'error' => "Header row {$headerRow} is beyond the file's row count (".count($rows).')',
+            ], 400);
+        }
+
+        $headers = $rows[$headerRow - 1]; // Convert to 0-indexed
+        $headers = array_map(fn ($h) => trim((string) $h), $headers);
+
+        // Remove rows before data start
+        $rows = array_slice($rows, $dataStartRow - 1); // Convert to 0-indexed
+
+        // Find column indexes - support both column names and letters (A, B, C, etc.)
+        $partNumberIndex = $this->resolveColumnIndex($partNumberColumn, $headers);
+        $quantityIndex = $this->resolveColumnIndex($quantityColumn, $headers);
+        $descriptionIndex = $this->resolveColumnIndex($descriptionColumn, $headers);
+
+        if ($partNumberIndex === false) {
+            return response()->json([
+                'error' => "Column '{$partNumberColumn}' not found in the file. Available columns: ".implode(', ', array_filter($headers)),
+            ], 400);
+        }
+
+        if ($quantityIndex === false) {
+            return response()->json([
+                'error' => "Column '{$quantityColumn}' not found in the file. Available columns: ".implode(', ', array_filter($headers)),
+            ], 400);
+        }
+
+        // Process each row
+        $results = [];
+        $summary = [
+            'total' => 0,
+            'available' => 0,
+            'partial' => 0,
+            'unavailable' => 0,
+            'not_found' => 0,
+        ];
+
+        foreach ($rows as $rowIndex => $row) {
+            // Skip empty rows
+            if (empty(array_filter($row))) {
+                continue;
             }
 
-            $headers = $rows[$headerRow - 1]; // Convert to 0-indexed
-            $headers = array_map(fn($h) => trim((string)$h), $headers);
+            $partNumber = isset($row[$partNumberIndex]) ? trim($row[$partNumberIndex]) : null;
+            $requiredQty = isset($row[$quantityIndex]) ? floatval($row[$quantityIndex]) : 0;
+            $description = ($descriptionIndex !== false && isset($row[$descriptionIndex]))
+                ? trim($row[$descriptionIndex])
+                : null;
 
-            // Remove rows before data start
-            $rows = array_slice($rows, $dataStartRow - 1); // Convert to 0-indexed
-
-            // Find column indexes - support both column names and letters (A, B, C, etc.)
-            $partNumberIndex = $this->resolveColumnIndex($partNumberColumn, $headers);
-            $quantityIndex = $this->resolveColumnIndex($quantityColumn, $headers);
-            $descriptionIndex = $this->resolveColumnIndex($descriptionColumn, $headers);
-
-            if ($partNumberIndex === false) {
-                return response()->json([
-                    'error' => "Column '{$partNumberColumn}' not found in the file. Available columns: " . implode(', ', array_filter($headers)),
-                ], 400);
+            // Skip if no part number or quantity
+            if (empty($partNumber) || $requiredQty <= 0) {
+                continue;
             }
 
-            if ($quantityIndex === false) {
-                return response()->json([
-                    'error' => "Column '{$quantityColumn}' not found in the file. Available columns: " . implode(', ', array_filter($headers)),
-                ], 400);
-            }
+            $summary['total']++;
 
-            // Process each row
-            $results = [];
-            $summary = [
-                'total' => 0,
-                'available' => 0,
-                'partial' => 0,
-                'unavailable' => 0,
-                'not_found' => 0,
-            ];
+            // Look up the part in inventory
+            $product = $this->findProduct($partNumber);
 
-            foreach ($rows as $rowIndex => $row) {
-                // Skip empty rows
-                if (empty(array_filter($row))) {
-                    continue;
-                }
-
-                $partNumber = isset($row[$partNumberIndex]) ? trim($row[$partNumberIndex]) : null;
-                $requiredQty = isset($row[$quantityIndex]) ? floatval($row[$quantityIndex]) : 0;
-                $description = ($descriptionIndex !== false && isset($row[$descriptionIndex]))
-                    ? trim($row[$descriptionIndex])
-                    : null;
-
-                // Skip if no part number or quantity
-                if (empty($partNumber) || $requiredQty <= 0) {
-                    continue;
-                }
-
-                $summary['total']++;
-
-                // Look up the part in inventory
-                $product = $this->findProduct($partNumber);
-
-                if (!$product) {
-                    $results[] = [
-                        'part_number' => $partNumber,
-                        'description' => $description,
-                        'required_quantity' => $requiredQty,
-                        'available_quantity' => 0,
-                        'shortage' => $requiredQty,
-                        'status' => 'not_found',
-                        'location' => null,
-                    ];
-                    $summary['not_found']++;
-                    continue;
-                }
-
-                // Calculate availability
-                $availableQty = $product->quantity_available ?? $product->quantity_on_hand ?? 0;
-                $shortage = max(0, $requiredQty - $availableQty);
-
-                // Determine status
-                $status = 'available';
-                if ($availableQty <= 0) {
-                    $status = 'unavailable';
-                    $summary['unavailable']++;
-                } elseif ($availableQty < $requiredQty) {
-                    $status = 'partial';
-                    $summary['partial']++;
-                } else {
-                    $summary['available']++;
-                }
-
+            if (! $product) {
                 $results[] = [
                     'part_number' => $partNumber,
-                    'description' => $description ?: $product->description,
+                    'description' => $description,
                     'required_quantity' => $requiredQty,
-                    'available_quantity' => $availableQty,
-                    'shortage' => $shortage,
-                    'status' => $status,
-                    'location' => $product->location,
-                    'product_id' => $product->id,
-                    'sku' => $product->sku,
+                    'available_quantity' => 0,
+                    'shortage' => $requiredQty,
+                    'status' => 'not_found',
+                    'location' => null,
                 ];
+                $summary['not_found']++;
+
+                continue;
             }
 
-            $results = $this->mergeResultsBySku($results, $summary);
+            // Calculate availability
+            $availableQty = $product->quantity_available ?? $product->quantity_on_hand ?? 0;
+            $shortage = max(0, $requiredQty - $availableQty);
 
-            return response()->json([
-                'message' => 'Material check completed',
-                'summary' => $summary,
-                'results' => $results,
-            ]);
+            // Determine status
+            $status = 'available';
+            if ($availableQty <= 0) {
+                $status = 'unavailable';
+                $summary['unavailable']++;
+            } elseif ($availableQty < $requiredQty) {
+                $status = 'partial';
+                $summary['partial']++;
+            } else {
+                $summary['available']++;
+            }
+
+            $results[] = [
+                'part_number' => $partNumber,
+                'description' => $description ?: $product->description,
+                'required_quantity' => $requiredQty,
+                'available_quantity' => $availableQty,
+                'shortage' => $shortage,
+                'status' => $status,
+                'location' => $product->location,
+                'product_id' => $product->id,
+                'sku' => $product->sku,
+            ];
+        }
+
+        $results = $this->mergeResultsBySku($results, $summary);
+
+        return response()->json([
+            'message' => 'Material check completed',
+            'summary' => $summary,
+            'results' => $results,
+        ]);
     }
 
     /**
@@ -707,7 +717,7 @@ class MaterialCheckController extends Controller
     {
         $letter = strtoupper(trim($letter));
 
-        if ($letter === '' || !ctype_alpha($letter)) {
+        if ($letter === '' || ! ctype_alpha($letter)) {
             return false;
         }
 
@@ -741,26 +751,28 @@ class MaterialCheckController extends Controller
 
         $path = $request->file('file')->getRealPath();
         $handle = fopen($path, 'r');
-        if (!$handle) {
+        if (! $handle) {
             return response()->json(['error' => 'Could not open uploaded file'], 500);
         }
 
         // Read header row and normalise column names
         $rawHeaders = fgetcsv($handle);
-        if (!$rawHeaders) {
+        if (! $rawHeaders) {
             fclose($handle);
+
             return response()->json(['error' => 'CSV file is empty'], 400);
         }
-        $headers = array_map(fn($h) => strtolower(trim($h)), $rawHeaders);
+        $headers = array_map(fn ($h) => strtolower(trim($h)), $rawHeaders);
 
-        $qtyIdx   = array_search('qty',          $headers) !== false ? array_search('qty',          $headers) : array_search('quantity',     $headers);
-        $partIdx  = array_search('part number',  $headers) !== false ? array_search('part number',  $headers) : array_search('part_number',   $headers);
-        $colorIdx = array_search('color code',   $headers) !== false ? array_search('color code',   $headers) : array_search('color_code',    $headers);
+        $qtyIdx = array_search('qty', $headers) !== false ? array_search('qty', $headers) : array_search('quantity', $headers);
+        $partIdx = array_search('part number', $headers) !== false ? array_search('part number', $headers) : array_search('part_number', $headers);
+        $colorIdx = array_search('color code', $headers) !== false ? array_search('color code', $headers) : array_search('color_code', $headers);
 
         if ($qtyIdx === false || $partIdx === false) {
             fclose($handle);
+
             return response()->json([
-                'error' => 'CSV must have Qty and Part Number columns. Found: ' . implode(', ', $rawHeaders),
+                'error' => 'CSV must have Qty and Part Number columns. Found: '.implode(', ', $rawHeaders),
             ], 400);
         }
 
@@ -769,28 +781,32 @@ class MaterialCheckController extends Controller
         $this->productCache = [];
         foreach ($allProducts as $product) {
             $sku = $product->sku;
-            $this->productCache[$sku]                                      = $product;
-            $this->productCache[strtolower($sku)]                          = $product;
-            $this->productCache[str_replace([' ', '-', '_'], '', $sku)]    = $product;
+            $this->productCache[$sku] = $product;
+            $this->productCache[strtolower($sku)] = $product;
+            $this->productCache[str_replace([' ', '-', '_'], '', $sku)] = $product;
         }
 
         $results = [];
         $summary = ['total' => 0, 'available' => 0, 'partial' => 0, 'unavailable' => 0, 'not_found' => 0];
 
         while (($row = fgetcsv($handle)) !== false) {
-            if (empty(array_filter($row))) continue;
+            if (empty(array_filter($row))) {
+                continue;
+            }
 
-            $qty        = isset($row[$qtyIdx])  ? floatval($row[$qtyIdx])  : 0;
-            $partNumber = isset($row[$partIdx]) ? trim($row[$partIdx])      : '';
-            $colorCode  = ($colorIdx !== false && isset($row[$colorIdx])) ? trim($row[$colorIdx]) : '';
+            $qty = isset($row[$qtyIdx]) ? floatval($row[$qtyIdx]) : 0;
+            $partNumber = isset($row[$partIdx]) ? trim($row[$partIdx]) : '';
+            $colorCode = ($colorIdx !== false && isset($row[$colorIdx])) ? trim($row[$colorIdx]) : '';
 
-            if ($qty <= 0 || $partNumber === '') continue;
+            if ($qty <= 0 || $partNumber === '') {
+                continue;
+            }
 
             foreach ($this->applyPartRules($partNumber, $colorCode, $qty) as $line) {
-                $pn    = $line['part_number'];
-                $fin   = $line['finish'];
+                $pn = $line['part_number'];
+                $fin = $line['finish'];
                 $lineQty = $line['qty'];
-                $sku   = $fin !== '' ? "{$pn}-{$fin}" : $pn;
+                $sku = $fin !== '' ? "{$pn}-{$fin}" : $pn;
 
                 // CSV quantities are always eaches — round up to nearest 0.1
                 $requiredEach = ceil($lineQty * 10) / 10;
@@ -798,56 +814,60 @@ class MaterialCheckController extends Controller
                 $summary['total']++;
                 $product = $this->findProduct($sku);
 
-                if (!$product) {
+                if (! $product) {
                     $results[] = [
-                        'part_number'         => $pn,
-                        'finish'              => $fin,
-                        'sku'                 => $sku,
-                        'description'         => '',
-                        'required_qty_packs'  => $requiredEach,
+                        'part_number' => $pn,
+                        'finish' => $fin,
+                        'sku' => $sku,
+                        'description' => '',
+                        'required_qty_packs' => $requiredEach,
                         'required_qty_eaches' => $requiredEach,
                         'available_qty_packs' => 0,
-                        'available_qty_eaches'=> 0,
-                        'shortage_packs'      => $requiredEach,
-                        'shortage_eaches'     => $requiredEach,
-                        'pack_size'           => 1,
-                        'has_pack_size'       => false,
-                        'status'              => 'not_found',
-                        'location'            => null,
+                        'available_qty_eaches' => 0,
+                        'shortage_packs' => $requiredEach,
+                        'shortage_eaches' => $requiredEach,
+                        'pack_size' => 1,
+                        'has_pack_size' => false,
+                        'status' => 'not_found',
+                        'location' => null,
                     ];
                     $summary['not_found']++;
+
                     continue;
                 }
 
                 $availableEach = (float) ($product->quantity_available ?? $product->quantity_on_hand ?? 0);
-                $shortageEach  = max(0.0, $requiredEach - $availableEach);
+                $shortageEach = max(0.0, $requiredEach - $availableEach);
 
                 if ($availableEach <= 0) {
-                    $status = 'unavailable'; $summary['unavailable']++;
+                    $status = 'unavailable';
+                    $summary['unavailable']++;
                 } elseif ($availableEach < $requiredEach) {
-                    $status = 'partial'; $summary['partial']++;
+                    $status = 'partial';
+                    $summary['partial']++;
                 } else {
-                    $status = 'available'; $summary['available']++;
+                    $status = 'available';
+                    $summary['available']++;
                 }
 
                 $results[] = [
-                    'part_number'         => $pn,
-                    'finish'              => $fin,
-                    'sku'                 => $sku,
-                    'description'         => $product->description,
-                    'required_qty_packs'  => $requiredEach,
+                    'part_number' => $pn,
+                    'finish' => $fin,
+                    'sku' => $sku,
+                    'description' => $product->description,
+                    'required_qty_packs' => $requiredEach,
                     'required_qty_eaches' => $requiredEach,
                     'available_qty_packs' => $availableEach,
-                    'available_qty_eaches'=> $availableEach,
-                    'shortage_packs'      => $shortageEach,
-                    'shortage_eaches'     => $shortageEach,
-                    'pack_size'           => 1,
-                    'has_pack_size'       => false,
-                    'status'              => $status,
-                    'location'            => $product->location,
-                    'product_id'          => $product->id,
-                    'nonsof'              => (bool) $product->nonsof,
-                    'is_shared'           => (bool) $product->is_shared,
+                    'available_qty_eaches' => $availableEach,
+                    'shortage_packs' => $shortageEach,
+                    'shortage_eaches' => $shortageEach,
+                    'pack_size' => 1,
+                    'has_pack_size' => false,
+                    'status' => $status,
+                    'location' => $product->location,
+                    'product_id' => $product->id,
+                    'nonsof' => (bool) $product->nonsof,
+                    'is_shared' => (bool) $product->is_shared,
                 ];
             }
         }
@@ -915,8 +935,9 @@ class MaterialCheckController extends Controller
         $merged = [];
         foreach ($results as $row) {
             $key = $row['sku'];
-            if (!isset($merged[$key])) {
+            if (! isset($merged[$key])) {
                 $merged[$key] = $row;
+
                 continue;
             }
 
@@ -929,12 +950,12 @@ class MaterialCheckController extends Controller
             }
 
             // Sum quantities
-            $existing['required_qty_packs']  += $row['required_qty_packs'];
+            $existing['required_qty_packs'] += $row['required_qty_packs'];
             $existing['required_qty_eaches'] += $row['required_qty_eaches'];
 
             // Re-evaluate status against the merged required qty
             $available = $existing['available_qty_eaches'];
-            $required  = $existing['required_qty_eaches'];
+            $required = $existing['required_qty_eaches'];
 
             if ($row['status'] === 'not_found') {
                 // Keep existing status — one found row + a not_found duplicate skips
@@ -948,7 +969,7 @@ class MaterialCheckController extends Controller
 
             // Recalculate shortage
             $existing['shortage_eaches'] = max(0, $required - $available);
-            $existing['shortage_packs']  = $existing['shortage_eaches'];
+            $existing['shortage_packs'] = $existing['shortage_eaches'];
 
             // Re-add merged row's status to summary
             if ($existing['status'] !== 'not_found') {
@@ -1007,18 +1028,18 @@ class EzEstimateReadFilter implements \PhpOffice\PhpSpreadsheet\Reader\IReadFilt
         }
 
         // Only load columns A, B, C
-        if (!in_array($columnAddress, ['A', 'B', 'C'])) {
+        if (! in_array($columnAddress, ['A', 'B', 'C'])) {
             return false;
         }
 
         // For Stock Lengths sheets: load rows 11-47
         if (stripos($worksheetName, 'Stock Lengths') === 0) {
-            return ($row >= 11 && $row <= 47);
+            return $row >= 11 && $row <= 47;
         }
 
         // For Accessories sheets: load rows 11-46
         if (stripos($worksheetName, 'Accessories') === 0) {
-            return ($row >= 11 && $row <= 46);
+            return $row >= 11 && $row <= 46;
         }
 
         return false;

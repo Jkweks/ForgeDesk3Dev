@@ -10,8 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
@@ -35,11 +35,11 @@ class UserController extends Controller
         // Search by name or email
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
@@ -238,7 +238,7 @@ class UserController extends Controller
     public function sendPendingInvitations(Request $request)
     {
         $data = $request->validate([
-            'user_ids'   => 'sometimes|array',
+            'user_ids' => 'sometimes|array',
             'user_ids.*' => 'integer',
         ]);
 
@@ -254,6 +254,7 @@ class UserController extends Controller
         foreach ($query->get() as $user) {
             if (! $user->is_active) {
                 $skippedInactive++;
+
                 continue;
             }
 
@@ -265,14 +266,14 @@ class UserController extends Controller
         }
 
         return response()->json([
-            'sent'             => $sent,
-            'failed'           => $failed,
+            'sent' => $sent,
+            'failed' => $failed,
             'skipped_inactive' => $skippedInactive,
-            'message'          => $sent === 0 && ! $failed && ! $skippedInactive
+            'message' => $sent === 0 && ! $failed && ! $skippedInactive
                 ? 'No held invitations to send.'
                 : "Sent {$sent} invitation(s)."
-                    . ($failed ? ' ' . count($failed) . ' failed.' : '')
-                    . ($skippedInactive ? " {$skippedInactive} skipped (inactive)." : ''),
+                    .($failed ? ' '.count($failed).' failed.' : '')
+                    .($skippedInactive ? " {$skippedInactive} skipped (inactive)." : ''),
         ]);
     }
 
@@ -321,7 +322,7 @@ class UserController extends Controller
 
             return true;
         } catch (\Throwable $e) {
-            Log::error('Failed to send welcome email to ' . $user->email . ': ' . $e->getMessage());
+            Log::error('Failed to send welcome email to '.$user->email.': '.$e->getMessage());
 
             return false;
         }
@@ -396,14 +397,14 @@ class UserController extends Controller
         // Prevent deleting yourself
         if ($user->id === auth()->id()) {
             return response()->json([
-                'message' => 'You cannot delete your own account'
+                'message' => 'You cannot delete your own account',
             ], 403);
         }
 
         $user->delete();
 
         return response()->json([
-            'message' => 'User deleted successfully'
+            'message' => 'User deleted successfully',
         ]);
     }
 
@@ -443,7 +444,7 @@ class UserController extends Controller
         $user->tokens()->delete();
 
         return response()->json([
-            'message' => 'Password reset successfully. The user must set a new password on next sign-in.'
+            'message' => 'Password reset successfully. The user must set a new password on next sign-in.',
         ]);
     }
 
@@ -462,12 +463,12 @@ class UserController extends Controller
 
         if ($status === Password::RESET_LINK_SENT) {
             return response()->json([
-                'message' => 'Password reset link sent to email'
+                'message' => 'Password reset link sent to email',
             ]);
         }
 
         return response()->json([
-            'message' => 'Unable to send password reset link'
+            'message' => 'Unable to send password reset link',
         ], 500);
     }
 
@@ -484,10 +485,10 @@ class UserController extends Controller
         $user = auth()->user();
 
         // Verify current password
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return response()->json([
                 'message' => 'Current password is incorrect',
-                'errors' => ['current_password' => ['Current password is incorrect']]
+                'errors' => ['current_password' => ['Current password is incorrect']],
             ], 422);
         }
 
@@ -498,7 +499,7 @@ class UserController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Password changed successfully'
+            'message' => 'Password changed successfully',
         ]);
     }
 

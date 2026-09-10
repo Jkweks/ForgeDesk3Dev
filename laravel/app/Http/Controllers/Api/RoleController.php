@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Role;
 use App\Models\Permission;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -17,7 +17,7 @@ class RoleController extends Controller
     {
         $roles = Role::with('permissions')->orderBy('name')->get();
 
-        return response()->json($roles->map(function($role) {
+        return response()->json($roles->map(function ($role) {
             return [
                 'id' => $role->id,
                 'name' => $role->name,
@@ -46,7 +46,7 @@ class RoleController extends Controller
             'description' => $role->description,
             'is_system' => $role->is_system,
             'user_count' => $role->users()->count(),
-            'permissions' => $role->permissions->map(function($permission) {
+            'permissions' => $role->permissions->map(function ($permission) {
                 return [
                     'id' => $permission->id,
                     'name' => $permission->name,
@@ -153,7 +153,7 @@ class RoleController extends Controller
         // Prevent deleting system roles
         if ($role->is_system) {
             return response()->json([
-                'message' => 'Cannot delete system roles'
+                'message' => 'Cannot delete system roles',
             ], 403);
         }
 
@@ -161,14 +161,14 @@ class RoleController extends Controller
         if ($role->users()->count() > 0) {
             return response()->json([
                 'message' => 'Cannot delete role that is assigned to users',
-                'user_count' => $role->users()->count()
+                'user_count' => $role->users()->count(),
             ], 422);
         }
 
         $role->delete();
 
         return response()->json([
-            'message' => 'Role deleted successfully'
+            'message' => 'Role deleted successfully',
         ]);
     }
 
@@ -180,10 +180,10 @@ class RoleController extends Controller
         $permissions = Permission::orderBy('category')->orderBy('name')->get();
 
         // Group permissions by category
-        $grouped = $permissions->groupBy('category')->map(function($permissions, $category) {
+        $grouped = $permissions->groupBy('category')->map(function ($permissions, $category) {
             return [
                 'category' => $category,
-                'permissions' => $permissions->map(function($permission) {
+                'permissions' => $permissions->map(function ($permission) {
                     return [
                         'id' => $permission->id,
                         'name' => $permission->name,

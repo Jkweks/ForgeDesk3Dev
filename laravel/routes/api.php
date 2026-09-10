@@ -129,31 +129,43 @@ Route::prefix('v1')->group(function () {
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
     Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials']);
     Route::post('/fulfillment/material-check-csv', [MaterialCheckController::class, 'checkCsv']);
-    Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials']);
+    // Commit-to-job creates a live (active) reservation and moves inventory —
+    // unlike the read-only material checks above it must be authenticated and
+    // permission-gated.
+    Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials'])
+        ->middleware(['auth:sanctum', 'permission:jobs.manage-reservations']);
 
-    // Job Reservations
-    // IMPORTANT: Specific routes MUST come before parameterized routes like {id}
-    Route::get('/job-reservations', [JobReservationController::class, 'index']);
-    Route::post('/job-reservations/create-manual', [JobReservationController::class, 'createManual']);
-    Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct']);
-    Route::get('/job-reservations/search-products', [JobReservationController::class, 'searchProducts']);
-    Route::get('/job-reservations/status-labels', [JobReservationController::class, 'statusLabels']);
-    Route::get('/job-reservations/{id}', [JobReservationController::class, 'show']);
-    Route::put('/job-reservations/{id}', [JobReservationController::class, 'updateReservation']);
-    Route::post('/job-reservations/{id}/status', [JobReservationController::class, 'updateStatus']);
-    Route::post('/job-reservations/{id}/complete', [JobReservationController::class, 'complete']);
-    Route::post('/job-reservations/{id}/items', [JobReservationController::class, 'addItem']);
-    Route::put('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'updateItem']);
-    Route::post('/job-reservations/{id}/items/{itemId}/replace', [JobReservationController::class, 'replaceItem']);
-    Route::delete('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'removeItem']);
+    // Job Reservations — authenticated. Reads need jobs.view, writes need
+    // jobs.manage-reservations (the same mapping as /business-jobs/{id}/reservations).
+    // admin/manager/fabricator hold both, so their workflow is unchanged; this
+    // only closes the endpoints to anonymous callers, viewers and office staff.
+    // IMPORTANT: specific routes MUST come before parameterized routes like {id}.
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/job-reservations', [JobReservationController::class, 'index'])->middleware('permission:jobs.view');
+        Route::post('/job-reservations/create-manual', [JobReservationController::class, 'createManual'])->middleware('permission:jobs.manage-reservations');
+        Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/search-products', [JobReservationController::class, 'searchProducts'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/status-labels', [JobReservationController::class, 'statusLabels'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/{id}', [JobReservationController::class, 'show'])->middleware('permission:jobs.view');
+        Route::put('/job-reservations/{id}', [JobReservationController::class, 'updateReservation'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/status', [JobReservationController::class, 'updateStatus'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/complete', [JobReservationController::class, 'complete'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/items', [JobReservationController::class, 'addItem'])->middleware('permission:jobs.manage-reservations');
+        Route::put('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'updateItem'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/items/{itemId}/replace', [JobReservationController::class, 'replaceItem'])->middleware('permission:jobs.manage-reservations');
+        Route::delete('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'removeItem'])->middleware('permission:jobs.manage-reservations');
+    });
 
-    // EZ Estimate Management (called from admin web interface)
+    // EZ Estimate Management (admin web interface). Login required; upload is a
+    // file write and the debug endpoints dump parsed data.
     Route::get('/ez-estimate/test', [\App\Http\Controllers\Api\EzEstimateController::class, 'test']);
-    Route::get('/ez-estimate/debug', [\App\Http\Controllers\Api\EzEstimateController::class, 'debug']);
-    Route::get('/ez-estimate/test-pricing', [\App\Http\Controllers\Api\EzEstimateController::class, 'testPricing']);
-    Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
-    Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
-    Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/ez-estimate/debug', [\App\Http\Controllers\Api\EzEstimateController::class, 'debug']);
+        Route::get('/ez-estimate/test-pricing', [\App\Http\Controllers\Api\EzEstimateController::class, 'testPricing']);
+        Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
+        Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
+        Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
+    });
 });
 
 Route::middleware('auth:sanctum')->group(function () {

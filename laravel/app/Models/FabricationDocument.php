@@ -40,10 +40,11 @@ class FabricationDocument extends Model
      */
     public function getFileUrlAttribute(): ?string
     {
-        if (!$this->file_path) {
+        if (! $this->file_path) {
             return null;
         }
-        return '/storage/' . $this->file_path;
+
+        return '/storage/'.$this->file_path;
     }
 
     /**
@@ -51,14 +52,15 @@ class FabricationDocument extends Model
      */
     public function getFileAttribute(): ?array
     {
-        if (!$this->file_name) {
+        if (! $this->file_name) {
             return null;
         }
+
         return [
             'name' => $this->file_name,
             'size' => $this->file_size,
             'mime' => $this->file_mime,
-            'url'  => $this->file_url,
+            'url' => $this->file_url,
         ];
     }
 

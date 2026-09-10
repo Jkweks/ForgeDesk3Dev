@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
-use App\Models\JobReservationItem;
-use App\Models\CommittedInventory;
 
 class Product extends Model
 {
@@ -45,9 +43,9 @@ class Product extends Model
         'dimension_depth' => 'decimal:2',
         'is_active' => 'boolean',
         'is_discontinued' => 'boolean',
-        'nonsof'     => 'boolean',
-        'cp_part'    => 'boolean',
-        'is_shared'  => 'boolean',
+        'nonsof' => 'boolean',
+        'cp_part' => 'boolean',
+        'is_shared' => 'boolean',
         'configurator_available' => 'boolean',
         'tool_life_max' => 'decimal:2',
         'compatible_machine_types' => 'array',
@@ -70,8 +68,8 @@ class Product extends Model
         'C2' => 'Clear Anodized',
         'DB' => 'Dark Bronze Anodized',
         'BL' => 'Black Anodized',
-        '0R' => 'Mill/Unfinished'
-        ];
+        '0R' => 'Mill/Unfinished',
+    ];
 
     // UOM configuration
     public static $unitOfMeasures = [
@@ -260,7 +258,7 @@ class Product extends Model
     public function activeReservationItems()
     {
         return $this->reservationItems()
-            ->whereHas('reservation', function($query) {
+            ->whereHas('reservation', function ($query) {
                 $query->whereIn('status', ['active', 'in_progress', 'on_hold']);
             });
     }
@@ -310,10 +308,10 @@ class Product extends Model
 
     public function updateStatus()
     {
-        $available    = $this->quantity_available;
+        $available = $this->quantity_available;
         $reorderPoint = $this->reorder_point ?? 0;
-        $safetyStock  = $this->safety_stock ?? 0;
-        $onOrder      = $this->on_order_qty ?? 0;
+        $safetyStock = $this->safety_stock ?? 0;
+        $onOrder = $this->on_order_qty ?? 0;
 
         if ($available <= 0) {
             // Zero or overcommitted — critical if a reorder point is set, otherwise out_of_stock
@@ -372,8 +370,9 @@ class Product extends Model
     public static function generateSku($partNumber, $finish = null)
     {
         if ($finish) {
-            return strtoupper($partNumber . '-' . $finish);
+            return strtoupper($partNumber.'-'.$finish);
         }
+
         return strtoupper($partNumber);
     }
 
@@ -392,7 +391,9 @@ class Product extends Model
      */
     public function getSuggestedOrderQtyAttribute()
     {
-        if (!$this->reorder_point) return 0;
+        if (! $this->reorder_point) {
+            return 0;
+        }
 
         $onOrder = $this->on_order_qty ?? 0;
 
@@ -432,6 +433,7 @@ class Product extends Model
         if ($this->average_daily_use && $this->average_daily_use > 0) {
             return round($this->quantity_available / $this->average_daily_use, 1);
         }
+
         return null;
     }
 
@@ -461,12 +463,12 @@ class Product extends Model
      * Quantities for these are stored as negative values in the DB.
      *
      * @param  int|array|null  $productIds  Specific product(s) to update, or null for all.
-     * @param  string          $startDate   Earliest transaction_date to include.
+     * @param  string  $startDate  Earliest transaction_date to include.
      */
     public static function recalculateDailyUse($productIds = null, string $startDate = '2026-01-01'): void
     {
-        $start      = \Carbon\Carbon::parse($startDate)->startOfDay();
-        $today      = \Carbon\Carbon::today();
+        $start = \Carbon\Carbon::parse($startDate)->startOfDay();
+        $today = \Carbon\Carbon::today();
         $daysElapsed = max(1, $start->diffInDays($today));
 
         $outboundTypes = ['issue', 'shipment', 'job_issue', 'fulfillment'];
@@ -515,6 +517,7 @@ class Product extends Model
         if ($this->pack_size && $this->pack_size > 0) {
             return $purchaseQty * $this->pack_size;
         }
+
         return $purchaseQty;
     }
 
@@ -526,6 +529,7 @@ class Product extends Model
         if ($this->pack_size && $this->pack_size > 0) {
             return $stockQty / $this->pack_size;
         }
+
         return $stockQty;
     }
 
@@ -551,9 +555,10 @@ class Product extends Model
      */
     public function eachesToFullPacks($eachesQty)
     {
-        if (!$this->hasPackSize()) {
+        if (! $this->hasPackSize()) {
             return $eachesQty;
         }
+
         return (int) floor($eachesQty / $this->pack_size);
     }
 
@@ -563,9 +568,10 @@ class Product extends Model
      */
     public function eachesToPacksNeeded($eachesQty)
     {
-        if (!$this->hasPackSize()) {
+        if (! $this->hasPackSize()) {
             return $eachesQty;
         }
+
         return (int) ceil($eachesQty / $this->pack_size);
     }
 
@@ -574,9 +580,10 @@ class Product extends Model
      */
     public function packsToEaches($packsQty)
     {
-        if (!$this->hasPackSize()) {
+        if (! $this->hasPackSize()) {
             return $packsQty;
         }
+
         return $packsQty * $this->pack_size;
     }
 
@@ -604,6 +611,7 @@ class Product extends Model
     public function getCommittedPacksFromReservationsAttribute()
     {
         $totalEaches = $this->activeReservationItems()->sum('committed_qty');
+
         return $this->eachesToPacksNeeded($totalEaches);
     }
 
@@ -614,6 +622,7 @@ class Product extends Model
     {
         $onHandPacks = $this->quantity_on_hand_packs;
         $committedPacks = $this->committed_packs_from_reservations;
+
         return (int) floor($onHandPacks - $committedPacks);
     }
 
@@ -626,6 +635,7 @@ class Product extends Model
         if ($this->hasPackSize()) {
             return $this->purchase_uom ?: 'packs';
         }
+
         return $this->stock_uom ?: 'EA';
     }
 
@@ -643,10 +653,11 @@ class Product extends Model
      */
     public function getPhotoUrlAttribute(): ?string
     {
-        if (!$this->photo_path) {
+        if (! $this->photo_path) {
             return null;
         }
-        return url('storage/' . $this->photo_path);
+
+        return url('storage/'.$this->photo_path);
     }
 
     /**
@@ -654,11 +665,12 @@ class Product extends Model
      */
     public function needsReorder()
     {
-        if (!$this->reorder_point) {
+        if (! $this->reorder_point) {
             return false;
         }
 
         $availableWithOnOrder = $this->quantity_available + $this->on_order_qty;
+
         return $availableWithOnOrder <= $this->reorder_point;
     }
 
@@ -670,6 +682,7 @@ class Product extends Model
         if ($this->finish && isset(self::$finishCodes[$this->finish])) {
             return self::$finishCodes[$this->finish];
         }
+
         return $this->finish;
     }
 
@@ -681,6 +694,7 @@ class Product extends Model
         if ($this->unit_of_measure && isset(self::$unitOfMeasures[$this->unit_of_measure])) {
             return self::$unitOfMeasures[$this->unit_of_measure];
         }
+
         return $this->unit_of_measure;
     }
 
@@ -692,6 +706,7 @@ class Product extends Model
         if ($this->purchase_uom && isset(self::$unitOfMeasures[$this->purchase_uom])) {
             return self::$unitOfMeasures[$this->purchase_uom];
         }
+
         return $this->purchase_uom;
     }
 
@@ -703,6 +718,7 @@ class Product extends Model
         if ($this->stock_uom && isset(self::$unitOfMeasures[$this->stock_uom])) {
             return self::$unitOfMeasures[$this->stock_uom];
         }
+
         return $this->stock_uom;
     }
 
@@ -738,6 +754,7 @@ class Product extends Model
         if ($this->tool_type && isset(self::$toolTypes[$this->tool_type])) {
             return self::$toolTypes[$this->tool_type];
         }
+
         return null;
     }
 
@@ -749,6 +766,7 @@ class Product extends Model
         if ($this->tool_life_unit && isset(self::$toolLifeUnits[$this->tool_life_unit])) {
             return self::$toolLifeUnits[$this->tool_life_unit];
         }
+
         return $this->tool_life_unit;
     }
 
@@ -757,9 +775,10 @@ class Product extends Model
      */
     public function isCompatibleWithMachine($machineTypeId)
     {
-        if (!$this->isTool() || !$this->compatible_machine_types) {
+        if (! $this->isTool() || ! $this->compatible_machine_types) {
             return false;
         }
+
         return in_array($machineTypeId, $this->compatible_machine_types);
     }
 
@@ -768,13 +787,13 @@ class Product extends Model
      */
     public function getFormattedSpecificationsAttribute()
     {
-        if (!$this->tool_specifications) {
+        if (! $this->tool_specifications) {
             return null;
         }
 
         $specs = [];
         foreach ($this->tool_specifications as $key => $value) {
-            $specs[] = ucfirst(str_replace('_', ' ', $key)) . ': ' . $value;
+            $specs[] = ucfirst(str_replace('_', ' ', $key)).': '.$value;
         }
 
         return implode(' | ', $specs);

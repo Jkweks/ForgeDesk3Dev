@@ -18,7 +18,7 @@ class FdWoElevation extends Model
     protected $casts = [
         'date_requested' => 'date',
         'date_completed' => 'date',
-        'joint_qty'      => 'integer',
+        'joint_qty' => 'integer',
     ];
 
     /**
@@ -55,8 +55,8 @@ class FdWoElevation extends Model
             : null;
 
         return [
-            'computed'  => $computed,
-            'rate'      => $rate,
+            'computed' => $computed,
+            'rate' => $rate,
             'effective' => $computed,
         ];
     }

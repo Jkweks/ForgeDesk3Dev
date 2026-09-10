@@ -8,9 +8,9 @@ use App\Models\JobReservation;
 use App\Models\JobReservationItem;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
 
 class BusinessJobController extends Controller
 {
@@ -32,8 +32,8 @@ class BusinessJobController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('job_number', 'like', "%{$search}%")
-                      ->orWhere('job_name', 'like', "%{$search}%")
-                      ->orWhere('customer_name', 'like', "%{$search}%");
+                        ->orWhere('job_name', 'like', "%{$search}%")
+                        ->orWhere('customer_name', 'like', "%{$search}%");
                 });
             }
 
@@ -51,6 +51,8 @@ class BusinessJobController extends Controller
                         'customer_name' => $job->customer_name,
                         'project_manager' => $job->project_manager,
                         'project_manager_id' => $job->project_manager_id,
+                        'superintendent' => $job->superintendent,
+                        'superintendent_id' => $job->superintendent_id,
                         'division' => substr($job->job_number ?? '', 0, 1) ?: '—',
                         'status' => $job->status,
                         'status_label' => $job->status_label,
@@ -92,9 +94,17 @@ class BusinessJobController extends Controller
         try {
             $job = BusinessJob::with([
                 'createdBy',
-                'doorFrameConfigurations',
                 'jobReservations',
             ])->findOrFail($id);
+
+            // The door/frame configurator is an optional module; don't let a
+            // job fetch 500 just because those tables aren't present.
+            $configCount = 0;
+            try {
+                $configCount = $job->doorFrameConfigurations()->count();
+            } catch (\Throwable $e) {
+                Log::warning('doorFrameConfigurations count skipped', ['job_id' => $id, 'message' => $e->getMessage()]);
+            }
 
             return response()->json([
                 'job' => [
@@ -104,6 +114,8 @@ class BusinessJobController extends Controller
                     'customer_name' => $job->customer_name,
                     'project_manager' => $job->project_manager,
                     'project_manager_id' => $job->project_manager_id,
+                    'superintendent' => $job->superintendent,
+                    'superintendent_id' => $job->superintendent_id,
                     'site_address' => $job->site_address,
                     'contact_name' => $job->contact_name,
                     'contact_phone' => $job->contact_phone,
@@ -118,7 +130,7 @@ class BusinessJobController extends Controller
                         'id' => $job->createdBy->id,
                         'name' => $job->createdBy->name,
                     ] : null,
-                    'configurations_count' => $job->doorFrameConfigurations->count(),
+                    'configurations_count' => $configCount,
                     'reservations_count' => $job->jobReservations->count(),
                     'created_at' => $job->created_at?->format('Y-m-d H:i:s'),
                     'updated_at' => $job->updated_at?->format('Y-m-d H:i:s'),
@@ -158,6 +170,7 @@ class BusinessJobController extends Controller
                 'target_completion_date' => 'nullable|date',
                 'notes' => 'nullable|string',
                 'project_manager_id' => 'nullable|integer|exists:users,id',
+                'superintendent_id' => 'nullable|integer|exists:users,id',
             ]);
 
             if ($validator->fails()) {
@@ -168,6 +181,7 @@ class BusinessJobController extends Controller
             }
 
             $pm = \App\Models\User::resolvePersonField($request->project_manager_id, $request->project_manager);
+            $super = \App\Models\User::resolvePersonField($request->superintendent_id, $request->superintendent);
 
             $job = BusinessJob::create([
                 'job_number' => $request->job_number,
@@ -175,6 +189,8 @@ class BusinessJobController extends Controller
                 'customer_name' => $request->customer_name,
                 'project_manager' => $pm['label'],
                 'project_manager_id' => $pm['id'],
+                'superintendent' => $super['label'],
+                'superintendent_id' => $super['id'],
                 'site_address' => $request->site_address,
                 'contact_name' => $request->contact_name,
                 'contact_phone' => $request->contact_phone,
@@ -198,6 +214,11 @@ class BusinessJobController extends Controller
                     'id' => $job->id,
                     'job_number' => $job->job_number,
                     'job_name' => $job->job_name,
+                    'customer_name' => $job->customer_name,
+                    'project_manager' => $job->project_manager,
+                    'project_manager_id' => $job->project_manager_id,
+                    'superintendent' => $job->superintendent,
+                    'superintendent_id' => $job->superintendent_id,
                     'status' => $job->status,
                 ],
             ], 201);
@@ -223,7 +244,7 @@ class BusinessJobController extends Controller
             $job = BusinessJob::findOrFail($id);
 
             $validator = Validator::make($request->all(), [
-                'job_number' => 'sometimes|required|string|max:100|unique:business_jobs,job_number,' . $id,
+                'job_number' => 'sometimes|required|string|max:100|unique:business_jobs,job_number,'.$id,
                 'job_name' => 'sometimes|required|string|max:255',
                 'customer_name' => 'nullable|string|max:255',
                 'site_address' => 'nullable|string|max:500',
@@ -236,6 +257,7 @@ class BusinessJobController extends Controller
                 'actual_completion_date' => 'nullable|date',
                 'notes' => 'nullable|string',
                 'project_manager_id' => 'sometimes|nullable|integer|exists:users,id',
+                'superintendent_id' => 'sometimes|nullable|integer|exists:users,id',
             ]);
 
             if ($validator->fails()) {
@@ -280,6 +302,18 @@ class BusinessJobController extends Controller
                 $pm = \App\Models\User::resolvePersonField(null, $request->input('project_manager'));
                 $job->project_manager = $pm['label'];
                 $job->project_manager_id = $pm['id'];
+            }
+
+            // Superintendent: same rule — an explicit `superintendent_id` (even
+            // null) wins; a bare `superintendent` string is the legacy path.
+            if ($request->has('superintendent_id')) {
+                $super = \App\Models\User::resolvePersonField($request->input('superintendent_id'), $request->input('superintendent'));
+                $job->superintendent = $super['label'];
+                $job->superintendent_id = $super['id'];
+            } elseif ($request->has('superintendent')) {
+                $super = \App\Models\User::resolvePersonField(null, $request->input('superintendent'));
+                $job->superintendent = $super['label'];
+                $job->superintendent_id = $super['id'];
             }
 
             $renamedReservations = 0;
@@ -361,6 +395,15 @@ class BusinessJobController extends Controller
             return true;
         }
 
+        if ($request->has('superintendent_id')
+            && (int) $request->input('superintendent_id') !== (int) $job->superintendent_id) {
+            return true;
+        }
+        if ($request->has('superintendent') && ! $request->has('superintendent_id')
+            && trim((string) $request->input('superintendent')) !== trim((string) $job->superintendent)) {
+            return true;
+        }
+
         return false;
     }
 
@@ -372,11 +415,16 @@ class BusinessJobController extends Controller
         try {
             $job = BusinessJob::findOrFail($id);
 
-            // Check if job has configurations
-            if ($job->doorFrameConfigurations()->count() > 0) {
+            // Check if job has configurations (optional module — tolerate absence).
+            try {
+                $configCount = $job->doorFrameConfigurations()->count();
+            } catch (\Throwable $e) {
+                $configCount = 0;
+            }
+            if ($configCount > 0) {
                 return response()->json([
                     'error' => 'Cannot delete job with existing configurations',
-                    'message' => 'This job has ' . $job->doorFrameConfigurations()->count() . ' configuration(s). Please delete them first.',
+                    'message' => "This job has {$configCount} configuration(s). Please delete them first.",
                 ], 422);
             }
 
@@ -384,7 +432,7 @@ class BusinessJobController extends Controller
             if ($job->jobReservations()->count() > 0) {
                 return response()->json([
                     'error' => 'Cannot delete job with existing reservations',
-                    'message' => 'This job has ' . $job->jobReservations()->count() . ' reservation(s). Please remove them first.',
+                    'message' => 'This job has '.$job->jobReservations()->count().' reservation(s). Please remove them first.',
                 ], 422);
             }
 
@@ -751,27 +799,27 @@ class BusinessJobController extends Controller
         $job = BusinessJob::findOrFail($jobId);
         $workOrders = $job->workOrders()
             ->with(['steps.completedBy'])
-            ->withCount(['elevations', 'elevations as elevations_complete' => fn($q) => $q->whereNotNull('date_completed')])
+            ->withCount(['elevations', 'elevations as elevations_complete' => fn ($q) => $q->whereNotNull('date_completed')])
             ->get()
-            ->map(fn($wo) => [
-                'id'                  => $wo->id,
-                'release_number'      => $wo->release_number,
-                'release_code'        => $wo->release_code,
-                'release_label'       => "{$job->job_number}-{$wo->release_token}",
-                'date_issued'         => $wo->date_issued?->format('Y-m-d'),
-                'material_delivery'   => $wo->material_delivery,
-                'notes'               => $wo->notes,
-                'archived'            => $wo->archived,
-                'elevation_count'     => $wo->elevations_count ?? 0,
+            ->map(fn ($wo) => [
+                'id' => $wo->id,
+                'release_number' => $wo->release_number,
+                'release_code' => $wo->release_code,
+                'release_label' => "{$job->job_number}-{$wo->release_token}",
+                'date_issued' => $wo->date_issued?->format('Y-m-d'),
+                'material_delivery' => $wo->material_delivery,
+                'notes' => $wo->notes,
+                'archived' => $wo->archived,
+                'elevation_count' => $wo->elevations_count ?? 0,
                 'elevations_complete' => $wo->elevations_complete ?? 0,
-                'created_at'          => $wo->created_at->toIso8601String(),
-                'steps'               => $wo->steps->map(fn($s) => [
-                    'id'                => $s->id,
-                    'name'              => $s->name,
-                    'sort_order'        => $s->sort_order,
-                    'status'            => $s->status,
+                'created_at' => $wo->created_at->toIso8601String(),
+                'steps' => $wo->steps->map(fn ($s) => [
+                    'id' => $s->id,
+                    'name' => $s->name,
+                    'sort_order' => $s->sort_order,
+                    'status' => $s->status,
                     'completed_by_name' => $s->completedBy?->name,
-                    'completed_at'      => $s->completed_at?->toIso8601String(),
+                    'completed_at' => $s->completed_at?->toIso8601String(),
                 ])->values(),
             ]);
 
@@ -790,32 +838,33 @@ class BusinessJobController extends Controller
                 ->where('business_job_id', $jobId)
                 ->orderBy('transaction_date', 'desc')
                 ->get()
-                ->map(fn($t) => [
-                    'id'               => $t->id,
-                    'type'             => $t->type,
-                    'type_label'       => ucwords(str_replace('_', ' ', $t->type)),
-                    'quantity'         => $t->quantity,
-                    'quantity_before'  => $t->quantity_before,
-                    'quantity_after'   => $t->quantity_after,
-                    'notes'            => $t->notes,
+                ->map(fn ($t) => [
+                    'id' => $t->id,
+                    'type' => $t->type,
+                    'type_label' => ucwords(str_replace('_', ' ', $t->type)),
+                    'quantity' => $t->quantity,
+                    'quantity_before' => $t->quantity_before,
+                    'quantity_after' => $t->quantity_after,
+                    'notes' => $t->notes,
                     'reference_number' => $t->reference_number,
                     'transaction_date' => $t->transaction_date->format('Y-m-d H:i'),
-                    'product'          => $t->product ? [
-                        'id'          => $t->product->id,
-                        'sku'         => $t->product->sku,
+                    'product' => $t->product ? [
+                        'id' => $t->product->id,
+                        'sku' => $t->product->sku,
                         'part_number' => $t->product->part_number,
-                        'finish'      => $t->product->finish,
+                        'finish' => $t->product->finish,
                         'description' => $t->product->description,
                     ] : null,
                     'user_name' => $t->user?->name,
                 ]);
 
             return response()->json([
-                'job'          => ['id' => $job->id, 'job_number' => $job->job_number],
+                'job' => ['id' => $job->id, 'job_number' => $job->job_number],
                 'transactions' => $transactions,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to fetch job transactions', ['job_id' => $jobId, 'message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to fetch transactions', 'message' => $e->getMessage()], 500);
         }
     }
@@ -829,10 +878,10 @@ class BusinessJobController extends Controller
             $job = BusinessJob::findOrFail($jobId);
 
             $validator = Validator::make($request->all(), [
-                'product_id'  => 'required|integer|exists:products,id',
-                'type'        => 'required|in:job_issue,receipt,adjustment,job_material_transfer',
-                'quantity'    => 'required|integer|min:1',
-                'notes'       => 'nullable|string|max:500',
+                'product_id' => 'required|integer|exists:products,id',
+                'type' => 'required|in:job_issue,receipt,adjustment,job_material_transfer',
+                'quantity' => 'required|integer|min:1',
+                'notes' => 'nullable|string|max:500',
             ]);
 
             if ($validator->fails()) {
@@ -848,22 +897,22 @@ class BusinessJobController extends Controller
             }
 
             $qtyBefore = $product->quantity_on_hand;
-            $qtyAfter  = $qtyBefore + $qty;
+            $qtyAfter = $qtyBefore + $qty;
 
             DB::beginTransaction();
 
             $transaction = \App\Models\InventoryTransaction::create([
-                'product_id'       => $product->id,
-                'type'             => $request->type,
-                'quantity'         => $qty,
-                'quantity_before'  => $qtyBefore,
-                'quantity_after'   => $qtyAfter,
-                'business_job_id'  => $job->id,
+                'product_id' => $product->id,
+                'type' => $request->type,
+                'quantity' => $qty,
+                'quantity_before' => $qtyBefore,
+                'quantity_after' => $qtyAfter,
+                'business_job_id' => $job->id,
                 'reference_number' => $job->job_number,
-                'reference_type'   => 'business_job',
-                'reference_id'     => $job->id,
-                'notes'            => $request->notes,
-                'user_id'          => auth()->id(),
+                'reference_type' => 'business_job',
+                'reference_id' => $job->id,
+                'notes' => $request->notes,
+                'user_id' => auth()->id(),
                 'transaction_date' => now(),
             ]);
 
@@ -881,10 +930,10 @@ class BusinessJobController extends Controller
                 // drifting from a direct quantity_on_hand write.
                 $unassigned = \App\Models\StorageLocation::where('code', 'UNASSIGNED')->first();
                 \App\Models\InventoryLocation::create([
-                    'product_id'          => $product->id,
+                    'product_id' => $product->id,
                     'storage_location_id' => $unassigned?->id ?? null,
-                    'quantity'            => max(0, $qty),
-                    'is_primary'          => true,
+                    'quantity' => max(0, $qty),
+                    'is_primary' => true,
                 ]);
             }
             $product->recalculateQuantitiesFromLocations();
@@ -892,24 +941,25 @@ class BusinessJobController extends Controller
             DB::commit();
 
             Log::info('Job transaction created', [
-                'job_id'         => $job->id,
+                'job_id' => $job->id,
                 'transaction_id' => $transaction->id,
-                'product_id'     => $product->id,
-                'type'           => $request->type,
-                'quantity'       => $qty,
+                'product_id' => $product->id,
+                'type' => $request->type,
+                'quantity' => $qty,
             ]);
 
             return response()->json([
-                'message'     => 'Transaction created successfully',
+                'message' => 'Transaction created successfully',
                 'transaction' => [
-                    'id'       => $transaction->id,
-                    'type'     => $transaction->type,
+                    'id' => $transaction->id,
+                    'type' => $transaction->type,
                     'quantity' => $transaction->quantity,
                 ],
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to create job transaction', ['job_id' => $jobId, 'message' => $e->getMessage()]);
+
             return response()->json(['error' => 'Failed to create transaction', 'message' => $e->getMessage()], 500);
         }
     }

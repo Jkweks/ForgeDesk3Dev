@@ -30,9 +30,9 @@ class UserInvitationTest extends TestCase
     {
         return $this->postJson('/api/v1/users', array_merge([
             'first_name' => 'Pat',
-            'last_name'  => 'Doe',
-            'email'      => 'pat' . fake()->unique()->numberBetween(1, 99999) . '@example.com',
-            'role'       => 'office_staff',
+            'last_name' => 'Doe',
+            'email' => 'pat'.fake()->unique()->numberBetween(1, 99999).'@example.com',
+            'role' => 'office_staff',
         ], $overrides))->json();
     }
 

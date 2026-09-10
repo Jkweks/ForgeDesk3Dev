@@ -5,16 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DoorFrameConfiguration;
 use App\Models\DoorFrameConfigurationDoor;
-use App\Models\DoorFrameOpeningSpec;
+use App\Models\DoorFrameDoorConfig;
 use App\Models\DoorFrameFrameConfig;
 use App\Models\DoorFrameFramePart;
-use App\Models\DoorFrameDoorConfig;
-use App\Models\DoorFrameDoorPart;
-use App\Models\Product;
+use App\Models\DoorFrameOpeningSpec;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
 
 class DoorFrameConfigurationController extends Controller
 {
@@ -189,7 +187,7 @@ class DoorFrameConfigurationController extends Controller
         try {
             $config = DoorFrameConfiguration::findOrFail($id);
 
-            if (!$config->canEdit()) {
+            if (! $config->canEdit()) {
                 return response()->json([
                     'error' => 'Cannot edit configuration',
                     'message' => 'Configuration is not in editable status',
@@ -259,14 +257,14 @@ class DoorFrameConfigurationController extends Controller
         try {
             $config = DoorFrameConfiguration::findOrFail($id);
 
-            if (!$config->includesFrame()) {
+            if (! $config->includesFrame()) {
                 return response()->json([
                     'error' => 'Invalid operation',
                     'message' => 'Job scope does not include frame',
                 ], 422);
             }
 
-            if (!$config->canEdit()) {
+            if (! $config->canEdit()) {
                 return response()->json([
                     'error' => 'Cannot edit configuration',
                     'message' => 'Configuration is not in editable status',
@@ -332,14 +330,14 @@ class DoorFrameConfigurationController extends Controller
         try {
             $config = DoorFrameConfiguration::with('frameConfig')->findOrFail($id);
 
-            if (!$config->frameConfig) {
+            if (! $config->frameConfig) {
                 return response()->json([
                     'error' => 'Frame configuration not found',
                     'message' => 'Please configure frame settings first',
                 ], 422);
             }
 
-            if (!$config->canEdit()) {
+            if (! $config->canEdit()) {
                 return response()->json([
                     'error' => 'Cannot edit configuration',
                     'message' => 'Configuration is not in editable status',
@@ -385,7 +383,7 @@ class DoorFrameConfigurationController extends Controller
 
             return response()->json([
                 'message' => 'Frame parts saved successfully',
-                'parts' => $config->frameConfig->parts->map(fn($p) => $this->formatPart($p)),
+                'parts' => $config->frameConfig->parts->map(fn ($p) => $this->formatPart($p)),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -410,14 +408,14 @@ class DoorFrameConfigurationController extends Controller
         try {
             $config = DoorFrameConfiguration::with('openingSpecs')->findOrFail($id);
 
-            if (!$config->includesDoor()) {
+            if (! $config->includesDoor()) {
                 return response()->json([
                     'error' => 'Invalid operation',
                     'message' => 'Job scope does not include door',
                 ], 422);
             }
 
-            if (!$config->canEdit()) {
+            if (! $config->canEdit()) {
                 return response()->json([
                     'error' => 'Cannot edit configuration',
                     'message' => 'Configuration is not in editable status',
@@ -463,7 +461,7 @@ class DoorFrameConfigurationController extends Controller
 
             return response()->json([
                 'message' => 'Door configurations saved successfully',
-                'door_configs' => $config->doorConfigs->map(fn($d) => $this->formatDoorConfig($d)),
+                'door_configs' => $config->doorConfigs->map(fn ($d) => $this->formatDoorConfig($d)),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -500,7 +498,7 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $errors = $config->getValidationErrors();
-            if (!empty($errors)) {
+            if (! empty($errors)) {
                 return response()->json([
                     'error' => 'Configuration incomplete',
                     'message' => 'Please complete all required sections',
@@ -556,10 +554,10 @@ class DoorFrameConfigurationController extends Controller
             'status' => $config->status,
             'status_label' => $config->status_label,
             'notes' => $config->notes,
-            'door_tags' => $config->doors->map(fn($d) => $d->door_tag),
+            'door_tags' => $config->doors->map(fn ($d) => $d->door_tag),
             'opening_specs' => $config->openingSpecs ? $this->formatOpeningSpecs($config->openingSpecs) : null,
             'frame_config' => $config->frameConfig ? $this->formatFrameConfig($config->frameConfig) : null,
-            'door_configs' => $config->doorConfigs->map(fn($d) => $this->formatDoorConfig($d)),
+            'door_configs' => $config->doorConfigs->map(fn ($d) => $this->formatDoorConfig($d)),
             'is_complete' => $config->isComplete(),
             'can_edit' => $config->canEdit(),
             'validation_errors' => $config->getValidationErrors(),
@@ -606,7 +604,7 @@ class DoorFrameConfigurationController extends Controller
             'transom_glazing' => $frameConfig->transom_glazing,
             'transom_glazing_label' => $frameConfig->transom_glazing_label,
             'total_frame_height' => $frameConfig->total_frame_height,
-            'parts' => $frameConfig->parts->map(fn($p) => $this->formatPart($p)),
+            'parts' => $frameConfig->parts->map(fn ($p) => $this->formatPart($p)),
         ];
     }
 
@@ -633,7 +631,7 @@ class DoorFrameConfigurationController extends Controller
             'glazing_label' => $doorConfig->glazing_label,
             'preset' => $doorConfig->preset,
             'preset_label' => $doorConfig->preset_label,
-            'parts' => $doorConfig->parts->map(fn($p) => $this->formatPart($p)),
+            'parts' => $doorConfig->parts->map(fn ($p) => $this->formatPart($p)),
         ];
     }
 

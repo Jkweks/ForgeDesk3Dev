@@ -20,7 +20,8 @@ use Illuminate\Support\Collection;
 class StageGateService
 {
     public const TERMINAL = ['complete', 'not_required'];
-    public const ACTIVE   = ['in_progress', 'complete'];
+
+    public const ACTIVE = ['in_progress', 'complete'];
 
     public function blockingStageFor(FdWoStage $stage): ?FdWoStage
     {
@@ -128,6 +129,7 @@ class StageGateService
         if ($to === 'complete') {
             return true;
         }
+
         return ! in_array($from, self::ACTIVE, true);
     }
 

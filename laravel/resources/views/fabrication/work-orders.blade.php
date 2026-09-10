@@ -11,10 +11,19 @@
 .pip-not_required { background: var(--tblr-blue-lt, #e9f0fb); border: 1px solid var(--tblr-blue, #206bc4); }
 .pip-on_hold      { background: var(--tblr-orange-lt, #fff4e6); border: 1px solid var(--tblr-orange, #f76707); }
 .pip-locked       { box-shadow: 0 0 0 2px var(--tblr-danger, #d63939); opacity: .55; }
-.wo-offcanvas    { width: 700px !important; }
+.wo-offcanvas    { width: min(920px, 96vw) !important; }
 .elev-row td     { vertical-align: middle; }
 .wo-detail-header { background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
 .card.bg-light, table.bg-light { background: var(--tblr-bg-surface-secondary) !important; }
+
+/* WO detail panel — consistent section rhythm + tabbed body */
+.wo-block        { padding: 1rem 1.25rem; border-bottom: 1px solid var(--tblr-border-color, #e6e7e9); }
+.wo-block:last-child { border-bottom: 0; }
+.wo-block-head   { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; min-height: 1.75rem; }
+.wo-block-head > h6 { margin: 0; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; color: var(--tblr-secondary, #667382); }
+#wo-detail .nav-tabs { padding: 0 1rem; background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
+#wo-detail .tab-pane { padding-top: .25rem; }
+#wo-detail .subheader { margin-bottom: .15rem; }
 @endsection
 
 @section('content')
@@ -122,8 +131,11 @@
      Detail Offcanvas
      ============================================================ -->
 <div class="offcanvas offcanvas-end wo-offcanvas" tabindex="-1" id="wo-detail">
-  <div class="offcanvas-header border-bottom">
-    <h5 class="offcanvas-title" id="wo-detail-title">Work Order</h5>
+  <div class="offcanvas-header border-bottom align-items-start">
+    <div>
+      <h5 class="offcanvas-title mb-0" id="wo-detail-title">Work Order</h5>
+      <div class="text-muted small" id="wo-detail-subtitle"></div>
+    </div>
     <div class="ms-auto d-flex gap-2">
       <button class="btn btn-sm btn-ghost-warning" onclick="archiveCurrentWO()" id="btn-archive-wo" title="Archive">
         <i class="ti ti-archive"></i>
@@ -133,162 +145,198 @@
       </button>
     </div>
   </div>
-  <div class="offcanvas-body p-0">
+  <div class="offcanvas-body p-0 d-flex flex-column">
 
-    <!-- WO Header -->
-    <div class="p-3 border-bottom wo-detail-header">
-      <div class="d-flex justify-content-end mb-1">
-        <button class="btn btn-sm btn-ghost-primary" onclick="openEditJobFromWO()" data-permission="jobs.edit-core">
-          <i class="ti ti-pencil me-1"></i>Edit Job
-        </button>
-      </div>
-
-      <!-- WO lifecycle status -->
-      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-        <span class="subheader">Status</span>
-        <select class="form-select form-select-sm" id="d-wo-status" style="width:130px" onchange="onWoStatusSelect(this.value)">
+    <!-- Status strip — always visible -->
+    <div class="wo-detail-header px-3 py-2 border-bottom">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="subheader mb-0">Status</span>
+        <select class="form-select form-select-sm" id="d-wo-status" style="width:140px" onchange="onWoStatusSelect(this.value)">
           <option value="active">Active</option>
           <option value="on_hold">On Hold</option>
           <option value="complete">Complete</option>
         </select>
         <span id="d-wo-status-extra" class="text-muted small"></span>
-        <button class="btn btn-sm btn-ghost-primary ms-auto" id="d-wo-send-email-btn" style="display:none"
-          onclick="openWoCompletionEmail()"><i class="ti ti-mail me-1"></i>Send Completion Email</button>
-        <button class="btn btn-sm btn-ghost-secondary" id="d-wo-status-log-btn" style="display:none"
-          onclick="toggleWoStatusLog()" title="Status history"><i class="ti ti-history"></i></button>
-      </div>
-      <div id="d-wo-status-log" class="mb-2 small border rounded p-2" style="display:none;max-height:170px;overflow:auto"></div>
-      <div class="row g-3">
-        <div class="col-6 col-md-3">
-          <div class="subheader">Job</div>
-          <div class="fw-bold" id="d-job-number">—</div>
-        </div>
-        <div class="col-6 col-md-5">
-          <div class="subheader">Job Name</div>
-          <div id="d-job-name">—</div>
-        </div>
-        <div class="col-6 col-md-2">
-          <div class="subheader">PM</div>
-          <div id="d-pm">—</div>
-        </div>
-        <div class="col-6 col-md-2">
-          <div class="subheader">Division</div>
-          <div id="d-division">—</div>
+        <div class="ms-auto d-flex gap-2">
+          <button class="btn btn-sm btn-ghost-primary" id="d-wo-send-email-btn" style="display:none"
+            onclick="openWoCompletionEmail()"><i class="ti ti-mail me-1"></i>Send Completion Email</button>
+          <button class="btn btn-sm btn-ghost-secondary" id="d-wo-status-log-btn" style="display:none"
+            onclick="toggleWoStatusLog()" title="Status history"><i class="ti ti-history"></i></button>
         </div>
       </div>
-      <div class="row g-3 mt-1">
-        <div class="col-auto">
-          <div class="subheader">Release #</div>
-          <input type="text" class="form-control form-control-sm" id="d-release-code" style="width:130px"
-            maxlength="50" onchange="saveReleaseCode(this.value)">
-          <div class="form-hint mt-1" id="d-release-code-hint"></div>
-        </div>
-        <div class="col-auto">
-          <div class="subheader">Date Issued</div>
-          <input type="date" class="form-control form-control-sm" id="d-date-issued" style="width:150px"
-            onchange="patchWO('date_issued', this.value)">
-        </div>
-        <div class="col-auto">
-          <div class="subheader">Due Date</div>
-          <div id="d-due-date" style="min-width:150px">—</div>
-          <div class="form-hint mt-1">Auto-set from the earliest elevation date</div>
-        </div>
-        <div class="col-auto">
-          <div class="subheader">Priority</div>
-          <input type="number" class="form-control form-control-sm" id="d-priority" style="width:80px"
-            min="1" placeholder="—" onchange="patchWO('priority', this.value ? parseInt(this.value) : null)">
-          <div class="form-hint mt-1" id="d-priority-hint"></div>
-        </div>
-        <div class="col-auto">
-          <div class="subheader">Est. Time</div>
-          <div class="input-group input-group-sm" style="width:170px">
-            <input type="number" class="form-control" id="d-est-minutes" min="0" placeholder="—"
-              title="Total estimated minutes — overrides the elevation roll-up when set"
-              onchange="saveWOEstimate(this.value)">
-            <span class="input-group-text" id="d-est-hours">– h</span>
+      <div id="d-wo-facts" class="small text-muted mt-1"></div>
+      <div id="d-wo-status-log" class="mt-2 small border rounded p-2" style="display:none;max-height:170px;overflow:auto"></div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#wo-tab-elevations" type="button" role="tab">Elevations</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-details" type="button" role="tab">Details</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-checklist" type="button" role="tab">Checklist</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-drawings" type="button" role="tab">Drawings</button></li>
+    </ul>
+
+    <div class="tab-content flex-grow-1 overflow-auto">
+
+      <!-- Elevations (default) -->
+      <div class="tab-pane fade show active" id="wo-tab-elevations" role="tabpanel">
+        <div class="wo-block">
+          <div class="wo-block-head">
+            <h6>Elevations</h6>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-ghost-success" onclick="openBulkCompleteStage()" title="Mark one stage complete on every elevation">
+                <i class="ti ti-checks me-1"></i>Bulk Complete Stage
+              </button>
+              <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
+                <i class="ti ti-door me-1"></i>Door Schedule
+              </button>
+              <button class="btn btn-ghost-primary" onclick="openBulkElev()">
+                <i class="ti ti-plus me-1"></i>Add Elevation
+              </button>
+            </div>
           </div>
-          <div class="form-hint mt-1" id="d-est-hint"></div>
-        </div>
-        <div class="col-auto">
-          <div class="subheader">Material Delivery</div>
-          <div class="input-group input-group-sm" style="width:260px">
-            <input type="text" class="form-control" id="d-material" placeholder="Date, In Shop, SOF"
-              onchange="patchWO('material_delivery', this.value || null)">
-            <button class="btn btn-ghost-success" type="button"
-              onclick="setMaterial('In Shop')">In Shop</button>
-            <button class="btn btn-ghost-warning" type="button"
-              onclick="setMaterial('SOF')">SOF</button>
+          <div id="elevations-loading" class="text-muted small" style="display:none;">Loading…</div>
+          <div id="elevations-list">
+            <div class="text-muted small">No elevations yet.</div>
           </div>
         </div>
-        <div class="col">
-          <div class="subheader">Notes</div>
-          <input type="text" class="form-control form-control-sm" id="d-notes" placeholder="Notes"
-            onchange="patchWO('notes', this.value || null)">
+      </div>
+
+      <!-- Details -->
+      <div class="tab-pane fade" id="wo-tab-details" role="tabpanel">
+
+        <!-- Job (reference) -->
+        <div class="wo-block">
+          <div class="wo-block-head">
+            <h6>Job</h6>
+            <button class="btn btn-sm btn-ghost-primary" onclick="openEditJobFromWO()" data-permission="jobs.edit-core">
+              <i class="ti ti-pencil me-1"></i>Edit Job
+            </button>
+          </div>
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <div class="subheader">Job #</div>
+              <div class="fw-bold" id="d-job-number">—</div>
+            </div>
+            <div class="col-6 col-md-6">
+              <div class="subheader">Job Name</div>
+              <div id="d-job-name">—</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="subheader">Division</div>
+              <div id="d-division">—</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="subheader">Project Manager</div>
+              <div id="d-pm">—</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="subheader">Superintendent</div>
+              <div id="d-super">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Work Order fields (editable) -->
+        <div class="wo-block">
+          <div class="wo-block-head"><h6>Work Order</h6></div>
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <label class="form-label form-label-sm mb-1">Release #</label>
+              <input type="text" class="form-control form-control-sm" id="d-release-code"
+                maxlength="50" onchange="saveReleaseCode(this.value)">
+              <div class="form-hint mt-1" id="d-release-code-hint"></div>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label form-label-sm mb-1">Date Issued</label>
+              <input type="date" class="form-control form-control-sm" id="d-date-issued"
+                onchange="patchWO('date_issued', this.value)">
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label form-label-sm mb-1">Due Date</label>
+              <div id="d-due-date">—</div>
+              <div class="form-hint mt-1">Auto-set from the earliest elevation date</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label form-label-sm mb-1">Priority</label>
+              <input type="number" class="form-control form-control-sm" id="d-priority"
+                min="1" placeholder="—" onchange="patchWO('priority', this.value ? parseInt(this.value) : null)">
+              <div class="form-hint mt-1" id="d-priority-hint"></div>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label form-label-sm mb-1">Est. Time</label>
+              <div class="input-group input-group-sm">
+                <input type="number" class="form-control" id="d-est-minutes" min="0" placeholder="—"
+                  title="Total estimated minutes — overrides the elevation roll-up when set"
+                  onchange="saveWOEstimate(this.value)">
+                <span class="input-group-text" id="d-est-hours">– h</span>
+              </div>
+              <div class="form-hint mt-1" id="d-est-hint"></div>
+            </div>
+            <div class="col-12 col-md-8">
+              <label class="form-label form-label-sm mb-1">Material Delivery</label>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control" id="d-material" placeholder="Date, In Shop, SOF"
+                  onchange="patchWO('material_delivery', this.value || null)">
+                <button class="btn btn-ghost-success" type="button" onclick="setMaterial('In Shop')">In Shop</button>
+                <button class="btn btn-ghost-warning" type="button" onclick="setMaterial('SOF')">SOF</button>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label form-label-sm mb-1">Notes</label>
+              <input type="text" class="form-control form-control-sm" id="d-notes" placeholder="Notes"
+                onchange="patchWO('notes', this.value || null)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Assigned Workers -->
+        <div class="wo-block">
+          <div class="wo-block-head">
+            <h6>Assigned Workers</h6>
+            <button class="btn btn-sm btn-ghost-primary" onclick="toggleAssignPanel()">
+              <i class="ti ti-pencil me-1"></i>Edit
+            </button>
+          </div>
+          <div id="d-assigned-display" class="d-flex flex-wrap gap-1"></div>
+          <div id="d-assign-panel" style="display:none;" class="mt-2 p-2 border rounded">
+            <div id="d-assign-checkboxes" class="d-flex flex-wrap gap-2 mb-2"></div>
+            <button class="btn btn-sm btn-primary" onclick="saveWOAssignments()">Save</button>
+            <button class="btn btn-sm btn-ghost-secondary ms-1" onclick="toggleAssignPanel()">Cancel</button>
+          </div>
         </div>
       </div>
-      <!-- Assigned Workers -->
-      <div class="mt-3">
-        <div class="d-flex justify-content-between align-items-center mb-1">
-          <div class="subheader">Assigned Workers</div>
-          <button class="btn btn-xs btn-ghost-primary" onclick="toggleAssignPanel()">
-            <i class="ti ti-pencil" style="font-size:.8rem"></i>
-          </button>
-        </div>
-        <div id="d-assigned-display" class="d-flex flex-wrap gap-1 min-height-1"></div>
-        <div id="d-assign-panel" style="display:none;" class="mt-2 p-2 border rounded">
-          <div id="d-assign-checkboxes" class="d-flex flex-wrap gap-2 mb-2"></div>
-          <button class="btn btn-sm btn-primary" onclick="saveWOAssignments()">Save</button>
-          <button class="btn btn-sm btn-ghost-secondary ms-1" onclick="toggleAssignPanel()">Cancel</button>
+
+      <!-- Checklist (WO steps) -->
+      <div class="tab-pane fade" id="wo-tab-checklist" role="tabpanel">
+        <div class="wo-block">
+          <div class="wo-block-head"><h6>Checklist</h6></div>
+          <div class="d-flex align-items-center gap-1 flex-wrap" id="wo-steps-container">
+            <span class="text-muted small">Loading steps…</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- WO Steps -->
-    <div class="px-3 py-2 border-bottom">
-      <div class="d-flex align-items-center gap-1 flex-wrap" id="wo-steps-container">
-        <span class="text-muted small">Loading steps…</span>
-      </div>
-    </div>
-
-    <!-- Shop Drawings -->
-    <div class="p-3 border-bottom">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h5 class="mb-0">Shop Drawings</h5>
-        <label class="btn btn-sm btn-ghost-primary mb-0" for="drawing-upload">
-          <i class="ti ti-upload me-1"></i>Upload
-          <input type="file" id="drawing-upload" class="d-none" multiple
-            accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
-            onchange="uploadDrawings(this.files)">
-        </label>
-      </div>
-      <div id="drawings-loading" class="text-muted small" style="display:none;">Uploading…</div>
-      <div id="drawings-list">
-        <div class="text-muted small">No drawings attached.</div>
-      </div>
-    </div>
-
-    <!-- Elevations -->
-    <div class="p-3">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h5 class="mb-0">Elevations</h5>
-        <div class="btn-group btn-group-sm">
-          <button class="btn btn-ghost-success" onclick="openBulkCompleteStage()" title="Mark one stage complete on every elevation">
-            <i class="ti ti-checks me-1"></i>Bulk Complete Stage
-          </button>
-          <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
-            <i class="ti ti-door me-1"></i>Door Schedule
-          </button>
-          <button class="btn btn-ghost-primary" onclick="openBulkElev()">
-            <i class="ti ti-plus me-1"></i>Add Elevation
-          </button>
+      <!-- Shop Drawings -->
+      <div class="tab-pane fade" id="wo-tab-drawings" role="tabpanel">
+        <div class="wo-block">
+          <div class="wo-block-head">
+            <h6>Shop Drawings</h6>
+            <label class="btn btn-sm btn-ghost-primary mb-0" for="drawing-upload">
+              <i class="ti ti-upload me-1"></i>Upload
+              <input type="file" id="drawing-upload" class="d-none" multiple
+                accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+                onchange="uploadDrawings(this.files)">
+            </label>
+          </div>
+          <div id="drawings-loading" class="text-muted small" style="display:none;">Uploading…</div>
+          <div id="drawings-list">
+            <div class="text-muted small">No drawings attached.</div>
+          </div>
         </div>
       </div>
-      <div id="elevations-loading" class="text-muted small" style="display:none;">Loading…</div>
-      <div id="elevations-list">
-        <div class="text-muted small">No elevations yet.</div>
-      </div>
-    </div>
 
+    </div>
   </div>
 </div>
 <div id="wo-backdrop" onclick="closeOffcanvas('wo-detail')"
@@ -349,9 +397,18 @@
           </div>
           <div class="mb-3">
             <label class="form-label required">Job</label>
-            <select class="form-select" id="new-wo-job" required onchange="refreshWizardDivisionBadge()">
-              <option value="">— Select a job —</option>
-            </select>
+            <div class="dropdown" id="wiz-job-combo">
+              <input type="text" class="form-control" id="new-wo-job-search" autocomplete="off"
+                placeholder="Search job number, name, or customer…"
+                oninput="onWizardJobSearch(this.value)"
+                onkeydown="onWizardJobKeydown(event)"
+                onfocus="onWizardJobSearch(this.value)"
+                onblur="setTimeout(hideWizardJobResults, 200)">
+              <input type="hidden" id="new-wo-job">
+              <div class="dropdown-menu w-100 p-0" id="wiz-job-results"
+                style="max-height:280px;overflow-y:auto;top:100%;left:0"></div>
+            </div>
+            <div class="form-hint mt-1" id="wiz-job-hint"></div>
             <div class="mt-1">
               <button type="button" class="btn btn-sm btn-ghost-primary" onclick="openQuickJobCreate()">
                 <i class="ti ti-plus me-1"></i>Create New Job
@@ -668,6 +725,10 @@
           <div class="col-md-6">
             <label class="form-label">Project Manager</label>
             <select class="form-select" id="ej-pm"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Superintendent</label>
+            <select class="form-select" id="ej-super"></select>
           </div>
           <div class="col-md-4">
             <label class="form-label">Status</label>
@@ -1037,12 +1098,39 @@ async function openWODetail(id) {
     }
 }
 
+// Snap the detail panel back to the Elevations tab on (re)open.
+function resetWoDetailTab() {
+    document.querySelectorAll('#wo-detail .nav-link').forEach(el => {
+        el.classList.toggle('active', el.dataset.bsTarget === '#wo-tab-elevations');
+    });
+    document.querySelectorAll('#wo-detail .tab-pane').forEach(el => {
+        const on = el.id === 'wo-tab-elevations';
+        el.classList.toggle('show', on);
+        el.classList.toggle('active', on);
+    });
+}
+
 function populateDetail(wo) {
     const job = wo.job || {};
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    resetWoDetailTab();
     document.getElementById('wo-detail-title').textContent = wo.release_label || `WO #${wo.id}`;
+    set('wo-detail-subtitle', job.job_name || '');
+
+    // Glanceable facts under the status strip (so the Details tab isn't needed
+    // just to see due date / priority / material / progress).
+    const facts = [];
+    const due = wo.due_date_first || wo.due_date;
+    if (due) facts.push('Due ' + fmtDate(due));
+    if (wo.priority != null) facts.push('Priority ' + wo.priority);
+    if (wo.material_delivery) facts.push(wo.material_delivery);
+    if (wo.elevation_count > 0) facts.push(`${wo.elevations_complete || 0}/${wo.elevation_count} elevations done`);
+    set('d-wo-facts', facts.join('  ·  '));
+
     document.getElementById('d-job-number').textContent = job.job_number || '—';
     document.getElementById('d-job-name').textContent = job.job_name || '—';
     document.getElementById('d-pm').textContent = job.project_manager || '—';
+    document.getElementById('d-super').textContent = job.superintendent || '—';
     document.getElementById('d-division').textContent = job.division || '—';
     document.getElementById('d-release-code').value = wo.release_code || '';
     document.getElementById('d-release-code').placeholder = 'R' + wo.release_number;
@@ -1067,25 +1155,53 @@ function populateDetail(wo) {
 }
 
 // ============================================================
-// Edit parent Job (from the WO detail panel) — needs jobs.edit-core
+// Edit parent Job — needs jobs.edit-core. Shared by the WO detail panel and
+// the create-wizard's "job info doesn't match the sheet" prompt.
+// _editJobCtx null => WO-detail behaviour; else { jobId, source:'wizard' }.
 // ============================================================
+let _editJobCtx = null;
+
+async function fillEditJobModal(jobId, numberHint) {
+    const r = await API(`/business-jobs/${jobId}`);
+    const job = (await r.json()).job;
+    document.getElementById('ej-number').value = job.job_number || '';
+    document.getElementById('ej-name').value = job.job_name || '';
+    document.getElementById('ej-customer').value = job.customer_name || '';
+    document.getElementById('ej-status').value = job.status || 'active';
+    document.getElementById('ej-start').value = job.start_date || '';
+    document.getElementById('ej-target').value = job.target_completion_date || '';
+    await populatePeopleSelect(document.getElementById('ej-pm'), job.project_manager_id,
+        { placeholder: '— Select PM —', legacyLabel: job.project_manager });
+    await populatePeopleSelect(document.getElementById('ej-super'), job.superintendent_id,
+        { placeholder: '— Select superintendent —', legacyLabel: job.superintendent });
+    document.getElementById('ej-number-hint').textContent = numberHint
+        || 'Renaming carries across every reservation on this job.';
+    showModal(document.getElementById('editJobModal'));
+}
+
 async function openEditJobFromWO() {
+    _editJobCtx = null;
     const jobId = currentWO?.business_job_id;
     if (!jobId) { fabToast('This work order has no linked job.', 'info'); return; }
     try {
-        const r = await API(`/business-jobs/${jobId}`);
-        const job = (await r.json()).job;
-        document.getElementById('ej-number').value = job.job_number || '';
-        document.getElementById('ej-name').value = job.job_name || '';
-        document.getElementById('ej-customer').value = job.customer_name || '';
-        document.getElementById('ej-status').value = job.status || 'active';
-        document.getElementById('ej-start').value = job.start_date || '';
-        document.getElementById('ej-target').value = job.target_completion_date || '';
-        await populatePeopleSelect(document.getElementById('ej-pm'), job.project_manager_id,
-            { placeholder: '— Select PM —', legacyLabel: job.project_manager });
-        document.getElementById('ej-number-hint').textContent =
-            'Renaming carries across every reservation on this job.';
-        showModal(document.getElementById('editJobModal'));
+        await fillEditJobModal(jobId);
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to load the job.', 'error');
+    }
+}
+
+// Opened from the wizard when the uploaded sheet's job number doesn't match the
+// selected job. On save, refreshes the picker instead of the WO detail panel.
+async function openEditJobForWizard(jobId, sheet) {
+    _editJobCtx = { jobId, source: 'wizard' };
+    const bits = [];
+    if (sheet?.number) bits.push(`sheet job #: ${sheet.number}`);
+    if (sheet?.name) bits.push(`sheet job name: "${sheet.name}"`);
+    const hint = (bits.length ? bits.join(' · ') + '. ' : '')
+        + 'Renaming carries across every reservation on this job.';
+    try {
+        await fillEditJobModal(jobId, hint);
     } catch (e) {
         console.error(e);
         fabToast('Failed to load the job.', 'error');
@@ -1093,13 +1209,14 @@ async function openEditJobFromWO() {
 }
 
 async function saveEditJobFromWO() {
-    const jobId = currentWO?.business_job_id;
+    const jobId = _editJobCtx?.jobId ?? currentWO?.business_job_id;
     if (!jobId) return;
     const body = {
         job_number: document.getElementById('ej-number').value.trim(),
         job_name: document.getElementById('ej-name').value.trim(),
         customer_name: document.getElementById('ej-customer').value.trim() || null,
         project_manager_id: document.getElementById('ej-pm').value || null,
+        superintendent_id: document.getElementById('ej-super').value || null,
         status: document.getElementById('ej-status').value,
         start_date: document.getElementById('ej-start').value || null,
         target_completion_date: document.getElementById('ej-target').value || null,
@@ -1118,8 +1235,17 @@ async function saveEditJobFromWO() {
         if (!r.ok) { fabToast(data.message || 'Failed to save the job.', 'error'); return; }
         hideModal(document.getElementById('editJobModal'));
         fabToast(data.message || 'Job updated.', 'success');
-        await openWODetail(currentWO.id);   // refresh the panel
-        loadWorkOrders();
+
+        if (_editJobCtx?.source === 'wizard') {
+            // Reflect the edit in the wizard's job picker.
+            const j = wizardJobs.find(x => String(x.id) === String(jobId));
+            if (j) { j.job_number = body.job_number; j.job_name = body.job_name; j.customer_name = body.customer_name; }
+            selectWizardJob(jobId);
+        } else {
+            await openWODetail(currentWO.id);   // refresh the panel
+            loadWorkOrders();
+        }
+        _editJobCtx = null;
     } catch (e) {
         console.error(e);
         fabToast('Failed to save the job.', 'error');
@@ -1542,7 +1668,7 @@ function renderWoSteps(woId, steps) {
                <i class="ti ti-checks"></i> Complete All (${pendingCount})
            </button>`
         : '';
-    container.innerHTML = `<span class="text-muted small me-2" style="white-space:nowrap">WO Steps:</span>${html}
+    container.innerHTML = `${html || '<span class="text-muted small me-1">No steps.</span>'}
         <button class="btn btn-ghost-secondary btn-sm ms-1 px-1 py-0" style="font-size:.72rem"
             onclick="addWoStep()" title="Add step"><i class="ti ti-plus"></i></button>
         ${bulkBtn}`;
@@ -2462,10 +2588,266 @@ function deleteElev(elevId) {
 }
 
 // ============================================================
-// Create WO Wizard — Excel Import
+// Create WO Wizard — Job picker (searchable) + Excel Import
 // ============================================================
 let _wizardImportedElevations = [];
-let _wizardImportMeta = { division: null, jobNumber: null };
+let _wizardImportMeta = { division: null, jobNumber: null, jobName: null, projectManager: null, superintendent: null };
+// job.id:sheetNumber pairs we've already asked "update the job?" about, so the
+// prompt fires at most once per (job, sheet number) per wizard run.
+let _jobMismatchPrompted = new Set();
+
+// All active jobs, loaded once when the wizard opens. `_wizardJobsReady` lets
+// the Excel importer wait for the list before auto-matching.
+let wizardJobs = [];
+let _wizardJobsReady = null;
+let _wizJobActiveIdx = -1;
+
+async function loadWizardJobs() {
+    try {
+        const r = await API('/business-jobs?per_page=1000&status=active');
+        const data = await r.json();
+        wizardJobs = data.jobs || [];
+    } catch (e) {
+        console.error(e);
+        wizardJobs = [];
+    }
+    return wizardJobs;
+}
+
+// Uppercase, strip everything that isn't a letter or digit — so "42-50403 R1"
+// and "4250403r1" compare equal.
+function normJobNum(s) {
+    return String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// Dice coefficient over character bigrams — cheap fuzzy string match in [0,1].
+function jobNameSimilarity(a, b) {
+    a = String(a ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    b = String(b ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+    const grams = s => {
+        const m = new Map();
+        for (let i = 0; i < s.length - 1; i++) {
+            const g = s.substr(i, 2);
+            m.set(g, (m.get(g) || 0) + 1);
+        }
+        return m;
+    };
+    const ma = grams(a), mb = grams(b);
+    let inter = 0;
+    for (const [g, c] of ma) if (mb.has(g)) inter += Math.min(c, mb.get(g));
+    return (2 * inter) / ((a.length - 1) + (b.length - 1));
+}
+
+// "Regex-style" people match: given a free-text name from a sheet, find the most
+// likely active user. Tries a regex (if the string compiles as one) and a
+// word-order-independent bigram score; returns { id, label, score } or null.
+async function bestPersonMatch(name) {
+    const q = String(name ?? '').trim();
+    if (q.length < 2) return null;
+    const people = await fetchPeople();          // [{ id, label }] — label is "Last, First"
+    let re = null;
+    try { re = new RegExp(q, 'i'); } catch (_) { re = null; }
+    // Normalise "Last, First" and "First Last" to a sorted token string so order
+    // doesn't matter.
+    const canon = s => String(s || '').toLowerCase().replace(/[,]/g, ' ')
+        .replace(/\s+/g, ' ').trim().split(' ').sort().join(' ');
+    const cq = canon(q);
+
+    let best = null;
+    for (const p of people) {
+        const reHit = re && re.test(p.label);
+        const score = Math.max(jobNameSimilarity(canon(p.label), cq), reHit ? 0.9 : 0);
+        if (!best || score > best.score) best = { id: p.id, label: p.label, score };
+    }
+    return best && best.score >= 0.5 ? best : null;
+}
+
+// Populate a people <select>. Prefer an explicit id; otherwise fuzzy-match the
+// free-text name and pre-select the best candidate (keeping the raw name as a
+// legacy label when nothing matches well).
+async function populatePeopleSelectMatched(select, { id, name } = {}) {
+    if (id) { await populatePeopleSelect(select, id, { placeholder: '— Select —' }); return; }
+    if (name) {
+        const m = await bestPersonMatch(name);
+        await populatePeopleSelect(select, m?.id || '', { placeholder: '— Select —', legacyLabel: name });
+        return;
+    }
+    await populatePeopleSelect(select, '', { placeholder: '— Select —' });
+}
+
+// Filter `wizardJobs` for a query. Space-separated tokens must each appear
+// (substring) in "number name customer"; a query that is a valid regex also
+// matches via RegExp. Number/prefix hits rank first.
+function filterWizardJobs(query) {
+    const q = String(query || '').trim();
+    // Drop pure-punctuation tokens (e.g. the "–" in a selected job's label).
+    const tokens = q.toLowerCase().split(/\s+/).filter(t => /[a-z0-9]/.test(t));
+    let re = null;
+    if (q.length >= 2) { try { re = new RegExp(q, 'i'); } catch (_) { re = null; } }
+    const nq = normJobNum(q);
+
+    const scored = [];
+    for (const j of wizardJobs) {
+        const hay = `${j.job_number || ''} ${j.job_name || ''} ${j.customer_name || ''}`.toLowerCase();
+        const tokenHit = tokens.length && tokens.every(t => hay.includes(t));
+        const reHit = re && re.test(hay);
+        if (!q || tokenHit || reHit) {
+            const nnum = normJobNum(j.job_number);
+            let rank = 3;
+            if (nq && nnum === nq) rank = 0;
+            else if (nq && (nnum.startsWith(nq) || nq.startsWith(nnum))) rank = 1;
+            else if (tokens.length && (j.job_number || '').toLowerCase().startsWith(tokens[0])) rank = 2;
+            scored.push({ j, rank });
+        }
+    }
+    scored.sort((a, b) => a.rank - b.rank
+        || String(a.j.job_number).localeCompare(String(b.j.job_number), undefined, { numeric: true }));
+    return scored.slice(0, 25).map(s => s.j);
+}
+
+function onWizardJobSearch(query) {
+    const box = document.getElementById('wiz-job-results');
+    const jobs = filterWizardJobs(query);
+    _wizJobActiveIdx = -1;
+    if (!jobs.length) {
+        box.innerHTML = `<div class="dropdown-item-text text-muted small">No matching active job${wizardJobs.length ? '' : ' loaded yet'}.</div>`;
+        box.classList.add('show');
+        return;
+    }
+    box.innerHTML = jobs.map((j, i) => `
+        <button type="button" class="dropdown-item d-flex flex-column align-items-start" data-idx="${i}" data-id="${j.id}"
+            onmousedown="event.preventDefault()" onclick="selectWizardJob(${j.id})">
+            <span><strong>${esc(j.job_number || '—')}</strong> ${esc(j.job_name || '')}</span>
+            ${j.customer_name ? `<span class="text-muted small">${esc(j.customer_name)}</span>` : ''}
+        </button>`).join('');
+    box.classList.add('show');
+}
+
+function hideWizardJobResults() {
+    document.getElementById('wiz-job-results')?.classList.remove('show');
+}
+
+function onWizardJobKeydown(e) {
+    const box = document.getElementById('wiz-job-results');
+    const items = [...box.querySelectorAll('.dropdown-item')];
+    if (e.key === 'Escape') { hideWizardJobResults(); return; }
+    if (!items.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        _wizJobActiveIdx += (e.key === 'ArrowDown' ? 1 : -1);
+        if (_wizJobActiveIdx < 0) _wizJobActiveIdx = items.length - 1;
+        if (_wizJobActiveIdx >= items.length) _wizJobActiveIdx = 0;
+        items.forEach((el, i) => el.classList.toggle('active', i === _wizJobActiveIdx));
+        items[_wizJobActiveIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const pick = items[_wizJobActiveIdx] || items[0];
+        if (pick) selectWizardJob(parseInt(pick.dataset.id));
+    }
+}
+
+function selectWizardJob(id) {
+    const j = wizardJobs.find(x => String(x.id) === String(id));
+    document.getElementById('new-wo-job').value = j ? j.id : '';
+    document.getElementById('new-wo-job-search').value = j ? `${j.job_number} – ${j.job_name}` : '';
+    document.getElementById('wiz-job-hint').textContent = '';
+    hideWizardJobResults();
+    refreshWizardDivisionBadge();
+    if (j) maybePromptJobMismatch(j);
+}
+
+// When an Excel import is in play and the picked job's number doesn't match the
+// sheet's, offer to open the Edit Job modal. Fires at most once per (job, sheet
+// number); skipped when the user can't edit jobs.
+async function maybePromptJobMismatch(job) {
+    const sheetNum = _wizardImportMeta.jobNumber;
+    if (!job || !sheetNum) return;
+    if (normJobNum(job.job_number) === normJobNum(sheetNum)) return;
+    const canEdit = (typeof isAdmin === 'function' && isAdmin())
+        || (typeof hasPermission === 'function' && hasPermission('jobs.edit-core'));
+    if (!canEdit) return;
+
+    const key = `${job.id}:${normJobNum(sheetNum)}`;
+    if (_jobMismatchPrompted.has(key)) return;
+    _jobMismatchPrompted.add(key);
+
+    const sheetBits = [`job number "${sheetNum}"`];
+    if (_wizardImportMeta.jobName) sheetBits.push(`name "${_wizardImportMeta.jobName}"`);
+    const ok = await fabConfirm({
+        title: "Job info doesn't match the sheet",
+        message: `You picked "${job.job_number} - ${job.job_name}", but the uploaded sheet lists `
+            + `${sheetBits.join(', ')}. Update this job's information now?`,
+        confirmLabel: 'Edit Job',
+        confirmClass: 'btn-primary',
+    });
+    if (ok) openEditJobForWizard(job.id, { number: sheetNum, name: _wizardImportMeta.jobName });
+}
+
+function setWizardJobQuery(q) {
+    const inp = document.getElementById('new-wo-job-search');
+    inp.value = q || '';
+    onWizardJobSearch(inp.value);
+}
+
+// After an Excel parse, try to select the job automatically:
+//  1. exact (normalised) job-number match
+//  2. one job whose number is a prefix of the sheet's (or vice-versa)
+//  3. a clearly-best fuzzy match on job name
+// Otherwise pre-fill the search with what we parsed and leave it to the user.
+function autoMatchWizardJob(jobNumber, jobName) {
+    const hint = document.getElementById('wiz-job-hint');
+    if (document.getElementById('new-wo-job').value) return;   // user already picked
+
+    const nNum = normJobNum(jobNumber);
+    if (nNum) {
+        const exact = wizardJobs.filter(j => normJobNum(j.job_number) === nNum);
+        if (exact.length === 1) {
+            selectWizardJob(exact[0].id);
+            hint.textContent = `Matched job ${exact[0].job_number} from the sheet.`;
+            return;
+        }
+        const pre = wizardJobs.filter(j => {
+            const x = normJobNum(j.job_number);
+            return x && (x.startsWith(nNum) || nNum.startsWith(x));
+        });
+        if (pre.length === 1) {
+            selectWizardJob(pre[0].id);
+            hint.textContent = `Matched the closest job number (${pre[0].job_number}) — confirm it's right.`;
+            return;
+        }
+        if (pre.length > 1) {
+            setWizardJobQuery(jobNumber);
+            hint.textContent = `${pre.length} jobs look close to "${jobNumber}" — pick the right one.`;
+            return;
+        }
+    }
+
+    if (jobName) {
+        const scored = wizardJobs
+            .map(j => ({ j, s: jobNameSimilarity(j.job_name, jobName) }))
+            .sort((a, b) => b.s - a.s);
+        const best = scored[0], next = scored[1];
+        if (best && best.s >= 0.55 && (!next || best.s - next.s >= 0.12)) {
+            selectWizardJob(best.j.id);
+            hint.textContent = `Matched by name: "${best.j.job_name}" (${Math.round(best.s * 100)}% similar) — confirm it's right.`;
+            return;
+        }
+        if (best && best.s >= 0.35) {
+            setWizardJobQuery(jobName);
+            hint.textContent = `No job-number match — showing the closest names. Pick one or create a job.`;
+            return;
+        }
+    }
+
+    const label = jobNumber || jobName;
+    if (label) {
+        setWizardJobQuery(label);
+        hint.textContent = `No active job matched "${label}". Search, or create a new job.`;
+    }
+}
 
 // First numeric character of a string, or '' when there is none.
 function firstDigit(s) {
@@ -2473,13 +2855,11 @@ function firstDigit(s) {
     return m ? m[0] : '';
 }
 
-// The job number of the job picked in wizard step 1. The option label is
-// "<job_number> – <job_name>", so take everything before the first dash.
+// The job number of the job picked in wizard step 1.
 function selectedWizardJobNumber() {
-    const sel = document.getElementById('new-wo-job');
-    const opt = sel && sel.selectedOptions ? sel.selectedOptions[0] : null;
-    if (!opt || !sel.value) return '';
-    return opt.textContent.split(/[–—-]/)[0].trim();
+    const id = document.getElementById('new-wo-job')?.value;
+    const j = wizardJobs.find(x => String(x.id) === String(id));
+    return j ? (j.job_number || '') : '';
 }
 
 // Division badge: the value parsed from the sheet, else the first digit of the
@@ -2521,8 +2901,19 @@ async function importWOExcel(input) {
         }
 
         _wizardImportedElevations = data.elevations || [];
-        _wizardImportMeta = { division: data.division || null, jobNumber: data.job_number || null };
+        _wizardImportMeta = {
+            division: data.division || null,
+            jobNumber: data.job_number || null,
+            jobName: data.job_name || null,
+            projectManager: data.project_manager || null,
+            superintendent: data.superintendent || null,
+        };
         refreshWizardDivisionBadge();
+
+        // Auto-select the job: exact job-number match, then a close number, then
+        // a fuzzy job-name match. Falls back to seeding the search box.
+        try { await (_wizardJobsReady || loadWizardJobs()); } catch (_) {}
+        autoMatchWizardJob(data.job_number, data.job_name);
 
         const doorRows  = _wizardImportedElevations.filter(e => (e.type || '').toLowerCase() === 'door');
         const doorCount = doorRows.reduce((sum, e) => sum + Math.max(1, parseInt(e.quantity) || 1), 0);
@@ -2557,8 +2948,9 @@ async function openCreateWO() {
     wizardBulkRowId = 0;
     wizardDoorRowId = 0;
     _wizardSystemPrompted = new Set();
+    _jobMismatchPrompted = new Set();
     _wizardImportedElevations = [];
-    _wizardImportMeta = { division: null, jobNumber: null };
+    _wizardImportMeta = { division: null, jobNumber: null, jobName: null, projectManager: null, superintendent: null };
 
     // Reset excel import UI
     document.getElementById('wo-excel-upload').value = '';
@@ -2566,19 +2958,17 @@ async function openCreateWO() {
     document.getElementById('wo-excel-hint').style.display = 'none';
     document.getElementById('wo-excel-division').textContent = '—';
 
-    // Reset step 1
-    const sel = document.getElementById('new-wo-job');
-    sel.innerHTML = '<option value="">— Select a job —</option>';
-    try {
-        const r = await API('/business-jobs?per_page=500&status=active');
-        const data = await r.json();
-        (data.jobs || []).forEach(j => {
-            const opt = document.createElement('option');
-            opt.value = j.id;
-            opt.textContent = `${j.job_number} – ${j.job_name}`;
-            sel.appendChild(opt);
-        });
-    } catch (e) { console.error(e); }
+    // Reset step 1 — searchable job picker
+    document.getElementById('new-wo-job').value = '';
+    document.getElementById('new-wo-job-search').value = '';
+    document.getElementById('wiz-job-hint').textContent = '';
+    hideWizardJobResults();
+    _wizardJobsReady = loadWizardJobs().then(() => {
+        const s = document.getElementById('new-wo-job-search');
+        if (s && document.activeElement === s && !document.getElementById('new-wo-job').value) {
+            onWizardJobSearch(s.value);
+        }
+    });
     document.getElementById('new-wo-release-code').value = '';
     document.getElementById('new-wo-material').value = '';
     document.getElementById('new-wo-notes').value = '';
@@ -3265,17 +3655,34 @@ async function saveDoorSchedule() {
     }
 }
 
-function openQuickJobCreate() {
-    document.getElementById('qj-number').value = '';
-    document.getElementById('qj-name').value = '';
-    document.getElementById('qj-customer').value = '';
-    populatePeopleSelect(document.getElementById('qj-pm'), '', { placeholder: '— Select PM —' });
+async function openQuickJobCreate(prefill) {
+    // No explicit prefill + an Excel import that matched no job => carry the
+    // parsed job number / name / PM / superintendent into the form.
+    if (!prefill && _wizardImportMeta.jobNumber && !document.getElementById('new-wo-job').value) {
+        prefill = {
+            job_number: _wizardImportMeta.jobNumber,
+            job_name: _wizardImportMeta.jobName || '',
+            project_manager: _wizardImportMeta.projectManager || null,
+            superintendent: _wizardImportMeta.superintendent || null,
+        };
+    }
+    prefill = prefill || {};
+
+    document.getElementById('qj-number').value = prefill.job_number || '';
+    document.getElementById('qj-name').value = prefill.job_name || '';
+    document.getElementById('qj-customer').value = prefill.customer_name || '';
     document.getElementById('qj-start').value = '';
     document.getElementById('qj-target').value = '';
     document.getElementById('qj-status').value = 'active';
     document.getElementById('qj-notes').value = '';
-    const m = new bootstrap.Modal(document.getElementById('quickJobModal'));
-    m.show();
+
+    new bootstrap.Modal(document.getElementById('quickJobModal')).show();
+
+    // PM + superintendent: use an explicit id, else fuzzy-match the sheet's name.
+    await populatePeopleSelectMatched(document.getElementById('qj-pm'),
+        { id: prefill.project_manager_id, name: prefill.project_manager });
+    await populatePeopleSelectMatched(document.getElementById('qj-super'),
+        { id: prefill.superintendent_id, name: prefill.superintendent });
 }
 
 async function saveQuickJob() {
@@ -3294,6 +3701,7 @@ async function saveQuickJob() {
                 job_name: jobName,
                 customer_name: document.getElementById('qj-customer').value || null,
                 project_manager_id: document.getElementById('qj-pm').value || null,
+                superintendent_id: document.getElementById('qj-super').value || null,
                 start_date: document.getElementById('qj-start').value || null,
                 target_completion_date: document.getElementById('qj-target').value || null,
                 status: document.getElementById('qj-status').value,
@@ -3308,15 +3716,19 @@ async function saveQuickJob() {
         const data = await r.json();
         bootstrap.Modal.getInstance(document.getElementById('quickJobModal')).hide();
 
-        // Reload job list and select the new job
-        const sel = document.getElementById('new-wo-job');
-        if (sel) {
-            const opt = document.createElement('option');
-            opt.value = data.job.id;
-            opt.textContent = `${data.job.job_number} — ${data.job.job_name}`;
-            sel.appendChild(opt);
-            sel.value = data.job.id;
-        }
+        // Add the new job to the picker's list and select it.
+        const job = {
+            id: data.job.id,
+            job_number: data.job.job_number,
+            job_name: data.job.job_name,
+            customer_name: data.job.customer_name || document.getElementById('qj-customer').value || null,
+            project_manager: data.job.project_manager || null,
+            project_manager_id: data.job.project_manager_id || null,
+            superintendent: data.job.superintendent || null,
+            superintendent_id: data.job.superintendent_id || null,
+        };
+        if (!wizardJobs.some(j => String(j.id) === String(job.id))) wizardJobs.unshift(job);
+        selectWizardJob(job.id);
     } catch (e) {
         fabToast('Error: ' + e.message, 'error');
     }
@@ -3343,13 +3755,17 @@ async function saveQuickJob() {
           </div>
         </div>
         <div class="row mb-3">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label">Customer Name</label>
             <input type="text" class="form-control" id="qj-customer">
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label">Project Manager</label>
             <select class="form-select" id="qj-pm"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Superintendent</label>
+            <select class="form-select" id="qj-super"></select>
           </div>
         </div>
         <div class="row mb-3">

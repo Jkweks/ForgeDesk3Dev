@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class InventoryTransactionController extends Controller
 {
@@ -52,7 +52,7 @@ class InventoryTransactionController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('reference_number', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%");
+                    ->orWhere('notes', 'like', "%{$search}%");
             });
         }
 
@@ -106,6 +106,7 @@ class InventoryTransactionController extends Controller
     public function show(InventoryTransaction $transaction)
     {
         $transaction->load(['product', 'user']);
+
         return response()->json($transaction);
     }
 
@@ -247,14 +248,14 @@ class InventoryTransactionController extends Controller
 
         $transactions = $query->orderBy('transaction_date', 'desc')->get();
 
-        $filename = 'inventory_transactions_' . date('Y-m-d_His') . '.csv';
+        $filename = 'inventory_transactions_'.date('Y-m-d_His').'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($transactions) {
+        $callback = function () use ($transactions) {
             $file = fopen('php://output', 'w');
 
             // CSV Headers
@@ -278,7 +279,7 @@ class InventoryTransactionController extends Controller
                     ucfirst($transaction->type),
                     $transaction->product->sku ?? '',
                     $transaction->product->description ?? '',
-                    $transaction->quantity >= 0 ? '+' . $transaction->quantity : $transaction->quantity,
+                    $transaction->quantity >= 0 ? '+'.$transaction->quantity : $transaction->quantity,
                     $transaction->quantity_before,
                     $transaction->quantity_after,
                     $transaction->reference_number ?? '',
@@ -323,7 +324,7 @@ class InventoryTransactionController extends Controller
         // Group by date
         $transactions = $query->orderBy('transaction_date', 'desc')
             ->get()
-            ->groupBy(function($transaction) {
+            ->groupBy(function ($transaction) {
                 return $transaction->transaction_date->format('Y-m-d');
             });
 
@@ -375,7 +376,7 @@ class InventoryTransactionController extends Controller
                             ->where('storage_location_id', $targetStorageLocationId)
                             ->first();
 
-                        if (!$targetLocation) {
+                        if (! $targetLocation) {
                             $targetLocation = $product->inventoryLocations()->create([
                                 'storage_location_id' => $targetStorageLocationId,
                                 'quantity' => 0,
@@ -390,7 +391,7 @@ class InventoryTransactionController extends Controller
                         // All other adding types — use primary location (or create default)
                         $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();
 
-                        if (!$primaryLocation) {
+                        if (! $primaryLocation) {
                             $defaultLocation = \App\Models\StorageLocation::firstOrCreate(
                                 ['code' => 'DEFAULT'],
                                 ['name' => 'Default Storage', 'type' => 'warehouse', 'is_active' => true]
@@ -419,7 +420,9 @@ class InventoryTransactionController extends Controller
                         ->get();
 
                     foreach ($locations as $location) {
-                        if ($remainingToRemove <= 0) break;
+                        if ($remainingToRemove <= 0) {
+                            break;
+                        }
 
                         $availableAtLocation = $location->quantity - $location->quantity_committed;
                         $toRemoveFromLocation = min($remainingToRemove, $availableAtLocation);
@@ -434,7 +437,9 @@ class InventoryTransactionController extends Controller
                     // If still have remaining to remove, force remove from locations with inventory
                     if ($remainingToRemove > 0) {
                         foreach ($locations as $location) {
-                            if ($remainingToRemove <= 0) break;
+                            if ($remainingToRemove <= 0) {
+                                break;
+                            }
 
                             if ($location->quantity > 0) {
                                 $toRemoveFromLocation = min($remainingToRemove, $location->quantity);
@@ -454,6 +459,7 @@ class InventoryTransactionController extends Controller
                 // Prevent negative inventory
                 if ($quantityAfter < 0) {
                     $errors[] = "Insufficient inventory for {$product->sku}. Available: {$quantityBefore}, Requested: {$productData['quantity']}";
+
                     continue;
                 }
 
@@ -479,11 +485,12 @@ class InventoryTransactionController extends Controller
             }
 
             // If any errors occurred, rollback
-            if (!empty($errors)) {
+            if (! empty($errors)) {
                 DB::rollBack();
+
                 return response()->json([
                     'message' => 'Transaction failed',
-                    'errors' => $errors
+                    'errors' => $errors,
                 ], 422);
             }
 
@@ -502,16 +509,17 @@ class InventoryTransactionController extends Controller
 
             return response()->json([
                 'message' => count($transactions) > 1
-                    ? count($transactions) . ' transactions created successfully'
+                    ? count($transactions).' transactions created successfully'
                     : 'Transaction created successfully',
-                'transactions' => $transactions
+                'transactions' => $transactions,
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to create transaction',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -582,6 +590,7 @@ class InventoryTransactionController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to update transaction',
                 'error' => $e->getMessage(),
@@ -624,6 +633,7 @@ class InventoryTransactionController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to delete transaction',
                 'error' => $e->getMessage(),
@@ -671,7 +681,9 @@ class InventoryTransactionController extends Controller
                 ->get();
 
             foreach ($locations as $location) {
-                if ($remainingToRemove <= 0) break;
+                if ($remainingToRemove <= 0) {
+                    break;
+                }
 
                 $availableAtLocation = $location->quantity - $location->quantity_committed;
                 $toRemoveFromLocation = min($remainingToRemove, $availableAtLocation);
@@ -685,7 +697,9 @@ class InventoryTransactionController extends Controller
 
             if ($remainingToRemove > 0) {
                 foreach ($locations as $location) {
-                    if ($remainingToRemove <= 0) break;
+                    if ($remainingToRemove <= 0) {
+                        break;
+                    }
 
                     if ($location->quantity > 0) {
                         $toRemoveFromLocation = min($remainingToRemove, $location->quantity);

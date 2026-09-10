@@ -47,15 +47,16 @@ class FabricationDocumentController extends Controller
         $sort = $request->get('sort', 'newest');
         match ($sort) {
             'oldest' => $query->orderBy('created_at', 'asc'),
-            'alpha'  => $query->orderBy('title', 'asc'),
-            default  => $query->orderBy('created_at', 'desc'),
+            'alpha' => $query->orderBy('title', 'asc'),
+            default => $query->orderBy('created_at', 'desc'),
         };
 
         // Return all or paginated
         if ($request->get('per_page') === 'all') {
             $docs = $query->get();
+
             return response()->json([
-                'data' => $docs->map(fn($d) => $this->formatDoc($d)),
+                'data' => $docs->map(fn ($d) => $this->formatDoc($d)),
             ]);
         }
 
@@ -63,12 +64,12 @@ class FabricationDocumentController extends Controller
         $paginated = $query->paginate($perPage);
 
         return response()->json([
-            'data' => collect($paginated->items())->map(fn($d) => $this->formatDoc($d)),
+            'data' => collect($paginated->items())->map(fn ($d) => $this->formatDoc($d)),
             'meta' => [
-                'total'        => $paginated->total(),
-                'per_page'     => $paginated->perPage(),
+                'total' => $paginated->total(),
+                'per_page' => $paginated->perPage(),
                 'current_page' => $paginated->currentPage(),
-                'last_page'    => $paginated->lastPage(),
+                'last_page' => $paginated->lastPage(),
             ],
         ]);
     }
@@ -79,23 +80,23 @@ class FabricationDocumentController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'title'        => 'required|string|max:255',
-            'type'         => 'required|in:fabrication,installation,maintenance',
-            'hwtype'       => 'nullable|string|max:100',
+            'title' => 'required|string|max:255',
+            'type' => 'required|in:fabrication,installation,maintenance',
+            'hwtype' => 'nullable|string|max:100',
             'manufacturer' => 'nullable|string|max:100',
-            'notes'        => 'nullable|string|max:5000',
-            'tags'         => 'nullable|string',
-            'file'         => 'nullable|file|max:51200', // 50 MB max
+            'notes' => 'nullable|string|max:5000',
+            'tags' => 'nullable|string',
+            'file' => 'nullable|file|max:51200', // 50 MB max
         ]);
 
         $data = [
-            'title'        => $request->title,
-            'type'         => $request->type,
-            'hwtype'       => $request->hwtype,
+            'title' => $request->title,
+            'type' => $request->type,
+            'hwtype' => $request->hwtype,
             'manufacturer' => $request->manufacturer,
-            'notes'        => $request->notes,
-            'tags'         => $this->parseTags($request->tags),
-            'created_by'   => $request->user()?->id,
+            'notes' => $request->notes,
+            'tags' => $this->parseTags($request->tags),
+            'created_by' => $request->user()?->id,
         ];
 
         if ($request->hasFile('file')) {
@@ -122,23 +123,23 @@ class FabricationDocumentController extends Controller
     public function update(Request $request, FabricationDocument $fabricationDocument)
     {
         $request->validate([
-            'title'        => 'required|string|max:255',
-            'type'         => 'required|in:fabrication,installation,maintenance',
-            'hwtype'       => 'nullable|string|max:100',
+            'title' => 'required|string|max:255',
+            'type' => 'required|in:fabrication,installation,maintenance',
+            'hwtype' => 'nullable|string|max:100',
             'manufacturer' => 'nullable|string|max:100',
-            'notes'        => 'nullable|string|max:5000',
-            'tags'         => 'nullable|string',
-            'file'         => 'nullable|file|max:51200',
-            'remove_file'  => 'nullable|boolean',
+            'notes' => 'nullable|string|max:5000',
+            'tags' => 'nullable|string',
+            'file' => 'nullable|file|max:51200',
+            'remove_file' => 'nullable|boolean',
         ]);
 
         $data = [
-            'title'        => $request->title,
-            'type'         => $request->type,
-            'hwtype'       => $request->hwtype,
+            'title' => $request->title,
+            'type' => $request->type,
+            'hwtype' => $request->hwtype,
             'manufacturer' => $request->manufacturer,
-            'notes'        => $request->notes,
-            'tags'         => $this->parseTags($request->tags),
+            'notes' => $request->notes,
+            'tags' => $this->parseTags($request->tags),
         ];
 
         if ($request->hasFile('file')) {
@@ -198,7 +199,7 @@ class FabricationDocumentController extends Controller
             ->pluck('manufacturer');
 
         return response()->json([
-            'hwtypes'       => $hwtypes,
+            'hwtypes' => $hwtypes,
             'manufacturers' => $manufacturers,
         ]);
     }
@@ -207,8 +208,8 @@ class FabricationDocumentController extends Controller
 
     private function storeFile(\Illuminate\Http\UploadedFile $file): array
     {
-        $slug      = Str::uuid()->toString();
-        $shortName = Str::random(8) . '.' . $file->getClientOriginalExtension();
+        $slug = Str::uuid()->toString();
+        $shortName = Str::random(8).'.'.$file->getClientOriginalExtension();
         $path = $file->storeAs("fabrication-documents/{$slug}", $shortName, 'public');
 
         return [
@@ -229,23 +230,24 @@ class FabricationDocumentController extends Controller
         if (is_array($decoded)) {
             return array_values(array_filter(array_map('trim', $decoded)));
         }
+
         return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
     private function formatDoc(FabricationDocument $doc): array
     {
         return [
-            'id'           => $doc->id,
-            'title'        => $doc->title,
-            'type'         => $doc->type,
-            'hwtype'       => $doc->hwtype,
+            'id' => $doc->id,
+            'title' => $doc->title,
+            'type' => $doc->type,
+            'hwtype' => $doc->hwtype,
             'manufacturer' => $doc->manufacturer,
-            'tags'         => $doc->tags ?? [],
-            'notes'        => $doc->notes,
-            'file'         => $doc->file,
-            'created_at'   => $doc->created_at?->toIso8601String(),
-            'updated_at'   => $doc->updated_at?->toIso8601String(),
-            'created_by'   => $doc->created_by,
+            'tags' => $doc->tags ?? [],
+            'notes' => $doc->notes,
+            'file' => $doc->file,
+            'created_at' => $doc->created_at?->toIso8601String(),
+            'updated_at' => $doc->updated_at?->toIso8601String(),
+            'created_by' => $doc->created_by,
         ];
     }
 }

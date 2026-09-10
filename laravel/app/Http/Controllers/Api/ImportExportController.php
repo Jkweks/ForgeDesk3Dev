@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\Order;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -34,13 +34,13 @@ class ImportExportController extends Controller
             ->pluck('committed_qty', 'product_id')
             ->toArray();
 
-        $filename = 'products_export_' . date('Y-m-d_His') . '.csv';
+        $filename = 'products_export_'.date('Y-m-d_His').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($products, $committedByProduct) {
+        $callback = function () use ($products, $committedByProduct) {
             $file = fopen('php://output', 'w');
 
             fputcsv($file, [
@@ -124,6 +124,7 @@ class ImportExportController extends Controller
                 if (count($row) !== count($header)) {
                     $results['errors']++;
                     $results['details'][] = "Row {$rowNumber}: Column count mismatch";
+
                     continue;
                 }
 
@@ -141,7 +142,8 @@ class ImportExportController extends Controller
 
                 if ($validator->fails()) {
                     $results['errors']++;
-                    $results['details'][] = "Row {$rowNumber}: " . implode(', ', $validator->errors()->all());
+                    $results['details'][] = "Row {$rowNumber}: ".implode(', ', $validator->errors()->all());
+
                     continue;
                 }
 
@@ -194,8 +196,9 @@ class ImportExportController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
-                'error' => 'Import failed: ' . $e->getMessage(),
+                'error' => 'Import failed: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -213,15 +216,15 @@ class ImportExportController extends Controller
 
         $orders = $query->get();
 
-        $filename = 'orders_export_' . date('Y-m-d_His') . '.csv';
+        $filename = 'orders_export_'.date('Y-m-d_His').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($orders) {
+        $callback = function () use ($orders) {
             $file = fopen('php://output', 'w');
-            
+
             fputcsv($file, [
                 'Order Number', 'Customer Name', 'Customer Email', 'Status',
                 'Priority', 'Order Date', 'Expected Ship Date', 'Subtotal',
@@ -259,15 +262,15 @@ class ImportExportController extends Controller
     {
         $type = $request->get('type', 'products');
 
-        $filename = $type . '_import_template.csv';
+        $filename = $type.'_import_template.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($type) {
+        $callback = function () use ($type) {
             $file = fopen('php://output', 'w');
-            
+
             if ($type === 'products') {
                 fputcsv($file, [
                     'SKU', 'Description', 'Long Description', 'Category',

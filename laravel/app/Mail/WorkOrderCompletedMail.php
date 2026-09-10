@@ -48,6 +48,8 @@ class WorkOrderCompletedMail extends Mailable implements ShouldQueue
                 'jobName' => $job?->job_name,
                 'completedAt' => $this->workOrder->completed_at?->format('M j, Y'),
                 'completedBy' => $this->completedBy,
+                'projectManager' => $job?->project_manager,
+                'superintendent' => $job?->superintendent,
                 'note' => $this->note,
                 'url' => rtrim(config('app.url', ''), '/').'/fabrication/work-orders',
             ],

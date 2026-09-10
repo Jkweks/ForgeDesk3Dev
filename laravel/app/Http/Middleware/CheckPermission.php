@@ -15,7 +15,7 @@ class CheckPermission
     {
         $user = $request->user();
 
-        if (!$user || !$user->hasAnyPermission($permissions)) {
+        if (! $user || ! $user->hasAnyPermission($permissions)) {
             return response()->json([
                 'message' => 'You do not have permission to perform this action.',
             ], 403);

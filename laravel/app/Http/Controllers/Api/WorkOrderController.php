@@ -515,7 +515,13 @@ class WorkOrderController extends Controller
             // first digit of the job-number cell (same label-then-right rule).
             $division = null;
             $jobNumber = null;
+            $jobName = null;
+            $projectManager = null;
+            $superintendent = null;
             $jobLabels = ['job number', 'job no', 'job no.', 'job #', 'job#', 'job number:', 'job #:'];
+            $jobNameLabels = ['job name', 'project', 'project name', 'project title'];
+            $pmLabels = ['project manager', 'pm', 'p.m.', 'proj mgr', 'project mgr', 'projectmanager'];
+            $superLabels = ['superintendent', 'super', 'supt', 'supt.', 'site superintendent', 'job superintendent', 'field superintendent'];
             foreach (array_slice($rows, 0, $headerRow) as $row) {
                 foreach ($row as $colIdx => $cell) {
                     $norm = rtrim(strtolower(trim((string) $cell)), ':');
@@ -527,6 +533,15 @@ class WorkOrderController extends Controller
                     }
                     if ($jobNumber === null && in_array($norm, $jobLabels, true)) {
                         $jobNumber = $this->firstValueRightOf($row, (int) $colIdx);
+                    }
+                    if ($jobName === null && in_array($norm, $jobNameLabels, true)) {
+                        $jobName = $this->firstValueRightOf($row, (int) $colIdx);
+                    }
+                    if ($projectManager === null && in_array($norm, $pmLabels, true)) {
+                        $projectManager = $this->firstValueRightOf($row, (int) $colIdx);
+                    }
+                    if ($superintendent === null && in_array($norm, $superLabels, true)) {
+                        $superintendent = $this->firstValueRightOf($row, (int) $colIdx);
                     }
                 }
             }
@@ -564,6 +579,9 @@ class WorkOrderController extends Controller
             return response()->json([
                 'division' => $division !== '' ? $division : null,
                 'job_number' => $jobNumber,
+                'job_name' => $jobName !== '' ? $jobName : null,
+                'project_manager' => $projectManager !== '' ? $projectManager : null,
+                'superintendent' => $superintendent !== '' ? $superintendent : null,
                 'elevations' => $elevations,
             ]);
         } catch (\Exception $e) {
@@ -665,6 +683,8 @@ class WorkOrderController extends Controller
                 'job_name' => $job->job_name,
                 'project_manager' => $job->project_manager,
                 'project_manager_id' => $job->project_manager_id,
+                'superintendent' => $job->superintendent,
+                'superintendent_id' => $job->superintendent_id,
                 'division' => substr($job->job_number ?? '', 0, 1) ?: '—',
             ] : null,
             'created_at' => $wo->created_at->toIso8601String(),

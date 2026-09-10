@@ -125,8 +125,9 @@ class WorkOrderStatusTest extends TestCase
         Mail::fake();
 
         $pm = User::factory()->create(['role' => 'manager', 'is_active' => true, 'email' => 'pm@example.com']);
+        $super = User::factory()->create(['role' => 'viewer', 'is_active' => true, 'email' => 'super@example.com']);
         User::factory()->create(['role' => 'admin', 'is_active' => true, 'email' => 'admin@example.com']);
-        $this->job->update(['project_manager_id' => $pm->id]);
+        $this->job->update(['project_manager_id' => $pm->id, 'superintendent_id' => $super->id]);
 
         Sanctum::actingAs(User::factory()->create(['role' => 'manager', 'is_active' => true]), ['*']);
         $wo = $this->readyWo();
@@ -140,6 +141,7 @@ class WorkOrderStatusTest extends TestCase
             $subject = $mail->envelope()->subject;
 
             return $mail->hasTo('pm@example.com')
+                && $mail->hasTo('super@example.com')
                 && $mail->hasTo('admin@example.com')
                 && $subject === "Work Order Complete: Job One - WO{$wo->release_number} (see notes)";
         });

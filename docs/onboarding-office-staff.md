@@ -1,8 +1,8 @@
 # ForgeDesk – Office Staff Quick Start
 
-For users with the **Office Staff** role. This role is read‑only for most of the
-system: you can look things up and submit reservation *requests* for a manager to
-approve, but you can't edit inventory, jobs, or work orders.
+For users with the **Office Staff** role. This role is read‑only: you can look
+things up and run material checks, but you can't edit inventory, jobs, or work
+orders, and you can't create or change reservations.
 
 ---
 
@@ -13,7 +13,7 @@ approve, but you can't edit inventory, jobs, or work orders.
 2. Enter your **email** and **password**, click **Sign In**.
 3. The menu on the left shows only the sections you have access to — expect
    **Dashboard**, **Inventory**, and **Fulfillment**. If you also need
-   **Fabrication**, ask an admin to add it to the Office Staff role.
+   **Fabrication**, ask an admin to add it to your role.
 
 **Forgot your password?**
 
@@ -64,14 +64,14 @@ Click any row to open its detail panel:
 - Cost/price fields are hidden unless your role includes pricing access.
 
 You can view and search everything here, but the **Edit** and **Adjust** buttons
-won't be available to Office Staff.
+won't be available to office users.
 
 ---
 
 ## 3. Viewing work orders & fabrication status
 
 > Requires the **Fabrication** menu. If you don't see it, ask an admin to grant
-> the Office Staff role `nav.fabrication` and `fabrication.work-orders.view`.
+> your role `nav.fabrication` and `fabrication.work-orders.view`.
 
 ### Work Orders list — **Fabrication → Work Orders**
 
@@ -124,16 +124,59 @@ A live board grouped by operator, one card per stage:
 - Each card shows the stage name, release, elevation tag, priority, and due date.
 - The board **auto‑refreshes** about every 30 seconds.
 
-Office Staff can watch this board to see what's in progress and who's working on
+Office users can watch this board to see what's in progress and who's working on
 what; dragging cards to reassign is a fabrication‑lead action.
 
 ---
 
-## What Office Staff can't do
+## 4. Fulfillment — material checks
+
+Under **Fulfillment** you have **Jobs Dashboard** (view only) and **Material
+Check**.
+
+> **Reservation requests are on hold.** Submitting material reservation requests
+> from ForgeDesk isn't available yet — for now, pass material needs to a manager.
+
+### Checking availability — **Fulfillment → Material Check**
+
+Use this to see whether the shop has the material for an estimate — a check makes
+no changes to inventory.
+
+1. **Select File:**
+   - **EZ Estimate** (`.xlsx` / `.xlsm`) — quantities are in **packs**; it reads
+     the *Stock Lengths* and *Accessories* sheets automatically.
+   - **CSV** (`.csv`) — quantities in **eaches**; columns `Qty`, `Part Number`,
+     and optional `Color Code`. SKU is built as `PartNumber-ColorCode`.
+2. Optionally tick **Boneyard & Shared Components only** to check against just
+   salvaged/boneyard stock and shared components (regular stock is ignored, and
+   parts found only in regular stock come back as *Not Found*).
+3. Click **Check Materials**.
+
+**Reading the results:**
+
+| Badge | Meaning |
+| --- | --- |
+| **Available** (green) | Enough on hand for the full quantity |
+| **Partial** (amber) | Some on hand — see the **Shortage** column |
+| **Out of Stock** (red) | Matched a product, but none available |
+| **Not Found** (grey) | No matching product in inventory |
+
+The four cards up top total each category. When a part has a pack size the table
+shows both packs and eaches. Use the search box and the **All Status** filter to
+work the list.
+
+- **Export Results** downloads the whole table as CSV — send the shortages to
+  purchasing or a manager.
+- **Commit to Job** creates a live reservation immediately — it's a
+  manager/lead action and won't appear for you.
+
+---
+
+## What office users can't do
 
 - Edit or adjust inventory, jobs, purchase orders, or work orders.
-- Approve reservations — you can **request** materials (draft), and a manager
-  approves them.
+- Create, request, or approve reservations — pass material needs to a manager
+  (in‑app reservation requests aren't available yet).
 - See pricing/cost fields unless specifically granted.
 
 If you need access to something that's missing, contact an admin.

@@ -72,7 +72,7 @@ class PurchaseOrder extends Model
     public function getIsPartiallyReceivedAttribute()
     {
         return $this->items()->where('quantity_received', '>', 0)->count() > 0
-            && !$this->is_fully_received;
+            && ! $this->is_fully_received;
     }
 
     public function getTotalReceivedAttribute()
@@ -88,7 +88,10 @@ class PurchaseOrder extends Model
     public function getReceiveProgressAttribute()
     {
         $total = $this->total_ordered;
-        if ($total == 0) return 0;
+        if ($total == 0) {
+            return 0;
+        }
+
         return round(($this->total_received / $total) * 100, 1);
     }
 
@@ -123,6 +126,6 @@ class PurchaseOrder extends Model
             $nextNum = 1;
         }
 
-        return "PO-{$year}-" . str_pad($nextNum, 4, '0', STR_PAD_LEFT);
+        return "PO-{$year}-".str_pad($nextNum, 4, '0', STR_PAD_LEFT);
     }
 }

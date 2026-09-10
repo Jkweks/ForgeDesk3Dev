@@ -15,7 +15,7 @@ class FdStageTemplate extends Model
     ];
 
     protected $casts = [
-        'blocks_next'       => 'boolean',
+        'blocks_next' => 'boolean',
         'minutes_per_joint' => 'decimal:2',
     ];
 

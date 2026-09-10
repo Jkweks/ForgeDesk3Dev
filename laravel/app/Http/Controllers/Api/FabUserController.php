@@ -13,12 +13,12 @@ class FabUserController extends Controller
     {
         $query = FdUser::orderBy('name');
 
-        if (!$request->boolean('all')) {
+        if (! $request->boolean('all')) {
             $query->where('active', true);
         }
 
         $users = $query->get(['id', 'name', 'initials', 'role', 'email', 'active', 'fab_pin'])
-            ->map(fn($u) => array_merge($u->makeHidden('fab_pin')->toArray(), ['has_pin' => !is_null($u->fab_pin)]));
+            ->map(fn ($u) => array_merge($u->makeHidden('fab_pin')->toArray(), ['has_pin' => ! is_null($u->fab_pin)]));
 
         return response()->json(['users' => $users]);
     }
@@ -56,7 +56,7 @@ class FabUserController extends Controller
     public function setPin(Request $request, int $id)
     {
         $request->validate(['pin' => 'nullable|digits_between:4,8']);
-        $user          = FdUser::findOrFail($id);
+        $user = FdUser::findOrFail($id);
         $user->fab_pin = $request->pin ? Hash::make($request->pin) : null;
         $user->save();
 

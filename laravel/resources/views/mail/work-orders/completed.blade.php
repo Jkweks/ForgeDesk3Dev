@@ -12,6 +12,12 @@
 @if($completedBy)
 - **Confirmed by:** {{ $completedBy }}
 @endif
+@if(!empty($projectManager))
+- **Project manager:** {{ $projectManager }}
+@endif
+@if(!empty($superintendent))
+- **Superintendent:** {{ $superintendent }}
+@endif
 
 @if($note)
 **Notes**

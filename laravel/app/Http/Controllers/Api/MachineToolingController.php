@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Machine;
 use App\Models\MachineTooling;
-use App\Models\Product;
 use App\Models\MaintenanceRecord;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -107,15 +107,15 @@ class MachineToolingController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('sku', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhere('part_number', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('part_number', 'like', "%{$search}%");
             });
         }
 
         $tools = $query->with([
             'categories',
             'supplier',
-            'activeTooling.machine'
+            'activeTooling.machine',
         ])->get();
 
         // Add installation status to each tool
@@ -159,7 +159,7 @@ class MachineToolingController extends Controller
             'product',
             'machine',
             'installationRecord',
-            'replacementRecord'
+            'replacementRecord',
         ])->findOrFail($id);
 
         return response()->json($tooling);
@@ -188,9 +188,9 @@ class MachineToolingController extends Controller
         $product = Product::findOrFail($request->product_id);
 
         // Check if product is a tool
-        if (!$product->isTool()) {
+        if (! $product->isTool()) {
             return response()->json([
-                'error' => 'The selected product is not classified as a tool.'
+                'error' => 'The selected product is not classified as a tool.',
             ], 422);
         }
 
@@ -226,9 +226,10 @@ class MachineToolingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'error' => 'Failed to install tool',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -279,9 +280,9 @@ class MachineToolingController extends Controller
         $newProduct = Product::findOrFail($request->new_product_id);
 
         // Check if new product is a tool
-        if (!$newProduct->isTool()) {
+        if (! $newProduct->isTool()) {
             return response()->json([
-                'error' => 'The replacement product is not classified as a tool.'
+                'error' => 'The replacement product is not classified as a tool.',
             ], 422);
         }
 
@@ -344,9 +345,10 @@ class MachineToolingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'error' => 'Failed to replace tool',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -376,8 +378,8 @@ class MachineToolingController extends Controller
             $tooling->status = 'replaced';
             $tooling->removed_at = now();
             $tooling->removed_by = auth()->user()->name ?? 'System';
-            $tooling->notes = ($tooling->notes ? $tooling->notes . "\n\n" : '') .
-                             "Removal reason: " . ($request->reason ?? 'Not specified');
+            $tooling->notes = ($tooling->notes ? $tooling->notes."\n\n" : '').
+                             'Removal reason: '.($request->reason ?? 'Not specified');
             $tooling->save();
 
             DB::commit();
@@ -389,9 +391,10 @@ class MachineToolingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'error' => 'Failed to remove tool',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -415,6 +418,7 @@ class MachineToolingController extends Controller
             ->groupBy('machine_id')
             ->map(function ($tooling, $machineId) {
                 $machine = $tooling->first()->machine;
+
                 return [
                     'machine_id' => $machineId,
                     'machine_name' => $machine->name,
@@ -444,7 +448,7 @@ class MachineToolingController extends Controller
         if ($machine->machine_type_id) {
             $query->where(function ($q) use ($machine) {
                 $q->whereJsonContains('compatible_machine_types', $machine->machine_type_id)
-                  ->orWhereNull('compatible_machine_types');
+                    ->orWhereNull('compatible_machine_types');
             });
         }
 

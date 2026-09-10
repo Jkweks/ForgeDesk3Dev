@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\InventoryTransaction;
+use App\Models\Product;
 use App\Models\StorageLocation;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class ReportsController extends Controller
 {
@@ -19,7 +19,9 @@ class ReportsController extends Controller
     {
         $lowStock = Product::whereIn('status', ['low', 'very_low'])
             ->where('is_active', true)
-            ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
+            ->where(function ($q) {
+                $q->where('nonsof', false)->orWhereNull('nonsof');
+            })
             ->with(['categories', 'supplier', 'inventoryLocations'])
             ->get()
             ->map(function ($product) {
@@ -28,7 +30,9 @@ class ReportsController extends Controller
 
         $critical = Product::where('status', 'critical')
             ->where('is_active', true)
-            ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
+            ->where(function ($q) {
+                $q->where('nonsof', false)->orWhereNull('nonsof');
+            })
             ->with(['categories', 'supplier', 'inventoryLocations'])
             ->get()
             ->map(function ($product) {
@@ -56,13 +60,13 @@ class ReportsController extends Controller
         // Get products that have active reservation items
         // Active statuses per fulfillment process: 'active', 'in_progress', 'on_hold'
         $committedProducts = Product::where('is_active', true)
-            ->whereHas('reservationItems', function($query) {
-                $query->whereHas('reservation', function($resQuery) {
+            ->whereHas('reservationItems', function ($query) {
+                $query->whereHas('reservation', function ($resQuery) {
                     $resQuery->whereIn('status', ['active', 'in_progress', 'on_hold']);
                 });
             })
-            ->with(['categories', 'supplier', 'reservationItems' => function($query) {
-                $query->whereHas('reservation', function($resQuery) {
+            ->with(['categories', 'supplier', 'reservationItems' => function ($query) {
+                $query->whereHas('reservation', function ($resQuery) {
                     $resQuery->whereIn('status', ['active', 'in_progress', 'on_hold']);
                 })->with('reservation');
             }])
@@ -98,6 +102,7 @@ class ReportsController extends Controller
                         'needed_by' => $item->reservation->needed_by,
                     ];
                 });
+
                 return $data;
             });
 
@@ -106,7 +111,7 @@ class ReportsController extends Controller
             'summary' => [
                 'total_products' => $committedProducts->count(),
                 'total_quantity_committed' => $committedProducts->sum('committed'),
-                'total_value_committed' => $committedProducts->sum(function($p) {
+                'total_value_committed' => $committedProducts->sum(function ($p) {
                     return $p['committed_display'] * $p['display_cost'];
                 }),
             ],
@@ -126,13 +131,13 @@ class ReportsController extends Controller
             ->with([
                 'categories',
                 'supplier',
-                'transactions' => function($query) use ($since) {
+                'transactions' => function ($query) use ($since) {
                     $query->where('transaction_date', '>=', $since);
-                }
+                },
             ])
             ->get();
 
-        $velocityData = $products->map(function ($product) use ($since) {
+        $velocityData = $products->map(function ($product) {
             // Use pre-loaded transactions (no additional query)
             $transactions = $product->transactions;
 
@@ -140,7 +145,7 @@ class ReportsController extends Controller
 
             // Count all inventory removals as shipments (negative quantity transactions)
             // This includes: shipment, issue, job_issue, and negative adjustments
-            $shipments = abs($transactions->filter(function($t) {
+            $shipments = abs($transactions->filter(function ($t) {
                 return $t->quantity < 0;
             })->sum('quantity'));
 
@@ -152,8 +157,11 @@ class ReportsController extends Controller
 
             // Classify velocity
             $velocity = 'slow';
-            if ($turnoverRate > 200) $velocity = 'fast';
-            elseif ($turnoverRate > 100) $velocity = 'medium';
+            if ($turnoverRate > 200) {
+                $velocity = 'fast';
+            } elseif ($turnoverRate > 100) {
+                $velocity = 'medium';
+            }
 
             // Days until stockout
             $daysUntilStockout = null;
@@ -205,8 +213,10 @@ class ReportsController extends Controller
     public function reorderRecommendations(Request $request)
     {
         $products = Product::where('is_active', true)
-            ->where(function ($q) { $q->where('nonsof', false)->orWhereNull('nonsof'); })
-            ->where(function($query) {
+            ->where(function ($q) {
+                $q->where('nonsof', false)->orWhereNull('nonsof');
+            })
+            ->where(function ($query) {
                 // Products at or below reorder point (using actual DB columns)
                 $query->whereRaw('(quantity_on_hand - quantity_committed) <= reorder_point')
                     // Or products below minimum
@@ -244,11 +254,11 @@ class ReportsController extends Controller
             ->with([
                 'categories',
                 'supplier',
-                'transactions' => function($query) {
+                'transactions' => function ($query) {
                     $query->where('type', 'shipment')
                         ->orderBy('transaction_date', 'desc')
                         ->limit(1);
-                }
+                },
             ])
             ->withCount('usedInProducts') // Single query for BOM usage count
             ->get();
@@ -257,7 +267,7 @@ class ReportsController extends Controller
             // Use pre-loaded last shipment transaction (no additional query)
             $lastTransaction = $product->transactions->first();
 
-            if (!$lastTransaction) {
+            if (! $lastTransaction) {
                 return true; // Never shipped = potentially obsolete
             }
 
@@ -369,13 +379,13 @@ class ReportsController extends Controller
         // Load ALL products (active or inactive) to capture complete inventory value
         // Products are filtered later based on whether they have inventory/transactions
         $products = Product::with([
-                'categories',
-                'supplier',
-                'transactions' => function($query) use ($startDate, $endDate) {
-                    $query->whereBetween('transaction_date', [$startDate, $endDate])
-                        ->orderBy('transaction_date', 'asc');
-                }
-            ])
+            'categories',
+            'supplier',
+            'transactions' => function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('transaction_date', [$startDate, $endDate])
+                    ->orderBy('transaction_date', 'asc');
+            },
+        ])
             ->get();
 
         $statementData = $products->map(function ($product) use ($startDate, $endDate) {
@@ -412,7 +422,7 @@ class ReportsController extends Controller
                     // Product was created before this month and has a future transaction
                     // Use quantity_before of first transaction as beginning inventory
                     $beginningInventory = $firstTransactionEver->quantity_before;
-                } elseif (!$firstTransactionEver && $product->created_at < $startDate && $product->quantity_on_hand > 0) {
+                } elseif (! $firstTransactionEver && $product->created_at < $startDate && $product->quantity_on_hand > 0) {
                     // Product was created before this month, has no transactions at all,
                     // but has current inventory - use current quantity_on_hand
                     // This captures products created with initial inventory but no transaction history yet
@@ -426,7 +436,7 @@ class ReportsController extends Controller
             $receipts = $transactions->where('type', 'receipt')->sum('quantity');
             $returns = $transactions->where('type', 'return')->sum('quantity');
             $jobMaterialTransfers = $transactions->where('type', 'job_material_transfer')->sum('quantity');
-            $positiveAdjustments = $transactions->where('type', 'adjustment')->filter(function($t) {
+            $positiveAdjustments = $transactions->where('type', 'adjustment')->filter(function ($t) {
                 return $t->quantity > 0;
             })->sum('quantity');
 
@@ -434,7 +444,7 @@ class ReportsController extends Controller
             $shipments = abs($transactions->where('type', 'shipment')->sum('quantity'));
             $jobIssues = abs($transactions->whereIn('type', ['job_issue', 'fulfillment'])->sum('quantity'));
             $issues = abs($transactions->where('type', 'issue')->sum('quantity'));
-            $negativeAdjustments = abs($transactions->where('type', 'adjustment')->filter(function($t) {
+            $negativeAdjustments = abs($transactions->where('type', 'adjustment')->filter(function ($t) {
                 return $t->quantity < 0;
             })->sum('quantity'));
 
@@ -477,7 +487,7 @@ class ReportsController extends Controller
                         // Product was created during/before this month and has a future transaction
                         // Use quantity_before of first transaction as ending inventory
                         $endingInventory = $firstTransactionEver->quantity_before;
-                    } elseif (!$firstTransactionEver && $product->created_at <= $endDate && $product->quantity_on_hand > 0) {
+                    } elseif (! $firstTransactionEver && $product->created_at <= $endDate && $product->quantity_on_hand > 0) {
                         // Product was created before/during this month, has no transactions at all,
                         // but has current inventory - use current quantity_on_hand
                         // This captures products created with initial inventory but no transaction history yet
@@ -568,10 +578,10 @@ class ReportsController extends Controller
             ];
         })
         // First, filter to products with inventory or activity to ensure complete financial calculations
-        ->filter(function($item) {
-            return $item['beginning_inventory'] > 0 || $item['ending_inventory'] > 0 || $item['transaction_count'] > 0;
-        })
-        ->values();
+            ->filter(function ($item) {
+                return $item['beginning_inventory'] > 0 || $item['ending_inventory'] > 0 || $item['transaction_count'] > 0;
+            })
+            ->values();
 
         // Calculate summary statistics from ALL products (includes products with inventory but no transactions)
         // This ensures accurate financial totals including static inventory
@@ -596,7 +606,7 @@ class ReportsController extends Controller
 
         // Filter displayed list to only show products with transactions during the month
         // Financial totals still include all inventory
-        $statementData = $statementData->filter(function($item) {
+        $statementData = $statementData->filter(function ($item) {
             return $item['transaction_count'] > 0;
         })->values();
 
@@ -693,9 +703,13 @@ class ReportsController extends Controller
 
             // Priority score (higher = more urgent)
             $priorityScore = 0;
-            if ($product->status === 'critical') $priorityScore += 100;
-            elseif ($product->status === 'very_low') $priorityScore += 75;
-            elseif ($product->status === 'low') $priorityScore += 50;
+            if ($product->status === 'critical') {
+                $priorityScore += 100;
+            } elseif ($product->status === 'very_low') {
+                $priorityScore += 75;
+            } elseif ($product->status === 'low') {
+                $priorityScore += 50;
+            }
 
             if ($product->days_until_stockout && $product->days_until_stockout < 7) {
                 $priorityScore += 50;
@@ -713,14 +727,14 @@ class ReportsController extends Controller
         $items = collect($data->original['low_stock'])->concat($data->original['critical']);
 
         // Map to proper CSV format with pack-based quantities
-        $csvData = $items->map(function($item) {
+        $csvData = $items->map(function ($item) {
             return [
                 $item['sku'],
                 $item['description'],
                 $item['category'] ?? '',
                 $item['supplier'] ?? '',
-                $item['on_hand_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['available_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
+                $item['on_hand_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['available_display'].' '.($item['counting_unit'] ?? 'ea'),
                 $item['minimum'] ?? '',
                 $item['status'],
                 number_format($item['total_value'], 2),
@@ -729,20 +743,20 @@ class ReportsController extends Controller
 
         return $this->generateCSV($csvData, 'low_stock_report', [
             'SKU', 'Description', 'Category', 'Supplier', 'On Hand', 'Available',
-            'Minimum', 'Status', 'Value'
+            'Minimum', 'Status', 'Value',
         ]);
     }
 
     private function generateCSV($data, $filename, $headers)
     {
-        $filename = $filename . '_' . date('Y-m-d_His') . '.csv';
+        $filename = $filename.'_'.date('Y-m-d_His').'.csv';
 
-        $callback = function() use ($data, $headers) {
+        $callback = function () use ($data, $headers) {
             $file = fopen('php://output', 'w');
             fputcsv($file, $headers);
 
             foreach ($data as $row) {
-                fputcsv($file, array_values((array)$row));
+                fputcsv($file, array_values((array) $row));
             }
 
             fclose($file);
@@ -760,15 +774,15 @@ class ReportsController extends Controller
         $items = collect($data->original['committed_products']);
 
         // Map to proper CSV format with pack-based quantities
-        $csvData = $items->map(function($item) {
+        $csvData = $items->map(function ($item) {
             return [
                 $item['sku'],
                 $item['description'],
                 $item['category'] ?? '',
                 $item['supplier'] ?? '',
-                $item['on_hand_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['committed_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['available_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
+                $item['on_hand_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['committed_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['available_display'].' '.($item['counting_unit'] ?? 'ea'),
                 number_format($item['display_cost'], 2),
                 number_format($item['total_value'], 2),
             ];
@@ -776,7 +790,7 @@ class ReportsController extends Controller
 
         return $this->generateCSV($csvData, 'committed_parts_report', [
             'SKU', 'Description', 'Category', 'Supplier', 'On Hand', 'Committed',
-            'Available', 'Unit Cost', 'Total Value'
+            'Available', 'Unit Cost', 'Total Value',
         ]);
     }
 
@@ -786,16 +800,16 @@ class ReportsController extends Controller
         $items = collect($data->original['products']);
 
         // Map to proper CSV format with pack-based quantities
-        $csvData = $items->map(function($item) {
+        $csvData = $items->map(function ($item) {
             return [
                 $item['sku'],
                 $item['description'],
                 $item['category'] ?? '',
-                $item['on_hand_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['available_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
+                $item['on_hand_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['available_display'].' '.($item['counting_unit'] ?? 'ea'),
                 $item['receipts'],
                 $item['shipments'],
-                $item['turnover_rate'] . '%',
+                $item['turnover_rate'].'%',
                 ucfirst($item['velocity']),
                 $item['days_until_stockout'] ?? 'N/A',
             ];
@@ -803,7 +817,7 @@ class ReportsController extends Controller
 
         return $this->generateCSV($csvData, 'velocity_analysis_report', [
             'SKU', 'Description', 'Category', 'On Hand', 'Available', 'Receipts',
-            'Shipments', 'Turnover Rate', 'Velocity', 'Days Until Stockout'
+            'Shipments', 'Turnover Rate', 'Velocity', 'Days Until Stockout',
         ]);
     }
 
@@ -813,16 +827,16 @@ class ReportsController extends Controller
         $items = collect($data->original['recommendations']);
 
         // Map to proper CSV format with pack-based quantities
-        $csvData = $items->map(function($item) {
+        $csvData = $items->map(function ($item) {
             return [
                 $item['sku'],
                 $item['description'],
                 $item['category'] ?? '',
                 $item['supplier'] ?? '',
-                $item['available_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['reorder_point_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['shortage_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['recommended_order_qty_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
+                $item['available_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['reorder_point_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['shortage_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['recommended_order_qty_display'].' '.($item['counting_unit'] ?? 'ea'),
                 number_format($item['recommended_order_value'], 2),
                 ucfirst($item['status']),
                 $item['lead_time_days'] ?? '',
@@ -831,7 +845,7 @@ class ReportsController extends Controller
 
         return $this->generateCSV($csvData, 'reorder_recommendations_report', [
             'SKU', 'Description', 'Category', 'Supplier', 'Available', 'Reorder Point',
-            'Shortage', 'Recommended Qty', 'Recommended Value', 'Status', 'Lead Time Days'
+            'Shortage', 'Recommended Qty', 'Recommended Value', 'Status', 'Lead Time Days',
         ]);
     }
 
@@ -841,12 +855,12 @@ class ReportsController extends Controller
         $items = collect($data->original['obsolete_candidates']);
 
         // Map to proper CSV format with pack-based quantities
-        $csvData = $items->map(function($item) {
+        $csvData = $items->map(function ($item) {
             return [
                 $item['sku'],
                 $item['description'],
                 $item['category'] ?? '',
-                $item['on_hand_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
+                $item['on_hand_display'].' '.($item['counting_unit'] ?? 'ea'),
                 number_format($item['display_cost'], 2),
                 number_format($item['total_value'], 2),
                 $item['last_shipment_date'] ?? 'Never',
@@ -857,7 +871,7 @@ class ReportsController extends Controller
 
         return $this->generateCSV($csvData, 'obsolete_inventory_report', [
             'SKU', 'Description', 'Category', 'On Hand', 'Unit Cost', 'Total Value',
-            'Last Shipment Date', 'Days Since Last Use', 'Used in BOM'
+            'Last Shipment Date', 'Days Since Last Use', 'Used in BOM',
         ]);
     }
 
@@ -879,11 +893,12 @@ class ReportsController extends Controller
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.low-stock-report', [
             'products' => $products,
-            'summary' => $summary
+            'summary' => $summary,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('low-stock-report-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('low-stock-report-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -896,7 +911,7 @@ class ReportsController extends Controller
 
         // Get unique active job count
         $activeJobs = collect($reportData['committed_products'])
-            ->flatMap(function($product) {
+            ->flatMap(function ($product) {
                 return $product['reservations'] ?? [];
             })
             ->pluck('id')
@@ -912,11 +927,12 @@ class ReportsController extends Controller
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.committed-parts-report', [
             'products' => $reportData['committed_products'],
-            'summary' => $summary
+            'summary' => $summary,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('committed-parts-report-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('committed-parts-report-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -931,11 +947,12 @@ class ReportsController extends Controller
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.velocity-analysis-report', [
             'products' => $reportData['products'],
             'summary' => $reportData['summary'],
-            'days' => $days
+            'days' => $days,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('velocity-analysis-report-' . $days . 'd-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('velocity-analysis-report-'.$days.'d-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -949,11 +966,11 @@ class ReportsController extends Controller
         $recommendations = collect($reportData['recommendations']);
 
         // Calculate priority counts for summary
-        $highPriority = $recommendations->filter(function($rec) {
+        $highPriority = $recommendations->filter(function ($rec) {
             return $rec['priority_score'] >= 100;
         })->count();
 
-        $mediumPriority = $recommendations->filter(function($rec) {
+        $mediumPriority = $recommendations->filter(function ($rec) {
             return $rec['priority_score'] >= 50 && $rec['priority_score'] < 100;
         })->count();
 
@@ -966,11 +983,12 @@ class ReportsController extends Controller
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.reorder-recommendations-report', [
             'recommendations' => $recommendations,
-            'summary' => $summary
+            'summary' => $summary,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('reorder-recommendations-report-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('reorder-recommendations-report-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -982,7 +1000,7 @@ class ReportsController extends Controller
         $reportData = $data->original;
         $inactive_days = $request->get('inactive_days', 90);
 
-        $candidates = collect($reportData['obsolete_candidates'])->map(function($candidate) {
+        $candidates = collect($reportData['obsolete_candidates'])->map(function ($candidate) {
             return array_merge($candidate, [
                 'last_activity_date' => $candidate['last_shipment_date'],
                 'days_since_activity' => $candidate['days_since_last_use'],
@@ -1004,11 +1022,12 @@ class ReportsController extends Controller
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.obsolete-inventory-report', [
             'candidates' => $candidates,
             'summary' => $summary,
-            'inactive_days' => $inactive_days
+            'inactive_days' => $inactive_days,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('obsolete-inventory-report-' . $inactive_days . 'd-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('obsolete-inventory-report-'.$inactive_days.'d-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -1027,9 +1046,9 @@ class ReportsController extends Controller
             ->get();
 
         // Transform by_date to include issues (negative quantity transactions)
-        $byDate = collect($reportData['by_date'])->mapWithKeys(function($dayData) use ($allTransactions) {
+        $byDate = collect($reportData['by_date'])->mapWithKeys(function ($dayData) use ($allTransactions) {
             $date = $dayData['date'];
-            $dayTrans = $allTransactions->filter(function($t) use ($date) {
+            $dayTrans = $allTransactions->filter(function ($t) use ($date) {
                 return Carbon::parse($t->transaction_date)->format('Y-m-d') === $date;
             });
 
@@ -1044,9 +1063,9 @@ class ReportsController extends Controller
 
         // Transform by_category to include product_count and percentage
         $totalTransactions = $allTransactions->count();
-        $byCategory = $allTransactions->groupBy(function($t) {
+        $byCategory = $allTransactions->groupBy(function ($t) {
             return $t->product->primaryCategory()?->name ?? 'Uncategorized';
-        })->map(function($catTrans, $category) use ($totalTransactions) {
+        })->map(function ($catTrans, $category) use ($totalTransactions) {
             return [
                 'transaction_count' => $catTrans->count(),
                 'product_count' => $catTrans->pluck('product_id')->unique()->count(),
@@ -1071,11 +1090,12 @@ class ReportsController extends Controller
             'by_date' => $byDate,
             'by_category' => $byCategory,
             'summary' => $summary,
-            'days' => $days
+            'days' => $days,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('usage-analytics-report-' . $days . 'd-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('usage-analytics-report-'.$days.'d-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -1091,11 +1111,12 @@ class ReportsController extends Controller
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.monthly-inventory-statement-report', [
             'statement' => $reportData['statement'],
-            'summary' => $reportData['summary']
+            'summary' => $reportData['summary'],
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('monthly-inventory-statement-' . $year . '-' . str_pad($month, 2, '0', STR_PAD_LEFT) . '.pdf');
+
+        return $pdf->stream('monthly-inventory-statement-'.$year.'-'.str_pad($month, 2, '0', STR_PAD_LEFT).'.pdf');
     }
 
     private function exportMonthlyStatement($request)
@@ -1104,24 +1125,24 @@ class ReportsController extends Controller
         $items = collect($data->original['statement']);
 
         // Map to proper CSV format with pack-based quantities
-        $csvData = $items->map(function($item) {
+        $csvData = $items->map(function ($item) {
             return [
                 $item['sku'],
                 $item['description'],
                 $item['category'] ?? '',
-                $item['beginning_inventory_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['receipts_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['returns_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['job_material_transfers_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['positive_adjustments_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['total_additions_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['shipments_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['job_issues_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['issues_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['negative_adjustments_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['total_deductions_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['ending_inventory_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
-                $item['net_change_display'] . ' ' . ($item['counting_unit'] ?? 'ea'),
+                $item['beginning_inventory_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['receipts_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['returns_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['job_material_transfers_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['positive_adjustments_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['total_additions_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['shipments_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['job_issues_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['issues_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['negative_adjustments_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['total_deductions_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['ending_inventory_display'].' '.($item['counting_unit'] ?? 'ea'),
+                $item['net_change_display'].' '.($item['counting_unit'] ?? 'ea'),
                 number_format($item['display_cost'], 2),
                 number_format($item['beginning_value'], 2),
                 number_format($item['ending_value'], 2),
@@ -1130,12 +1151,13 @@ class ReportsController extends Controller
         });
 
         $month = $data->original['summary']['month'];
-        return $this->generateCSV($csvData, 'monthly_inventory_statement_' . str_replace(' ', '_', $month), [
+
+        return $this->generateCSV($csvData, 'monthly_inventory_statement_'.str_replace(' ', '_', $month), [
             'SKU', 'Description', 'Category',
             'Beginning Inventory', 'Receipts', 'Returns', 'Job Material Transfers', 'Positive Adjustments', 'Total Additions',
             'Shipments', 'Job Issues', 'Issues', 'Negative Adjustments', 'Total Deductions',
             'Ending Inventory', 'Net Change',
-            'Unit Cost', 'Beginning Value', 'Ending Value', 'Value Change'
+            'Unit Cost', 'Beginning Value', 'Ending Value', 'Value Change',
         ]);
     }
 
@@ -1165,13 +1187,13 @@ class ReportsController extends Controller
             ->pluck('committed_qty', 'product_id')
             ->toArray();
 
-        $filename = 'inventory_report_' . date('Y-m-d_His') . '.csv';
+        $filename = 'inventory_report_'.date('Y-m-d_His').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($products, $committedByProduct) {
+        $callback = function () use ($products, $committedByProduct) {
             $file = fopen('php://output', 'w');
 
             fputcsv($file, [
@@ -1301,7 +1323,7 @@ class ReportsController extends Controller
 
         return response()->json([
             'products' => $inventoryData->values(),
-            'summary' => $summary
+            'summary' => $summary,
         ]);
     }
 
@@ -1374,11 +1396,12 @@ class ReportsController extends Controller
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.inventory-report', [
             'products' => $inventoryData,
-            'summary' => $summary
+            'summary' => $summary,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
-        return $pdf->stream('inventory-report-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('inventory-report-'.date('Y-m-d').'.pdf');
     }
 
     /**
@@ -1397,56 +1420,55 @@ class ReportsController extends Controller
             ])
             ->get()
             ->map(function (StorageLocation $loc) {
-                $items = $loc->inventoryLocations->map(fn($il) => [
-                    'sku'         => $il->product->sku,
+                $items = $loc->inventoryLocations->map(fn ($il) => [
+                    'sku' => $il->product->sku,
                     'part_number' => $il->product->part_number,
                     'description' => $il->product->description,
-                    'quantity'    => $il->quantity,
-                    'uom'         => $il->product->stock_uom ?? $il->product->unit_of_measure,
-                    'is_primary'  => (bool) $il->is_primary,
+                    'quantity' => $il->quantity,
+                    'uom' => $il->product->stock_uom ?? $il->product->unit_of_measure,
+                    'is_primary' => (bool) $il->is_primary,
                 ]);
 
                 return [
-                    'id'            => $loc->id,
-                    'name'          => $loc->name,
-                    'code'          => $loc->code,
-                    'type'          => $loc->type,
-                    'full_path'     => $loc->full_path,
-                    'aisle'         => $loc->aisle,
-                    'bay'           => $loc->bay,
-                    'level'         => $loc->level,
-                    'position'      => $loc->position,
-                    'item_count'    => $items->count(),
-                    'total_qty'     => $items->sum('quantity'),
-                    'items'         => $items->sortBy('sku')->values(),
+                    'id' => $loc->id,
+                    'name' => $loc->name,
+                    'code' => $loc->code,
+                    'type' => $loc->type,
+                    'full_path' => $loc->full_path,
+                    'aisle' => $loc->aisle,
+                    'bay' => $loc->bay,
+                    'level' => $loc->level,
+                    'position' => $loc->position,
+                    'item_count' => $items->count(),
+                    'total_qty' => $items->sum('quantity'),
+                    'items' => $items->sortBy('sku')->values(),
                 ];
             })
             ->values();
 
         $unassigned = \App\Models\Product::whereNull('deleted_at')
-            ->whereDoesntHave('inventoryLocations', fn($q) =>
-                $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
+            ->whereDoesntHave('inventoryLocations', fn ($q) => $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
             )
             ->orderBy('sku')
             ->get()
-            ->map(fn($p) => [
-                'sku'                => $p->sku,
-                'part_number'        => $p->part_number,
-                'description'        => $p->description,
-                'quantity_on_hand'   => $p->quantity_on_hand,
+            ->map(fn ($p) => [
+                'sku' => $p->sku,
+                'part_number' => $p->part_number,
+                'description' => $p->description,
+                'quantity_on_hand' => $p->quantity_on_hand,
                 'quantity_committed' => $p->quantity_committed,
-                'uom'                => $p->stock_uom ?? $p->unit_of_measure,
+                'uom' => $p->stock_uom ?? $p->unit_of_measure,
             ])
             ->values();
 
         return response()->json([
-            'locations'           => $locations,
+            'locations' => $locations,
             'unassigned_products' => $unassigned,
-            'summary'             => [
-                'total_locations'    => $locations->count(),
-                'total_line_items'   => $locations->sum('item_count'),
-                'total_qty'          => $locations->sum('total_qty'),
-                'unassigned_count'   => $unassigned->count(),
+            'summary' => [
+                'total_locations' => $locations->count(),
+                'total_line_items' => $locations->sum('item_count'),
+                'total_qty' => $locations->sum('total_qty'),
+                'unassigned_count' => $unassigned->count(),
             ],
         ]);
     }
@@ -1456,16 +1478,17 @@ class ReportsController extends Controller
      */
     public function storageLocationPdf(Request $request)
     {
-        $data       = $this->storageLocationReport($request);
+        $data = $this->storageLocationReport($request);
         $reportData = $data->original;
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.storage-location-report', [
-            'locations'           => $reportData['locations'],
-            'summary'             => $reportData['summary'],
+            'locations' => $reportData['locations'],
+            'summary' => $reportData['summary'],
             'unassigned_products' => $reportData['unassigned_products'],
         ]);
 
         $pdf->setPaper('letter', 'portrait');
-        return $pdf->stream('storage-location-report-' . date('Y-m-d') . '.pdf');
+
+        return $pdf->stream('storage-location-report-'.date('Y-m-d').'.pdf');
     }
 }

@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\BusinessJob;
 use App\Models\FdUser;
 use App\Models\FdWoElevation;
-use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\FdWoStage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -36,8 +36,8 @@ class StageMultiAssigneeTest extends TestCase
 
         return FdWorkOrder::create(array_merge([
             'business_job_id' => $this->job->id,
-            'release_number'  => ++$rel,
-            'priority'        => 1,
+            'release_number' => ++$rel,
+            'priority' => 1,
             'priority_locked' => true,
         ], $attr));
     }
@@ -45,8 +45,8 @@ class StageMultiAssigneeTest extends TestCase
     private function elevation(FdWorkOrder $wo, ?string $requested = null): FdWoElevation
     {
         return FdWoElevation::create([
-            'work_order_id'  => $wo->id,
-            'elevation_tag'  => 'E' . $wo->id . '-' . uniqid(),
+            'work_order_id' => $wo->id,
+            'elevation_tag' => 'E'.$wo->id.'-'.uniqid(),
             'date_requested' => $requested,
         ]);
     }
@@ -55,17 +55,17 @@ class StageMultiAssigneeTest extends TestCase
     {
         return FdWoStage::create(array_merge([
             'elevation_id' => $e->id,
-            'name'         => $name,
-            'sort_order'   => $order,
-            'blocks_next'  => true,
-            'status'       => 'pending',
+            'name' => $name,
+            'sort_order' => $order,
+            'blocks_next' => true,
+            'status' => 'pending',
         ], $attr));
     }
 
     public function test_patching_assigned_to_ids_puts_the_stage_in_every_operator_column(): void
     {
-        $al  = FdUser::create(['name' => 'Al', 'initials' => 'AL', 'role' => 'worker', 'active' => true]);
-        $mo  = FdUser::create(['name' => 'Mo', 'initials' => 'MO', 'role' => 'worker', 'active' => true]);
+        $al = FdUser::create(['name' => 'Al', 'initials' => 'AL', 'role' => 'worker', 'active' => true]);
+        $mo = FdUser::create(['name' => 'Mo', 'initials' => 'MO', 'role' => 'worker', 'active' => true]);
 
         $s = $this->stage($this->elevation($this->wo()), 'Door assembly', 1);
 
@@ -86,7 +86,7 @@ class StageMultiAssigneeTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $mo = FdUser::create(['name' => 'Mo', 'role' => 'worker', 'active' => true]);
-        $s  = $this->stage($this->elevation($this->wo()), 'Door assembly', 1);
+        $s = $this->stage($this->elevation($this->wo()), 'Door assembly', 1);
         $s->syncAssignees([$al->id, $mo->id]);
 
         // Al marks it complete from the kiosk (PATCH cycles the status forward).
@@ -104,7 +104,7 @@ class StageMultiAssigneeTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $mo = FdUser::create(['name' => 'Mo', 'role' => 'worker', 'active' => true]);
-        $s  = $this->stage($this->elevation($this->wo(), '2026-09-01'), 'Glaze', 1);
+        $s = $this->stage($this->elevation($this->wo(), '2026-09-01'), 'Glaze', 1);
         $s->syncAssignees([$al->id, $mo->id]);
 
         foreach ([$al, $mo] as $u) {
@@ -118,7 +118,7 @@ class StageMultiAssigneeTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $mo = FdUser::create(['name' => 'Mo', 'role' => 'worker', 'active' => true]);
-        $s  = $this->stage($this->elevation($this->wo()), 'Weld', 1);
+        $s = $this->stage($this->elevation($this->wo()), 'Weld', 1);
         $s->syncAssignees([$al->id, $mo->id]);
 
         // Drag-drop path sends a single id — it should REPLACE the whole set.
@@ -142,7 +142,7 @@ class StageMultiAssigneeTest extends TestCase
 
         $res = $this->postJson('/api/v1/work-order-stages/bulk-assign', [
             'work_order_id' => $wo->id,
-            'assignments'   => [
+            'assignments' => [
                 ['stage_name' => 'Assembly', 'assigned_to_ids' => [$al->id, $mo->id]],
             ],
         ])->assertOk();
@@ -154,7 +154,7 @@ class StageMultiAssigneeTest extends TestCase
         // Re-running with the same set is a no-op.
         $again = $this->postJson('/api/v1/work-order-stages/bulk-assign', [
             'work_order_id' => $wo->id,
-            'assignments'   => [['stage_name' => 'Assembly', 'assigned_to_ids' => [$mo->id, $al->id]]],
+            'assignments' => [['stage_name' => 'Assembly', 'assigned_to_ids' => [$mo->id, $al->id]]],
         ])->assertOk();
         $this->assertSame(0, $again->json('updated'));
     }

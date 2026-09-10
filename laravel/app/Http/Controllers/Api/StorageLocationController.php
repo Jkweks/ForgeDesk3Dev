@@ -45,8 +45,8 @@ class StorageLocationController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'LIKE', "%{$search}%")
-                  ->orWhere('code', 'LIKE', "%{$search}%")
-                  ->orWhere('description', 'LIKE', "%{$search}%");
+                    ->orWhere('code', 'LIKE', "%{$search}%")
+                    ->orWhere('description', 'LIKE', "%{$search}%");
             });
         }
 
@@ -66,6 +66,7 @@ class StorageLocationController extends Controller
         $perPage = $request->get('per_page', 50);
         if ($perPage === 'all') {
             $locations = $query->get();
+
             return response()->json($locations);
         }
 
@@ -142,7 +143,9 @@ class StorageLocationController extends Controller
 
             foreach ($inventoryLocs as $il) {
                 $product = $il->product;
-                if (!$product) continue;
+                if (! $product) {
+                    continue;
+                }
 
                 $qtyEaches = $il->quantity ?? 0;
                 $committedEaches = $il->quantity_committed ?? 0;
@@ -246,7 +249,9 @@ class StorageLocationController extends Controller
 
         foreach ($inventoryLocs as $il) {
             $product = $il->product;
-            if (!$product) continue;
+            if (! $product) {
+                continue;
+            }
 
             $qtyEaches = $il->quantity ?? 0;
             $committedEaches = $il->quantity_committed ?? 0;
@@ -288,8 +293,8 @@ class StorageLocationController extends Controller
     public function update(Request $request, StorageLocation $storageLocation)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255|unique:storage_locations,name,' . $storageLocation->id,
-            'code' => 'nullable|string|max:50|unique:storage_locations,code,' . $storageLocation->id,
+            'name' => 'sometimes|required|string|max:255|unique:storage_locations,name,'.$storageLocation->id,
+            'code' => 'nullable|string|max:50|unique:storage_locations,code,'.$storageLocation->id,
             'type' => 'sometimes|required|in:aisle,rack,shelf,bin,warehouse,zone,other',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:storage_locations,id',
@@ -312,7 +317,7 @@ class StorageLocationController extends Controller
 
             // Check if the new parent is a descendant of this location
             $parent = StorageLocation::find($request->parent_id);
-            if ($parent && $parent->path && str_contains($parent->path, (string)$storageLocation->id)) {
+            if ($parent && $parent->path && str_contains($parent->path, (string) $storageLocation->id)) {
                 return response()->json(['errors' => ['parent_id' => ['Cannot move a location under one of its own descendants.']]], 422);
             }
         }
@@ -376,22 +381,23 @@ class StorageLocationController extends Controller
                 ->with('product')
                 ->orderBy('is_primary', 'desc')
                 ->get()
-                ->filter(fn($il) => $il->quantity > 0)
+                ->filter(fn ($il) => $il->quantity > 0)
                 ->map(function ($il) {
                     $photoData = null;
                     if ($il->product->photo_path) {
-                        $path = storage_path('app/public/' . $il->product->photo_path);
+                        $path = storage_path('app/public/'.$il->product->photo_path);
                         if (file_exists($path)) {
-                            $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-                            $mime = match($ext) {
-                                'png'  => 'image/png',
-                                'gif'  => 'image/gif',
+                            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                            $mime = match ($ext) {
+                                'png' => 'image/png',
+                                'gif' => 'image/gif',
                                 'webp' => 'image/webp',
                                 default => 'image/jpeg',
                             };
-                            $photoData = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+                            $photoData = 'data:'.$mime.';base64,'.base64_encode(file_get_contents($path));
                         }
                     }
+
                     return ['sku' => $il->product->sku, 'photo_data' => $photoData];
                 })
                 ->values()
@@ -400,7 +406,7 @@ class StorageLocationController extends Controller
 
             return [
                 'shelf_id' => $loc->code ?: $loc->name,
-                'items'    => $items,
+                'items' => $items,
             ];
         })->values()->toArray();
 
@@ -427,22 +433,23 @@ class StorageLocationController extends Controller
             ->with('product')
             ->orderBy('is_primary', 'desc')
             ->get()
-            ->filter(fn($il) => $il->quantity > 0)
+            ->filter(fn ($il) => $il->quantity > 0)
             ->map(function ($il) {
                 $photoData = null;
                 if ($il->product->photo_path) {
-                    $path = storage_path('app/public/' . $il->product->photo_path);
+                    $path = storage_path('app/public/'.$il->product->photo_path);
                     if (file_exists($path)) {
-                        $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-                        $mime = match($ext) {
-                            'png'  => 'image/png',
-                            'gif'  => 'image/gif',
+                        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                        $mime = match ($ext) {
+                            'png' => 'image/png',
+                            'gif' => 'image/gif',
                             'webp' => 'image/webp',
                             default => 'image/jpeg',
                         };
-                        $photoData = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
+                        $photoData = 'data:'.$mime.';base64,'.base64_encode(file_get_contents($path));
                     }
                 }
+
                 return ['sku' => $il->product->sku, 'photo_data' => $photoData];
             })
             ->values()
@@ -452,13 +459,13 @@ class StorageLocationController extends Controller
         $shelfId = $storageLocation->code ?: $storageLocation->name;
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.shelf-label', [
-            'items'    => $items,
+            'items' => $items,
             'shelf_id' => $shelfId,
         ]);
 
         $pdf->setPaper('letter', 'landscape');
 
-        return $pdf->stream('shelf-label-' . preg_replace('/[^A-Za-z0-9\-_.]/', '_', $shelfId) . '.pdf');
+        return $pdf->stream('shelf-label-'.preg_replace('/[^A-Za-z0-9\-_.]/', '_', $shelfId).'.pdf');
     }
 
     /**
@@ -476,7 +483,7 @@ class StorageLocationController extends Controller
         $originalCode = $code;
         $counter = 1;
         while (StorageLocation::where('code', $code)->exists()) {
-            $code = $originalCode . $counter;
+            $code = $originalCode.$counter;
             $counter++;
         }
 

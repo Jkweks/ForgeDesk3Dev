@@ -37,7 +37,7 @@ class JobReservation extends Model
 
         // Auto-generate sequential reservation_id per job when creating
         static::creating(function ($reservation) {
-            if (!$reservation->reservation_id && $reservation->business_job_id) {
+            if (! $reservation->reservation_id && $reservation->business_job_id) {
                 // Get the next reservation_id for this job
                 $maxReservationId = static::where('business_job_id', $reservation->business_job_id)
                     ->max('reservation_id') ?? 0;
@@ -45,7 +45,7 @@ class JobReservation extends Model
             }
 
             // Auto-generate sequential release_number per job_number when not explicitly provided
-            if (!$reservation->release_number) {
+            if (! $reservation->release_number) {
                 $maxRelease = static::where('job_number', $reservation->job_number)
                     ->max('release_number') ?? 0;
                 $reservation->release_number = $maxRelease + 1;
@@ -77,7 +77,9 @@ class JobReservation extends Model
 
         foreach ($productIds as $productId) {
             $product = Product::find($productId);
-            if (!$product) continue;
+            if (! $product) {
+                continue;
+            }
 
             $product->quantity_committed = JobReservationItem::binAwareCommitted($productId);
             $product->save();
@@ -155,6 +157,7 @@ class JobReservation extends Model
     public function getStatusLabelAttribute()
     {
         $labels = self::statusLabels();
+
         return $labels[$this->status] ?? $this->status;
     }
 }

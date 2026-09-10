@@ -41,7 +41,7 @@ class CategoryController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
@@ -64,10 +64,10 @@ class CategoryController extends Controller
         // Get hierarchical tree structure
         if ($request->boolean('tree')) {
             $categories = $query->whereNull('parent_id')
-                               ->with('descendants')
-                               ->orderBy('sort_order')
-                               ->orderBy('name')
-                               ->get();
+                ->with('descendants')
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get();
 
             return response()->json($categories);
         }
@@ -77,14 +77,15 @@ class CategoryController extends Controller
 
         if ($perPage === 'all') {
             $categories = $query->orderBy('sort_order')
-                               ->orderBy('name')
-                               ->get();
+                ->orderBy('name')
+                ->get();
+
             return response()->json($categories);
         }
 
         $categories = $query->orderBy('sort_order')
-                           ->orderBy('name')
-                           ->paginate($perPage);
+            ->orderBy('name')
+            ->paginate($perPage);
 
         return response()->json($categories);
     }
@@ -107,7 +108,7 @@ class CategoryController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -119,7 +120,7 @@ class CategoryController extends Controller
 
         return response()->json([
             'message' => 'Category created successfully',
-            'category' => $category
+            'category' => $category,
         ], 201);
     }
 
@@ -141,7 +142,7 @@ class CategoryController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
-            'code' => 'nullable|string|max:255|unique:categories,code,' . $category->id,
+            'code' => 'nullable|string|max:255|unique:categories,code,'.$category->id,
             'parent_id' => 'nullable|exists:categories,id',
             'description' => 'nullable|string',
             'system' => 'nullable|string|max:255',
@@ -152,7 +153,7 @@ class CategoryController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -160,7 +161,7 @@ class CategoryController extends Controller
         if ($request->has('parent_id') && $request->parent_id) {
             if ($this->wouldCreateCircularReference($category, $request->parent_id)) {
                 return response()->json([
-                    'message' => 'Cannot set parent - would create circular reference'
+                    'message' => 'Cannot set parent - would create circular reference',
                 ], 422);
             }
         }
@@ -171,7 +172,7 @@ class CategoryController extends Controller
 
         return response()->json([
             'message' => 'Category updated successfully',
-            'category' => $category
+            'category' => $category,
         ]);
     }
 
@@ -184,7 +185,7 @@ class CategoryController extends Controller
         if ($category->products()->count() > 0) {
             return response()->json([
                 'message' => 'Cannot delete category with associated products',
-                'products_count' => $category->products()->count()
+                'products_count' => $category->products()->count(),
             ], 422);
         }
 
@@ -192,14 +193,14 @@ class CategoryController extends Controller
         if ($category->children()->count() > 0) {
             return response()->json([
                 'message' => 'Cannot delete category with subcategories',
-                'children_count' => $category->children()->count()
+                'children_count' => $category->children()->count(),
             ], 422);
         }
 
         $category->delete();
 
         return response()->json([
-            'message' => 'Category deleted successfully'
+            'message' => 'Category deleted successfully',
         ]);
     }
 
@@ -220,7 +221,7 @@ class CategoryController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
@@ -236,7 +237,7 @@ class CategoryController extends Controller
                     $search = $request->search;
                     $query->where(function ($q) use ($search) {
                         $q->where('name', 'like', "%{$search}%")
-                          ->orWhere('code', 'like', "%{$search}%");
+                            ->orWhere('code', 'like', "%{$search}%");
                     });
                 }
             }])
@@ -298,7 +299,7 @@ class CategoryController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -308,7 +309,7 @@ class CategoryController extends Controller
         }
 
         return response()->json([
-            'message' => 'Sort order updated successfully'
+            'message' => 'Sort order updated successfully',
         ]);
     }
 
@@ -326,7 +327,7 @@ class CategoryController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -348,7 +349,7 @@ class CategoryController extends Controller
                 foreach ($categories->get() as $category) {
                     if ($category->products()->count() > 0 || $category->children()->count() > 0) {
                         return response()->json([
-                            'message' => 'Cannot delete categories with products or subcategories'
+                            'message' => 'Cannot delete categories with products or subcategories',
                         ], 422);
                     }
                 }
@@ -358,7 +359,7 @@ class CategoryController extends Controller
         }
 
         return response()->json([
-            'message' => $message
+            'message' => $message,
         ]);
     }
 

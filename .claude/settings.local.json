@@ -6,7 +6,9 @@
       "Bash(php -l app/Http/Middleware/CheckPermission.php)",
       "Bash(php -l bootstrap/app.php)",
       "Bash(php -l routes/api.php)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(gunzip -c /tmp/fd-restore)",
+      "Bash(echo \"=== load exit: $? ; table count ===\")"
     ]
   }
 }
