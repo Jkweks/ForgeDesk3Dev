@@ -746,7 +746,7 @@
 
     <!-- Stage Templates Default-User Modal -->
     <div class="modal modal-blur fade" id="tplModal" tabindex="-1">
-      <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-dialog modal-xl modal-fullscreen-lg-down modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="tplModalTypeName">Stage Templates</h5>

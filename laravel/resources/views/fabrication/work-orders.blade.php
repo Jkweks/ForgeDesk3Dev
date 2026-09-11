@@ -888,6 +888,8 @@ async function loadWorkOrders() {
     }
 }
 
+const WO_STATUS_SORT = { active: 0, on_hold: 1, complete: 2 };
+
 function renderWOList(wos) {
     document.getElementById('wo-loading').style.display = 'none';
     document.getElementById('wo-count-label').textContent = `${wos.length} work order${wos.length !== 1 ? 's' : ''}`;
@@ -899,7 +901,12 @@ function renderWOList(wos) {
 
     document.getElementById('wo-table-wrap').style.display = 'block';
     const tbody = document.getElementById('wo-tbody');
-    tbody.innerHTML = wos.map(wo => {
+    const sorted = wos.slice().sort((a, b) => {
+        const statusDiff = (WO_STATUS_SORT[a.status] ?? 99) - (WO_STATUS_SORT[b.status] ?? 99);
+        if (statusDiff !== 0) return statusDiff;
+        return (a.job?.job_number || '').localeCompare(b.job?.job_number || '', undefined, { numeric: true, sensitivity: 'base' });
+    });
+    tbody.innerHTML = sorted.map(wo => {
         const assignedPills = (wo.assigned_users || []).map(u =>
             `<span class="badge bg-blue-lt text-blue" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
         ).join(' ') || '<span class="text-muted">—</span>';
@@ -2797,12 +2804,56 @@ function setWizardJobQuery(q) {
     onWizardJobSearch(inp.value);
 }
 
+// A job number the sheet matched that isn't active — completed, cancelled or
+// on hold. Looked up via the API since wizardJobs only holds active jobs.
+async function findInactiveJobByNumber(nNum) {
+    if (!nNum) return null;
+    try {
+        const r = await API(`/business-jobs?search=${encodeURIComponent(nNum)}`);
+        const data = await r.json();
+        const jobs = data.jobs || [];
+        return jobs.find(j => normJobNum(j.job_number) === nNum && j.status !== 'active') || null;
+    } catch (e) {
+        console.error(e);
+        return null;
+    }
+}
+
+// Offers to reactivate an archived/completed job matched from the sheet.
+// Returns true if the job was reactivated (and selected), false otherwise.
+async function maybePromptUnarchiveJob(job) {
+    const ok = await fabConfirm({
+        title: 'Matched job is archived',
+        message: `The sheet matches job "${job.job_number} - ${job.job_name}", but it's marked `
+            + `${job.status_label || job.status}. Reactivate it so this work order can use it?`,
+        confirmLabel: 'Reactivate Job',
+        confirmClass: 'btn-primary',
+    });
+    if (!ok) return false;
+
+    try {
+        const r = await API(`/business-jobs/${job.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'active' }),
+        });
+        if (!r.ok) { fabToast('Failed to reactivate job.', 'error'); return false; }
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to reactivate job.', 'error');
+        return false;
+    }
+
+    wizardJobs.push({ ...job, status: 'active' });
+    return true;
+}
+
 // After an Excel parse, try to select the job automatically:
 //  1. exact (normalised) job-number match
 //  2. one job whose number is a prefix of the sheet's (or vice-versa)
 //  3. a clearly-best fuzzy match on job name
 // Otherwise pre-fill the search with what we parsed and leave it to the user.
-function autoMatchWizardJob(jobNumber, jobName) {
+async function autoMatchWizardJob(jobNumber, jobName) {
     const hint = document.getElementById('wiz-job-hint');
     if (document.getElementById('new-wo-job').value) return;   // user already picked
 
@@ -2826,6 +2877,21 @@ function autoMatchWizardJob(jobNumber, jobName) {
         if (pre.length > 1) {
             setWizardJobQuery(jobNumber);
             hint.textContent = `${pre.length} jobs look close to "${jobNumber}" — pick the right one.`;
+            return;
+        }
+
+        const inactive = await findInactiveJobByNumber(nNum);
+        if (inactive) {
+            const canReactivate = (typeof isAdmin === 'function' && isAdmin())
+                || (typeof hasPermission === 'function' && hasPermission('jobs.edit'));
+            const reactivated = canReactivate && await maybePromptUnarchiveJob(inactive);
+            if (reactivated) {
+                selectWizardJob(inactive.id);
+                hint.textContent = `Reactivated job ${inactive.job_number} and matched it from the sheet.`;
+            } else {
+                setWizardJobQuery(jobNumber);
+                hint.textContent = `Job ${inactive.job_number} exists but is ${inactive.status_label || inactive.status} — pick or create a job.`;
+            }
             return;
         }
     }

@@ -171,7 +171,7 @@ class FdWorkOrder extends Model
 
     public function elevations(): HasMany
     {
-        return $this->hasMany(FdWoElevation::class, 'work_order_id')->orderBy('created_at');
+        return $this->hasMany(FdWoElevation::class, 'work_order_id')->orderBy('created_at')->orderBy('id');
     }
 
     public function drawings(): HasMany
