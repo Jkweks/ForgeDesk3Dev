@@ -121,9 +121,11 @@ Route::prefix('v1')->group(function () {
     // Kiosk stage mutations stay unauthenticated (shared tablets) but are
     // throttled so a stray script can't run away with production state.
     Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage'])->middleware('throttle:120,1');
+    Route::patch('/shop/stages/{id}/status', [\App\Http\Controllers\Api\ShopFloorController::class, 'setStageStatus'])->middleware('throttle:120,1');
     Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage'])->middleware('throttle:120,1');
     Route::patch('/shop/elevations/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'updateElevation'])->middleware('throttle:120,1');
     Route::patch('/shop/elevations/{id}/complete-stages', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteStages'])->middleware('throttle:120,1');
+    Route::patch('/shop/work-orders/{id}/stages/bulk-complete', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteWoStage'])->middleware('throttle:120,1');
     // ─────────────────────────────────────────────────────────────────────────
 
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
@@ -476,6 +478,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/business-jobs/{jobId}/reservations/{reservationId}', [BusinessJobController::class, 'getReservation'])->middleware('permission:jobs.view');
         Route::post('/business-jobs/{jobId}/reservations/{reservationId}/status', [BusinessJobController::class, 'updateReservationStatus'])->middleware('permission:jobs.manage-reservations');
         Route::delete('/business-jobs/{jobId}/reservations/{reservationId}', [BusinessJobController::class, 'deleteReservation'])->middleware('permission:jobs.manage-reservations');
+
+        // Job-specific Documents (SOF / EZ Estimate / PO / Other — storage only)
+        Route::get('/business-jobs/{jobId}/documents', [\App\Http\Controllers\Api\JobDocumentController::class, 'index'])->middleware('permission:jobs.documents.view');
+        Route::get('/business-jobs/{jobId}/documents/{documentId}/download', [\App\Http\Controllers\Api\JobDocumentController::class, 'download'])->middleware('permission:jobs.documents.view');
+        Route::post('/business-jobs/{jobId}/documents', [\App\Http\Controllers\Api\JobDocumentController::class, 'store'])->middleware('permission:jobs.documents.manage');
+        Route::delete('/business-jobs/{jobId}/documents/{documentId}', [\App\Http\Controllers\Api\JobDocumentController::class, 'destroy'])->middleware('permission:jobs.documents.manage');
 
         // Door/Frame Configurator
         Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');

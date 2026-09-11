@@ -727,6 +727,7 @@ class WorkOrderController extends Controller
                 'name' => $s->name,
                 'status' => $s->status,
                 'sort_order' => $s->sort_order,
+                'phase' => $s->phase,
                 'blocks_next' => (bool) $s->blocks_next,
                 'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
                 'assigned_name' => $s->assignedTo?->name,

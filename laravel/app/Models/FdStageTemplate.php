@@ -11,7 +11,7 @@ class FdStageTemplate extends Model
 
     protected $fillable = [
         'elevation_type_id', 'template_set_id', 'job_type', 'name', 'description',
-        'sort_order', 'blocks_next', 'default_user_id', 'minutes_per_joint',
+        'sort_order', 'phase', 'blocks_next', 'default_user_id', 'minutes_per_joint',
     ];
 
     protected $casts = [

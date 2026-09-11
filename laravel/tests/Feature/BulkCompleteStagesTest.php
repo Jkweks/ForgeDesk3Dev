@@ -89,6 +89,34 @@ class BulkCompleteStagesTest extends TestCase
         $this->assertSame('pending', $other->fresh()->status);
     }
 
+    public function test_bulk_complete_last_stage_closes_the_elevations(): void
+    {
+        $fab = FdUser::create(['name' => 'Fabby', 'initials' => 'FB', 'role' => 'worker', 'active' => true]);
+        $wo = $this->wo();
+
+        // e1: only Weld outstanding — bulk completing it closes the line.
+        $e1 = $this->elevation($wo);
+        $this->stage($e1, 'Cut', 1, ['status' => 'complete']);
+        $this->stage($e1, 'Weld', 2);
+
+        // e2: still has a Paint stage pending afterwards — stays open.
+        $e2 = $this->elevation($wo);
+        $this->stage($e2, 'Cut', 1, ['status' => 'complete']);
+        $this->stage($e2, 'Weld', 2);
+        $this->stage($e2, 'Paint', 3);
+
+        $this->patchJson("/api/v1/work-orders/{$wo->id}/stages/bulk-complete", [
+            'stage_name' => 'weld',
+            'fab_user_id' => $fab->id,
+        ])->assertOk()->assertJson(['updated' => 2, 'elevations_completed' => 1]);
+
+        $e1->refresh();
+        $this->assertNotNull($e1->date_completed);
+        $this->assertSame($fab->id, $e1->completed_by_id);
+
+        $this->assertNull($e2->fresh()->date_completed);
+    }
+
     public function test_bulk_complete_stage_is_gate_blocked_without_override(): void
     {
         $wo = $this->wo();
@@ -146,5 +174,55 @@ class BulkCompleteStagesTest extends TestCase
         $this->assertSame('complete', $cut->fresh()->status);
         $this->assertNull($cut->fresh()->completed_by_id);
         $this->assertNull($e->fresh()->completed_by_id);
+    }
+
+    public function test_shop_bulk_complete_wo_stage_sweeps_step_and_closes_finished_lines(): void
+    {
+        $fab = FdUser::create(['name' => 'Fabby', 'initials' => 'FB', 'role' => 'worker', 'active' => true]);
+        $wo = $this->wo();
+
+        // e1: Cut done, Weld open, Paint open afterwards — stays open.
+        $e1 = $this->elevation($wo);
+        $this->stage($e1, 'Cut', 1, ['status' => 'complete']);
+        $this->stage($e1, 'Weld', 2);
+        $this->stage($e1, 'Paint', 3);
+
+        // e2: Cut done, Weld open — completing Weld closes the line.
+        $e2 = $this->elevation($wo);
+        $this->stage($e2, 'Cut', 1, ['status' => 'complete']);
+        $this->stage($e2, 'Weld', 2);
+
+        $this->patchJson("/api/v1/shop/work-orders/{$wo->id}/stages/bulk-complete", [
+            'stage_name' => 'weld',
+            'fab_user_id' => $fab->id,
+        ])->assertOk()->assertJson(['updated' => 2, 'elevations_completed' => 1]);
+
+        $this->assertSame('complete', $e1->stages()->where('name', 'Weld')->first()->status);
+        $this->assertNull($e1->fresh()->date_completed);
+
+        $e2->refresh();
+        $this->assertNotNull($e2->date_completed);
+        $this->assertSame($fab->id, $e2->completed_by_id);
+    }
+
+    public function test_shop_bulk_complete_wo_stage_respects_the_gate(): void
+    {
+        $wo = $this->wo();
+        $e = $this->elevation($wo);
+        $this->stage($e, 'Cut', 1);           // still pending — blocks Weld
+        $weld = $this->stage($e, 'Weld', 2);
+
+        $this->patchJson("/api/v1/shop/work-orders/{$wo->id}/stages/bulk-complete", [
+            'stage_name' => 'Weld',
+        ])->assertStatus(422)->assertJson(['code' => 'stage_gated']);
+
+        $this->assertSame('pending', $weld->fresh()->status);
+
+        $this->patchJson("/api/v1/shop/work-orders/{$wo->id}/stages/bulk-complete", [
+            'stage_name' => 'Weld',
+            'override' => true,
+        ])->assertOk()->assertJson(['updated' => 1]);
+
+        $this->assertSame('complete', $weld->fresh()->status);
     }
 }

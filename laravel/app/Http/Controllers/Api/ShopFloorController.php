@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\StageGatedException;
 use App\Http\Controllers\Controller;
+use App\Models\FdStageLog;
 use App\Models\FdUser;
+use App\Models\FdWoElevation;
 use App\Models\FdWorkOrder;
 use App\Models\FdWoStage;
 use App\Services\StageGateService;
@@ -13,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class ShopFloorController extends Controller
 {
@@ -120,10 +123,49 @@ class ShopFloorController extends Controller
         }
     }
 
+    /**
+     * Put a single stage on hold, or take it back off hold, from the kiosk.
+     * Restricted to the on_hold <-> pending pair — advancing a stage still
+     * goes through cycleStage() so the sequential gate is enforced.
+     *
+     * Body: { status: 'on_hold'|'pending', fab_user_id? }
+     */
+    public function setStageStatus(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['on_hold', 'pending'])],
+            'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+        ]);
+
+        try {
+            $stage = FdWoStage::findOrFail($id);
+            $fabUser = ($data['fab_user_id'] ?? null) ? FdUser::find($data['fab_user_id']) : null;
+
+            $stage->status = $data['status'];
+            $stage->started_at = null;
+            $stage->completed_at = null;
+            $stage->completed_by_id = null;
+            $stage->save();
+
+            FdStageLog::create([
+                'stage_id' => $stage->id,
+                'user_id' => $fabUser?->id,
+                'message' => ($data['status'] === 'on_hold' ? 'Put on hold' : 'Taken off hold')
+                    .' from the shop floor'.($fabUser ? " by {$fabUser->name}" : ''),
+            ]);
+
+            return response()->json(['status' => $stage->status]);
+        } catch (\Exception $e) {
+            Log::error('ShopFloorController@setStageStatus failed', ['id' => $id, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to update stage'], 500);
+        }
+    }
+
     public function updateElevation(Request $request, int $id)
     {
         try {
-            $elevation = \App\Models\FdWoElevation::findOrFail($id);
+            $elevation = FdWoElevation::findOrFail($id);
             // Only allow completion fields from the public shop route
             if ($request->has('date_completed')) {
                 $elevation->date_completed = $request->date_completed ?: null;
@@ -139,7 +181,7 @@ class ShopFloorController extends Controller
 
     public function bulkCompleteStages(Request $request, int $id)
     {
-        $elevation = \App\Models\FdWoElevation::with('stages')->findOrFail($id);
+        $elevation = FdWoElevation::with('stages')->findOrFail($id);
         $resolution = $this->overrides->resolve($request);
         $fabUserId = $request->input('fab_user_id') ?: null;
 
@@ -176,6 +218,93 @@ class ShopFloorController extends Controller
             return $e->render();
         } catch (\Exception $e) {
             Log::error('ShopFloorController@bulkCompleteStages failed', ['id' => $id, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to complete stages'], 500);
+        }
+    }
+
+    /**
+     * Complete every instance of a named stage across all elevations of a work
+     * order — the kiosk press-and-hold "bulk complete step" action. Mirrors
+     * WorkOrderStageController@bulkComplete, including closing any elevation whose
+     * last outstanding stage this sweep completes.
+     *
+     * Body: { stage_name, fab_user_id?, override? }
+     */
+    public function bulkCompleteWoStage(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'stage_name' => 'required|string|max:255',
+            'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+            'override' => 'sometimes|boolean',
+        ]);
+
+        $wo = FdWorkOrder::with('elevations.stages')->findOrFail($id);
+        $resolution = $this->overrides->resolve($request);
+        $actor = $resolution['actor_label'] ?: 'Shop floor';
+        $fabUserId = $data['fab_user_id'] ?? null;
+        $target = mb_strtolower($data['stage_name']);
+
+        try {
+            $updated = 0;
+            $elevationsClosed = 0;
+
+            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $actor, &$updated, &$elevationsClosed) {
+                foreach ($wo->elevations as $elevation) {
+                    $stages = $elevation->stages
+                        ->filter(fn ($s) => mb_strtolower($s->name) === $target)
+                        ->whereIn('status', ['pending', 'in_progress'])
+                        ->sortBy('sort_order');
+
+                    foreach ($stages as $stage) {
+                        $this->gate->guardStageTransition(
+                            $stage,
+                            'complete',
+                            $resolution['allowed'],
+                            $this->overrides->stageLogger($stage, $resolution),
+                        );
+
+                        $stage->status = 'complete';
+                        $stage->completed_at = now();
+                        $stage->completed_by_id = $fabUserId;
+                        $stage->save();
+
+                        FdStageLog::create([
+                            'stage_id' => $stage->id,
+                            'user_id' => $resolution['log_user_id'] ?? null,
+                            'message' => "Completed via shop-floor bulk step complete by {$actor}",
+                        ]);
+                        $updated++;
+                    }
+
+                    // Close the line if this bulk-completed step was the last one
+                    // outstanding on the elevation.
+                    $elevation->load('stages');
+                    $allTerminal = $elevation->stages->every(
+                        fn ($s) => in_array($s->status, ['complete', 'not_required'], true)
+                    );
+                    if ($allTerminal && ! $elevation->date_completed) {
+                        $elevation->date_completed = now()->toDateString();
+                        $elevation->completed_by_id = $fabUserId;
+                        $elevation->save();
+                        $elevationsClosed++;
+                    }
+                }
+            });
+
+            if ($elevationsClosed > 0) {
+                $wo->recalcDueDateFromElevations();
+                FdWorkOrder::resequencePriorities();
+            }
+
+            return response()->json([
+                'updated' => $updated,
+                'elevations_completed' => $elevationsClosed,
+            ]);
+        } catch (StageGatedException $e) {
+            return $e->render();
+        } catch (\Exception $e) {
+            Log::error('ShopFloorController@bulkCompleteWoStage failed', ['id' => $id, 'message' => $e->getMessage()]);
 
             return response()->json(['error' => 'Failed to complete stages'], 500);
         }
@@ -241,6 +370,7 @@ class ShopFloorController extends Controller
                     'name' => $s->name,
                     'status' => $s->status,
                     'sort_order' => $s->sort_order,
+                    'phase' => $s->phase,
                     'blocks_next' => (bool) $s->blocks_next,
                     'assigned_to_id' => $s->assigned_to_id,
                     'assigned_name' => $s->assignedTo?->name,
@@ -310,6 +440,7 @@ class ShopFloorController extends Controller
                     'name' => $s->name,
                     'status' => $s->status,
                     'sort_order' => $s->sort_order,
+                    'phase' => $s->phase,
                     'blocks_next' => (bool) $s->blocks_next,
                     'assigned_to_id' => $s->assigned_to_id,
                     'assigned_name' => $s->assignedTo?->name,

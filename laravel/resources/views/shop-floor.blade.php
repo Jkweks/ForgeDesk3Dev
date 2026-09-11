@@ -4,11 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="color-scheme" content="light dark">
   <title>Shop Floor — ForgeDesk</title>
+  {{-- Apply the persisted/OS theme before first paint to avoid a flash of light. --}}
+  <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
   <link href="{{ asset('assets/tabler/css/tabler.min.css') }}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
   <style>
-    body { background: var(--tblr-bg-surface); font-size: 15px; -webkit-tap-highlight-color: transparent; overflow-x: clip; }
+    body { background: var(--tblr-bg-surface); color: var(--tblr-body-color); font-size: 16px; -webkit-tap-highlight-color: transparent; overflow-x: clip; }
 
     /* ── Header ── */
     .sf-header {
@@ -28,15 +31,21 @@
       padding: .45rem 1rem;
       display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
       border-bottom: 1px solid var(--tblr-border-color);
-      background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+      background: var(--tblr-bg-surface-secondary);
     }
-    .sf-filter-label { font-size: .75rem; color: var(--tblr-secondary); white-space: nowrap; }
+    .sf-filter-label { font-size: .8rem; color: var(--tblr-secondary); white-space: nowrap; }
+    .sf-theme-toggle {
+      border: 1px solid var(--tblr-border-color); background: transparent;
+      color: var(--tblr-body-color); border-radius: 8px;
+      width: 2.1rem; height: 2.1rem; display: inline-flex;
+      align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem;
+    }
 
     /* ── Pills ── */
     .pill {
-      padding: .28rem .75rem; border-radius: 20px;
+      padding: .3rem .8rem; border-radius: 20px;
       border: 1.5px solid var(--tblr-border-color);
-      background: transparent; font-size: .78rem; cursor: pointer; white-space: nowrap;
+      background: transparent; font-size: .85rem; cursor: pointer; white-space: nowrap;
       color: var(--tblr-body-color);
       transition: background .1s, border-color .1s, color .1s;
     }
@@ -45,7 +54,7 @@
     /* ── WO table ── */
     .sf-table { width: 100%; border-collapse: collapse; }
     .sf-table th {
-      font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+      font-size: .74rem; text-transform: uppercase; letter-spacing: .06em;
       color: var(--tblr-secondary); font-weight: 600;
       padding: .45rem .9rem;
       border-bottom: 2px solid var(--tblr-border-color);
@@ -58,7 +67,7 @@
       cursor: pointer;
       transition: background .1s;
     }
-    .wo-row:hover { background: var(--tblr-active-bg, rgba(0,0,0,.025)); }
+    .wo-row:hover { background: var(--tblr-active-bg, transparent); }
     .wo-row td {
       padding: .75rem .9rem;
       border-bottom: 1px solid var(--tblr-border-color);
@@ -82,6 +91,7 @@
       background: var(--tblr-success);
       transition: width .3s;
     }
+    .sf-progress-frac { font-size: .9rem; font-weight: 600; color: var(--tblr-body-color); white-space: nowrap; }
 
     /* ── Expanded detail panel ── */
     .wo-detail-row { display: none; }
@@ -89,7 +99,7 @@
     .wo-detail-cell {
       padding: 0 0 .5rem 2.5rem !important;
       border-bottom: 2px solid var(--tblr-border-color);
-      background: var(--tblr-bg-surface-secondary, var(--tblr-light));
+      background: var(--tblr-bg-surface-secondary);
     }
 
     /* ── Elevation block ── */
@@ -110,35 +120,38 @@
       cursor: pointer; min-width: 88px;
       transition: filter .1s, transform .07s;
       line-height: 1.3;
+      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+      touch-action: manipulation;
     }
+    .stage-btn.pressing { filter: brightness(.9); transform: scale(.97); }
     .stage-btn:active { transform: scale(.94); filter: brightness(.88); }
-    .stage-btn .sname { font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
-    .stage-btn .sstatus { font-size: .78rem; font-weight: 700; }
-    .stage-btn.pending     { background: var(--tblr-gray-200, #e9ecef); color: var(--tblr-gray-700, #495057); }
+    .stage-btn .sname { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .stage-btn .sstatus { font-size: .95rem; font-weight: 700; }
+    .stage-btn.pending     { background: #e9ecef; color: #495057; }
     .stage-btn.in_progress { background: #fff3cd; color: #664d03; }
     .stage-btn.complete    { background: #d1e7dd; color: #0a3622; }
     .stage-btn.blocked     { background: #f8d7da; color: #58151c; }
     .stage-btn.on_hold     { background: #fde3c4; color: #7a3f00; border: 2px dashed #b96a00; }
-    [data-bs-theme="dark"] .stage-btn.pending     { background: #343a40; color: #adb5bd; }
+    [data-bs-theme="dark"] .stage-btn.pending     { background: #343a40; color: #c5ccd3; }
     [data-bs-theme="dark"] .stage-btn.in_progress { background: #3d2e00; color: #ffc107; }
-    [data-bs-theme="dark"] .stage-btn.complete    { background: #051b11; color: #75b798; }
-    [data-bs-theme="dark"] .stage-btn.blocked     { background: #2c0b0e; color: #ea868f; }
+    [data-bs-theme="dark"] .stage-btn.complete    { background: #12281c; color: #8fd0ad; }
+    [data-bs-theme="dark"] .stage-btn.blocked     { background: #3a1417; color: #ef9aa1; }
     [data-bs-theme="dark"] .stage-btn.on_hold     { background: #3d2503; color: #f5a623; border: 2px dashed #f5a623; }
 
     /* ── Status summary chips ── */
     .sf-chip {
-      font-size: .72rem; padding: .15rem .45rem; border-radius: 4px;
+      font-size: .78rem; padding: .15rem .45rem; border-radius: 4px;
       font-weight: 600; white-space: nowrap;
     }
     .sf-chip.in_progress { background: #fff3cd; color: #664d03; }
     .sf-chip.blocked     { background: #f8d7da; color: #58151c; }
     .sf-chip.on_hold     { background: #fde3c4; color: #7a3f00; }
     [data-bs-theme="dark"] .sf-chip.in_progress { background: #3d2e00; color: #ffc107; }
-    [data-bs-theme="dark"] .sf-chip.blocked     { background: #2c0b0e; color: #ea868f; }
+    [data-bs-theme="dark"] .sf-chip.blocked     { background: #3a1417; color: #ef9aa1; }
     [data-bs-theme="dark"] .sf-chip.on_hold     { background: #3d2503; color: #f5a623; }
 
     /* ── not_required stage ── */
-    .stage-btn.not_required { background: var(--tblr-blue-lt, #dce7f9); color: var(--tblr-blue, #2c5fc3); }
+    .stage-btn.not_required { background: #dce7f9; color: #2c5fc3; }
     [data-bs-theme="dark"] .stage-btn.not_required { background: #0d1f3c; color: #7aa7e9; }
     .stage-btn.locked { opacity: .5; }
     .stage-btn.locked:active { transform: none; filter: none; }
@@ -151,9 +164,10 @@
     }
     .sf-pin-card {
       background: var(--tblr-bg-surface);
+      border: 1px solid var(--tblr-border-color);
       border-radius: 12px; padding: 2rem 2.5rem;
       width: min(380px, 90vw); text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,.25);
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
     }
     .sf-pin-card h3 { margin-bottom: 1.25rem; font-size: 1.2rem; }
     .sf-pin-input {
@@ -165,6 +179,19 @@
     .sf-pin-input:focus { border-color: var(--tblr-primary); }
     .sf-pin-error { color: var(--tblr-danger); font-size: .85rem; min-height: 1.2em; margin-top: .5rem; }
 
+    /* ── Shared prompt overlay ── */
+    .sf-prompt {
+      position: fixed; inset: 0; z-index: 4000;
+      background: rgba(0,0,0,.5);
+      align-items: center; justify-content: center;
+    }
+    .sf-prompt-card {
+      background: var(--tblr-bg-surface);
+      border: 1px solid var(--tblr-border-color);
+      border-radius: 12px; padding: 2rem; width: min(380px, 90vw);
+      box-shadow: 0 12px 40px rgba(0,0,0,.5); text-align: center;
+    }
+
     /* ── Misc ── */
     .sf-loading { text-align: center; padding: 5rem; }
     .sf-empty   { text-align: center; padding: 4rem; color: var(--tblr-secondary); }
@@ -172,9 +199,9 @@
       .hide-sm { display: none !important; }
     }
   </style>
+  @include('partials.fab-status-styles')
 </head>
 <body>
-<script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
 <script src="{{ asset('js/fab-shared.js') }}"></script>
 
 <!-- ── PIN login overlay ── -->
@@ -190,8 +217,8 @@
 </div>
 
 <!-- ── Elevation complete prompt ── -->
-<div id="sf-elev-complete-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
-  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+<div id="sf-elev-complete-prompt" class="sf-prompt" style="display:none">
+  <div class="sf-prompt-card">
     <div style="font-size:2.5rem;margin-bottom:.75rem">✅</div>
     <h4 style="margin-bottom:.5rem">All stages done!</h4>
     <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
@@ -206,8 +233,8 @@
 </div>
 
 <!-- ── Elevation reopen prompt ── -->
-<div id="sf-elev-reopen-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
-  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+<div id="sf-elev-reopen-prompt" class="sf-prompt" style="display:none">
+  <div class="sf-prompt-card">
     <div style="font-size:2.5rem;margin-bottom:.75rem">⚠️</div>
     <h4 style="margin-bottom:.5rem">Elevation is complete</h4>
     <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
@@ -221,8 +248,8 @@
 </div>
 
 <!-- ── On-hold stage prompt ── -->
-<div id="sf-hold-prompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;align-items:center;justify-content:center;">
-  <div style="background:var(--tblr-bg-surface);border-radius:12px;padding:2rem;width:min(380px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center">
+<div id="sf-hold-prompt" class="sf-prompt" style="display:none">
+  <div class="sf-prompt-card">
     <div style="font-size:2.5rem;margin-bottom:.75rem">🚧</div>
     <h4 style="margin-bottom:.5rem">Stage is on hold</h4>
     <p style="color:var(--tblr-secondary);margin-bottom:1.5rem">
@@ -235,12 +262,25 @@
   </div>
 </div>
 
+<!-- ── Stage press-and-hold menu ── -->
+<div id="sf-stage-menu" class="sf-prompt" style="display:none">
+  <div class="sf-prompt-card">
+    <div id="sf-sm-title" style="font-weight:700;font-size:1.1rem"></div>
+    <div id="sf-sm-sub" class="text-secondary" style="font-size:.9rem;margin-bottom:1.25rem"></div>
+    <div class="d-grid gap-2" id="sf-sm-actions"></div>
+    <button class="btn btn-ghost-secondary w-100 mt-2" onclick="sfCloseStageMenu()">Cancel</button>
+  </div>
+</div>
+
 <!-- ── Header ── -->
 <div class="sf-header">
   <div class="sf-logo">Forge<span class="accent">Desk</span><span class="sub">Shop Floor</span></div>
   <div class="ms-auto d-flex align-items-center gap-3">
-    <span class="text-muted small" id="sf-clock"></span>
-    <span class="text-muted small" id="sf-wo-count"></span>
+    <span class="text-secondary" id="sf-clock"></span>
+    <span class="text-secondary" id="sf-wo-count"></span>
+    <button type="button" class="sf-theme-toggle" id="sf-theme-toggle" onclick="sfToggleTheme()" title="Toggle light / dark" aria-label="Toggle light / dark">
+      <i class="ti ti-sun-moon"></i>
+    </button>
     <span id="sf-user-badge" style="display:none" class="d-flex align-items-center gap-2">
       <span class="badge bg-blue-lt text-blue" id="sf-user-name"></span>
       <button class="btn btn-sm btn-ghost-secondary" onclick="sfLogout()" title="Log out">
@@ -268,7 +308,7 @@
 <!-- ── Loading ── -->
 <div id="sf-loading" class="sf-loading">
   <div class="spinner-border text-primary" role="status"></div>
-  <p class="mt-2 text-muted">Loading…</p>
+  <p class="mt-2 text-secondary">Loading…</p>
 </div>
 
 <!-- ── Table ── -->
@@ -289,7 +329,7 @@
     <tbody id="sf-tbody"></tbody>
   </table>
   <div id="sf-empty" class="sf-empty" style="display:none">
-    <i class="ti ti-clipboard-check" style="font-size:3rem;opacity:.25"></i>
+    <i class="ti ti-clipboard-check" style="font-size:3rem;opacity:.45"></i>
     <p class="mt-2">No work orders to show</p>
   </div>
 </div>
@@ -327,6 +367,16 @@ function updateClock() {
     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 updateClock(); setInterval(updateClock, 10000);
+
+// ── Theme toggle ──────────────────────────────────────────────────────────
+// Persist under the same key Tabler's theme bootstrapper reads, so the choice
+// sticks across reloads on this kiosk browser.
+function sfToggleTheme() {
+  const el = document.documentElement;
+  const next = el.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+  el.setAttribute('data-bs-theme', next);
+  try { localStorage.setItem('tabler-theme', next); } catch (e) { /* private mode */ }
+}
 
 // ── Sticky offset calibration ──────────────────────────────────────────────
 // Measure actual rendered heights of the header and filter bar, then set
@@ -497,12 +547,12 @@ function render() {
     ].filter(Boolean).join(' ');
 
     const assignedBadges = (wo.assigned_users || []).map(u =>
-      `<span style="font-size:.68rem;padding:.1rem .35rem;border-radius:4px;background:var(--tblr-blue-lt,#dce7f9);color:var(--tblr-blue,#2c5fc3);font-weight:600" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
-    ).join(' ') || '<span class="text-muted small">—</span>';
+      `<span style="font-size:.75rem;padding:.1rem .35rem;border-radius:4px;background:var(--tblr-blue-lt);color:var(--tblr-blue);font-weight:600" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
+    ).join(' ') || '<span class="text-secondary small">—</span>';
 
     const priorityBadge = wo.priority != null
-      ? `<span style="font-size:.72rem;padding:.1rem .4rem;border-radius:4px;background:var(--tblr-gray-200,#e9ecef);color:var(--tblr-secondary)">${wo.priority}</span>`
-      : '<span class="text-muted small">—</span>';
+      ? `<span style="font-size:.78rem;padding:.1rem .4rem;border-radius:4px;background:var(--tblr-bg-surface-secondary);color:var(--tblr-body-color)">${wo.priority}</span>`
+      : '<span class="text-secondary small">—</span>';
 
     const isOpen = expandedWOs.has(wo.id);
     rows.push(`
@@ -510,18 +560,18 @@ function render() {
         <td class="ps-3" style="width:36px">
           <i class="ti ti-chevron-right wo-chevron" style="${isOpen ? 'transform:rotate(90deg)' : ''}"></i>
         </td>
-        <td class="text-muted small hide-sm">${priorityBadge}</td>
+        <td class="hide-sm">${priorityBadge}</td>
         <td><strong>${esc(wo.release_label)}</strong></td>
         <td>${esc(wo.job_name)}</td>
         <td class="hide-sm">${assignedBadges}</td>
-        <td class="text-muted small">${wo.elevations.length} elevation${wo.elevations.length !== 1 ? 's' : ''}</td>
+        <td>${wo.elevations.length} elevation${wo.elevations.length !== 1 ? 's' : ''}</td>
         <td>
           <div class="d-flex align-items-center gap-2">
             <div class="sf-progress"><div class="sf-progress-fill" style="width:${pct}%"></div></div>
-            <span class="text-muted small">${doneStages}/${totalStages}</span>
+            <span class="sf-progress-frac">${doneStages}/${totalStages}</span>
           </div>
         </td>
-        <td class="hide-sm">${chips || '<span class="text-muted small">—</span>'}</td>
+        <td class="hide-sm">${chips || '<span class="text-secondary small">—</span>'}</td>
       </tr>
       <tr class="wo-detail-row${isOpen ? ' open' : ''}" id="wo-detail-${wo.id}">
         <td colspan="8" class="wo-detail-cell">
@@ -545,24 +595,29 @@ function render() {
 function elevBlock(e) {
   const typeColor = e.elevation_type?.color || '#6b7280';
   const typeName  = e.elevation_type?.name  || '—';
-  const typeBadge = `<span class="badge" style="background:${esc(typeColor)};font-size:.65rem">${esc(typeName)}</span>`;
+  const typeBadge = `<span class="badge" style="background:${esc(typeColor)};color:${pickTextColor(typeColor)};border:1px solid var(--tblr-border-color);font-size:.72rem">${esc(typeName)}</span>`;
   const scopeBadge = e.scope === 'kit'
-    ? '<span class="badge bg-orange-lt" style="font-size:.65rem">Kit</span>' : '';
+    ? '<span class="badge bg-orange-lt text-orange" style="font-size:.72rem">Kit</span>' : '';
   const dateLabel = e.date_requested
-    ? `<span class="small ${isPast(e.date_requested) ? 'text-danger' : 'text-muted'}">${e.date_requested}</span>` : '';
+    ? `<span class="small ${isPast(e.date_requested) ? 'text-danger' : 'text-secondary'}">${e.date_requested}</span>` : '';
 
   const allStages = e.stages || [];
   const stagesBtns = allStages.map(s => {
     const who = s.completed_by_name || s.assigned_name || '';
     const blocker = sfStageBlocker(s, allStages);
     const tip  = blocker
-      ? `Blocked by “${blocker.name}”`
-      : (who ? `${who} · tap to advance` : 'tap to advance');
+      ? `Blocked by “${blocker.name}” · hold for options`
+      : (who ? `${who} · tap to advance, hold for options` : 'tap to advance, hold for options');
     const byLine = s.completed_by_name
-      ? `<span style="font-size:.6rem;opacity:.7">${esc(s.completed_by_name)}</span>`
+      ? `<span style="font-size:.7rem;opacity:.85">${esc(s.completed_by_name)}</span>`
       : '';
     return `<button class="stage-btn ${s.status}${blocker ? ' locked' : ''}"
         onclick="cycleStage(event, ${s.id})"
+        onpointerdown="sfStagePressStart(event, ${s.id})"
+        onpointerup="sfStagePressEnd(event)"
+        onpointercancel="sfStagePressEnd(event)"
+        onpointerleave="sfStagePressEnd(event)"
+        oncontextmenu="sfStageContextMenu(event, ${s.id})"
         title="${esc(tip)}">
       <span class="sname">${esc(s.name)}</span>
       <span class="sstatus">${blocker ? '🔒 ' : ''}${STATUS_LABEL[s.status] || s.status}</span>
@@ -570,22 +625,12 @@ function elevBlock(e) {
     </button>`;
   }).join('');
 
-  const openCount = (e.stages || []).filter(s => s.status === 'pending' || s.status === 'in_progress').length;
-  const bulkBtn = openCount > 0
-    ? `<button class="stage-btn" style="background:var(--tblr-success-lt,#d1e7dd);color:var(--tblr-success,#0a3622);border:2px solid var(--tblr-success,#2fb344)"
-          onclick="bulkCompleteElevStages(event, ${e.id})"
-          title="Mark all remaining stages complete">
-        <span class="sname">All Stages</span>
-        <span class="sstatus">✓ Complete All</span>
-      </button>`
-    : '';
-
   return `<div class="elev-block">
     <div class="elev-meta">
       <div class="elev-tag">${esc(e.elevation_tag)} ${scopeBadge}</div>
       <div class="d-flex gap-1 mt-1 flex-wrap">${typeBadge}${dateLabel}</div>
     </div>
-    <div class="elev-stages">${stagesBtns || '<span class="text-muted small">No stages</span>'}${bulkBtn}</div>
+    <div class="elev-stages">${stagesBtns || '<span class="text-secondary small">No stages</span>'}</div>
   </div>`;
 }
 
@@ -597,10 +642,11 @@ function isPast(dateStr) {
 // or null. Mirrors StageGateService::blockingStageFor on the server.
 function sfStageBlocker(stage, siblings) {
   const done = st => st === 'complete' || st === 'not_required';
+  const ph = s => (s.phase ?? s.sort_order);   // steps sharing a phase run concurrently
   return (siblings || []).find(p =>
     p.id !== stage.id &&
     p.blocks_next &&
-    p.sort_order < stage.sort_order &&
+    ph(p) < ph(stage) &&
     !done(p.status)
   ) || null;
 }
@@ -631,9 +677,50 @@ function toggleWO(woId) {
 let _sfLastCycledStageId = null;
 let _sfLastCycledStatus  = null;
 
+// ── Press-and-hold on a stage button → bulk actions menu ───────────────────
+const SF_LONGPRESS_MS = 500;
+let _sfPressTimer     = null;
+let _sfLongPressFired = false;
+let _sfPressBtn       = null;
+
+function sfStagePressStart(event, stageId) {
+  // Left button / touch / pen only.
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  event.stopPropagation();
+  _sfLongPressFired = false;
+  _sfPressBtn = event.currentTarget;
+  clearTimeout(_sfPressTimer);
+  _sfPressTimer = setTimeout(() => {
+    _sfLongPressFired = true;
+    _sfPressBtn?.classList.remove('pressing');
+    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (e) {} }
+    sfOpenStageMenu(stageId);
+  }, SF_LONGPRESS_MS);
+  _sfPressBtn.classList.add('pressing');
+}
+
+function sfStagePressEnd() {
+  clearTimeout(_sfPressTimer);
+  _sfPressBtn?.classList.remove('pressing');
+  _sfPressBtn = null;
+}
+
+// Right-click (desktop) opens the same bulk-actions menu; also suppresses the
+// browser's native context menu on a touch long-press.
+function sfStageContextMenu(event, stageId) {
+  event.preventDefault();
+  clearTimeout(_sfPressTimer);
+  _sfPressBtn?.classList.remove('pressing');
+  _sfLongPressFired = true;   // swallow any click the gesture leaves behind
+  sfOpenStageMenu(stageId);
+}
+
 async function cycleStage(event, stageId) {
   event.stopPropagation();
   const btn = event.currentTarget;
+
+  // A long-press opened the actions menu — swallow the click that follows it.
+  if (_sfLongPressFired) { _sfLongPressFired = false; return; }
 
   // If the stage is on hold, require explicit confirmation before clearing it —
   // a single tap should never silently erase a PM's hold.
@@ -707,9 +794,117 @@ async function cycleStage(event, stageId) {
   }
 }
 
-async function bulkCompleteElevStages(event, elevId) {
-  event.stopPropagation();
-  const btn = event.currentTarget;
+// ── Stage press-and-hold menu ─────────────────────────────────────────────
+function sfOpenStageMenu(stageId) {
+  const stage = sfFindStage(stageId);
+  const elev  = sfFindElevForStage(stageId);
+  const wo    = sfFindWoForStage(stageId);
+  if (!stage || !elev || !wo) return;
+
+  const OPEN = s => s.status === 'pending' || s.status === 'in_progress';
+
+  document.getElementById('sf-sm-title').textContent = stage.name;
+  document.getElementById('sf-sm-sub').textContent = `${wo.release_label} · ${elev.elevation_tag}`;
+
+  const actions = document.getElementById('sf-sm-actions');
+  actions.innerHTML = '';
+  const addBtn = (cls, label, fn) => {
+    const b = document.createElement('button');
+    b.className = `btn ${cls} w-100`;
+    b.style.whiteSpace = 'normal';
+    b.textContent = label;
+    b.onclick = fn;
+    actions.appendChild(b);
+  };
+
+  // Per-stage: hold / release (not a bulk action).
+  if (stage.status === 'on_hold') {
+    addBtn('btn-outline-warning', `Take “${stage.name}” off hold`, () => sfSetStageHold(stage.id, 'pending'));
+  } else if (!['complete', 'not_required'].includes(stage.status)) {
+    addBtn('btn-outline-warning', `Put “${stage.name}” on hold`, () => sfSetStageHold(stage.id, 'on_hold'));
+  }
+
+  // Bulk: this named step across the whole work order.
+  const sameOpen = (wo.elevations || []).reduce((n, ev) =>
+    n + (ev.stages || []).filter(s => s.name.toLowerCase() === stage.name.toLowerCase() && OPEN(s)).length, 0);
+  if (sameOpen > 0) {
+    addBtn('btn-success', `Complete “${stage.name}” on all elevations (${sameOpen})`,
+      () => sfBulkCompleteWoStage(wo.id, stage.name));
+  }
+
+  // Bulk: every remaining stage on this elevation.
+  const elevOpen = (elev.stages || []).filter(OPEN).length;
+  if (elevOpen > 0) {
+    addBtn('btn-outline-success', `Complete all ${elevOpen} remaining stage${elevOpen !== 1 ? 's' : ''} on ${elev.elevation_tag}`,
+      () => sfBulkCompleteElev(elev.id));
+  }
+
+  if (!actions.children.length) {
+    const p = document.createElement('div');
+    p.className = 'text-secondary';
+    p.textContent = 'No actions available for this stage.';
+    actions.appendChild(p);
+  }
+
+  document.getElementById('sf-stage-menu').style.display = 'flex';
+}
+
+function sfCloseStageMenu() {
+  document.getElementById('sf-stage-menu').style.display = 'none';
+}
+
+// Shared: fire a bulk-complete request, retrying once with an override if a
+// gate blocks it and the logged-in fab user is a manager/admin.
+async function sfSendBulk(url, basePayload) {
+  const send = async (override) => {
+    const payload = { ...basePayload };
+    if (sfFabUser) payload.fab_user_id = sfFabUser.user_id;
+    if (override)  payload.override = true;
+    const r = await API(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { r, data: await r.json().catch(() => ({})) };
+  };
+
+  let { r, data } = await send(false);
+  if (!r.ok && data.code === 'stage_gated' && sfIsManager()) {
+    const ok = await fabConfirm({
+      title: 'Override gate',
+      message: `“${data.blocking_stage?.name || 'An earlier stage'}” isn’t complete. Complete anyway?`,
+      confirmLabel: 'Override & Complete',
+      confirmClass: 'btn-warning',
+    });
+    if (ok) ({ r, data } = await send(true));
+  }
+  return { r, data };
+}
+
+async function sfBulkCompleteWoStage(woId, stageName) {
+  sfCloseStageMenu();
+  try {
+    const { r, data } = await sfSendBulk(`/shop/work-orders/${woId}/stages/bulk-complete`, { stage_name: stageName });
+    if (!r.ok) {
+      fabToast(data.code === 'stage_gated'
+        ? `Blocked by “${data.blocking_stage?.name || 'an earlier stage'}”.`
+        : (data.message || 'Failed to complete steps.'), 'error');
+      return;
+    }
+    await reload();
+    const closed = data.elevations_completed || 0;
+    fabToast(data.updated
+      ? `Completed ${data.updated} “${stageName}” step${data.updated !== 1 ? 's' : ''}.` +
+        (closed ? ` ${closed} elevation${closed !== 1 ? 's' : ''} done.` : '')
+      : 'No open steps matched.', data.updated ? 'success' : 'info');
+  } catch (e) {
+    console.error(e);
+    fabToast('Failed to complete steps — check your connection and try again.', 'error');
+  }
+}
+
+async function sfBulkCompleteElev(elevId) {
+  sfCloseStageMenu();
 
   const elev = sfWOs.flatMap(wo => wo.elevations || []).find(e => e.id === elevId);
   const tag = elev ? elev.elevation_tag : 'this elevation';
@@ -722,47 +917,44 @@ async function bulkCompleteElevStages(event, elevId) {
   });
   if (!ok) return;
 
-  btn.disabled = true; btn.style.opacity = '.55';
   try {
-    const send = async (override) => {
-      const payload = {};
-      if (sfFabUser) payload.fab_user_id = sfFabUser.user_id;
-      if (override)  payload.override = true;
-      const r = await API(`/shop/elevations/${elevId}/complete-stages`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      return { r, data: await r.json().catch(() => ({})) };
-    };
-
-    let { r, data } = await send(false);
-
-    if (!r.ok && data.code === 'stage_gated' && sfIsManager()) {
-      const ok = await fabConfirm({
-        title: 'Override gate',
-        message: `“${data.blocking_stage?.name || 'An earlier stage'}” isn’t complete. Complete all remaining stages anyway?`,
-        confirmLabel: 'Override & Complete',
-        confirmClass: 'btn-warning',
-      });
-      if (ok) ({ r, data } = await send(true));
-    }
-
+    const { r, data } = await sfSendBulk(`/shop/elevations/${elevId}/complete-stages`, {});
     if (!r.ok) {
       fabToast(data.code === 'stage_gated'
         ? `Blocked by “${data.blocking_stage?.name || 'an earlier stage'}”.`
         : (data.message || 'Failed to complete stages.'), 'error');
-      btn.disabled = false; btn.style.opacity = '';
       return;
     }
-
     await reload();
     sfCheckElevationCompletionById(elevId);
     fabToast('Stages marked complete.', 'success');
   } catch (e) {
     console.error(e);
     fabToast('Failed to complete stages — check your connection and try again.', 'error');
-    btn.disabled = false; btn.style.opacity = '';
+  }
+}
+
+// Put one stage on hold, or take it back off hold. Not a bulk action.
+async function sfSetStageHold(stageId, status) {
+  sfCloseStageMenu();
+  try {
+    const payload = { status };
+    if (sfFabUser) payload.fab_user_id = sfFabUser.user_id;
+    const r = await API(`/shop/stages/${stageId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      fabToast(data.message || 'Failed to update stage.', 'error');
+      return;
+    }
+    await reload();
+    fabToast(status === 'on_hold' ? 'Stage put on hold.' : 'Stage taken off hold.', 'success');
+  } catch (e) {
+    console.error(e);
+    fabToast('Failed to update stage — check your connection and try again.', 'error');
   }
 }
 
@@ -771,6 +963,15 @@ function sfFindElevForStage(stageId) {
   for (const wo of sfWOs) {
     for (const e of wo.elevations || []) {
       if ((e.stages || []).some(s => s.id === stageId)) return e;
+    }
+  }
+  return null;
+}
+
+function sfFindWoForStage(stageId) {
+  for (const wo of sfWOs) {
+    for (const e of wo.elevations || []) {
+      if ((e.stages || []).some(s => s.id === stageId)) return wo;
     }
   }
   return null;
@@ -895,27 +1096,27 @@ function renderMyQueue() {
     `${sfQueue.length} task${sfQueue.length !== 1 ? 's' : ''}`;
 
   if (!sfQueue.length) {
-    box.innerHTML = `<div class="sf-empty"><i class="ti ti-checklist" style="font-size:3rem;opacity:.25"></i>
+    box.innerHTML = `<div class="sf-empty"><i class="ti ti-checklist" style="font-size:3rem;opacity:.45"></i>
       <p class="mt-2">Nothing in your queue — you're all caught up.</p></div>`;
     return;
   }
 
   box.innerHTML = sfQueue.map(t => {
     const due = t.due_date
-      ? `<span class="small ${isPast(t.due_date) ? 'text-danger' : 'text-muted'}">due ${t.due_date}</span>` : '';
+      ? `<span class="small ${isPast(t.due_date) ? 'text-danger' : 'text-secondary'}">due ${t.due_date}</span>` : '';
     const prio = t.priority != null
-      ? `<span style="font-size:.7rem;padding:.05rem .35rem;border-radius:4px;background:var(--tblr-gray-200,#e9ecef);color:var(--tblr-secondary)">#${t.priority}</span>` : '';
+      ? `<span style="font-size:.75rem;padding:.05rem .35rem;border-radius:4px;background:var(--tblr-bg-surface-secondary);color:var(--tblr-body-color)">#${t.priority}</span>` : '';
     const mates = (t.assignee_names || []).filter(n => n && n !== sfFabUser?.name);
     const shared = mates.length
-      ? `<span class="badge bg-purple-lt" style="font-size:.62rem" title="Working with ${esc(mates.join(', '))}">
+      ? `<span class="badge bg-purple-lt text-purple" style="font-size:.7rem" title="Working with ${esc(mates.join(', '))}">
            <i class="ti ti-users"></i> with ${esc(mates.join(', '))}</span>` : '';
     return `<button class="stage-btn ${t.status}" style="display:block;width:100%;text-align:left;margin-bottom:.5rem;padding:.7rem .9rem"
         onclick="cycleStage(event, ${t.stage_id})">
       <div class="d-flex align-items-center gap-2 flex-wrap">
         ${prio}
         <strong>${esc(t.release_label)}</strong>
-        <span class="text-muted small">${esc(t.job_name || '')}</span>
-        <span class="badge bg-blue-lt" style="font-size:.62rem">${esc(t.elevation_tag)}</span>
+        <span class="text-secondary small">${esc(t.job_name || '')}</span>
+        <span class="badge bg-blue-lt text-blue" style="font-size:.7rem">${esc(t.elevation_tag)}</span>
         ${due}
         ${shared}
         <span class="ms-auto sstatus">${STATUS_LABEL[t.status] || t.status}</span>

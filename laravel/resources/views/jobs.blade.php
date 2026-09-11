@@ -993,6 +993,13 @@
                                         <span class="badge bg-secondary-lt text-secondary ms-1" id="job-tx-badge-${job.id}">0</span>
                                     </button>
                                 </li>
+                                <li class="nav-item" role="presentation" data-permission="jobs.documents.view">
+                                    <button class="nav-link" id="job-tab-doc-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'doc')" type="button">
+                                        <i class="ti ti-files me-1"></i>Documents
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-doc-badge-${job.id}">0</span>
+                                    </button>
+                                </li>
                             </ul>
                             <!-- Tab panes -->
                             <div class="px-3 py-2">
@@ -1053,6 +1060,42 @@
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Documents pane -->
+                                <div id="job-pane-doc-${job.id}" style="display:none;">
+                                    <div id="detail-doc-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-doc-content-${job.id}" style="display:none;"></div>
+                                    <!-- Upload inline form -->
+                                    <div id="job-doc-form-${job.id}" style="display:none;" class="mt-2 p-3 rounded job-tx-form-wrap">
+                                        <h6 class="mb-2">Upload document</h6>
+                                        <div class="row g-2">
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label form-label-sm mb-1">Type</label>
+                                                <select class="form-select form-select-sm" id="job-doc-type-${job.id}" onchange="onJobDocTypeChange(${job.id})">
+                                                    <option value="sof">SOF</option>
+                                                    <option value="ez_estimate">EZ Estimate</option>
+                                                    <option value="purchase_order">Purchase Order</option>
+                                                    <option value="other">Other</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-12 col-md-8">
+                                                <label class="form-label form-label-sm mb-1" id="job-doc-label-lbl-${job.id}">Label <span class="text-secondary">(optional)</span></label>
+                                                <input type="text" class="form-control form-control-sm" id="job-doc-label-${job.id}" placeholder="e.g. PO #4821, revised SOF…">
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label form-label-sm mb-1">File</label>
+                                                <input type="file" class="form-control form-control-sm" id="job-doc-file-${job.id}"
+                                                    accept=".pdf,.xlsx,.xlsm,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif,.txt">
+                                                <div class="form-hint mt-1">PDF, Excel, Word, image or text — up to 25&nbsp;MB.</div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2 mt-2">
+                                            <button class="btn btn-primary btn-sm" id="job-doc-save-${job.id}" onclick="submitJobDocument(${job.id})">Upload</button>
+                                            <button class="btn btn-link btn-sm text-secondary p-0" onclick="hideJobDocForm(${job.id})">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </td>
@@ -1086,7 +1129,7 @@
 
         function switchJobTab(jobId, tab) {
             // Update button active states
-            ['wo', 'res', 'tx'].forEach(t => {
+            ['wo', 'res', 'tx', 'doc'].forEach(t => {
                 const btn = document.getElementById(`job-tab-${t}-btn-${jobId}`);
                 const pane = document.getElementById(`job-pane-${t}-${jobId}`);
                 if (btn) btn.classList.toggle('active', t === tab);
@@ -1101,6 +1144,7 @@
                 if (tab === 'wo') loadJobWorkOrders(jobId);
                 else if (tab === 'res') loadJobReservationsInline(jobId);
                 else if (tab === 'tx') loadJobTransactions(jobId);
+                else if (tab === 'doc') loadJobDocuments(jobId);
             }
         }
 
@@ -1126,6 +1170,11 @@
                     <button class="btn btn-sm btn-outline-primary" onclick="showJobTxForm(${jobId})">
                         <i class="ti ti-plus me-1"></i>Add Transaction
                     </button>`;
+            } else if (tab === 'doc') {
+                actionsEl.innerHTML = jobDocCanManage() ? `
+                    <button class="btn btn-sm btn-outline-primary" data-permission="jobs.documents.manage" onclick="showJobDocForm(${jobId})">
+                        <i class="ti ti-upload me-1"></i>Upload
+                    </button>` : '';
             }
         }
 
@@ -1263,6 +1312,129 @@
             document.getElementById(`job-tx-product-selected-${jobId}`).style.display = 'none';
             document.getElementById(`job-tx-qty-${jobId}`).value = 1;
             document.getElementById(`job-tx-notes-${jobId}`).value = '';
+        }
+
+        // ===== JOB DOCUMENTS =====
+        const JOB_DOC_TYPES = { sof: 'SOF', ez_estimate: 'EZ Estimate', purchase_order: 'Purchase Order', other: 'Other' };
+
+        function jobDocCanManage() {
+            if (typeof isAdmin === 'function' && isAdmin()) return true;
+            return typeof hasPermission === 'function' && hasPermission('jobs.documents.manage');
+        }
+
+        function fmtFileSize(bytes) {
+            const b = Number(bytes) || 0;
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+            return (b / 1048576).toFixed(1) + ' MB';
+        }
+
+        async function loadJobDocuments(jobId) {
+            const loadingEl = document.getElementById(`detail-doc-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-doc-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            try {
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/documents`);
+                if (!r.ok) {
+                    if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">You don’t have access to this job’s documents.</div>';
+                } else {
+                    const data = await r.json();
+                    renderJobDocuments(jobId, data.documents || []);
+                }
+            } catch (e) {
+                console.error(e);
+                if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">Failed to load documents.</div>';
+            } finally {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (contentEl) contentEl.style.display = 'block';
+            }
+        }
+
+        function renderJobDocuments(jobId, docs) {
+            const contentEl = document.getElementById(`detail-doc-content-${jobId}`);
+            if (!contentEl) return;
+            const badge = document.getElementById(`job-doc-badge-${jobId}`);
+            if (badge) badge.textContent = docs.length;
+            const canManage = jobDocCanManage();
+
+            const section = (typeKey) => {
+                const rows = docs.filter(d => d.doc_type === typeKey);
+                const items = rows.length ? rows.map(d => `
+                    <div class="d-flex align-items-center gap-2 py-1">
+                        <i class="ti ti-file-text text-secondary"></i>
+                        <a href="${d.download_url}" target="_blank" rel="noopener" class="fw-medium text-decoration-none">${escapeHtml(d.original_name)}</a>
+                        ${d.label ? `<span class="text-secondary small">— ${escapeHtml(d.label)}</span>` : ''}
+                        <span class="text-secondary small ms-auto">${fmtFileSize(d.file_size)} · ${jobDate(d.created_at)}${d.uploaded_by_name ? ' · ' + escapeHtml(d.uploaded_by_name) : ''}</span>
+                        ${canManage ? `<button class="btn btn-sm btn-icon btn-ghost-danger" data-permission="jobs.documents.manage" title="Delete" onclick="deleteJobDocument(${jobId}, ${d.id})"><i class="ti ti-trash"></i></button>` : ''}
+                    </div>`).join('')
+                    : '<div class="text-secondary small py-1">None</div>';
+                return `
+                    <div class="mb-3">
+                        <div class="subheader mb-1">${JOB_DOC_TYPES[typeKey]}</div>
+                        ${items}
+                    </div>`;
+            };
+
+            contentEl.innerHTML = Object.keys(JOB_DOC_TYPES).map(section).join('');
+        }
+
+        function showJobDocForm(jobId) {
+            document.getElementById(`job-doc-form-${jobId}`).style.display = 'block';
+            onJobDocTypeChange(jobId);
+        }
+        function hideJobDocForm(jobId) {
+            document.getElementById(`job-doc-form-${jobId}`).style.display = 'none';
+            document.getElementById(`job-doc-type-${jobId}`).value = 'sof';
+            document.getElementById(`job-doc-label-${jobId}`).value = '';
+            document.getElementById(`job-doc-file-${jobId}`).value = '';
+        }
+        function onJobDocTypeChange(jobId) {
+            const isOther = document.getElementById(`job-doc-type-${jobId}`).value === 'other';
+            document.getElementById(`job-doc-label-lbl-${jobId}`).innerHTML =
+                isOther ? 'Label <span class="text-danger">*</span>' : 'Label <span class="text-secondary">(optional)</span>';
+        }
+
+        async function submitJobDocument(jobId) {
+            const type = document.getElementById(`job-doc-type-${jobId}`).value;
+            const label = document.getElementById(`job-doc-label-${jobId}`).value.trim();
+            const fileInput = document.getElementById(`job-doc-file-${jobId}`);
+            const file = fileInput.files[0];
+
+            if (!file) { alert('Choose a file to upload.'); return; }
+            if (type === 'other' && !label) { alert('A label is required for "Other" documents.'); return; }
+
+            const fd = new FormData();
+            fd.append('doc_type', type);
+            if (label) fd.append('label', label);
+            fd.append('file', file);
+
+            const btn = document.getElementById(`job-doc-save-${jobId}`);
+            btn.disabled = true; btn.textContent = 'Uploading…';
+            try {
+                const r = await authenticatedUpload(`/business-jobs/${jobId}/documents`, fd);
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) { alert(data.error || (data.errors ? Object.values(data.errors).flat().join(' ') : 'Upload failed')); return; }
+                hideJobDocForm(jobId);
+                delete jobTabLoaded[`${jobId}-doc`];
+                jobTabLoaded[`${jobId}-doc`] = true;
+                await loadJobDocuments(jobId);
+            } catch (e) {
+                console.error(e);
+                alert('Upload failed.');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Upload';
+            }
+        }
+
+        async function deleteJobDocument(jobId, docId) {
+            if (!confirm('Delete this document? This cannot be undone.')) return;
+            try {
+                const r = await jobsAPI(`/api/v1/business-jobs/${jobId}/documents/${docId}`, { method: 'DELETE' });
+                if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || d.message || 'Delete failed'); return; }
+                delete jobTabLoaded[`${jobId}-doc`];
+                jobTabLoaded[`${jobId}-doc`] = true;
+                await loadJobDocuments(jobId);
+            } catch (e) { console.error(e); alert('Delete failed.'); }
         }
 
         function wireJobTxProductSearch(jobId) {

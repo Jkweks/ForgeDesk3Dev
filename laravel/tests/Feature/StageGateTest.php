@@ -34,6 +34,7 @@ class StageGateTest extends TestCase
                 'elevation_id' => $elev->id,
                 'name' => $spec['name'] ?? "S{$i}",
                 'sort_order' => $spec['sort_order'] ?? ($i + 1),
+                'phase' => $spec['phase'] ?? null,
                 'blocks_next' => $spec['blocks_next'] ?? true,
                 'status' => $spec['status'] ?? 'pending',
             ]);
@@ -75,6 +76,43 @@ class StageGateTest extends TestCase
 
         $this->assertNotNull($blocking);
         $this->assertSame('Material Check', $blocking->name);
+    }
+
+    public function test_stages_in_the_same_phase_do_not_gate_each_other(): void
+    {
+        // Cut + Program share phase 1 — either order, or at once.
+        $elev = $this->elevationWithStages([
+            ['name' => 'Cut', 'phase' => 1, 'status' => 'pending'],
+            ['name' => 'Program', 'phase' => 1, 'status' => 'pending'],
+            ['name' => 'CNC', 'phase' => 2, 'status' => 'pending'],
+        ]);
+        $gate = app(StageGateService::class);
+
+        $this->assertNull($gate->blockingStageFor($elev->stages->firstWhere('name', 'Cut')));
+        $this->assertNull($gate->blockingStageFor($elev->stages->firstWhere('name', 'Program')));
+    }
+
+    public function test_later_phase_waits_for_every_blocking_step_in_earlier_phases(): void
+    {
+        $gate = app(StageGateService::class);
+
+        // Only Cut done — CNC still blocked by Program.
+        $elev = $this->elevationWithStages([
+            ['name' => 'Cut', 'phase' => 1, 'status' => 'complete'],
+            ['name' => 'Program', 'phase' => 1, 'status' => 'pending'],
+            ['name' => 'CNC', 'phase' => 2, 'status' => 'pending'],
+        ]);
+        $blocking = $gate->blockingStageFor($elev->stages->firstWhere('name', 'CNC'));
+        $this->assertNotNull($blocking);
+        $this->assertSame('Program', $blocking->name);
+
+        // Both phase-1 steps done — CNC clears.
+        $elev2 = $this->elevationWithStages([
+            ['name' => 'Cut', 'phase' => 1, 'status' => 'complete'],
+            ['name' => 'Program', 'phase' => 1, 'status' => 'complete'],
+            ['name' => 'CNC', 'phase' => 2, 'status' => 'pending'],
+        ]);
+        $this->assertNull($gate->blockingStageFor($elev2->stages->firstWhere('name', 'CNC')));
     }
 
     public function test_not_required_counts_as_terminal(): void

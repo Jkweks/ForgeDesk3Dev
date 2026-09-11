@@ -164,6 +164,34 @@
       background-color: #4a5568 !important;
       color: #fff !important;
     }
+    /* Extended hue badges — Tabler only ships dark tuning for the semantic set above */
+    [data-bs-theme="dark"] .badge.bg-green,
+    [data-bs-theme="dark"] .badge.bg-teal,
+    [data-bs-theme="dark"] .badge.bg-lime {
+      background-color: #48bb78 !important;
+      color: #1a202c !important;
+    }
+    [data-bs-theme="dark"] .badge.bg-blue,
+    [data-bs-theme="dark"] .badge.bg-azure,
+    [data-bs-theme="dark"] .badge.bg-cyan {
+      background-color: #4299e1 !important;
+      color: #1a202c !important;
+    }
+    [data-bs-theme="dark"] .badge.bg-orange,
+    [data-bs-theme="dark"] .badge.bg-yellow {
+      background-color: #ed8936 !important;
+      color: #1a202c !important;
+    }
+    [data-bs-theme="dark"] .badge.bg-red,
+    [data-bs-theme="dark"] .badge.bg-pink {
+      background-color: #f56565 !important;
+      color: #fff !important;
+    }
+    [data-bs-theme="dark"] .badge.bg-purple,
+    [data-bs-theme="dark"] .badge.bg-indigo {
+      background-color: #9f7aea !important;
+      color: #1a202c !important;
+    }
 
     /* Dark mode table row improvements - better visibility for shaded rows */
     [data-bs-theme="dark"] .table-success {
@@ -213,6 +241,7 @@
 
     @yield('styles')
   </style>
+  @include('partials.fab-status-styles')
 </head>
 <body>
   <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>

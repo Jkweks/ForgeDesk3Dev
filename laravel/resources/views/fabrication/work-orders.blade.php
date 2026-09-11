@@ -376,11 +376,11 @@
         <!-- ── Step 1: WO Details ── -->
         <div id="wiz-step-1">
           <!-- Excel import -->
-          <div class="mb-3 p-3 border rounded bg-light">
+          <div class="mb-3 p-3 border rounded" style="background:var(--tblr-bg-surface-secondary)">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="ti ti-file-spreadsheet text-success"></i>
               <span class="fw-medium">Import from Excel</span>
-              <span class="text-muted small">Optional — upload a WO sheet to autofill elevations</span>
+              <span class="text-secondary small">Optional — upload a WO sheet to autofill elevations</span>
             </div>
             <div class="d-flex align-items-center gap-2">
               <label class="btn btn-sm btn-outline-success mb-0" for="wo-excel-upload">
@@ -388,7 +388,7 @@
                 <input type="file" id="wo-excel-upload" class="d-none" accept=".xlsx,.xls"
                   onchange="importWOExcel(this)">
               </label>
-              <span id="wo-excel-status" class="text-muted small"></span>
+              <span id="wo-excel-status" class="text-secondary small"></span>
             </div>
             <div id="wo-excel-hint" style="display:none" class="mt-2 small">
               <span class="badge bg-blue-lt text-blue me-1">Division: <span id="wo-excel-division">—</span></span>
@@ -1901,9 +1901,11 @@ function renderElevations(elevations) {
 }
 
 function elevRow(e) {
-    const typeBadge = e.elevation_type
-        ? `<span class="badge" style="background:${esc(e.elevation_type.color || '#666')};color:#fff">${esc(e.elevation_type.name)}</span>`
-        : '<span class="text-muted">—</span>';
+    let typeBadge = '<span class="text-secondary">—</span>';
+    if (e.elevation_type) {
+        const tc = e.elevation_type.color || '#666';
+        typeBadge = `<span class="badge" style="background:${esc(tc)};color:${pickTextColor(tc)};border:1px solid var(--tblr-border-color)">${esc(e.elevation_type.name)}</span>`;
+    }
 
     const nextLabels = { pending: 'Start', in_progress: 'Complete', complete: 'Reset', blocked: 'Reset', not_required: 'Reset', on_hold: 'Reset' };
     const stages = e.stages || [];
@@ -1919,8 +1921,8 @@ function elevRow(e) {
     }).join('');
 
     const completedInfo = e.date_completed
-        ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-muted">${esc(e.completed_by_name)}</small>` : ''}`
-        : `<span class="text-muted small">—</span>`;
+        ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-secondary">${esc(e.completed_by_name)}</small>` : ''}`
+        : `<span class="text-secondary small">—</span>`;
 
     const hasStages = stages.length > 0;
     const expandBtn = hasStages
@@ -1929,30 +1931,28 @@ function elevRow(e) {
            </button>`
         : '';
 
-    const stageColors = { pending: 'secondary', in_progress: 'warning', complete: 'success', blocked: 'danger', not_required: 'blue-lt', on_hold: 'orange' };
-    const stageLabels = { pending: 'Pending', in_progress: 'In Progress', complete: 'Done', blocked: 'Blocked', not_required: 'N/R', on_hold: 'On Hold' };
     const stageDetailRows = stages.map(s => `
         <tr>
-            <td style="padding-left:2rem" class="text-muted small">${esc(s.name)}</td>
+            <td style="padding-left:2rem" class="small">${esc(s.name)}</td>
             <td>
-                <span class="badge bg-${stageColors[s.status] || 'secondary'}" style="cursor:pointer"
+                <span class="${FabStage.className(s.status)}" style="cursor:pointer"
                     onclick="cycleStage(${s.id},'${s.status}',event)"
                     oncontextmenu="stageContextMenu(${s.id},'${s.status}',event)">
-                    ${stageLabels[s.status] || s.status}
+                    ${FabStage.LABEL[s.status] || s.status}
                 </span>
             </td>
-            <td class="text-muted small">${s.assigned_name ? esc(s.assigned_name) : '—'}</td>
-            <td class="text-muted small">${s.minutes_per_joint != null ? s.minutes_per_joint + ' min/jt' : '—'}</td>
-            <td class="text-muted small">${s.started_at ? new Date(s.started_at).toLocaleDateString() : '—'}</td>
-            <td class="text-muted small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}${s.completed_by_name ? `<br><span class="text-muted" style="font-size:.7rem">${esc(s.completed_by_name)}</span>` : ''}</td>
+            <td class="text-secondary small">${s.assigned_name ? esc(s.assigned_name) : '—'}</td>
+            <td class="text-secondary small">${s.minutes_per_joint != null ? s.minutes_per_joint + ' min/jt' : '—'}</td>
+            <td class="text-secondary small">${s.started_at ? new Date(s.started_at).toLocaleDateString() : '—'}</td>
+            <td class="text-secondary small">${s.completed_at ? new Date(s.completed_at).toLocaleDateString() : '—'}${s.completed_by_name ? `<br><span class="text-secondary" style="font-size:.7rem">${esc(s.completed_by_name)}</span>` : ''}</td>
         </tr>`).join('');
 
     const stageDetailBlock = hasStages ? `
         <tr id="elev-stages-${e.id}" style="display:none">
             <td colspan="9" class="p-0">
-                <table class="table table-sm mb-0 bg-light">
+                <table class="table table-sm mb-0" style="background:var(--tblr-bg-surface-secondary)">
                     <thead>
-                        <tr class="text-muted" style="font-size:.7rem;text-transform:uppercase">
+                        <tr class="text-secondary" style="font-size:.7rem;text-transform:uppercase">
                             <th style="padding-left:2rem">Stage</th>
                             <th>Status</th>
                             <th>Assigned</th>
@@ -2162,8 +2162,9 @@ async function cycleStage(stageId, currentStatus, event) {
 // or null. Mirrors StageGateService::blockingStageFor on the server.
 function stageBlocker(stage, siblings) {
     const done = st => st === 'complete' || st === 'not_required';
+    const ph = s => (s.phase ?? s.sort_order);   // steps sharing a phase run concurrently
     return (siblings || []).find(p =>
-        p.id !== stage.id && p.blocks_next && p.sort_order < stage.sort_order && !done(p.status)
+        p.id !== stage.id && p.blocks_next && ph(p) < ph(stage) && !done(p.status)
     ) || null;
 }
 
@@ -2451,9 +2452,13 @@ async function openBulkCompleteStage() {
         );
         if (!data) return;
         await reloadWODetailKeepExpanded();
-        fabToast(data.updated
-            ? `Completed ${data.updated} “${res.stageName}” stage${data.updated !== 1 ? 's' : ''}.`
-            : 'No open stages matched.', data.updated ? 'success' : 'info');
+        if (data.updated) {
+            const closed = data.elevations_completed || 0;
+            const tail = closed ? ` ${closed} elevation${closed !== 1 ? 's' : ''} marked complete.` : '';
+            fabToast(`Completed ${data.updated} “${res.stageName}” stage${data.updated !== 1 ? 's' : ''}.${tail}`, 'success');
+        } else {
+            fabToast('No open stages matched.', 'info');
+        }
     } catch (e) { console.error(e); fabToast('Failed to complete stages.', 'error'); }
 }
 

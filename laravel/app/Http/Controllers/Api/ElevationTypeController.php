@@ -20,6 +20,7 @@ class ElevationTypeController extends Controller
                 'name' => $t->name,
                 'description' => $t->description,
                 'sort_order' => $t->sort_order,
+                'phase' => $t->phase,
                 'blocks_next' => (bool) $t->blocks_next,
                 'minutes_per_joint' => $t->minutes_per_joint !== null ? (float) $t->minutes_per_joint : null,
                 'default_user_id' => $t->default_user_id,
@@ -148,6 +149,9 @@ class ElevationTypeController extends Controller
         if ($request->has('sort_order')) {
             $template->sort_order = (int) $request->sort_order;
         }
+        if ($request->has('phase')) {
+            $template->phase = $request->filled('phase') ? max(1, (int) $request->phase) : null;
+        }
         if ($request->has('blocks_next')) {
             $template->blocks_next = $request->boolean('blocks_next');
         }
@@ -167,6 +171,7 @@ class ElevationTypeController extends Controller
             'name' => $template->name,
             'description' => $template->description,
             'sort_order' => $template->sort_order,
+            'phase' => $template->phase,
             'blocks_next' => (bool) $template->blocks_next,
             'minutes_per_joint' => $template->minutes_per_joint !== null ? (float) $template->minutes_per_joint : null,
             'template_set_id' => $template->template_set_id,
@@ -180,6 +185,7 @@ class ElevationTypeController extends Controller
             'elevation_type_id' => 'required|integer|exists:fd_elevation_types,id',
             'name' => 'required|string|max:255',
             'template_set_id' => 'sometimes|nullable|integer|exists:fd_stage_template_sets,id',
+            'phase' => 'sometimes|nullable|integer|min:1',
             'blocks_next' => 'sometimes|boolean',
             'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
@@ -198,6 +204,7 @@ class ElevationTypeController extends Controller
             'name' => $request->name,
             'description' => $request->description ?? null,
             'sort_order' => $maxOrder + 1,
+            'phase' => $request->filled('phase') ? max(1, (int) $request->phase) : null,
             'blocks_next' => $request->boolean('blocks_next', true),
             'minutes_per_joint' => $request->filled('minutes_per_joint') ? max(0, round((float) $request->minutes_per_joint, 2)) : null,
             'default_user_id' => $request->default_user_id ?? null,
@@ -208,6 +215,7 @@ class ElevationTypeController extends Controller
             'name' => $template->name,
             'description' => $template->description,
             'sort_order' => $template->sort_order,
+            'phase' => $template->phase,
             'blocks_next' => (bool) $template->blocks_next,
             'minutes_per_joint' => $template->minutes_per_joint !== null ? (float) $template->minutes_per_joint : null,
             'template_set_id' => $template->template_set_id,

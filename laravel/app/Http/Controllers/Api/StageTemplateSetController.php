@@ -176,6 +176,7 @@ class StageTemplateSetController extends Controller
                     'name' => $t->name,
                     'description' => $t->description,
                     'sort_order' => $t->sort_order,
+                    'phase' => $t->phase,
                     'blocks_next' => (bool) $t->blocks_next,
                     'minutes_per_joint' => $t->minutes_per_joint !== null ? (float) $t->minutes_per_joint : null,
                     'default_user_id' => $t->default_user_id,

@@ -141,8 +141,9 @@ class WorkOrderStageController extends Controller
 
         try {
             $updated = 0;
+            $elevationsClosed = 0;
 
-            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $actor, &$updated) {
+            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $actor, &$updated, &$elevationsClosed) {
                 foreach ($wo->elevations as $elevation) {
                     $stages = $elevation->stages
                         ->filter(fn ($s) => mb_strtolower($s->name) === $target)
@@ -169,10 +170,32 @@ class WorkOrderStageController extends Controller
                         ]);
                         $updated++;
                     }
+
+                    // Close the line if this bulk-completed stage was the last one
+                    // outstanding on the elevation. Mirrors
+                    // ElevationController@completeAllStages.
+                    $elevation->load('stages');
+                    $allTerminal = $elevation->stages->every(
+                        fn ($s) => in_array($s->status, ['complete', 'not_required'], true)
+                    );
+                    if ($allTerminal && ! $elevation->date_completed) {
+                        $elevation->date_completed = now()->toDateString();
+                        $elevation->completed_by_id = $fabUserId;
+                        $elevation->save();
+                        $elevationsClosed++;
+                    }
                 }
             });
 
-            return response()->json(['updated' => $updated]);
+            if ($elevationsClosed > 0) {
+                $wo->recalcDueDateFromElevations();
+                FdWorkOrder::resequencePriorities();
+            }
+
+            return response()->json([
+                'updated' => $updated,
+                'elevations_completed' => $elevationsClosed,
+            ]);
         } catch (StageGatedException $e) {
             return $e->render();
         } catch (\Exception $e) {
@@ -206,6 +229,7 @@ class WorkOrderStageController extends Controller
         $request->validate([
             'work_order_id' => 'required|integer|exists:fd_work_orders,id',
             'name' => 'required|string|max:255',
+            'phase' => 'sometimes|nullable|integer|min:1',
             'assigned_to_id' => 'sometimes|nullable|integer|exists:fd_users,id',
             'assigned_to_ids' => 'sometimes|array',
             'assigned_to_ids.*' => 'integer|exists:fd_users,id',
@@ -219,6 +243,7 @@ class WorkOrderStageController extends Controller
                 'name' => $request->name,
                 'description' => $request->description,
                 'sort_order' => $maxOrder + 1,
+                'phase' => $request->input('phase'),
                 'blocks_next' => $request->boolean('blocks_next', true),
                 'status' => 'pending',
                 'assigned_to_id' => $request->assigned_to_id,
@@ -246,6 +271,7 @@ class WorkOrderStageController extends Controller
         $request->validate([
             'status' => ['sometimes', Rule::in(FdWoStage::STATUSES)],
             'blocks_next' => 'sometimes|boolean',
+            'phase' => 'sometimes|nullable|integer|min:1',
             'override' => 'sometimes|boolean',
             'assigned_to_id' => 'sometimes|nullable|integer|exists:fd_users,id',
             'assigned_to_ids' => 'sometimes|array',
@@ -265,7 +291,7 @@ class WorkOrderStageController extends Controller
         }
 
         try {
-            $allowed = ['name', 'description', 'status', 'sort_order', 'blocks_next', 'assigned_to_id', 'completed_by_id', 'notes', 'started_at', 'completed_at'];
+            $allowed = ['name', 'description', 'status', 'sort_order', 'phase', 'blocks_next', 'assigned_to_id', 'completed_by_id', 'notes', 'started_at', 'completed_at'];
             $stage->fill($request->only($allowed));
 
             // Auto-timestamp on status transitions
@@ -337,6 +363,7 @@ class WorkOrderStageController extends Controller
             'name' => $s->name,
             'description' => $s->description,
             'sort_order' => $s->sort_order,
+            'phase' => $s->phase,
             'blocks_next' => (bool) $s->blocks_next,
             'status' => $s->status,
             'assigned_to_id' => $s->assigned_to_id,

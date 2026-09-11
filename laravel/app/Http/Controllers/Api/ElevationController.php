@@ -81,6 +81,7 @@ class ElevationController extends Controller
                         'name' => $tpl->name,
                         'description' => $tpl->description,
                         'sort_order' => $tpl->sort_order,
+                        'phase' => $tpl->phase,
                         'blocks_next' => $tpl->blocks_next ?? true,
                         'minutes_per_joint' => $tpl->minutes_per_joint,
                         'status' => 'pending',
@@ -197,6 +198,7 @@ class ElevationController extends Controller
 
             if ($match) {
                 $match->sort_order = $tpl->sort_order;
+                $match->phase = $tpl->phase;
                 $match->blocks_next = $tpl->blocks_next ?? true;
                 $match->minutes_per_joint = $tpl->minutes_per_joint;
                 $match->template_id = $tpl->id;
@@ -211,6 +213,7 @@ class ElevationController extends Controller
                     'name' => $tpl->name,
                     'description' => $tpl->description,
                     'sort_order' => $tpl->sort_order,
+                    'phase' => $tpl->phase,
                     'blocks_next' => $tpl->blocks_next ?? true,
                     'minutes_per_joint' => $tpl->minutes_per_joint,
                     'status' => 'pending',
@@ -277,6 +280,7 @@ class ElevationController extends Controller
                 'name' => $tpl->name,
                 'description' => $tpl->description,
                 'sort_order' => $tpl->sort_order,
+                'phase' => $tpl->phase,
                 'blocks_next' => $tpl->blocks_next ?? true,
                 'minutes_per_joint' => $tpl->minutes_per_joint,
                 'status' => 'pending',
@@ -426,6 +430,7 @@ class ElevationController extends Controller
                 'name' => $s->name,
                 'status' => $s->status,
                 'sort_order' => $s->sort_order,
+                'phase' => $s->phase,
                 'blocks_next' => (bool) $s->blocks_next,
                 'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
                 'assigned_name' => $s->assignedTo?->name,

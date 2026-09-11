@@ -2642,6 +2642,13 @@
               </div>
             </td>
             <td style="width:36px" class="text-muted small">${t.sort_order}</td>
+            <td style="width:74px">
+              <input type="number" min="1" step="1" class="form-control form-control-sm" style="width:64px"
+                value="${t.phase ?? ''}" placeholder="—"
+                title="Steps sharing a phase run in parallel; a later phase waits for every 'Blocks next' step in earlier phases. Blank = run in list order."
+                onblur="saveTplField(${t.id}, 'phase', this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </td>
             <td>
               <input type="text" class="form-control form-control-sm" value="${escT(t.name)}"
                 style="min-width:140px"
@@ -2702,8 +2709,10 @@
           <p class="text-muted small mb-2">
             Each tier is an independent step list — pick it when creating an elevation, or bump an
             elevation up later. “Blocks next” gates the following stage until this one is done.
-            Set <strong>Min / joint</strong> per step, or leave the steps blank and set one
-            <strong>Tier min / joint</strong> for the whole list. Saves on blur.
+            Give steps the same <strong>Phase</strong> to let them run in parallel (any order, or at
+            once); a later phase waits for every “Blocks next” step in earlier phases. Blank phase =
+            run in list order. Set <strong>Min / joint</strong> per step, or leave the steps blank and
+            set one <strong>Tier min / joint</strong> for the whole list. Saves on blur.
           </p>
           <div class="table-responsive">
             <table class="table table-sm table-vcenter align-middle mb-2">
@@ -2711,6 +2720,7 @@
                 <tr>
                   <th style="width:52px"></th>
                   <th style="width:36px">#</th>
+                  <th style="width:74px" title="Steps sharing a phase run in parallel">Phase</th>
                   <th>Stage Name</th>
                   <th>Description</th>
                   <th style="width:70px" class="text-center">Blocks next</th>
@@ -2719,7 +2729,7 @@
                   <th style="width:48px"></th>
                 </tr>
               </thead>
-              <tbody>${rows || '<tr><td colspan="8" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
+              <tbody>${rows || '<tr><td colspan="9" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
             </table>
           </div>
           <div class="border-top pt-3">
