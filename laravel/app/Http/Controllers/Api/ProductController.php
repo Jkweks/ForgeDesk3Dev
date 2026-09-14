@@ -54,6 +54,10 @@ class ProductController extends Controller
             $query->where('is_special_order', $request->boolean('is_special_order'));
         }
 
+        if ($request->has('nonsof')) {
+            $query->where('nonsof', $request->boolean('nonsof'));
+        }
+
         if ($request->has('supplier_id')) {
             $query->where('supplier_id', $request->supplier_id);
         }

@@ -37,6 +37,7 @@ class FdWorkOrder extends Model
 
     protected $fillable = [
         'business_job_id', 'release_number', 'release_code', 'date_issued', 'due_date',
+        'planned_start_date', 'planned_completion_date',
         'material_delivery', 'estimated_minutes_override', 'notes', 'archived', 'priority', 'priority_locked',
         'status', 'completed_at', 'completed_by_user_id', 'completion_email_sent_at',
     ];
@@ -44,6 +45,8 @@ class FdWorkOrder extends Model
     protected $casts = [
         'date_issued' => 'date',
         'due_date' => 'date',
+        'planned_start_date' => 'date',
+        'planned_completion_date' => 'date',
         'archived' => 'boolean',
         'priority_locked' => 'boolean',
         'estimated_minutes_override' => 'integer',
@@ -80,6 +83,37 @@ class FdWorkOrder extends Model
             'computed' => $computed,
             'override' => $override,
             'effective' => $override ?? $computed,
+        ];
+    }
+
+    /**
+     * Estimated labour-time remaining: every elevation's not-yet-complete
+     * share summed. Unlike estimateMinutes(), there's no manual override —
+     * this always reflects current stage progress.
+     *
+     * @return array{computed: int|null, effective: int|null}
+     */
+    public function estimateRemainingMinutes(): array
+    {
+        $elevations = $this->relationLoaded('elevations')
+            ? $this->elevations
+            : $this->elevations()->with(['stages', 'templateSet'])->get();
+
+        $sum = 0;
+        $any = false;
+        foreach ($elevations as $elev) {
+            $eff = $elev->remainingMinutes()['effective'];
+            if ($eff !== null) {
+                $sum += $eff;
+                $any = true;
+            }
+        }
+
+        $computed = $any ? $sum : null;
+
+        return [
+            'computed' => $computed,
+            'effective' => $computed,
         ];
     }
 

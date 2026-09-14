@@ -537,4 +537,54 @@ class UserController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Persist the signed-in user's Tabler theme (color mode, scheme, font,
+     * base, radius) so it follows them to any device on next login.
+     */
+    public function updateThemePreferences(Request $request)
+    {
+        $validated = $request->validate([
+            'theme' => 'sometimes|nullable|in:light,dark',
+            'theme-base' => 'sometimes|nullable|in:slate,gray,zinc,neutral,stone',
+            'theme-font' => 'sometimes|nullable|in:sans-serif,serif,monospace,comic',
+            'theme-primary' => 'sometimes|nullable|in:blue,azure,indigo,purple,pink,red,orange,yellow,lime,green,teal,cyan',
+            'theme-radius' => 'sometimes|nullable|in:0,0.5,1,1.5,2',
+        ]);
+
+        $user = auth()->user();
+        $preferences = array_filter($validated, fn ($value) => $value !== null);
+
+        // The client always sends the full current config, so this is a
+        // straight replace, not a merge — a stale partial payload would
+        // otherwise silently drop previously saved keys.
+        $user->update(['theme_preferences' => $preferences ?: null]);
+
+        return response()->json([
+            'theme_preferences' => $user->theme_preferences,
+        ]);
+    }
+
+    /**
+     * Persist which columns the signed-in user has hidden on the Work Orders
+     * table, so it follows them to any device on next login.
+     */
+    public function updateWoColumnPrefs(Request $request)
+    {
+        $validated = $request->validate([
+            'hidden' => 'sometimes|array',
+            'hidden.*' => 'string|max:64',
+        ]);
+
+        $user = auth()->user();
+        $hidden = array_values(array_unique($validated['hidden'] ?? []));
+
+        // The client always sends the full current set of hidden columns, so
+        // this is a straight replace, not a merge.
+        $user->update(['wo_column_prefs' => $hidden ?: null]);
+
+        return response()->json([
+            'wo_column_prefs' => $user->wo_column_prefs,
+        ]);
+    }
 }

@@ -74,8 +74,15 @@
                 <option value="pending">Pending</option>
               </select>
             </div>
-            <div class="col-auto ms-auto">
+            <div class="col-auto ms-auto d-flex align-items-center gap-2">
               <span class="text-muted small" id="wo-count-label"></span>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="wo-columns-btn"
+                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                  <i class="ti ti-columns me-1"></i>Columns
+                </button>
+                <div class="dropdown-menu dropdown-menu-end p-2" id="wo-columns-menu" style="min-width:14rem;max-height:20rem;overflow:auto"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -104,19 +111,7 @@
         <div class="card">
           <div class="table-responsive">
             <table class="table table-vcenter card-table table-hover table-striped">
-              <thead>
-                <tr>
-                  <th style="width:4.5rem">#</th>
-                  <th>Release</th>
-                  <th>Job Name</th>
-                  <th>PM</th>
-                  <th>Due</th>
-                  <th>Assigned</th>
-                  <th>Material</th>
-                  <th>Elevations</th>
-                  <th class="w-1"></th>
-                </tr>
-              </thead>
+              <thead id="wo-thead"></thead>
               <tbody id="wo-tbody"></tbody>
             </table>
           </div>
@@ -187,6 +182,9 @@
               <button class="btn btn-ghost-success" onclick="openBulkCompleteStage()" title="Mark one stage complete on every elevation">
                 <i class="ti ti-checks me-1"></i>Bulk Complete Stage
               </button>
+              <button class="btn btn-ghost-success" onclick="openBulkCompleteWO()" title="Complete every open stage on every elevation of this work order">
+                <i class="ti ti-clipboard-check me-1"></i>Bulk Complete Work Order
+              </button>
               <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
                 <i class="ti ti-door me-1"></i>Door Schedule
               </button>
@@ -256,6 +254,14 @@
               <label class="form-label form-label-sm mb-1">Due Date</label>
               <div id="d-due-date">—</div>
               <div class="form-hint mt-1">Auto-set from the earliest elevation date</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label form-label-sm mb-1">Est. Start</label>
+              <div id="d-planned-start-wrap"></div>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label form-label-sm mb-1">Est. Complete</label>
+              <div id="d-planned-completion-wrap"></div>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label form-label-sm mb-1">Priority</label>
@@ -853,12 +859,102 @@ function closeOffcanvas(id) {
 // Init
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    renderWOTableHead();
+    initWoColumnPrefs();
     await Promise.all([loadWorkOrders(), loadElevTypes(), loadFabUsers()]);
 
     // Open WO from query param (e.g. linked from Jobs page)
     const params = new URLSearchParams(location.search);
     if (params.has('wo')) openWODetail(parseInt(params.get('wo')));
 });
+
+// ============================================================
+// Column visibility — persisted to the signed-in user's account
+// ============================================================
+const WO_COLUMNS = [
+    { key: 'priority',        label: '#' },
+    { key: 'job_name',        label: 'Job Name' },
+    { key: 'pm',               label: 'PM' },
+    { key: 'due',              label: 'Due' },
+    { key: 'est_start',        label: 'Est. Start' },
+    { key: 'est_completion',   label: 'Est. Complete' },
+    { key: 'work_content',     label: 'Work Content' },
+    { key: 'est_remaining',    label: 'Est. Remaining' },
+    { key: 'work_combined',    label: 'Work Content (Combined)' },
+    { key: 'assigned',         label: 'Assigned' },
+    { key: 'material',         label: 'Material' },
+    { key: 'elevations',       label: 'Elevations' },
+];
+let woHiddenColumns = new Set();
+
+// Uses locally-cached prefs immediately (avoids a flash of every column),
+// then reconciles against the server's copy once the session refresh
+// resolves (`window.sessionReady`, set up by partials.auth-scripts) — this
+// is what makes the choice follow the user to a new device/browser.
+function initWoColumnPrefs() {
+    applyStoredWoColumnPrefs(currentUser?.wo_column_prefs);
+    renderWoColumnsMenu();
+
+    if (typeof window.sessionReady !== 'undefined') {
+        window.sessionReady.then(() => {
+            applyStoredWoColumnPrefs(currentUser?.wo_column_prefs);
+            renderWoColumnsMenu();
+            applyWoColumnVisibility();
+        });
+    }
+}
+
+function applyStoredWoColumnPrefs(hidden) {
+    woHiddenColumns = new Set(Array.isArray(hidden) ? hidden : []);
+}
+
+function renderWoColumnsMenu() {
+    const menu = document.getElementById('wo-columns-menu');
+    if (!menu) return;
+    menu.innerHTML = WO_COLUMNS.map(c => `
+        <label class="form-check">
+            <input class="form-check-input" type="checkbox" ${woHiddenColumns.has(c.key) ? '' : 'checked'}
+                onchange="toggleWoColumn('${c.key}', this.checked)">
+            <span class="form-check-label">${esc(c.label)}</span>
+        </label>
+    `).join('');
+}
+
+function toggleWoColumn(key, visible) {
+    if (visible) woHiddenColumns.delete(key);
+    else woHiddenColumns.add(key);
+    applyWoColumnVisibility();
+    saveWoColumnPrefs();
+}
+
+function applyWoColumnVisibility() {
+    WO_COLUMNS.forEach(c => {
+        const hidden = woHiddenColumns.has(c.key);
+        document.querySelectorAll(`[data-col="${c.key}"]`).forEach(el => {
+            el.style.display = hidden ? 'none' : '';
+        });
+    });
+}
+
+let _woColumnSaveTimeout = null;
+function saveWoColumnPrefs() {
+    // currentUser stays in sync locally so a re-render (e.g. reopening the
+    // dropdown) reflects the latest choice even before the save resolves.
+    if (currentUser) {
+        currentUser.wo_column_prefs = [...woHiddenColumns];
+        try { localStorage.setItem('userData', JSON.stringify(currentUser)); } catch (e) { /* best-effort */ }
+    }
+    clearTimeout(_woColumnSaveTimeout);
+    _woColumnSaveTimeout = setTimeout(async () => {
+        try {
+            await API('/user/wo-column-prefs', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hidden: [...woHiddenColumns] }),
+            });
+        } catch (e) { console.error('Failed to save column preferences:', e); }
+    }, 400);
+}
 
 // ============================================================
 // Load & render WO list
@@ -890,6 +986,130 @@ async function loadWorkOrders() {
 
 const WO_STATUS_SORT = { active: 0, on_hold: 1, complete: 2 };
 
+// ── Sortable table headers ──
+// Default: priority ascending (the normal shop-floor work order). Any other
+// column can be clicked to re-sort; clicking the active column flips
+// direction. Persisted only for the session (not saved to the DB — unlike
+// column visibility, which columns to see is what should follow the user).
+let currentWOSortBy = 'priority';
+let currentWOSortDir = 'asc';
+
+function woSortIcon(col) {
+    if (currentWOSortBy !== col) {
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ms-1 text-muted opacity-50"><path d="M8 9l4 -4 4 4"/><path d="M16 15l-4 4 -4 -4"/></svg>';
+    }
+    return currentWOSortDir === 'asc'
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ms-1"><path d="M12 5l0 14"/><path d="M18 11l-6 -6"/><path d="M6 11l6 -6"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ms-1"><path d="M12 5l0 14"/><path d="M18 13l-6 6"/><path d="M6 13l6 6"/></svg>';
+}
+
+function woSortTh(label, col, dataCol, extraStyle) {
+    const dataAttr = dataCol ? ` data-col="${dataCol}"` : '';
+    const style = extraStyle ? `cursor:pointer;user-select:none;${extraStyle}` : 'cursor:pointer;user-select:none;';
+    return `<th${dataAttr} style="${style}" onclick="sortWOColumn('${col}')">${esc(label)}${woSortIcon(col)}</th>`;
+}
+
+function renderWOTableHead() {
+    const thead = document.getElementById('wo-thead');
+    if (!thead) return;
+    thead.innerHTML = `<tr>
+        ${woSortTh('#', 'priority', 'priority', 'width:4.5rem')}
+        ${woSortTh('Release', 'release')}
+        ${woSortTh('Job Name', 'job_name', 'job_name')}
+        ${woSortTh('PM', 'pm', 'pm')}
+        ${woSortTh('Due', 'due', 'due')}
+        ${woSortTh('Est. Start', 'est_start', 'est_start')}
+        ${woSortTh('Est. Complete', 'est_completion', 'est_completion')}
+        ${woSortTh('Work Content', 'work_content', 'work_content')}
+        ${woSortTh('Est. Remaining', 'est_remaining', 'est_remaining')}
+        ${woSortTh('Work Content', 'work_combined', 'work_combined')}
+        ${woSortTh('Assigned', 'assigned', 'assigned')}
+        ${woSortTh('Material', 'material', 'material')}
+        ${woSortTh('Elevations', 'elevations', 'elevations')}
+        <th class="w-1"></th>
+    </tr>`;
+    applyWoColumnVisibility();
+}
+
+function sortWOColumn(col) {
+    if (currentWOSortBy === col) {
+        currentWOSortDir = currentWOSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentWOSortBy = col;
+        currentWOSortDir = 'asc';
+    }
+    renderWOTableHead();
+    renderWOList(allWOs);
+}
+
+function compareWO(a, b) {
+    let aVal, bVal, cmp;
+    const dir = currentWOSortDir === 'asc' ? 1 : -1;
+    switch (currentWOSortBy) {
+        case 'release':
+            cmp = (a.release_label || '').localeCompare(b.release_label || '', undefined, { numeric: true, sensitivity: 'base' });
+            break;
+        case 'job_name':
+            cmp = (a.job?.job_name || '').localeCompare(b.job?.job_name || '');
+            break;
+        case 'pm':
+            cmp = (a.job?.project_manager || '').localeCompare(b.job?.project_manager || '');
+            break;
+        case 'due':
+            aVal = a.due_date_first || a.due_date || '9999-99-99';
+            bVal = b.due_date_first || b.due_date || '9999-99-99';
+            cmp = String(aVal).localeCompare(String(bVal));
+            break;
+        case 'est_start':
+            cmp = String(a.planned_start_date || '9999-99-99').localeCompare(String(b.planned_start_date || '9999-99-99'));
+            break;
+        case 'est_completion':
+            cmp = String(a.planned_completion_date || '9999-99-99').localeCompare(String(b.planned_completion_date || '9999-99-99'));
+            break;
+        case 'work_content':
+            aVal = a.estimated_minutes ?? -1; bVal = b.estimated_minutes ?? -1;
+            cmp = aVal - bVal;
+            break;
+        case 'est_remaining':
+            aVal = a.estimated_minutes_remaining ?? -1; bVal = b.estimated_minutes_remaining ?? -1;
+            cmp = aVal - bVal;
+            break;
+        case 'work_combined':
+            // Same ordering as est_remaining — remaining work is what
+            // matters most here, total is secondary context.
+            aVal = a.estimated_minutes_remaining ?? -1; bVal = b.estimated_minutes_remaining ?? -1;
+            cmp = aVal - bVal;
+            break;
+        case 'assigned':
+            cmp = (a.assigned_users || []).length - (b.assigned_users || []).length;
+            break;
+        case 'material':
+            cmp = (a.material_delivery || '').localeCompare(b.material_delivery || '');
+            break;
+        case 'elevations':
+            aVal = a.elevation_count ? a.elevations_complete / a.elevation_count : -1;
+            bVal = b.elevation_count ? b.elevations_complete / b.elevation_count : -1;
+            cmp = aVal - bVal;
+            break;
+        default: { // 'priority'
+            // Status grouping (active, then on hold, then complete) takes
+            // precedence over priority — priority only orders within a
+            // status group, same as before sortable headers existed. This
+            // grouping is fixed regardless of the asc/desc toggle; only the
+            // priority ordering within each group flips.
+            const statusDiff = (WO_STATUS_SORT[a.status] ?? 99) - (WO_STATUS_SORT[b.status] ?? 99);
+            if (statusDiff !== 0) return statusDiff;
+            aVal = a.priority ?? Infinity; bVal = b.priority ?? Infinity;
+            cmp = aVal - bVal;
+        }
+    }
+    if (cmp !== 0) return cmp * dir;
+    // Stable, sensible tiebreak regardless of active sort column.
+    const statusDiff = (WO_STATUS_SORT[a.status] ?? 99) - (WO_STATUS_SORT[b.status] ?? 99);
+    if (statusDiff !== 0) return statusDiff;
+    return (a.job?.job_number || '').localeCompare(b.job?.job_number || '', undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function renderWOList(wos) {
     document.getElementById('wo-loading').style.display = 'none';
     document.getElementById('wo-count-label').textContent = `${wos.length} work order${wos.length !== 1 ? 's' : ''}`;
@@ -901,18 +1121,17 @@ function renderWOList(wos) {
 
     document.getElementById('wo-table-wrap').style.display = 'block';
     const tbody = document.getElementById('wo-tbody');
-    const sorted = wos.slice().sort((a, b) => {
-        const statusDiff = (WO_STATUS_SORT[a.status] ?? 99) - (WO_STATUS_SORT[b.status] ?? 99);
-        if (statusDiff !== 0) return statusDiff;
-        return (a.job?.job_number || '').localeCompare(b.job?.job_number || '', undefined, { numeric: true, sensitivity: 'base' });
-    });
-    tbody.innerHTML = sorted.map(wo => {
+    const sorted = wos.slice().sort(compareWO);
+    tbody.innerHTML = sorted.map((wo, idx) => {
         const assignedPills = (wo.assigned_users || []).map(u =>
             `<span class="badge bg-blue-lt text-blue" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
         ).join(' ') || '<span class="text-muted">—</span>';
-        const priorityCell = wo.priority != null
-            ? `<span class="badge bg-secondary-lt text-secondary">${wo.priority}</span>`
-            : '<span class="text-muted">—</span>';
+        // Show the stored priority when the WO has one (the normal case —
+        // every non-archived WO gets resequenced with one); fall back to its
+        // position in the current sort so the column never sits blank for an
+        // archived or not-yet-resequenced row.
+        const priorityValue = wo.priority ?? (idx + 1);
+        const priorityCell = `<span class="badge bg-secondary-lt text-secondary" title="${wo.priority != null ? 'Priority' : 'Unprioritized — showing list position'}">${priorityValue}</span>`;
         const pinBtn = `<button class="btn btn-sm btn-ghost-${wo.priority_locked ? 'yellow' : 'secondary'} p-0 px-1"
             title="${wo.priority_locked ? 'Pinned — auto-ranking skips this WO' : 'Pin at this position'}"
             onclick="toggleWOPin(${wo.id}, event)"><i class="ti ti-pin${wo.priority_locked ? '-filled' : ''}"></i></button>`;
@@ -923,14 +1142,19 @@ function renderWOList(wos) {
                 ? '<span class="badge bg-orange-lt text-orange ms-1">On Hold</span>'
                 : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
-            <td class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</td>
+            <td data-col="priority"><span class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</span></td>
             <td><strong>${esc(wo.release_label)}</strong>${statusBadge}</td>
-            <td>${esc(wo.job?.job_name || '—')}</td>
-            <td class="text-muted">${esc(wo.job?.project_manager || '—')}</td>
-            <td>${dueCell}</td>
-            <td>${assignedPills}</td>
-            <td>${matBadge(wo.material_delivery)}</td>
-            <td>
+            <td data-col="job_name">${esc(wo.job?.job_name || '—')}</td>
+            <td data-col="pm">${pmPill(wo.job?.project_manager)}</td>
+            <td data-col="due">${dueCell}</td>
+            <td data-col="est_start">${plannedDateCell(wo.id, 'planned_start_date', wo.planned_start_date)}</td>
+            <td data-col="est_completion">${plannedDateCell(wo.id, 'planned_completion_date', wo.planned_completion_date)}</td>
+            <td data-col="work_content" class="text-muted">${wo.estimated_minutes != null ? (wo.estimated_minutes / 60).toFixed(1) + ' h' : '—'}</td>
+            <td data-col="est_remaining" class="${wo.estimated_minutes_remaining ? 'fw-bold' : 'text-muted'}">${remainingHoursHtml(wo.estimated_minutes_remaining)}</td>
+            <td data-col="work_combined" class="${wo.estimated_minutes_remaining ? 'fw-bold' : 'text-muted'}">${workCombinedHtml(wo)}</td>
+            <td data-col="assigned">${assignedPills}</td>
+            <td data-col="material">${matBadge(wo.material_delivery)}</td>
+            <td data-col="elevations">
                 ${wo.elevation_count > 0
                     ? `<span class="text-muted small">${wo.elevations_complete}/${wo.elevation_count} done</span>`
                     : '<span class="text-muted">—</span>'}
@@ -942,6 +1166,7 @@ function renderWOList(wos) {
             </td>
         </tr>`;
     }).join('');
+    applyWoColumnVisibility();
 }
 
 // ============================================================
@@ -1146,6 +1371,10 @@ function populateDetail(wo) {
         : 'Blank = R' + wo.release_number;
     document.getElementById('d-date-issued').value = wo.date_issued || '';
     document.getElementById('d-due-date').innerHTML = dueDateHtml(wo);
+    document.getElementById('d-planned-start-wrap').innerHTML =
+        compactDateHtml('d-planned-start', wo.planned_start_date, `patchWO('planned_start_date', this.value || null)`);
+    document.getElementById('d-planned-completion-wrap').innerHTML =
+        compactDateHtml('d-planned-completion', wo.planned_completion_date, `patchWO('planned_completion_date', this.value || null)`);
     document.getElementById('d-priority').value = wo.priority != null ? wo.priority : '';
     document.getElementById('d-priority-hint').textContent = wo.priority_locked
         ? 'Pinned — auto-ranking skips this WO'
@@ -1284,6 +1513,27 @@ async function patchWO(field, value) {
         }
     } catch (e) {
         console.error(e);
+    }
+}
+
+// Like patchWO, but callable straight from the dashboard table row without the
+// detail panel open. Refreshes currentWO too, in case that same WO is open.
+async function patchWOField(id, field, value) {
+    try {
+        await API(`/work-orders/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value }),
+        });
+        if (currentWO && currentWO.id === id) {
+            const r = await API(`/work-orders/${id}`);
+            currentWO = await r.json();
+            populateDetail(currentWO);
+        }
+        loadWorkOrders();
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to save.', 'error');
     }
 }
 
@@ -2469,6 +2719,33 @@ async function openBulkCompleteStage() {
     } catch (e) { console.error(e); fabToast('Failed to complete stages.', 'error'); }
 }
 
+async function openBulkCompleteWO() {
+    if (!currentWO) return;
+    const open = (currentWO.elevations || [])
+        .reduce((n, e) => n + (e.stages || []).filter(s => ['pending', 'in_progress'].includes(s.status)).length, 0);
+    if (!open) { fabToast('No open stages on this work order.', 'info'); return; }
+
+    const res = await openBulkCompletePrompt({
+        title: 'Bulk Complete Work Order',
+        message: `Complete all ${open} open stage${open !== 1 ? 's' : ''} across every elevation of this work order? Stages on hold or blocked are left untouched.`,
+        allowUser: isManagerOrAbove(),
+    });
+    if (!res) return;
+
+    try {
+        const data = await sendBulkComplete(
+            `/work-orders/${currentWO.id}/stages/bulk-complete`,
+            { fab_user_id: res.fabUserId },
+            'Failed to complete the work order.',
+        );
+        if (!data) return;
+        await reloadWODetailKeepExpanded();
+        const closed = data.elevations_completed || 0;
+        const tail = closed ? ` ${closed} elevation${closed !== 1 ? 's' : ''} marked complete.` : '';
+        fabToast(`Completed ${data.updated} stage${data.updated !== 1 ? 's' : ''}.${tail}`, 'success');
+    } catch (e) { console.error(e); fabToast('Failed to complete the work order.', 'error'); }
+}
+
 async function bulkCompleteElevation(elevId) {
     if (!currentWO) return;
     const elev = (currentWO.elevations || []).find(e => e.id === elevId);
@@ -3498,6 +3775,82 @@ function dueDateHtml(wo, extraClass) {
              title="First due date: ${fmtDate(first)}&#10;Final due date: ${fmtDate(last)}"></i>`
         : '';
     return `<span class="fw-bold ${past ? 'text-danger' : ''} ${extraClass || ''}">${fmtDate(first)}</span>${info}`;
+}
+
+// "Last, First" (people-picker label) or "First Last" -> "FL" (first initial,
+// then last), matching how the assigned-worker pills read.
+function pmInitials(name) {
+    if (!name) return '';
+    const trimmed = name.trim();
+    if (trimmed.includes(',')) {
+        const [last, first] = trimmed.split(',').map(s => s.trim());
+        return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase();
+    }
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function pmPill(name) {
+    if (!name) return '<span class="text-muted">—</span>';
+    return `<span class="badge bg-blue-lt text-blue" title="${esc(name)}">${esc(pmInitials(name))}</span>`;
+}
+
+// Compact date field: a calendar icon + plain-text date, backed by a native
+// (visually hidden) date input opened on click. `onChangeJs` runs after the
+// visible label updates, with `this` bound to the hidden input, same as a
+// normal inline onchange handler. Pass stopPropagation:true inside a
+// clickable row so opening the picker doesn't also trigger the row's onclick.
+function compactDateHtml(id, value, onChangeJs, opts = {}) {
+    const stop = opts.stopPropagation ? 'event.stopPropagation();' : '';
+    return `<span class="d-inline-flex align-items-center gap-1">
+        <i class="ti ti-calendar text-muted" style="cursor:pointer" onclick="${stop}openDatePicker('${id}')" title="Pick a date"></i>
+        <span class="small ${value ? '' : 'text-muted'}" id="${id}-label" style="cursor:pointer" onclick="${stop}openDatePicker('${id}')">${value ? fmtDate(value) : '—'}</span>
+        <input type="date" id="${id}" value="${value || ''}" tabindex="-1"
+            style="position:absolute;width:0;height:0;padding:0;margin:0;border:0;opacity:0;pointer-events:none"
+            onclick="${stop}" onchange="${stop}updateCompactDateLabel('${id}');${onChangeJs || ''}">
+    </span>`;
+}
+
+function updateCompactDateLabel(id) {
+    const input = document.getElementById(id);
+    const label = document.getElementById(`${id}-label`);
+    if (!input || !label) return;
+    label.textContent = input.value ? fmtDate(input.value) : '—';
+    label.classList.toggle('text-muted', !input.value);
+}
+
+function openDatePicker(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (typeof el.showPicker === 'function') {
+        try { el.showPicker(); return; } catch (e) { /* fall through */ }
+    }
+    el.focus();
+}
+
+// Inline click-to-select date cell for the dashboard table — patches the WO
+// directly by id (no need for the detail panel to be open).
+function plannedDateCell(woId, field, value) {
+    return compactDateHtml(`pd-${field}-${woId}`, value, `patchWOField(${woId}, '${field}', this.value || null)`, { stopPropagation: true });
+}
+
+// Estimated labour-hours left on open (non-terminal) stages — null/0 both
+// read as "—" since a WO with no joint-based estimate and one that's fully
+// worked through both compute to nothing left to flag.
+function remainingHoursHtml(minutesRemaining) {
+    if (!minutesRemaining) return '—';
+    return (minutesRemaining / 60).toFixed(1) + ' h';
+}
+
+// Combined "remaining / total" labour-hours, e.g. "12.5 / 40.0 h" — lets a
+// user gauge how much of a work order's estimated content is left without
+// checking the separate Work Content and Est. Remaining columns.
+function workCombinedHtml(wo) {
+    if (wo.estimated_minutes == null) return '—';
+    const total = (wo.estimated_minutes / 60).toFixed(1);
+    const remaining = (wo.estimated_minutes_remaining || 0) / 60;
+    return `${remaining.toFixed(1)} / ${total} h`;
 }
 
 function matBadge(mat) {

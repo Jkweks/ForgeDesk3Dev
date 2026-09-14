@@ -192,6 +192,8 @@ Route::middleware('auth:sanctum')->group(function () {
                 'permissions' => $permissions,
                 'must_change_password' => $user->must_change_password,
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+                'theme_preferences' => $user->theme_preferences,
+                'wo_column_prefs' => $user->wo_column_prefs,
             ];
         });
 
@@ -214,6 +216,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // Self-service user endpoints
         Route::post('/user/change-password', [\App\Http\Controllers\Api\UserController::class, 'changePassword']);
         Route::put('/user/profile', [\App\Http\Controllers\Api\UserController::class, 'updateProfile']);
+        Route::put('/user/theme-preferences', [\App\Http\Controllers\Api\UserController::class, 'updateThemePreferences']);
+        Route::put('/user/wo-column-prefs', [\App\Http\Controllers\Api\UserController::class, 'updateWoColumnPrefs']);
 
         // Role & Permission Management
         Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index'])->middleware('permission:roles.view');

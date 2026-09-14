@@ -177,7 +177,8 @@ class WorkOrderController extends Controller
         try {
             $wo = FdWorkOrder::findOrFail($id);
             $wo->fill($request->only([
-                'date_issued', 'due_date', 'material_delivery', 'estimated_minutes_override',
+                'date_issued', 'due_date', 'planned_start_date', 'planned_completion_date',
+                'material_delivery', 'estimated_minutes_override',
                 'notes', 'priority', 'priority_locked',
             ]));
 
@@ -637,6 +638,7 @@ class WorkOrderController extends Controller
         );
 
         $estimate = $wo->estimateMinutes();
+        $remaining = $wo->estimateRemainingMinutes();
 
         $canAssessCompletion = $wo->relationLoaded('elevations') && $wo->relationLoaded('steps');
         $isReady = $canAssessCompletion ? $wo->isReadyToComplete() : null;
@@ -659,10 +661,13 @@ class WorkOrderController extends Controller
             'due_date' => $wo->due_date?->format('Y-m-d'),
             'due_date_first' => $dueFirst ?? $wo->due_date?->format('Y-m-d'),
             'due_date_last' => $dueLast ?? $wo->due_date?->format('Y-m-d'),
+            'planned_start_date' => $wo->planned_start_date?->format('Y-m-d'),
+            'planned_completion_date' => $wo->planned_completion_date?->format('Y-m-d'),
             'material_delivery' => $wo->material_delivery,
             'estimated_minutes' => $estimate['effective'],
             'estimated_minutes_computed' => $estimate['computed'],
             'estimated_minutes_override' => $estimate['override'],
+            'estimated_minutes_remaining' => $remaining['effective'],
             'joint_qty_total' => $wo->relationLoaded('elevations')
                 ? ($wo->elevations->sum(fn ($e) => (int) $e->joint_qty) ?: null)
                 : null,
@@ -697,6 +702,7 @@ class WorkOrderController extends Controller
         $stages = $e->relationLoaded('stages') ? $e->stages : collect();
 
         $estimate = $e->estimateMinutes();
+        $remaining = $e->remainingMinutes();
 
         return [
             'id' => $e->id,
@@ -712,6 +718,7 @@ class WorkOrderController extends Controller
             'joint_qty' => $e->joint_qty,
             'minutes_per_joint' => round($estimate['rate'], 2),
             'estimated_minutes' => $estimate['effective'],
+            'estimated_minutes_remaining' => $remaining['effective'],
             'date_requested' => $e->date_requested?->format('Y-m-d'),
             'date_completed' => $e->date_completed?->format('Y-m-d'),
             'completed_by_id' => $e->completed_by_id,

@@ -61,6 +61,39 @@ class FdWoElevation extends Model
         ];
     }
 
+    /**
+     * Time estimate for the portion of this line not yet complete. Mirrors
+     * estimateMinutes(), but when per-step rates exist it only sums the rate
+     * for stages that aren't terminal yet, so a partially-worked line only
+     * counts its open steps' share. A line with no per-step rates (only a
+     * tier-level fallback) can't be split by stage, so its full rate counts
+     * as remaining until the whole line is marked complete.
+     *
+     * @return array{computed: int|null, rate: float, effective: int|null}
+     */
+    public function remainingMinutes(): array
+    {
+        if ($this->date_completed) {
+            return ['computed' => 0, 'rate' => 0.0, 'effective' => 0];
+        }
+
+        $stages = $this->relationLoaded('stages') ? $this->stages : $this->stages()->get();
+        $stepRates = $stages->map(fn ($s) => $s->minutes_per_joint)->filter(fn ($v) => $v !== null);
+
+        $rate = $stepRates->isNotEmpty()
+            ? (float) $stages->filter(fn ($s) => $s->minutes_per_joint !== null && ! $s->isTerminal())->sum('minutes_per_joint')
+            : $this->minutesPerJoint();
+
+        $joints = $this->joint_qty;
+        $computed = ($joints !== null && $rate > 0) ? (int) round($joints * $rate) : null;
+
+        return [
+            'computed' => $computed,
+            'rate' => $rate,
+            'effective' => $computed,
+        ];
+    }
+
     public function workOrder(): BelongsTo
     {
         return $this->belongsTo(FdWorkOrder::class, 'work_order_id');

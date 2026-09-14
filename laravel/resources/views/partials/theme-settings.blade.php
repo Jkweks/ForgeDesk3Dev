@@ -246,6 +246,7 @@
 
       localStorage.setItem('tabler-' + name, value);
       document.documentElement.setAttribute('data-bs-' + name, value);
+      persistThemeToServer();
     }
   }
 
@@ -260,6 +261,54 @@
         input.checked = true;
       }
     }
+    persistThemeToServer();
+  }
+
+  // Save the full current config to the signed-in user's account so it
+  // follows them to any device on next login. `apiCall` is defined by
+  // partials.auth-scripts, included later in the layout but already
+  // executed by the time this fires (event handlers, or after
+  // window.sessionReady resolves on initial load).
+  function persistThemeToServer() {
+    if (typeof apiCall !== 'function' || typeof currentUser === 'undefined' || !currentUser) {
+      return;
+    }
+    var payload = {};
+    for (var key in themeConfig) {
+      payload[key] = localStorage.getItem('tabler-' + key) || themeConfig[key];
+    }
+    apiCall('/user/theme-preferences', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }).catch(function () { /* best-effort — local state already applied */ });
+  }
+
+  // Pull the signed-in user's saved preferences down from the server and
+  // apply any that differ from what's cached locally — this is what makes
+  // the theme follow the user to a new device/browser.
+  function syncThemeFromServer() {
+    if (typeof window.sessionReady === 'undefined') {
+      return;
+    }
+    window.sessionReady.then(function () {
+      var prefs = typeof currentUser !== 'undefined' && currentUser ? currentUser.theme_preferences : null;
+      if (!prefs) {
+        return;
+      }
+      for (var key in themeConfig) {
+        var value = prefs[key];
+        if (!value || localStorage.getItem('tabler-' + key) === value) {
+          continue;
+        }
+        localStorage.setItem('tabler-' + key, value);
+        document.documentElement.setAttribute('data-bs-' + key, value);
+
+        var input = document.querySelector('input[name="' + key + '"][value="' + value + '"]');
+        if (input) {
+          input.checked = true;
+        }
+      }
+    }).catch(function () { /* offline / not logged in — keep local theme */ });
   }
 
   // Initialize on DOM ready
@@ -276,6 +325,8 @@
       if (resetBtn) {
         resetBtn.addEventListener('click', resetTheme);
       }
+
+      syncThemeFromServer();
     });
   } else {
     initTheme();
@@ -289,6 +340,8 @@
     if (resetBtn) {
       resetBtn.addEventListener('click', resetTheme);
     }
+
+    syncThemeFromServer();
   }
 })();
 </script>

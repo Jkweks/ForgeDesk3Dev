@@ -31,6 +31,8 @@ class User extends Authenticatable
         'must_change_password',
         'password_set_at',
         'welcome_email_sent_at',
+        'theme_preferences',
+        'wo_column_prefs',
     ];
 
     /**
@@ -58,6 +60,8 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'password_set_at' => 'datetime',
             'welcome_email_sent_at' => 'datetime',
+            'theme_preferences' => 'array',
+            'wo_column_prefs' => 'array',
         ];
     }
 

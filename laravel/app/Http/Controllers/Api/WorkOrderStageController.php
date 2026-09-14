@@ -115,18 +115,20 @@ class WorkOrderStageController extends Controller
 
     /**
      * Complete every instance of a named stage across all elevations of a work
-     * order in one call. Stages already terminal, on hold or blocked are left
-     * alone; the rest are completed in sort order so per-stage gates clear as we
-     * go (a lingering gate can still be pushed past with `override`).
+     * order in one call — or, when `stage_name` is omitted, every open stage on
+     * every elevation (bulk-completing the whole work order). Stages already
+     * terminal, on hold or blocked are left alone; the rest are completed in
+     * sort order so per-stage gates clear as we go (a lingering gate can still
+     * be pushed past with `override`).
      *
-     * Body: { stage_name, fab_user_id?, override? }
+     * Body: { stage_name?, fab_user_id?, override? }
      * `fab_user_id` credits a fabricator with the work and is honoured only for
      * manager / admin app users — everyone else completes without a credit.
      */
     public function bulkComplete(Request $request, int $id)
     {
         $data = $request->validate([
-            'stage_name' => 'required|string|max:255',
+            'stage_name' => 'nullable|string|max:255',
             'fab_user_id' => 'nullable|integer|exists:fd_users,id',
             'override' => 'sometimes|boolean',
         ]);
@@ -137,16 +139,19 @@ class WorkOrderStageController extends Controller
         $fabUserId = $isManager ? ($data['fab_user_id'] ?? null) : null;
         $resolution = $this->overrides->resolve($request);
         $actor = $resolution['actor_label'] ?: ($request->user()?->name ?? 'Office user');
-        $target = mb_strtolower($data['stage_name']);
+        $target = isset($data['stage_name']) ? mb_strtolower($data['stage_name']) : null;
+        $logMessage = $target === null
+            ? "Completed via bulk complete work order by {$actor}"
+            : "Completed via bulk stage complete by {$actor}";
 
         try {
             $updated = 0;
             $elevationsClosed = 0;
 
-            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $actor, &$updated, &$elevationsClosed) {
+            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $logMessage, &$updated, &$elevationsClosed) {
                 foreach ($wo->elevations as $elevation) {
                     $stages = $elevation->stages
-                        ->filter(fn ($s) => mb_strtolower($s->name) === $target)
+                        ->filter(fn ($s) => $target === null || mb_strtolower($s->name) === $target)
                         ->whereIn('status', ['pending', 'in_progress'])
                         ->sortBy('sort_order');
 
@@ -166,7 +171,7 @@ class WorkOrderStageController extends Controller
                         FdStageLog::create([
                             'stage_id' => $stage->id,
                             'user_id' => $resolution['log_user_id'] ?? null,
-                            'message' => "Completed via bulk stage complete by {$actor}",
+                            'message' => $logMessage,
                         ]);
                         $updated++;
                     }
