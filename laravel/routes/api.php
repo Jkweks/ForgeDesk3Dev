@@ -421,6 +421,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/maintenance/dashboard', [MaintenanceController::class, 'dashboard'])->middleware('permission:maintenance.view');
         Route::get('/maintenance/upcoming-tasks', [MaintenanceController::class, 'upcomingTasks'])->middleware('permission:maintenance.view');
         Route::get('/maintenance/recent-records', [MaintenanceController::class, 'recentRecords'])->middleware('permission:maintenance.view');
+        Route::get('/maintenance/consumables', [MaintenanceController::class, 'consumables'])->middleware('permission:maintenance.view');
         Route::get('/maintenance/service-history/pdf', [MaintenanceController::class, 'serviceHistoryPdf'])->middleware('permission:maintenance.view');
 
         // Machines

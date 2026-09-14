@@ -247,8 +247,8 @@
                   <div class="card-body py-2">
                     <div class="row g-2">
                       <div class="col-5">
-                        <label class="form-label small text-muted mb-1">Supplier</label>
-                        <select class="form-select form-select-sm" name="supplier_id" id="productSupplierId">
+                        <label class="form-label small text-muted mb-1 required">Supplier</label>
+                        <select class="form-select form-select-sm" name="supplier_id" id="productSupplierId" required>
                           <option value="">Select supplier…</option>
                         </select>
                       </div>
@@ -335,6 +335,13 @@
                         <div class="form-check form-switch mt-1">
                           <input class="form-check-input" type="checkbox" name="is_shared" id="productIsShared">
                           <label class="form-check-label small" for="productIsShared">No</label>
+                        </div>
+                      </div>
+                      <div class="col-4 mt-2">
+                        <label class="form-label small text-muted mb-1">Special Order</label>
+                        <div class="form-check form-switch mt-1">
+                          <input class="form-check-input" type="checkbox" name="is_special_order" id="productIsSpecialOrder">
+                          <label class="form-check-label small" for="productIsSpecialOrder">No</label>
                         </div>
                       </div>
                     </div>
@@ -1158,6 +1165,8 @@
       if (cpPartCb)   cpPartCb.onchange   = () => { cpPartCb.nextElementSibling.textContent   = cpPartCb.checked   ? 'Yes' : 'No'; };
       const isSharedCb = document.getElementById('productIsShared');
       if (isSharedCb) isSharedCb.onchange = () => { isSharedCb.nextElementSibling.textContent = isSharedCb.checked ? 'Yes' : 'No'; };
+      const isSpecialOrderCb = document.getElementById('productIsSpecialOrder');
+      if (isSpecialOrderCb) isSpecialOrderCb.onchange = () => { isSpecialOrderCb.nextElementSibling.textContent = isSpecialOrderCb.checked ? 'Yes' : 'No'; };
 
       showModal(document.getElementById('addProductModal'));
     }
@@ -1181,6 +1190,7 @@
       data.nonsof    = !!document.getElementById('productNonsof')?.checked;
       data.cp_part   = !!document.getElementById('productCpPart')?.checked;
       data.is_shared = !!document.getElementById('productIsShared')?.checked;
+      data.is_special_order = !!document.getElementById('productIsSpecialOrder')?.checked;
 
       // Handle multiple category selection
       const categorySelect = document.getElementById('productCategoryIds');

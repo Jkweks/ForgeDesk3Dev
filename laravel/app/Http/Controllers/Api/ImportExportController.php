@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -117,6 +118,26 @@ class ImportExportController extends Controller
 
         DB::beginTransaction();
 
+        // supplier_id is now required on products; resolve each row's free-text
+        // "Supplier" column to a real Supplier (matched/created by name), falling
+        // back to the "No Supplier" placeholder when the column is blank.
+        $noSupplierId = Supplier::firstOrCreate(
+            ['code' => 'NO_SUPPLIER'],
+            ['name' => 'No Supplier', 'is_active' => true]
+        )->id;
+        $supplierIdCache = [];
+        $resolveSupplierId = function (?string $name) use (&$supplierIdCache, $noSupplierId) {
+            $name = trim((string) $name);
+            if ($name === '') {
+                return $noSupplierId;
+            }
+            if (! isset($supplierIdCache[$name])) {
+                $supplierIdCache[$name] = Supplier::firstOrCreate(['name' => $name])->id;
+            }
+
+            return $supplierIdCache[$name];
+        };
+
         try {
             foreach ($rows as $index => $row) {
                 $rowNumber = $index + 2;
@@ -150,7 +171,7 @@ class ImportExportController extends Controller
                 $product = Product::where('sku', $data['SKU'])->first();
 
                 if ($product) {
-                    $product->update([
+                    $updateData = [
                         'description' => $data['Description'],
                         'long_description' => $data['Long Description'] ?? null,
                         'category' => $data['Category'] ?? null,
@@ -163,7 +184,14 @@ class ImportExportController extends Controller
                         'supplier_sku' => $data['Supplier SKU'] ?? null,
                         'lead_time_days' => $data['Lead Time Days'] ?? null,
                         'is_active' => ($data['Active'] ?? 'Yes') === 'Yes',
-                    ]);
+                    ];
+                    // Only touch supplier_id when the sheet actually names one — an
+                    // existing product's real supplier must not be silently replaced
+                    // with the placeholder just because this column was left blank.
+                    if (trim((string) ($data['Supplier'] ?? '')) !== '') {
+                        $updateData['supplier_id'] = $resolveSupplierId($data['Supplier']);
+                    }
+                    $product->update($updateData);
                     $product->updateStatus();
                     $results['success']++;
                 } else {
@@ -178,6 +206,7 @@ class ImportExportController extends Controller
                         'maximum_quantity' => $data['Maximum Quantity'] ?? null,
                         'unit_of_measure' => $data['Unit of Measure'],
                         'supplier' => $data['Supplier'] ?? null,
+                        'supplier_id' => $resolveSupplierId($data['Supplier'] ?? null),
                         'supplier_sku' => $data['Supplier SKU'] ?? null,
                         'lead_time_days' => $data['Lead Time Days'] ?? null,
                         'is_active' => ($data['Active'] ?? 'Yes') === 'Yes',

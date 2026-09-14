@@ -50,6 +50,10 @@ class ProductController extends Controller
             $query->where('category_id', $request->category_id);
         }
 
+        if ($request->has('is_special_order')) {
+            $query->where('is_special_order', $request->boolean('is_special_order'));
+        }
+
         if ($request->has('supplier_id')) {
             $query->where('supplier_id', $request->supplier_id);
         }
@@ -99,7 +103,7 @@ class ProductController extends Controller
             'order_multiple' => 'nullable|integer|min:1',
 
             // Supplier
-            'supplier_id' => 'nullable|exists:suppliers,id',
+            'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
 
@@ -118,6 +122,7 @@ class ProductController extends Controller
 
             // Status
             'is_active' => 'nullable|boolean',
+            'is_special_order' => 'nullable|boolean',
         ]);
 
         // Auto-generate SKU if part_number is provided but not SKU
@@ -217,7 +222,7 @@ class ProductController extends Controller
             'order_multiple' => 'nullable|integer|min:1',
 
             // Supplier
-            'supplier_id' => 'nullable|exists:suppliers,id',
+            'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
 
@@ -239,6 +244,7 @@ class ProductController extends Controller
             'nonsof' => 'nullable|boolean',
             'cp_part' => 'nullable|boolean',
             'is_shared' => 'nullable|boolean',
+            'is_special_order' => 'nullable|boolean',
         ]);
 
         // Auto-generate SKU if part_number changed

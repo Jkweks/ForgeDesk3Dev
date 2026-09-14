@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Http\Request;
@@ -69,8 +70,44 @@ class DashboardController extends Controller
         // Single committed-by-product query — reused for both stats and row enrichment
         $committedByProduct = $this->getCommittedByProduct();
 
+        // Maintenance consumables (fittings, clamp pads, dust collector bags, etc)
+        // are ordinary inventory — they stay in Replenishment and Cycle Counting —
+        // but are noise on the main Inventory table, which is meant for regular
+        // stock. That page only, filtered out here.
+        $consumablesCategoryId = Category::where('code', 'maintenance_consumables')->value('id');
+        $excludeConsumables = function ($query) use ($consumablesCategoryId) {
+            if ($consumablesCategoryId) {
+                $query->whereDoesntHave('categories', function ($q) use ($consumablesCategoryId) {
+                    $q->where('categories.id', $consumablesCategoryId);
+                });
+            }
+        };
+
+        // Special-order parts are ordered per job, not kept in ongoing stock —
+        // they're noise on the main Inventory table when there's nothing to show
+        // for them. Keep a special-order product visible only while it actually
+        // has material on hand or committed against an active job reservation;
+        // once both hit zero it drops off here (Replenishment/Cycle Counting are
+        // unaffected — this filter lives only in this method).
+        $excludeIdleSpecialOrder = function ($query) {
+            $query->where(function ($q) {
+                $q->where('is_special_order', false)
+                    ->orWhere('quantity_on_hand', '>', 0)
+                    ->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('job_reservation_items as ri')
+                            ->join('job_reservations as r', 'ri.reservation_id', '=', 'r.id')
+                            ->whereColumn('ri.product_id', 'products.id')
+                            ->whereIn('r.status', ['active', 'in_progress', 'on_hold'])
+                            ->whereNull('r.deleted_at');
+                    });
+            });
+        };
+
         // Base query for stats (apply filters once)
         $statsQuery = Product::where('is_active', true);
+        $excludeConsumables($statsQuery);
+        $excludeIdleSpecialOrder($statsQuery);
         if ($categoryId) {
             $statsQuery->whereHas('categories', function ($q) use ($categoryId) {
                 $q->where('categories.id', $categoryId);
@@ -109,6 +146,8 @@ class DashboardController extends Controller
 
         $inventoryQuery = Product::with(['inventoryLocations', 'categories'])
             ->where('is_active', true);
+        $excludeConsumables($inventoryQuery);
+        $excludeIdleSpecialOrder($inventoryQuery);
 
         if ($categoryId) {
             $inventoryQuery->whereHas('categories', function ($q) use ($categoryId) {
@@ -194,9 +233,12 @@ class DashboardController extends Controller
             $query = Product::where('cp_part', true)
                 ->where('is_active', true);
         } elseif ($status === 'special_order') {
-            $query = Product::whereHas('inventoryLocations.storageLocation', function ($q) {
-                $q->whereRaw("LOWER(name) = 'special order'");
-            })->where('is_active', true);
+            // Every is_special_order product, regardless of stock status — this
+            // tab is the one place they should always be visible (unlike the
+            // main "All Inventory" tab, which hides idle ones with none on hand
+            // and nothing committed).
+            $query = Product::where('is_special_order', true)
+                ->where('is_active', true);
         } else {
             $statusFilter = $status === 'low_stock' ? ['low', 'very_low'] : [$status];
             $query = Product::whereIn('status', $statusFilter)

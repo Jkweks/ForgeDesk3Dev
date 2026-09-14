@@ -98,6 +98,9 @@
                   <a href="#tab-tooling" class="nav-link" data-bs-toggle="tab" role="tab">Machine Tooling</a>
                 </li>
                 <li class="nav-item" role="presentation">
+                  <a href="#tab-consumables" class="nav-link" data-bs-toggle="tab" role="tab">Consumables</a>
+                </li>
+                <li class="nav-item" role="presentation">
                   <a href="#tab-tasks" class="nav-link" data-bs-toggle="tab" role="tab">Tasks</a>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -275,6 +278,42 @@
                         </tr>
                       </thead>
                       <tbody id="toolingTable"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Consumables Tab -->
+                <div class="tab-pane" id="tab-consumables" role="tabpanel">
+                  <p class="text-muted small mb-3">
+                    Shop consumables used for machine upkeep — pneumatic fittings, clamp pads, dust collector
+                    bags/filter bags, and similar wear items that are stocked and used up rather than installed
+                    and tracked like Machine Tooling. This is ordinary inventory, filtered to just these items;
+                    open one to assign it a storage location under its Locations tab so cycle counts pick it up.
+                  </p>
+                  <div class="d-flex mb-3 gap-2">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addConsumableModal" onclick="openAddConsumableModal()" data-permission="inventory.create">
+                      <i class="ti ti-plus icon"></i> Add Consumable
+                    </button>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Search</label>
+                      <input type="text" class="form-control" id="consumablesSearch" placeholder="SKU, part #, or description" onkeyup="debounceConsumablesSearch()">
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-vcenter">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Qty on Hand</th>
+                          <th>Reorder Point</th>
+                          <th>Storage Location(s)</th>
+                          <th>Supplier</th>
+                          <th>Manufacturer</th>
+                        </tr>
+                      </thead>
+                      <tbody id="consumablesTable"></tbody>
                     </table>
                   </div>
                 </div>
@@ -762,9 +801,9 @@
                 <input type="text" class="form-control" id="newToolLocation" placeholder="Storage location">
               </div>
               <div class="col-md-3 mb-3">
-                <label class="form-label">Supplier</label>
-                <select class="form-select" id="newToolSupplier">
-                  <option value="">No Supplier</option>
+                <label class="form-label required">Supplier</label>
+                <select class="form-select" id="newToolSupplier" required>
+                  <option value="">Select supplier…</option>
                 </select>
               </div>
               <div class="col-md-3 mb-3">
@@ -859,6 +898,94 @@
           <div class="modal-footer">
             <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
             <button type="submit" class="btn btn-primary">Create Product</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Consumable Modal -->
+  <div class="modal fade" id="addConsumableModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Consumable</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="addConsumableForm">
+          <div class="modal-body">
+            <div class="row">
+              <div class="col-md-4 mb-3">
+                <label class="form-label required">Part Number</label>
+                <input type="text" class="form-control" id="newConsumablePartNumber" required>
+              </div>
+              <div class="col-md-4 mb-3">
+                <label class="form-label">SKU</label>
+                <input type="text" class="form-control" id="newConsumableSKU" placeholder="Auto-generated if empty">
+                <small class="form-hint">Leave empty to auto-generate from part number</small>
+              </div>
+              <div class="col-md-4 mb-3">
+                <label class="form-label required">Supplier</label>
+                <select class="form-select" id="newConsumableSupplier" required>
+                  <option value="">Select supplier…</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-12 mb-3">
+                <label class="form-label required">Description</label>
+                <input type="text" class="form-control" id="newConsumableDescription" required placeholder="e.g., Dust Collector Filter Bag - 12x24">
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-3 mb-3">
+                <label class="form-label">Quantity on Hand</label>
+                <input type="number" class="form-control" id="newConsumableQuantity" value="0" min="0">
+              </div>
+              <div class="col-md-3 mb-3">
+                <label class="form-label">Unit Cost</label>
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  <input type="number" class="form-control" id="newConsumableUnitCost" step="0.01" min="0" value="0">
+                </div>
+              </div>
+              <div class="col-md-3 mb-3">
+                <label class="form-label">Minimum Quantity</label>
+                <input type="number" class="form-control" id="newConsumableMinQuantity" value="0" min="0">
+              </div>
+              <div class="col-md-3 mb-3">
+                <label class="form-label">Reorder Point</label>
+                <input type="number" class="form-control" id="newConsumableReorderPoint" value="0" min="0">
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Manufacturer</label>
+                <input type="text" class="form-control" id="newConsumableManufacturer" placeholder="e.g., Festool, Bessey">
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Supplier Part Number</label>
+                <input type="text" class="form-control" id="newConsumableSupplierSKU" placeholder="Supplier's part #">
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" id="newConsumableNotes" rows="2"></textarea>
+            </div>
+
+            <div class="alert alert-info mb-0">
+              <i class="ti ti-info-circle me-1"></i>
+              After saving, open the item and use its <strong>Locations</strong> tab to assign a storage bin —
+              that's what makes cycle counts pick it up.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Consumable</button>
           </div>
         </form>
       </div>
@@ -992,9 +1119,14 @@
     </div>
   </div>
 
+  {{-- Shared product view/edit modal (Details/Locations/Reservations/Activity) — reused here so a
+       consumable's storage-location assignment (for cycle counting) doesn't need its own UI. --}}
+  @include('partials.product-modal')
+
 @endsection
 
 @push('scripts')
   <script src="/maintenance.js?v={{ time() }}"></script>
   <script src="/tooling.js?v={{ time() }}"></script>
+  <script src="/maintenance-consumables.js?v={{ time() }}"></script>
 @endpush

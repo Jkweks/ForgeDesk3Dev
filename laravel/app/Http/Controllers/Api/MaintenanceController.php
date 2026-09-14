@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
+use App\Models\Category;
 use App\Models\Machine;
 use App\Models\MaintenanceRecord;
 use App\Models\MaintenanceTask;
+use App\Models\Product;
 use Illuminate\Http\Request;
 
 class MaintenanceController extends Controller
@@ -35,6 +37,44 @@ class MaintenanceController extends Controller
             'total_downtime_minutes' => $totalDowntime,
             'total_downtime_hours' => round($totalDowntime / 60, 2),
             'last_service_date' => $lastService ? $lastService->performed_at : null,
+        ]);
+    }
+
+    /**
+     * Maintenance consumables — plain stock items (pneumatic fittings, clamp
+     * pads, dust collector bags, etc) tagged into the "Maintenance
+     * Consumables" category, surfaced only on the Maintenance page. These are
+     * ordinary Products; quantity/location/cycle-count all work exactly as
+     * they do everywhere else in the app, this just filters to the category.
+     */
+    public function consumables(Request $request)
+    {
+        $category = Category::where('code', 'maintenance_consumables')->first();
+
+        if (! $category) {
+            return response()->json(['consumables' => [], 'category_id' => null]);
+        }
+
+        $query = Product::whereHas('categories', function ($q) use ($category) {
+            $q->where('categories.id', $category->id);
+        });
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('sku', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('part_number', 'like', "%{$search}%");
+            });
+        }
+
+        $consumables = $query->with(['inventoryLocations.storageLocation', 'supplier'])
+            ->orderBy('description')
+            ->get();
+
+        return response()->json([
+            'consumables' => $consumables,
+            'category_id' => $category->id,
         ]);
     }
 

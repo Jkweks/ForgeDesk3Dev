@@ -960,6 +960,10 @@
                       <div class="text-muted small">Shared Component</div>
                       <div>${product.is_shared ? '<span class="badge text-bg-purple">Shared</span>' : '<span class="badge text-bg-secondary">No</span>'}</div>
                     </div>
+                    <div class="col-6 mt-2">
+                      <div class="text-muted small">Special Order</div>
+                      <div>${product.is_special_order ? '<span class="badge text-bg-purple">Special Order</span>' : '<span class="badge text-bg-secondary">No</span>'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1211,9 +1215,8 @@
                 <div class="card-body py-2">
                   <div class="row g-2">
                     <div class="col-5">
-                      <label class="form-label small text-muted mb-1">Supplier</label>
-                      <select class="form-select form-select-sm" name="supplier_id">
-                        <option value="">None</option>
+                      <label class="form-label small text-muted mb-1 required">Supplier</label>
+                      <select class="form-select form-select-sm" name="supplier_id" required>
                         ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
                       </select>
                     </div>
@@ -1274,6 +1277,13 @@
                       <div class="form-check form-switch mt-1">
                         <input class="form-check-input" type="checkbox" name="is_shared" id="editIsShared" ${product.is_shared ? 'checked' : ''}>
                         <label class="form-check-label" for="editIsShared" id="editIsSharedLabel">${product.is_shared ? 'Yes' : 'No'}</label>
+                      </div>
+                    </div>
+                    <div class="col-3 mt-2">
+                      <label class="form-label small text-muted mb-1">Special Order</label>
+                      <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" name="is_special_order" id="editIsSpecialOrder" ${product.is_special_order ? 'checked' : ''}>
+                        <label class="form-check-label" for="editIsSpecialOrder" id="editIsSpecialOrderLabel">${product.is_special_order ? 'Yes' : 'No'}</label>
                       </div>
                     </div>
                   </div>
@@ -1342,6 +1352,14 @@
       if (isSharedCb && isSharedLabel) {
         isSharedCb.addEventListener('change', () => {
           isSharedLabel.textContent = isSharedCb.checked ? 'Yes' : 'No';
+        });
+      }
+
+      const isSpecialOrderCb = editForm.querySelector('[name="is_special_order"]');
+      const isSpecialOrderLabel = document.getElementById('editIsSpecialOrderLabel');
+      if (isSpecialOrderCb && isSpecialOrderLabel) {
+        isSpecialOrderCb.addEventListener('change', () => {
+          isSpecialOrderLabel.textContent = isSpecialOrderCb.checked ? 'Yes' : 'No';
         });
       }
     }
@@ -1440,6 +1458,7 @@
         data.nonsof    = !!form.querySelector('[name="nonsof"]')?.checked;
         data.cp_part   = !!form.querySelector('[name="cp_part"]')?.checked;
         data.is_shared = !!form.querySelector('[name="is_shared"]')?.checked;
+        data.is_special_order = !!form.querySelector('[name="is_special_order"]')?.checked;
 
         // Handle multiple category selection
         const categorySelect = form.querySelector('[name="category_ids"]');

@@ -13,7 +13,13 @@ set -e
 # build output — this sync must never overwrite that.
 if [ "$APP_ENV" = "production" ] && [ -d "/var/www/public_src" ]; then
     echo "Syncing public assets to shared volume..."
-    cp -rf /var/www/public_src/. /var/www/html/public/
+    # Never let a sync hiccup (e.g. a file left with mismatched ownership by a
+    # manual hotfix) take the whole container down — this container always
+    # runs as www-data, so it may not have permission to overwrite everything
+    # in the volume, and that must not be fatal to boot.
+    if ! cp -rf /var/www/public_src/. /var/www/html/public/; then
+        echo "WARNING: public asset sync had errors (possible ownership mismatch in the volume) — continuing boot anyway." >&2
+    fi
 fi
 
 # Clear and rebuild caches so the running container reflects baked-in code
