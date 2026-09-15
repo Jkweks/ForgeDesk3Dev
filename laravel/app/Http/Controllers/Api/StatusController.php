@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
+use App\Models\BackupRun;
 use App\Models\Category;
 use App\Models\CycleCountSession;
 use App\Models\InventoryTransaction;
@@ -32,6 +33,7 @@ class StatusController extends Controller
             'inventory' => $this->getInventoryStats(),
             'operations' => $this->getOperationsStats(),
             'users' => $this->getUserStats(),
+            'backups' => $this->getBackupStats(),
         ]);
     }
 
@@ -267,6 +269,72 @@ class StatusController extends Controller
             'inactive' => User::where('is_active', false)->count(),
             'logged_in_recently' => User::where('last_login_at', '>=', now()->subDays(7))->count(),
         ];
+    }
+
+    /**
+     * Backup health for the status page: today-back-N daily bars (worst
+     * status per calendar day, red > orange > yellow > green) plus the most
+     * recent run and how long it's been since the last fully successful one.
+     * Populated by backup.sh (repo root) via `php artisan backup:record` —
+     * see RecordBackupRun for the consumer side.
+     */
+    private function getBackupStats()
+    {
+        $days = 60;
+        $severity = ['failed' => 3, 'remote_failed' => 2, 'local_failed' => 1, 'success' => 0];
+
+        try {
+            $since = now()->subDays($days - 1)->toDateString();
+
+            $runs = BackupRun::where('run_date', '>=', $since)
+                ->orderBy('run_date')
+                ->orderBy('started_at')
+                ->get();
+
+            // Worst status per calendar day, in case more than one run happened.
+            $byDate = [];
+            foreach ($runs as $run) {
+                $date = $run->run_date->toDateString();
+                if (! isset($byDate[$date]) || $severity[$run->status] > $severity[$byDate[$date]['status']]) {
+                    $byDate[$date] = [
+                        'status' => $run->status,
+                        'started_at' => $run->started_at?->toIso8601String(),
+                        'components' => $run->components,
+                        'error_message' => $run->error_message,
+                    ];
+                }
+            }
+
+            $history = [];
+            for ($i = $days - 1; $i >= 0; $i--) {
+                $date = now()->subDays($i)->toDateString();
+                $history[] = array_merge(['date' => $date, 'status' => null], $byDate[$date] ?? []);
+            }
+
+            $latest = BackupRun::latest('started_at')->first();
+            $lastSuccess = BackupRun::where('status', 'success')->latest('started_at')->first();
+
+            return [
+                'latest' => $latest ? [
+                    'status' => $latest->status,
+                    'started_at' => $latest->started_at?->toIso8601String(),
+                    'finished_at' => $latest->finished_at?->toIso8601String(),
+                    'components' => $latest->components,
+                    'error_message' => $latest->error_message,
+                ] : null,
+                'last_success_at' => $lastSuccess?->started_at?->toIso8601String(),
+                'hours_since_last_success' => $lastSuccess ? now()->diffInHours($lastSuccess->started_at) : null,
+                'history' => $history,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'latest' => null,
+                'last_success_at' => null,
+                'hours_since_last_success' => null,
+                'history' => [],
+                'error' => $e->getMessage(),
+            ];
+        }
     }
 
     private function getServerUptime()

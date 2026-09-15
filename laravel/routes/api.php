@@ -231,6 +231,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // System Status
         Route::get('/status', [StatusController::class, 'index']);
 
+        // System Notifications (nav bar bell, admin-only — see NotificationController)
+        Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+        Route::post('/notifications/{notification}/dismiss', [\App\Http\Controllers\Api\NotificationController::class, 'dismiss']);
+
         // Dashboard
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/dashboard/inventory/{status}', [DashboardController::class, 'inventoryByStatus']);
@@ -357,6 +361,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/reports/monthly-statement', [ReportsController::class, 'monthlyInventoryStatement']);
             Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
             Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
+            Route::get('/reports/work-order-backlog', [ReportsController::class, 'workOrderBacklogReport']);
+            Route::get('/reports/job-status-summary', [ReportsController::class, 'jobStatusSummaryReport']);
+            Route::get('/reports/joints-completed', [ReportsController::class, 'jointsCompletedReport']);
 
             // Exports / PDF / CSV
             Route::middleware('permission:reports.export')->group(function () {
@@ -371,6 +378,9 @@ Route::middleware('auth:sanctum')->group(function () {
                 Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
                 Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
                 Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
+                Route::get('/reports/work-order-backlog/pdf', [ReportsController::class, 'workOrderBacklogPdf']);
+                Route::get('/reports/job-status-summary/pdf', [ReportsController::class, 'jobStatusSummaryPdf']);
+                Route::get('/reports/joints-completed/pdf', [ReportsController::class, 'jointsCompletedPdf']);
             });
         });
 

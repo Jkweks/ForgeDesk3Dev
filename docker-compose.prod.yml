@@ -40,6 +40,7 @@ services:
     volumes:
       - app_public:/var/www/html/public
       - app_storage:/var/www/html/storage/app/public
+      - app_private:/var/www/html/storage/app/private
     environment:
       APP_NAME: ForgeDesk
       APP_ENV: production
@@ -126,6 +127,7 @@ services:
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
     volumes:
       - app_storage:/var/www/html/storage/app/public
+      - app_private:/var/www/html/storage/app/private
     environment:
       APP_NAME: ForgeDesk
       APP_ENV: production
@@ -195,13 +197,13 @@ configs:
           # at fab.vosglassintra.net/doorconfig — same host as /utils above, just a
           # friendlier dedicated path straight to the configurator app instead of
           # nested under /utils/.
-          location = /doorconfig {
-              return 301 /doorconfig/door-calculator.html;
+          location = /configurator {
+              return 301 /configurator/;
           }
 
-          location ^~ /doorconfig/ {
+          location ^~ /configurator/ {
               proxy_pass http://fab_utils:80/configurator/;
-              proxy_redirect http://fab_utils/ http://$$host/doorconfig/;
+              proxy_redirect http://fab_utils/ http://$$host/configurator/;
               proxy_http_version 1.1;
               proxy_set_header Host $$host;
               proxy_set_header X-Real-IP $$remote_addr;
@@ -252,4 +254,6 @@ volumes:
   app_public:
     driver: local
   app_storage:
+    driver: local
+  app_private:
     driver: local

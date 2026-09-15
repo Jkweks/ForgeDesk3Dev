@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BusinessJob;
+use App\Models\FdJobStep;
+use App\Models\FdWoElevation;
+use App\Models\FdWorkOrder;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\StorageLocation;
@@ -617,6 +621,201 @@ class ReportsController extends Controller
     }
 
     /**
+     * Work order backlog / queue report.
+     * Lists every non-archived, non-complete work order with priority, due
+     * dates, assignments, and progress — the exportable version of the
+     * shop-floor queue.
+     */
+    public function workOrderBacklogReport(Request $request)
+    {
+        $today = Carbon::today();
+
+        $workOrders = FdWorkOrder::where('archived', false)
+            ->whereIn('status', ['active', 'on_hold'])
+            ->with(['businessJob', 'assignedUsers', 'elevations', 'steps'])
+            ->orderBy('priority')
+            ->get();
+
+        $rows = $workOrders->map(function ($wo) use ($today) {
+            $dueDate = $wo->due_date;
+            $daysUntilDue = $dueDate ? $today->diffInDays($dueDate, false) : null;
+            $isOverdue = $daysUntilDue !== null && $daysUntilDue < 0;
+
+            $elevations = $wo->elevations;
+            $openSteps = $wo->steps->reject(fn ($s) => in_array($s->status, FdJobStep::TERMINAL, true));
+            $remaining = $wo->estimateRemainingMinutes();
+
+            return [
+                'id' => $wo->id,
+                'release_label' => $wo->releaseLabel(),
+                'business_job_id' => $wo->business_job_id,
+                'job_number' => $wo->businessJob?->job_number,
+                'job_name' => $wo->businessJob?->job_name,
+                'status' => $wo->status,
+                'priority' => $wo->priority,
+                'priority_locked' => $wo->priority_locked,
+                'date_issued' => $wo->date_issued?->format('Y-m-d'),
+                'due_date' => $dueDate?->format('Y-m-d'),
+                'days_until_due' => $daysUntilDue,
+                'is_overdue' => $isOverdue,
+                'planned_start_date' => $wo->planned_start_date?->format('Y-m-d'),
+                'planned_completion_date' => $wo->planned_completion_date?->format('Y-m-d'),
+                'assigned_users' => $wo->assignedUsers->pluck('name')->values(),
+                'elevation_count' => $elevations->count(),
+                'elevations_complete_count' => $elevations->whereNotNull('date_completed')->count(),
+                'open_steps_count' => $openSteps->count(),
+                'estimated_minutes_remaining' => $remaining['effective'],
+            ];
+        })->values();
+
+        return response()->json([
+            'work_orders' => $rows,
+            'summary' => [
+                'total_open' => $rows->count(),
+                'active_count' => $rows->where('status', 'active')->count(),
+                'on_hold_count' => $rows->where('status', 'on_hold')->count(),
+                'overdue_count' => $rows->where('is_overdue', true)->count(),
+                'due_this_week' => $rows->filter(fn ($r) => $r['days_until_due'] !== null && $r['days_until_due'] >= 0 && $r['days_until_due'] <= 7)->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Job status summary report.
+     * One row per business job with reservation fulfillment, work-order
+     * status breakdown, and target-vs-actual completion.
+     */
+    public function jobStatusSummaryReport(Request $request)
+    {
+        $statusFilter = $request->get('status');
+
+        $query = BusinessJob::with(['jobReservations.items', 'workOrders']);
+
+        if ($statusFilter) {
+            $query->where('status', $statusFilter);
+        } else {
+            $query->whereIn('status', ['active', 'on_hold']);
+        }
+
+        $jobs = $query->orderBy('job_number')->get();
+
+        $rows = $jobs->map(function ($job) {
+            $reservations = $job->jobReservations;
+            $requested = $reservations->flatMap->items->sum('requested_qty');
+            $consumed = $reservations->flatMap->items->sum('consumed_qty');
+            $fulfillmentPct = $requested > 0 ? round(($consumed / $requested) * 100, 1) : null;
+
+            $workOrders = $job->workOrders;
+            $woByStatus = $workOrders->groupBy('status')->map->count();
+
+            $daysUntilCompletion = $job->days_until_completion;
+
+            return [
+                'id' => $job->id,
+                'job_number' => $job->job_number,
+                'job_name' => $job->job_name,
+                'customer_name' => $job->customer_name,
+                'status' => $job->status,
+                'project_manager' => $job->project_manager,
+                'superintendent' => $job->superintendent,
+                'start_date' => $job->start_date?->format('Y-m-d'),
+                'target_completion_date' => $job->target_completion_date?->format('Y-m-d'),
+                'actual_completion_date' => $job->actual_completion_date?->format('Y-m-d'),
+                'days_until_completion' => $daysUntilCompletion,
+                'is_at_risk' => $daysUntilCompletion !== null && $daysUntilCompletion < 0,
+                'reservation_count' => $reservations->count(),
+                'open_reservation_count' => $reservations->whereNotIn('status', ['fulfilled', 'cancelled'])->count(),
+                'material_fulfillment_pct' => $fulfillmentPct,
+                'work_order_count' => $workOrders->count(),
+                'work_orders_active' => $woByStatus->get('active', 0),
+                'work_orders_on_hold' => $woByStatus->get('on_hold', 0),
+                'work_orders_complete' => $woByStatus->get('complete', 0),
+            ];
+        })->values();
+
+        $fulfillmentValues = $rows->pluck('material_fulfillment_pct')->filter(fn ($v) => $v !== null);
+
+        return response()->json([
+            'jobs' => $rows,
+            'summary' => [
+                'total_jobs' => $rows->count(),
+                'active_jobs' => $rows->where('status', 'active')->count(),
+                'on_hold_jobs' => $rows->where('status', 'on_hold')->count(),
+                'at_risk_jobs' => $rows->where('is_at_risk', true)->count(),
+                'avg_material_fulfillment_pct' => $fulfillmentValues->isNotEmpty() ? round($fulfillmentValues->avg(), 1) : null,
+            ],
+        ]);
+    }
+
+    /**
+     * Joints completed over time + system breakdown.
+     * Joint totals live on fd_wo_elevations (joint_qty), rolled up by
+     * completion date and by elevation "system" type (fd_elevation_types).
+     */
+    public function jointsCompletedReport(Request $request)
+    {
+        $startDate = $request->get('start_date')
+            ? Carbon::parse($request->get('start_date'))->startOfDay()
+            : Carbon::now()->subDays(30)->startOfDay();
+        $endDate = $request->get('end_date')
+            ? Carbon::parse($request->get('end_date'))->endOfDay()
+            : Carbon::now()->endOfDay();
+
+        $elevations = FdWoElevation::whereNotNull('date_completed')
+            ->whereBetween('date_completed', [$startDate, $endDate])
+            ->with(['elevationType', 'templateSet', 'workOrder.businessJob'])
+            ->get();
+
+        $totalJoints = (int) $elevations->sum('joint_qty');
+
+        $byDate = $elevations->groupBy(fn ($e) => $e->date_completed->format('Y-m-d'))
+            ->map(fn ($group, $date) => [
+                'date' => $date,
+                'joints' => (int) $group->sum('joint_qty'),
+                'elevation_count' => $group->count(),
+            ])
+            ->sortBy('date')
+            ->values();
+
+        $bySystem = $elevations->groupBy(fn ($e) => $e->elevationType?->name ?? 'Unclassified')
+            ->map(function ($group, $system) use ($totalJoints) {
+                $joints = (int) $group->sum('joint_qty');
+
+                return [
+                    'system' => $system,
+                    'joints' => $joints,
+                    'elevation_count' => $group->count(),
+                    'job_count' => $group->pluck('workOrder.businessJob.id')->filter()->unique()->count(),
+                    'percent_of_total' => $totalJoints > 0 ? round(($joints / $totalJoints) * 100, 1) : 0,
+                ];
+            })
+            ->sortByDesc('joints')
+            ->values();
+
+        $byTier = $elevations->groupBy(fn ($e) => $e->templateSet?->name ?? 'No Tier')
+            ->map(fn ($group, $tier) => [
+                'tier' => $tier,
+                'joints' => (int) $group->sum('joint_qty'),
+                'elevation_count' => $group->count(),
+            ])
+            ->sortByDesc('joints')
+            ->values();
+
+        return response()->json([
+            'by_date' => $byDate,
+            'by_system' => $bySystem,
+            'by_tier' => $byTier,
+            'summary' => [
+                'start_date' => $startDate->format('Y-m-d'),
+                'end_date' => $endDate->format('Y-m-d'),
+                'total_joints' => $totalJoints,
+                'total_elevations' => $elevations->count(),
+                'top_system' => $bySystem->first()['system'] ?? null,
+            ],
+        ]);
+    }
+
+    /**
      * Export report to CSV
      */
     public function exportReport(Request $request)
@@ -636,6 +835,12 @@ class ReportsController extends Controller
                 return $this->exportObsolete($request);
             case 'monthly_statement':
                 return $this->exportMonthlyStatement($request);
+            case 'work_order_backlog':
+                return $this->exportWorkOrderBacklog();
+            case 'job_status_summary':
+                return $this->exportJobStatusSummary($request);
+            case 'joints_completed':
+                return $this->exportJointsCompleted($request);
             default:
                 return response()->json(['message' => 'Invalid report type'], 400);
         }
@@ -1490,5 +1695,135 @@ class ReportsController extends Controller
         $pdf->setPaper('letter', 'portrait');
 
         return $pdf->stream('storage-location-report-'.date('Y-m-d').'.pdf');
+    }
+
+    private function exportWorkOrderBacklog()
+    {
+        $data = $this->workOrderBacklogReport(request());
+        $items = collect($data->original['work_orders']);
+
+        $csvData = $items->map(function ($item) {
+            return [
+                $item['release_label'],
+                $item['job_number'] ?? '',
+                $item['job_name'] ?? '',
+                ucfirst($item['status']),
+                $item['priority'] ?? '',
+                $item['due_date'] ?? '',
+                $item['days_until_due'] ?? '',
+                implode(', ', $item['assigned_users']),
+                $item['elevation_count'].'/'.$item['elevations_complete_count'],
+                $item['open_steps_count'],
+            ];
+        });
+
+        return $this->generateCSV($csvData, 'work_order_backlog_report', [
+            'Release', 'Job Number', 'Job Name', 'Status', 'Priority', 'Due Date',
+            'Days Until Due', 'Assigned To', 'Elevations (Done/Total)', 'Open Steps',
+        ]);
+    }
+
+    private function exportJobStatusSummary($request)
+    {
+        $data = $this->jobStatusSummaryReport($request);
+        $items = collect($data->original['jobs']);
+
+        $csvData = $items->map(function ($item) {
+            return [
+                $item['job_number'],
+                $item['job_name'],
+                $item['customer_name'] ?? '',
+                ucfirst($item['status']),
+                $item['project_manager'] ?? '',
+                $item['superintendent'] ?? '',
+                $item['target_completion_date'] ?? '',
+                $item['material_fulfillment_pct'] !== null ? $item['material_fulfillment_pct'].'%' : 'N/A',
+                $item['work_order_count'],
+                $item['work_orders_active'],
+                $item['work_orders_on_hold'],
+                $item['work_orders_complete'],
+            ];
+        });
+
+        return $this->generateCSV($csvData, 'job_status_summary_report', [
+            'Job Number', 'Job Name', 'Customer', 'Status', 'Project Manager', 'Superintendent',
+            'Target Completion', 'Material Fulfillment', 'Work Orders', 'WO Active', 'WO On Hold', 'WO Complete',
+        ]);
+    }
+
+    private function exportJointsCompleted($request)
+    {
+        $data = $this->jointsCompletedReport($request);
+        $items = collect($data->original['by_system']);
+
+        $csvData = $items->map(function ($item) {
+            return [
+                $item['system'],
+                $item['joints'],
+                $item['elevation_count'],
+                $item['job_count'],
+                $item['percent_of_total'].'%',
+            ];
+        });
+
+        return $this->generateCSV($csvData, 'joints_completed_report', [
+            'System', 'Joints Completed', 'Elevations', 'Jobs', 'Percent of Total',
+        ]);
+    }
+
+    /**
+     * Generate PDF for Work Order Backlog report
+     */
+    public function workOrderBacklogPdf(Request $request)
+    {
+        $data = $this->workOrderBacklogReport($request);
+        $reportData = $data->original;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.work-order-backlog-report', [
+            'workOrders' => $reportData['work_orders'],
+            'summary' => $reportData['summary'],
+        ]);
+
+        $pdf->setPaper('letter', 'landscape');
+
+        return $pdf->stream('work-order-backlog-report-'.date('Y-m-d').'.pdf');
+    }
+
+    /**
+     * Generate PDF for Job Status Summary report
+     */
+    public function jobStatusSummaryPdf(Request $request)
+    {
+        $data = $this->jobStatusSummaryReport($request);
+        $reportData = $data->original;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.job-status-summary-report', [
+            'jobs' => $reportData['jobs'],
+            'summary' => $reportData['summary'],
+        ]);
+
+        $pdf->setPaper('letter', 'landscape');
+
+        return $pdf->stream('job-status-summary-report-'.date('Y-m-d').'.pdf');
+    }
+
+    /**
+     * Generate PDF for Joints Completed report
+     */
+    public function jointsCompletedPdf(Request $request)
+    {
+        $data = $this->jointsCompletedReport($request);
+        $reportData = $data->original;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.joints-completed-report', [
+            'byDate' => $reportData['by_date'],
+            'bySystem' => $reportData['by_system'],
+            'byTier' => $reportData['by_tier'],
+            'summary' => $reportData['summary'],
+        ]);
+
+        $pdf->setPaper('letter', 'landscape');
+
+        return $pdf->stream('joints-completed-report-'.date('Y-m-d').'.pdf');
     }
 }
