@@ -169,6 +169,9 @@ class QualityReportController extends Controller
             // picker option) — skips auto-matching and stamps this text as the reference
             // instead of a real elevation. Ignored when elevation_id is also given.
             'elevation_tag_guess' => 'nullable|string|max:255',
+            // Anchors a Pre-Forge report's incident-rate trending the same way a real
+            // elevation's date_completed would, since there's no elevation to read it from.
+            'pre_forge_completed_date' => 'nullable|date',
         ]);
 
         try {
@@ -210,6 +213,7 @@ class QualityReportController extends Controller
             } elseif ($request->filled('elevation_tag_guess')) {
                 $report->update([
                     'elevation_tag_guess' => $request->input('elevation_tag_guess'),
+                    'pre_forge_completed_date' => $request->input('pre_forge_completed_date'),
                     'auto_matched' => false,
                     'matched_by_user_id' => $request->user()->id,
                 ]);
@@ -267,6 +271,7 @@ class QualityReportController extends Controller
         $data = $request->validate([
             'elevation_id' => 'nullable|integer|exists:fd_wo_elevations,id',
             'elevation_tag_guess' => 'sometimes|nullable|string|max:255',
+            'pre_forge_completed_date' => 'sometimes|nullable|date',
             'report_date' => 'nullable|date',
             'completed_at' => 'nullable|date',
             'inspector_name' => 'nullable|string|max:255',
@@ -395,6 +400,7 @@ class QualityReportController extends Controller
             'business_job_id' => $r->workOrder?->business_job_id,
             'business_job_name' => $this->jobNameFor($r),
             'report_date' => $r->report_date?->toDateString(),
+            'pre_forge_completed_date' => $r->pre_forge_completed_date?->toDateString(),
             'completed_at' => $r->completed_at?->toIso8601String(),
             'inspector_name' => $r->inspector_name,
             'problem_type' => $r->problem_type,

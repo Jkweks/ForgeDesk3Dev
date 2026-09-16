@@ -83,6 +83,8 @@ class QualityAnalyticsController extends Controller
         $casesByMonth = $reports->groupBy(fn ($r) => $r->anchor_date->format('Y-m'))
             ->map(fn ($group) => $group->count());
 
+        $currentMonthKey = Carbon::now()->format('Y-m');
+
         $result = [];
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
@@ -96,11 +98,35 @@ class QualityAnalyticsController extends Controller
                 'joint_count' => $joints,
                 'case_count' => $cases,
                 'incident_rate' => $joints > 0 ? round((($cases * 10) / $joints) * 100, 2) : null,
+                'projected_incident_rate' => $key === $currentMonthKey
+                    ? $this->projectedIncidentRate($cases, $joints)
+                    : null,
             ];
             $cursor->addMonth();
         }
 
         return $result;
+    }
+
+    /**
+     * Run-rate projection for the in-progress month: extrapolates the sparse,
+     * bursty case count forward to a full-month estimate using the elapsed
+     * day-of-month fraction, then compares it against joints already logged
+     * (not also extrapolated — scaling both by the same factor would just
+     * reproduce today's actual rate and tell us nothing new). Suppressed
+     * (null) until at least one case has actually been reported this month,
+     * since projecting zero forward reads as a misleadingly perfect rate.
+     */
+    private function projectedIncidentRate(int $casesSoFar, int $jointsSoFar): ?float
+    {
+        if ($casesSoFar === 0 || $jointsSoFar === 0) {
+            return null;
+        }
+
+        $now = Carbon::now();
+        $projectedCases = $casesSoFar * ($now->daysInMonth / $now->day);
+
+        return round((($projectedCases * 10) / $jointsSoFar) * 100, 2);
     }
 
     /** @return array{0: \Illuminate\Support\Collection, 1: array{start: string, end: string}} */
@@ -160,7 +186,7 @@ class QualityAnalyticsController extends Controller
             ->with('elevation:id,date_completed')
             ->get()
             ->map(function (QualityReport $r) {
-                $r->anchor_date = $r->elevation?->date_completed ?? $r->report_date;
+                $r->anchor_date = $r->elevation?->date_completed ?? $r->pre_forge_completed_date ?? $r->report_date;
 
                 return $r;
             })

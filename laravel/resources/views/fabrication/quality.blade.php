@@ -154,9 +154,14 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Elevation (optional — leave blank to review later)</label>
-              <select class="form-select" id="qr-upload-elevation">
+              <select class="form-select" id="qr-upload-elevation" onchange="qrToggleUploadPreForgeDate()">
                 <option value="">Not sure yet</option>
               </select>
+            </div>
+            <div class="mb-3" id="qr-upload-preforge-date-wrap" style="display:none;">
+              <label class="form-label">Completed date</label>
+              <input type="date" class="form-control" id="qr-upload-preforge-date">
+              <div class="form-text">When this job/elevation was actually finished — drives the incident-rate trend the same way a tracked elevation's completion date would.</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -220,7 +225,12 @@
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Elevation</label>
-                <select class="form-select" id="qr-d-elevation"></select>
+                <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeDate()"></select>
+              </div>
+              <div class="col-md-6 mb-3" id="qr-d-preforge-date-wrap" style="display:none;">
+                <label class="form-label">Completed date</label>
+                <input type="date" class="form-control" id="qr-d-preforge-date">
+                <div class="form-hint mt-1">Drives the incident-rate trend in place of a tracked elevation's completion date.</div>
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Completed by</label>
@@ -287,7 +297,12 @@ document.addEventListener('DOMContentLoaded', () => {
   qrLoadElevations();
   qrLoadAnalytics();
   document.getElementById('qr-status-filter').addEventListener('change', qrLoadReports);
-  document.getElementById('qr-upload-btn').addEventListener('click', () => qrShowModal('qr-upload-modal'));
+  document.getElementById('qr-upload-btn').addEventListener('click', () => {
+    document.getElementById('qr-upload-elevation').value = '';
+    document.getElementById('qr-upload-preforge-date').value = '';
+    qrToggleUploadPreForgeDate();
+    qrShowModal('qr-upload-modal');
+  });
 });
 
 async function qrLoadAnalytics() {
@@ -333,37 +348,64 @@ function qrExpandChart(canvasId, title) {
 }
 
 function qrRenderIncidentRateChart(rows) {
+  const n = rows.length;
+  const lastProjected = n > 0 ? rows[n - 1].projected_incident_rate : null;
+
+  const datasets = [
+    {
+      type: 'bar',
+      label: 'Joints completed',
+      data: rows.map(r => r.joint_count),
+      backgroundColor: 'rgba(32, 107, 196, 0.5)',
+      yAxisID: 'y',
+    },
+    {
+      type: 'line',
+      label: 'Incident rate (%)',
+      data: rows.map(r => r.incident_rate),
+      borderColor: '#d63939',
+      backgroundColor: '#d63939',
+      yAxisID: 'y1',
+      tension: 0.3,
+    },
+    {
+      type: 'line',
+      label: 'Goal (1.5%)',
+      data: rows.map(() => 1.5),
+      borderColor: '#2fb344',
+      backgroundColor: '#2fb344',
+      borderDash: [6, 4],
+      pointRadius: 0,
+      yAxisID: 'y1',
+    },
+  ];
+
+  // Month-to-date run rate for the in-progress month only: a short dashed
+  // segment branching off the last completed month's actual point. Omitted
+  // entirely (not just hidden) when the backend suppressed it — no cases
+  // reported yet this month, or the month just isn't in the window.
+  if (lastProjected != null) {
+    datasets.push({
+      type: 'line',
+      label: 'Projected (month to date)',
+      data: rows.map((r, i) => {
+        if (i === n - 1) return lastProjected;
+        if (i === n - 2) return r.incident_rate;
+        return null;
+      }),
+      borderColor: '#d63939',
+      backgroundColor: '#d63939',
+      borderDash: [4, 3],
+      pointRadius: (ctx) => ctx.dataIndex === n - 1 ? 4 : 0,
+      yAxisID: 'y1',
+      tension: 0,
+    });
+  }
+
   qrChart('qr-chart-incident-rate', {
     data: {
       labels: rows.map(r => r.month_label),
-      datasets: [
-        {
-          type: 'bar',
-          label: 'Joints completed',
-          data: rows.map(r => r.joint_count),
-          backgroundColor: 'rgba(32, 107, 196, 0.5)',
-          yAxisID: 'y',
-        },
-        {
-          type: 'line',
-          label: 'Incident rate (%)',
-          data: rows.map(r => r.incident_rate),
-          borderColor: '#d63939',
-          backgroundColor: '#d63939',
-          yAxisID: 'y1',
-          tension: 0.3,
-        },
-        {
-          type: 'line',
-          label: 'Goal (1.5%)',
-          data: rows.map(() => 1.5),
-          borderColor: '#2fb344',
-          backgroundColor: '#2fb344',
-          borderDash: [6, 4],
-          pointRadius: 0,
-          yAxisID: 'y1',
-        },
-      ],
+      datasets,
     },
     options: {
       responsive: true,
@@ -487,6 +529,16 @@ function qrWorkOrderSuffix(workOrderLabel, workOrderId) {
 const QR_PRE_FORGE_CUTOFF = new Date('2027-09-16T00:00:00');
 function qrPreForgeAvailable() { return new Date() < QR_PRE_FORGE_CUTOFF; }
 const QR_PRE_FORGE_OPTION = '<option value="pre-forge">Pre-Forge (pre-tracking)</option>';
+
+function qrToggleUploadPreForgeDate() {
+  const isPreForge = document.getElementById('qr-upload-elevation').value === 'pre-forge';
+  document.getElementById('qr-upload-preforge-date-wrap').style.display = isPreForge ? '' : 'none';
+}
+
+function qrToggleDetailPreForgeDate() {
+  const isPreForge = document.getElementById('qr-d-elevation').value === 'pre-forge';
+  document.getElementById('qr-d-preforge-date-wrap').style.display = isPreForge ? '' : 'none';
+}
 
 async function qrLoadElevations() {
   try {
@@ -632,6 +684,8 @@ async function qrUploadFile() {
     const elevationId = document.getElementById('qr-upload-elevation').value;
     if (elevationId === 'pre-forge') {
       fd.append('elevation_tag_guess', 'Pre-Forge');
+      const completedDate = document.getElementById('qr-upload-preforge-date').value;
+      if (completedDate) fd.append('pre_forge_completed_date', completedDate);
     } else if (elevationId) {
       fd.append('elevation_id', elevationId);
     }
@@ -674,6 +728,8 @@ async function qrOpenDetail(id) {
       ? `${Math.round(r.match_confidence)}%${r.auto_matched ? ' (auto-matched)' : ' (manually assigned)'}`
       : '';
     document.getElementById('qr-d-description').value = r.issue_description || '';
+    document.getElementById('qr-d-preforge-date').value = r.pre_forge_completed_date || '';
+    qrToggleDetailPreForgeDate();
 
     const files = (r.files || []).map(f => `
       <div class="d-flex align-items-center gap-2 mb-1">
@@ -711,7 +767,10 @@ async function qrSaveReport() {
       replacement_needed: replacementVal === '' ? null : replacementVal === '1',
       issue_description: document.getElementById('qr-d-description').value.trim() || null,
     };
-    if (elevationVal === 'pre-forge') payload.elevation_tag_guess = 'Pre-Forge';
+    if (elevationVal === 'pre-forge') {
+      payload.elevation_tag_guess = 'Pre-Forge';
+      payload.pre_forge_completed_date = document.getElementById('qr-d-preforge-date').value || null;
+    }
     await qrApiJson(`/quality-reports/${qrEditingId}`, { method: 'PUT', body: JSON.stringify(payload) });
     qrHideModal('qr-detail-modal');
     showNotification('Report updated', 'success');
