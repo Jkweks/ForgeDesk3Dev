@@ -172,6 +172,9 @@ class QualityReportController extends Controller
             // Anchors a Pre-Forge report's incident-rate trending the same way a real
             // elevation's date_completed would, since there's no elevation to read it from.
             'pre_forge_completed_date' => 'nullable|date',
+            // Manual job reference, used when there's no real business job to read a name
+            // from. Defaults to whatever the PDF's own "Job" field extracted to.
+            'job_text_guess' => 'nullable|string|max:255',
         ]);
 
         try {
@@ -204,6 +207,7 @@ class QualityReportController extends Controller
                 'replacement_needed' => $extracted['replacement_needed'],
                 'issue_description' => $extracted['issue_description'],
                 'elevation_tag_guess' => $extracted['elevation_tag_guess'],
+                'job_text_guess' => $request->input('job_text_guess') ?: ($extracted['job_text'] ?? null),
                 'raw_extracted_text' => $extracted['raw_extracted_text'],
                 'extracted_fields' => $extracted,
             ]);
@@ -236,7 +240,7 @@ class QualityReportController extends Controller
         $report = QualityReport::findOrFail($id);
 
         $this->applyMatch($report, $matcher, [
-            'job_text' => $report->extracted_fields['job_text'] ?? null,
+            'job_text' => $report->job_text_guess ?? ($report->extracted_fields['job_text'] ?? null),
             'elevation_tag_guess' => $report->elevation_tag_guess,
             'report_date' => $report->report_date?->toDateString(),
         ]);
@@ -271,6 +275,7 @@ class QualityReportController extends Controller
         $data = $request->validate([
             'elevation_id' => 'nullable|integer|exists:fd_wo_elevations,id',
             'elevation_tag_guess' => 'sometimes|nullable|string|max:255',
+            'job_text_guess' => 'sometimes|nullable|string|max:255',
             'pre_forge_completed_date' => 'sometimes|nullable|date',
             'report_date' => 'nullable|date',
             'completed_at' => 'nullable|date',
@@ -407,6 +412,7 @@ class QualityReportController extends Controller
             'replacement_needed' => $r->replacement_needed,
             'issue_description' => $r->issue_description,
             'elevation_tag_guess' => $r->elevation_tag_guess,
+            'job_text_guess' => $r->job_text_guess,
             'auto_matched' => $r->auto_matched,
             'match_confidence' => $r->match_confidence,
             'uploaded_by_name' => $r->uploader?->name,
@@ -450,7 +456,7 @@ class QualityReportController extends Controller
     /** Real business job name when matched, else the reference job text kept from ingestion/import. */
     private function jobNameFor(QualityReport $r): ?string
     {
-        return $r->workOrder?->businessJob?->job_name ?? ($r->extracted_fields['job_text'] ?? null);
+        return $r->workOrder?->businessJob?->job_name ?? $r->job_text_guess ?? ($r->extracted_fields['job_text'] ?? null);
     }
 
     private function employeeInitials(?FdWoElevation $elevation): ?string

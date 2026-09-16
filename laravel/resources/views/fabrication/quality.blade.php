@@ -6,6 +6,8 @@
     <style>
       .qr-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
       .qr-sortable:hover { color: var(--tblr-primary); }
+      #qr-table-wrap { max-height: 60vh; overflow-y: auto; }
+      #qr-table-wrap thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
     </style>
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -113,7 +115,7 @@
                   </div>
 
                   <div class="table-responsive" id="qr-table-wrap" style="display:none;">
-                    <table class="table table-vcenter card-table table-striped">
+                    <table class="table table-vcenter card-table table-striped table-sm">
                       <thead>
                         <tr>
                           <th class="qr-sortable" onclick="qrSortBy('created_at')">Uploaded <i class="ti qr-sort-icon" id="qr-sort-icon-created_at"></i></th>
@@ -218,6 +220,10 @@
                 <label class="form-label">Job</label>
                 <select class="form-select" id="qr-d-job" onchange="qrOnJobChange()"></select>
                 <div class="form-hint mt-1" id="qr-d-job-source"></div>
+                <div class="mt-1" id="qr-d-job-text-wrap" style="display:none;">
+                  <input type="text" class="form-control form-control-sm" id="qr-d-job-text-guess" placeholder="Job name (not tied to a tracked elevation)">
+                  <div class="form-hint mt-1">Saved on the report directly since there's no tracked job to read a name from.</div>
+                </div>
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Date issue discovered</label>
@@ -225,7 +231,7 @@
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Elevation</label>
-                <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeDate()"></select>
+                <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeDate(); qrToggleDetailJobTextGuess();"></select>
               </div>
               <div class="col-md-6 mb-3" id="qr-d-preforge-date-wrap" style="display:none;">
                 <label class="form-label">Completed date</label>
@@ -465,6 +471,16 @@ function qrRenderWeeklyTrendChart(rows) {
       responsive: true,
       maintainAspectRatio: false,
       scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const lag = rows[items[0]?.dataIndex]?.avg_lag_weeks;
+              return lag != null ? [`Avg. completion → report lag: ${lag}wk`] : [];
+            },
+          },
+        },
+      },
     },
   });
 }
@@ -538,6 +554,13 @@ function qrToggleUploadPreForgeDate() {
 function qrToggleDetailPreForgeDate() {
   const isPreForge = document.getElementById('qr-d-elevation').value === 'pre-forge';
   document.getElementById('qr-d-preforge-date-wrap').style.display = isPreForge ? '' : 'none';
+}
+
+/** No tracked elevation (Unassigned or Pre-Forge) means there's no real business job to read a name from — show the manually-saved job text field instead of just the passive extraction hint. */
+function qrToggleDetailJobTextGuess() {
+  const elevationVal = document.getElementById('qr-d-elevation').value;
+  const hasTrackedElevation = elevationVal !== '' && elevationVal !== 'pre-forge';
+  document.getElementById('qr-d-job-text-wrap').style.display = hasTrackedElevation ? 'none' : '';
 }
 
 async function qrLoadElevations() {
@@ -715,9 +738,11 @@ async function qrOpenDetail(id) {
     qrRenderElevationOptions();
 
     const pdfJobText = r.extracted_fields?.job_text || '';
-    document.getElementById('qr-d-job-source').textContent = pdfJobText
+    document.getElementById('qr-d-job-source').textContent = (pdfJobText && r.elevation_id != null)
       ? `Reference: "${pdfJobText}"`
       : '';
+    document.getElementById('qr-d-job-text-guess').value = r.job_text_guess || pdfJobText || '';
+    qrToggleDetailJobTextGuess();
 
     document.getElementById('qr-d-report-date').value = r.report_date || '';
     document.getElementById('qr-d-inspector').value = r.inspector_name || '';
@@ -770,6 +795,9 @@ async function qrSaveReport() {
     if (elevationVal === 'pre-forge') {
       payload.elevation_tag_guess = 'Pre-Forge';
       payload.pre_forge_completed_date = document.getElementById('qr-d-preforge-date').value || null;
+    }
+    if (elevationVal === '' || elevationVal === 'pre-forge') {
+      payload.job_text_guess = document.getElementById('qr-d-job-text-guess').value.trim() || null;
     }
     await qrApiJson(`/quality-reports/${qrEditingId}`, { method: 'PUT', body: JSON.stringify(payload) });
     qrHideModal('qr-detail-modal');

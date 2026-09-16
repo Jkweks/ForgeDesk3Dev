@@ -24,6 +24,10 @@
 #wo-detail .nav-tabs { padding: 0 1rem; background: var(--tblr-bg-surface-secondary, var(--tblr-light)); }
 #wo-detail .tab-pane { padding-top: .25rem; }
 #wo-detail .subheader { margin-bottom: .15rem; }
+
+/* Scroll within the table body instead of the whole page, keeping the header row visible. */
+#wo-table-scroll { max-height: calc(100vh - 260px); overflow-y: auto; }
+#wo-table-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
 @endsection
 
 @section('content')
@@ -109,8 +113,8 @@
       <!-- WO table -->
       <div id="wo-table-wrap" style="display:none;">
         <div class="card">
-          <div class="table-responsive">
-            <table class="table table-vcenter card-table table-hover table-striped">
+          <div class="table-responsive" id="wo-table-scroll">
+            <table class="table table-vcenter card-table table-hover table-striped table-sm">
               <thead id="wo-thead"></thead>
               <tbody id="wo-tbody"></tbody>
             </table>

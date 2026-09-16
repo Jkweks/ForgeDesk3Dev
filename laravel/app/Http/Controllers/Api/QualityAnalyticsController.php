@@ -129,13 +129,20 @@ class QualityAnalyticsController extends Controller
         return round((($projectedCases * 10) / $jointsSoFar) * 100, 2);
     }
 
-    /** @return array{0: \Illuminate\Support\Collection, 1: array{start: string, end: string}} */
+    /**
+     * Unlike the monthly incident rate (anchored on completion date, to
+     * measure quality against production volume), the 13-week views are
+     * anchored on report_date — when the issue was actually discovered —
+     * since these drive current improvement focus, not historical output.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: array{start: string, end: string}}
+     */
     private function buildProblemTypeData(): array
     {
         $start = Carbon::now()->subWeeks(13)->startOfDay();
         $end = Carbon::now()->endOfDay();
 
-        $reports = $this->nonRejectedReportsWithAnchor($start, $end);
+        $reports = $this->nonRejectedReportsByReportDate($start, $end);
 
         $rows = $reports->groupBy(fn ($r) => $r->problem_type ?: 'Unspecified')
             ->map(fn ($group, $type) => ['problem_type' => $type, 'count' => $group->count()])
@@ -160,12 +167,27 @@ class QualityAnalyticsController extends Controller
         $start = Carbon::parse($weeks[0]['week_start'])->startOfDay();
         $end = Carbon::now()->endOfDay();
 
-        $reports = $this->nonRejectedReportsWithAnchor($start, $end);
-        $casesByWeek = $reports->groupBy(fn ($r) => $r->anchor_date->format('o-W'))
-            ->map(fn ($group) => $group->count());
+        $reports = $this->nonRejectedReportsByReportDate($start, $end);
+        $byWeek = $reports->groupBy(fn ($r) => $r->report_date->format('o-W'));
 
-        $counts = array_map(fn ($w) => $casesByWeek->get($w['key'], 0), $weeks);
+        $counts = array_map(fn ($w) => $byWeek->get($w['key'], collect())->count(), $weeks);
         $trend = $this->linearTrend($counts);
+
+        // Average completion-to-report lag for that week's cases, in weeks — a
+        // read on how far behind discovery is trailing production, shown in
+        // the chart tooltip. Null wherever nothing in the bucket has a
+        // completion date to measure from (no elevation and no Pre-Forge date).
+        $avgLagWeeks = array_map(function ($w) use ($byWeek) {
+            $lags = $byWeek->get($w['key'], collect())
+                ->map(function (QualityReport $r) {
+                    $completed = $r->elevation?->date_completed ?? $r->pre_forge_completed_date;
+
+                    return $completed ? $completed->diffInDays($r->report_date) / 7 : null;
+                })
+                ->filter(fn ($v) => $v !== null);
+
+            return $lags->isNotEmpty() ? round($lags->avg(), 1) : null;
+        }, $weeks);
 
         $result = [];
         foreach ($weeks as $i => $week) {
@@ -174,12 +196,14 @@ class QualityAnalyticsController extends Controller
                 'week_start' => $week['week_start'],
                 'case_count' => $counts[$i],
                 'trend_value' => $trend[$i],
+                'avg_lag_weeks' => $avgLagWeeks[$i],
             ];
         }
 
         return $result;
     }
 
+    /** Anchored on completion date (elevation, or the manual Pre-Forge date) — used only for the monthly incident rate, which measures against production volume. */
     private function nonRejectedReportsWithAnchor(Carbon $start, Carbon $end): Collection
     {
         return QualityReport::where('status', '!=', 'rejected')
@@ -194,6 +218,16 @@ class QualityAnalyticsController extends Controller
                 && $r->anchor_date->between($start, $end)
             )
             ->values();
+    }
+
+    /** Anchored on report_date (when discovered) — used by the 13-week views, which drive current improvement focus rather than historical output. */
+    private function nonRejectedReportsByReportDate(Carbon $start, Carbon $end): Collection
+    {
+        return QualityReport::where('status', '!=', 'rejected')
+            ->whereNotNull('report_date')
+            ->whereBetween('report_date', [$start, $end])
+            ->with('elevation:id,date_completed')
+            ->get();
     }
 
     /** @return array<int, float> fitted y-value at each x=0..n-1 from a least-squares line through the given counts. */

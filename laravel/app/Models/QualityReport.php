@@ -16,7 +16,7 @@ class QualityReport extends Model
     protected $fillable = [
         'elevation_id', 'work_order_id', 'status',
         'report_date', 'pre_forge_completed_date', 'completed_at', 'inspector_name', 'problem_type', 'replacement_needed', 'issue_description',
-        'raw_extracted_text', 'extracted_fields', 'elevation_tag_guess',
+        'raw_extracted_text', 'extracted_fields', 'elevation_tag_guess', 'job_text_guess',
         'auto_matched', 'match_confidence', 'match_candidates', 'matched_by_user_id',
         'verified_by', 'verified_at', 'rejected_reason',
         'reviewed_by', 'reviewed_at',

@@ -3,6 +3,10 @@
 @section('title', 'Inventory Dashboard - ForgeDesk')
 
 @section('content')
+    <style>
+      #inventoryTableContainer { max-height: 60vh; overflow-y: auto; }
+      #inventoryTableContainer thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
+    </style>
     <div class="page-wrapper">
       <div class="page-header d-print-none">
         <div class="container-xl">
@@ -114,7 +118,7 @@
                   </div>
 
                   <div class="table-responsive" id="inventoryTableContainer" style="display: none;">
-                    <table class="table table-vcenter card-table table-striped">
+                    <table class="table table-vcenter card-table table-striped table-sm">
                       <thead>
                         <tr>
                           <th class="sortable" data-sort="sku" style="cursor: pointer;">
