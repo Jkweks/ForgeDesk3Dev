@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\StorageLocation;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -38,6 +39,7 @@ class PurchaseOrderReceiveTest extends TestCase
             // Deliberately drifted: the direct field says 100, but the real
             // location total (below) is only 40 — simulating pre-existing drift.
             'quantity_on_hand' => 100,
+            'supplier_id' => Supplier::create(['name' => 'PO Test Supplier 1'])->id,
         ]);
 
         InventoryLocation::create([
@@ -89,6 +91,7 @@ class PurchaseOrderReceiveTest extends TestCase
         $product = Product::create([
             'sku' => 'PO-TEST-002',
             'description' => 'PO test product 2',
+            'supplier_id' => Supplier::create(['name' => 'PO Test Supplier 2'])->id,
         ]);
 
         $po = PurchaseOrder::create([

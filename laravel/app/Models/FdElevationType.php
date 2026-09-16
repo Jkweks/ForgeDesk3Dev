@@ -9,9 +9,9 @@ class FdElevationType extends Model
 {
     protected $table = 'fd_elevation_types';
 
-    protected $fillable = ['name', 'color', 'sort_order', 'active', 'aliases'];
+    protected $fillable = ['name', 'color', 'sort_order', 'active', 'aliases', 'standard_joint_count'];
 
-    protected $casts = ['active' => 'boolean', 'aliases' => 'array'];
+    protected $casts = ['active' => 'boolean', 'aliases' => 'array', 'standard_joint_count' => 'integer'];
 
     /**
      * Every string that should resolve a work-order import row to this type:

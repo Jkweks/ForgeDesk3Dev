@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\StageGatedException;
 use App\Http\Controllers\Controller;
+use App\Models\FdElevationType;
 use App\Models\FdStageTemplate;
 use App\Models\FdStageTemplateSet;
 use App\Models\FdWoElevation;
@@ -39,6 +40,7 @@ class ElevationController extends Controller
             'elevation_tag' => 'required|string|max:100',
             'elevation_type_id' => 'nullable|integer|exists:fd_elevation_types,id',
             'template_set_id' => 'nullable|integer|exists:fd_stage_template_sets,id',
+            'joint_qty' => 'sometimes|nullable|integer|min:0',
         ]);
 
         FdWorkOrder::findOrFail($workOrderId);
@@ -56,12 +58,22 @@ class ElevationController extends Controller
                         ->orderBy('sort_order')->value('id');
             }
 
+            $quantity = $request->quantity ?? 1;
+
+            // joint_qty defaults from the type's standard joint count (e.g. a
+            // door is 6 joints, a frame is 3) x quantity, unless the caller
+            // sent an explicit value — it stays freely editable afterward.
+            $joinQty = $request->filled('joint_qty')
+                ? (int) $request->joint_qty
+                : $this->defaultJointQty($request->elevation_type_id, $quantity);
+
             $elevation = FdWoElevation::create([
                 'work_order_id' => $workOrderId,
                 'elevation_type_id' => $request->elevation_type_id,
                 'template_set_id' => $setId,
                 'elevation_tag' => $request->elevation_tag,
-                'quantity' => $request->quantity ?? 1,
+                'quantity' => $quantity,
+                'joint_qty' => $joinQty,
                 'date_requested' => $request->date_requested,
                 'notes' => $request->notes,
                 'scope' => $request->scope ?? 'assemble',
@@ -107,6 +119,18 @@ class ElevationController extends Controller
 
             return response()->json(['error' => 'Failed to create elevation'], 500);
         }
+    }
+
+    /** quantity x the elevation type's standard_joint_count (e.g. 6 per door, 3 per frame), or null when the type has no standard set. */
+    private function defaultJointQty(?int $elevationTypeId, int $quantity): ?int
+    {
+        if (! $elevationTypeId) {
+            return null;
+        }
+
+        $standard = FdElevationType::find($elevationTypeId)?->standard_joint_count;
+
+        return $standard !== null ? $quantity * $standard : null;
     }
 
     public function update(Request $request, int $id)

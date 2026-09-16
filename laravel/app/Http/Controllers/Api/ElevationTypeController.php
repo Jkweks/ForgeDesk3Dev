@@ -62,6 +62,7 @@ class ElevationTypeController extends Controller
             'name' => 'required|string|max:100',
             'aliases' => 'sometimes|array',
             'aliases.*' => 'nullable|string|max:100',
+            'standard_joint_count' => 'sometimes|nullable|integer|min:0|max:65535',
         ]);
 
         $maxOrder = FdElevationType::max('sort_order') ?? 0;
@@ -70,6 +71,7 @@ class ElevationTypeController extends Controller
             'aliases' => $this->cleanAliases($request->input('aliases'), $request->name),
             'color' => $request->color ?? '#6b7280',
             'sort_order' => $request->sort_order ?? ($maxOrder + 1),
+            'standard_joint_count' => $request->filled('standard_joint_count') ? (int) $request->standard_joint_count : null,
             'active' => true,
         ]);
 
@@ -90,6 +92,7 @@ class ElevationTypeController extends Controller
             'name' => 'sometimes|string|max:100',
             'aliases' => 'sometimes|array',
             'aliases.*' => 'nullable|string|max:100',
+            'standard_joint_count' => 'sometimes|nullable|integer|min:0|max:65535',
         ]);
 
         $type = FdElevationType::findOrFail($id);
@@ -97,6 +100,10 @@ class ElevationTypeController extends Controller
 
         if ($request->has('aliases')) {
             $type->aliases = $this->cleanAliases($request->input('aliases'), $type->name);
+        }
+
+        if ($request->has('standard_joint_count')) {
+            $type->standard_joint_count = $request->filled('standard_joint_count') ? (int) $request->standard_joint_count : null;
         }
 
         $type->save();

@@ -90,6 +90,10 @@ Route::get('/fabrication/work-queue', function () {
     return view('fabrication.work-queue');
 });
 
+Route::get('/fabrication/quality', function () {
+    return view('fabrication.quality');
+});
+
 // System Status
 Route::get('/status', function () {
     return view('status');

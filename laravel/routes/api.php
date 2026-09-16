@@ -589,5 +589,28 @@ Route::middleware('auth:sanctum')->group(function () {
         // already handles the frontend's multipart POST-with-_method=PUT edit calls.
         Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update'])->middleware('permission:fabrication.edit');
         Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy'])->middleware('permission:fabrication.delete');
+
+        // Quality Reports (PDF ingestion, elevation matching, verification)
+        Route::middleware('permission:quality.view')->group(function () {
+            Route::get('/quality-reports', [\App\Http\Controllers\Api\QualityReportController::class, 'index']);
+            // Static path BEFORE the /quality-reports/{id} wildcard.
+            Route::get('/quality-reports/elevation-options', [\App\Http\Controllers\Api\QualityReportController::class, 'elevationOptions']);
+            Route::get('/quality-reports/analytics/incident-rate', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'incidentRateByMonth']);
+            Route::get('/quality-reports/analytics/problem-types', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'problemTypeRolling13Week']);
+            Route::get('/quality-reports/analytics/weekly-trend', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'weeklyTrend13Week']);
+            Route::post('/quality-reports/analytics/export-pdf', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'exportPdf']);
+            Route::get('/quality-reports/export/csv', [\App\Http\Controllers\Api\QualityReportController::class, 'exportCsv']);
+            Route::get('/quality-reports/export/pdf', [\App\Http\Controllers\Api\QualityReportController::class, 'exportPdf']);
+            Route::get('/quality-reports/{id}', [\App\Http\Controllers\Api\QualityReportController::class, 'show']);
+            Route::get('/quality-reports/{id}/files/{fileId}/download', [\App\Http\Controllers\Api\QualityReportController::class, 'downloadFile']);
+            Route::get('/quality-reports/{id}/files/{fileId}/view', [\App\Http\Controllers\Api\QualityReportController::class, 'viewFile']);
+            Route::post('/quality-reports', [\App\Http\Controllers\Api\QualityReportController::class, 'store'])->middleware('permission:quality.create');
+            Route::put('/quality-reports/{id}', [\App\Http\Controllers\Api\QualityReportController::class, 'update'])->middleware('permission:quality.edit');
+            Route::post('/quality-reports/{id}/rematch', [\App\Http\Controllers\Api\QualityReportController::class, 'rematch'])->middleware('permission:quality.edit');
+            Route::post('/quality-reports/{id}/verify', [\App\Http\Controllers\Api\QualityReportController::class, 'verify'])->middleware('permission:quality.verify');
+            Route::post('/quality-reports/{id}/review', [\App\Http\Controllers\Api\QualityReportController::class, 'review'])->middleware('permission:quality.verify');
+            Route::post('/quality-reports/{id}/reject', [\App\Http\Controllers\Api\QualityReportController::class, 'reject'])->middleware('permission:quality.verify');
+            Route::delete('/quality-reports/{id}', [\App\Http\Controllers\Api\QualityReportController::class, 'destroy'])->middleware('permission:quality.delete');
+        });
     });
 });

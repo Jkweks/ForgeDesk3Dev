@@ -118,4 +118,9 @@ class FdWoElevation extends Model
     {
         return $this->hasMany(FdWoStage::class, 'elevation_id')->orderBy('sort_order');
     }
+
+    public function qualityReports(): HasMany
+    {
+        return $this->hasMany(QualityReport::class, 'elevation_id');
+    }
 }

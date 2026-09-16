@@ -640,13 +640,14 @@
                             <tr>
                               <th style="width:50px">Color</th>
                               <th>Name</th>
+                              <th>Standard Joints</th>
                               <th>Sort</th>
                               <th>Status</th>
                               <th class="w-1">Actions</th>
                             </tr>
                           </thead>
                           <tbody id="elev-types-tbody">
-                            <tr><td colspan="5" class="text-muted text-center py-3">Click "Elevation Types" tab to load.</td></tr>
+                            <tr><td colspan="6" class="text-muted text-center py-3">Click "Elevation Types" tab to load.</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -722,9 +723,16 @@
                 </div>
               </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Sort Order</label>
-              <input type="number" class="form-control" id="elevTypeSortOrder" value="99" min="1">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Sort Order</label>
+                <input type="number" class="form-control" id="elevTypeSortOrder" value="99" min="1">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Standard Joints / Unit</label>
+                <input type="number" class="form-control" id="elevTypeJointCount" min="0" placeholder="e.g. 6 for a door">
+                <div class="form-text">Auto-fills a new elevation's joint count as quantity × this value. Leave blank if not applicable; always editable per elevation.</div>
+              </div>
             </div>
             <div class="mb-1">
               <label class="form-label">Linked names</label>
@@ -2238,7 +2246,7 @@
       function renderElevTypes() {
         const tbody = document.getElementById('elev-types-tbody');
         if (!elevationTypes.length) {
-          tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No elevation types defined.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3">No elevation types defined.</td></tr>';
           return;
         }
         tbody.innerHTML = elevationTypes.map(t => `
@@ -2250,6 +2258,7 @@
                 ? `<div class="text-muted small">${t.aliases.map(locEscHtml).join(', ')}</div>`
                 : ''}
             </td>
+            <td>${t.standard_joint_count != null ? `${t.standard_joint_count} / unit` : '<span class="text-muted">—</span>'}</td>
             <td>${t.sort_order}</td>
             <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
             <td>
@@ -2275,6 +2284,7 @@
         document.getElementById('elevTypeColor').value = '#3b82f6';
         document.getElementById('elevTypeColorHex').value = '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = (elevationTypes.length + 1);
+        document.getElementById('elevTypeJointCount').value = '';
         document.getElementById('elevTypeAliases').value = '';
         // Use data-bs-dismiss or manual show
         const modal = document.getElementById('elevTypeModal');
@@ -2291,6 +2301,7 @@
         document.getElementById('elevTypeColor').value = t.color || '#3b82f6';
         document.getElementById('elevTypeColorHex').value = t.color || '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = t.sort_order;
+        document.getElementById('elevTypeJointCount').value = t.standard_joint_count ?? '';
         document.getElementById('elevTypeAliases').value = (t.aliases || []).join('\n');
         const modal = document.getElementById('elevTypeModal');
         if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
@@ -2302,10 +2313,12 @@
         const color = document.getElementById('elevTypeColorHex').value || document.getElementById('elevTypeColor').value;
         const aliases = document.getElementById('elevTypeAliases').value
           .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        const jointCountVal = document.getElementById('elevTypeJointCount').value;
         const body = {
           name: document.getElementById('elevTypeName').value,
           color: color,
           sort_order: parseInt(document.getElementById('elevTypeSortOrder').value) || 99,
+          standard_joint_count: jointCountVal === '' ? null : Math.max(0, parseInt(jointCountVal) || 0),
           aliases: aliases,
         };
         if (!body.name) { fabToast('Name is required.', 'info'); return; }

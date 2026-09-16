@@ -110,6 +110,7 @@ class PersonLinkTest extends TestCase
         $req = User::factory()->create(['role' => 'office_staff', 'is_active' => true, 'first_name' => 'Rob', 'last_name' => 'Requester', 'name' => 'Rob Requester']);
         $product = \App\Models\Product::create([
             'sku' => 'SKU-PL-1', 'description' => 'Test part', 'quantity_on_hand' => 50,
+            'supplier_id' => \App\Models\Supplier::create(['name' => 'PL Test Supplier'])->id,
         ]);
         $job = BusinessJob::create(['job_number' => 'JOB-9', 'job_name' => 'Nine', 'status' => 'active']);
 
