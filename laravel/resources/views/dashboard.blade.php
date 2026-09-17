@@ -6,6 +6,7 @@
     <style>
       #inventoryTableContainer { max-height: 60vh; overflow-y: auto; }
       #inventoryTableContainer thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
+      #inventoryTableContainer table > :not(caption) > * > * { padding-top: 0.5rem; padding-bottom: 0.5rem; }
     </style>
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -118,7 +119,7 @@
                   </div>
 
                   <div class="table-responsive" id="inventoryTableContainer" style="display: none;">
-                    <table class="table table-vcenter card-table table-striped table-sm">
+                    <table class="table table-vcenter card-table table-striped">
                       <thead>
                         <tr>
                           <th class="sortable" data-sort="sku" style="cursor: pointer;">

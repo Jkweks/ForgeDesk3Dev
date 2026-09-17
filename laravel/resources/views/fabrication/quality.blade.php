@@ -8,6 +8,7 @@
       .qr-sortable:hover { color: var(--tblr-primary); }
       #qr-table-wrap { max-height: 60vh; overflow-y: auto; }
       #qr-table-wrap thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
+      #qr-table-wrap table > :not(caption) > * > * { padding-top: 0.5rem; padding-bottom: 0.5rem; }
     </style>
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -31,7 +32,10 @@
 
       <main id="content" class="page-body">
         <div class="container-xl">
-          <div class="d-flex justify-content-end mb-2">
+          <div class="d-flex justify-content-end gap-2 mb-2">
+            <button class="btn btn-outline-secondary btn-sm" onclick="qrOpenReportSettings()">
+              <i class="ti ti-settings me-1"></i>Report Settings
+            </button>
             <button class="btn btn-outline-secondary btn-sm" id="qr-analytics-pdf-btn" onclick="qrExportAnalyticsPdf()">
               <i class="ti ti-file-type-pdf me-1"></i>Save charts as PDF
             </button>
@@ -115,7 +119,7 @@
                   </div>
 
                   <div class="table-responsive" id="qr-table-wrap" style="display:none;">
-                    <table class="table table-vcenter card-table table-striped table-sm">
+                    <table class="table table-vcenter card-table table-striped">
                       <thead>
                         <tr>
                           <th class="qr-sortable" onclick="qrSortBy('created_at')">Uploaded <i class="ti qr-sort-icon" id="qr-sort-icon-created_at"></i></th>
@@ -171,6 +175,33 @@
             <button class="btn btn-primary" id="qr-upload-submit" onclick="qrUploadFile()">
               <i class="ti ti-upload me-1"></i>Upload
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report settings modal -->
+    <div class="modal" id="qr-settings-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Report settings</h5>
+            <button type="button" class="btn-close" onclick="qrHideModal('qr-settings-modal')"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label">Incident rate by month — date basis</label>
+            <select class="form-select" id="qr-settings-incident-basis">
+              <option value="report_date">Date Reported</option>
+              <option value="completed_date">Date Completed</option>
+            </select>
+            <div class="form-hint mt-1">
+              Which date drives the incident-rate line: when the issue was reported, or when the underlying job/elevation was completed.
+              The two 13-week charts always use date reported.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" onclick="qrHideModal('qr-settings-modal')">Cancel</button>
+            <button class="btn btn-primary" id="qr-settings-save-btn" onclick="qrSaveReportSettings()">Save</button>
           </div>
         </div>
       </div>
@@ -297,6 +328,7 @@ let qrDetailSelectedElevationId = null;
 let qrCharts = {};
 let qrSortKey = 'created_at';
 let qrSortDir = 'desc';
+let qrIncidentBasis = (typeof currentUser !== 'undefined' && currentUser?.quality_report_prefs?.incident_rate_basis) || 'report_date';
 
 document.addEventListener('DOMContentLoaded', () => {
   qrLoadReports();
@@ -314,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function qrLoadAnalytics() {
   try {
     const [incident, problemTypes, weeklyTrend] = await Promise.all([
-      qrApiJson('/quality-reports/analytics/incident-rate'),
+      qrApiJson(`/quality-reports/analytics/incident-rate?basis=${qrIncidentBasis}`),
       qrApiJson('/quality-reports/analytics/problem-types'),
       qrApiJson('/quality-reports/analytics/weekly-trend'),
     ]);
@@ -323,6 +355,37 @@ async function qrLoadAnalytics() {
     qrRenderWeeklyTrendChart(weeklyTrend?.data ?? []);
   } catch (e) {
     console.error('Failed to load quality analytics', e);
+  }
+}
+
+function qrOpenReportSettings() {
+  document.getElementById('qr-settings-incident-basis').value = qrIncidentBasis;
+  qrShowModal('qr-settings-modal');
+}
+
+async function qrSaveReportSettings() {
+  const basis = document.getElementById('qr-settings-incident-basis').value;
+  const btn = document.getElementById('qr-settings-save-btn');
+  btn.disabled = true;
+  try {
+    await qrApiJson('/user/quality-report-prefs', {
+      method: 'PUT',
+      body: JSON.stringify({ incident_rate_basis: basis }),
+    });
+
+    qrIncidentBasis = basis;
+    if (typeof currentUser !== 'undefined' && currentUser) {
+      currentUser.quality_report_prefs = { ...(currentUser.quality_report_prefs || {}), incident_rate_basis: basis };
+      try { localStorage.setItem('userData', JSON.stringify(currentUser)); } catch (e) { /* best-effort */ }
+    }
+
+    qrHideModal('qr-settings-modal');
+    showNotification('Report settings saved', 'success');
+    qrLoadAnalytics();
+  } catch (e) {
+    showNotification(e.message || 'Failed to save settings', 'danger');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -952,6 +1015,7 @@ async function qrExportAnalyticsPdf() {
       incident_chart: qrCharts['qr-chart-incident-rate']?.toBase64Image() || null,
       problem_types_chart: qrCharts['qr-chart-problem-types']?.toBase64Image() || null,
       weekly_chart: qrCharts['qr-chart-weekly-trend']?.toBase64Image() || null,
+      basis: qrIncidentBasis,
     };
 
     const response = await fetch(`${API_BASE}/quality-reports/analytics/export-pdf`, {

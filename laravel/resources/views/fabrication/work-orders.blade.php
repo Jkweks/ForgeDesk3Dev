@@ -28,6 +28,7 @@
 /* Scroll within the table body instead of the whole page, keeping the header row visible. */
 #wo-table-scroll { max-height: calc(100vh - 260px); overflow-y: auto; }
 #wo-table-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
+#wo-table-scroll table > :not(caption) > * > * { padding-top: 0.5rem; padding-bottom: 0.5rem; }
 @endsection
 
 @section('content')
@@ -114,7 +115,7 @@
       <div id="wo-table-wrap" style="display:none;">
         <div class="card">
           <div class="table-responsive" id="wo-table-scroll">
-            <table class="table table-vcenter card-table table-hover table-striped table-sm">
+            <table class="table table-vcenter card-table table-hover table-striped">
               <thead id="wo-thead"></thead>
               <tbody id="wo-tbody"></tbody>
             </table>

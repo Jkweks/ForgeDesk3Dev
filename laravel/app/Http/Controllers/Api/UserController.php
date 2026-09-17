@@ -587,4 +587,28 @@ class UserController extends Controller
             'wo_column_prefs' => $user->wo_column_prefs,
         ]);
     }
+
+    /**
+     * Persist the signed-in user's Quality Reports dashboard settings — right
+     * now just which date drives the incident-rate-by-month line — so it
+     * follows them to any device on next login.
+     */
+    public function updateQualityReportPrefs(Request $request)
+    {
+        $validated = $request->validate([
+            'incident_rate_basis' => 'sometimes|nullable|in:report_date,completed_date',
+        ]);
+
+        $user = auth()->user();
+        $prefs = array_filter($validated, fn ($value) => $value !== null);
+
+        // Merge (not replace) — unlike theme/column prefs, this blob is meant to
+        // grow with more report-settings keys over time without each save
+        // needing to resend every other setting.
+        $user->update(['quality_report_prefs' => array_merge($user->quality_report_prefs ?? [], $prefs)]);
+
+        return response()->json([
+            'quality_report_prefs' => $user->quality_report_prefs,
+        ]);
+    }
 }

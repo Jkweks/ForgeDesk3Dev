@@ -28,7 +28,7 @@
         <h2>Generated {{ now()->format('F d, Y H:i') }}</h2>
     </div>
 
-    <div class="section-header">INCIDENT RATE BY MONTH</div>
+    <div class="section-header">INCIDENT RATE BY MONTH ({{ ($incidentBasis ?? 'report_date') === 'completed_date' ? 'by completion date' : 'by report date' }})</div>
     @if ($incidentChart)
         <div class="chart-wrap"><img class="chart-img" src="{{ $incidentChart }}"></div>
     @endif

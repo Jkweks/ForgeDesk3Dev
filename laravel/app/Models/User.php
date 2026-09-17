@@ -33,6 +33,7 @@ class User extends Authenticatable
         'welcome_email_sent_at',
         'theme_preferences',
         'wo_column_prefs',
+        'quality_report_prefs',
     ];
 
     /**
@@ -62,6 +63,7 @@ class User extends Authenticatable
             'welcome_email_sent_at' => 'datetime',
             'theme_preferences' => 'array',
             'wo_column_prefs' => 'array',
+            'quality_report_prefs' => 'array',
         ];
     }
 

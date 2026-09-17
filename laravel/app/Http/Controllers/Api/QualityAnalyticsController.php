@@ -11,17 +11,46 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Chart-feed endpoints for the Quality Reports dashboard. All three group a
- * non-rejected report by an "anchor date" — the matched elevation's
- * date_completed, falling back to the report's own date_issue_discovered
- * when it has no (or no completed) elevation — matching how the rest of the
- * quality-tracking feature keys off elevation completion date.
+ * Chart-feed endpoints for the Quality Reports dashboard.
+ *
+ * The incident-rate-by-month line can be driven by either date_reported (when
+ * the issue was discovered) or date_completed (the matched elevation's
+ * date_completed, or the manual Pre-Forge date) — per-user choice, saved to
+ * users.quality_report_prefs, defaulting to report_date. We're starting on
+ * report_date deliberately and plan to flip the default to completed_date
+ * once enough data has accumulated to validate that switch; completion dates
+ * are still recorded either way so that switch is just a default flip, not a
+ * data migration. See resolveIncidentRateBasis().
+ *
+ * The two rolling-13-week views always use report_date — they drive current
+ * improvement focus, not historical production output — regardless of the
+ * incident-rate-by-month setting.
  */
 class QualityAnalyticsController extends Controller
 {
+    private const INCIDENT_RATE_BASES = ['report_date', 'completed_date'];
+
     public function incidentRateByMonth(Request $request)
     {
-        return response()->json(['data' => $this->buildIncidentRateData(max(1, (int) $request->get('months', 12)))]);
+        $basis = $this->resolveIncidentRateBasis($request);
+
+        return response()->json([
+            'data' => $this->buildIncidentRateData(max(1, (int) $request->get('months', 12)), $basis),
+            'basis' => $basis,
+        ]);
+    }
+
+    /** Explicit ?basis= wins (what the on-screen toggle is currently set to); otherwise the user's saved preference; otherwise report_date. */
+    private function resolveIncidentRateBasis(Request $request): string
+    {
+        $requested = $request->get('basis');
+        if (in_array($requested, self::INCIDENT_RATE_BASES, true)) {
+            return $requested;
+        }
+
+        $saved = $request->user()?->quality_report_prefs['incident_rate_basis'] ?? null;
+
+        return in_array($saved, self::INCIDENT_RATE_BASES, true) ? $saved : 'report_date';
     }
 
     public function problemTypeRolling13Week()
@@ -50,9 +79,11 @@ class QualityAnalyticsController extends Controller
         ]);
 
         [$problemTypeRows] = $this->buildProblemTypeData();
+        $basis = $this->resolveIncidentRateBasis($request);
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.quality-analytics-report', [
-            'incidentRows' => $this->buildIncidentRateData(12),
+            'incidentRows' => $this->buildIncidentRateData(12, $basis),
+            'incidentBasis' => $basis,
             'problemTypeRows' => $problemTypeRows,
             'weeklyRows' => $this->buildWeeklyTrendData(),
             'incidentChart' => $data['incident_chart'] ?? null,
@@ -64,11 +95,14 @@ class QualityAnalyticsController extends Controller
         return $pdf->stream('quality-analytics-'.now()->format('Y-m-d').'.pdf');
     }
 
-    private function buildIncidentRateData(int $months): array
+    private function buildIncidentRateData(int $months, string $basis): array
     {
         $start = Carbon::now()->startOfMonth()->subMonths($months - 1);
         $end = Carbon::now()->endOfMonth();
 
+        // Joints (production volume, the bars) always come from completion
+        // date regardless of $basis — only which date buckets a case into a
+        // month (the incident-rate line) changes.
         $elevations = FdWoElevation::whereNotNull('date_completed')
             ->whereBetween('date_completed', [$start, $end])
             ->get();
@@ -79,7 +113,7 @@ class QualityAnalyticsController extends Controller
         // adds to) whatever partial FdWoElevation data exists for them.
         $jointOverrides = QualityJointHistory::pluck('joint_count', 'month');
 
-        $reports = $this->nonRejectedReportsWithAnchor($start, $end);
+        $reports = $this->nonRejectedReportsForIncidentRate($start, $end, $basis);
         $casesByMonth = $reports->groupBy(fn ($r) => $r->anchor_date->format('Y-m'))
             ->map(fn ($group) => $group->count());
 
@@ -203,14 +237,23 @@ class QualityAnalyticsController extends Controller
         return $result;
     }
 
-    /** Anchored on completion date (elevation, or the manual Pre-Forge date) — used only for the monthly incident rate, which measures against production volume. */
-    private function nonRejectedReportsWithAnchor(Carbon $start, Carbon $end): Collection
+    /**
+     * Used only by the monthly incident rate. $basis picks which date each
+     * report is bucketed by: 'completed_date' (elevation's date_completed,
+     * or the manual Pre-Forge date) or 'report_date' (when discovered) — each
+     * falling back to the other when its own value is missing, so a report
+     * still counts somewhere rather than being silently dropped.
+     */
+    private function nonRejectedReportsForIncidentRate(Carbon $start, Carbon $end, string $basis): Collection
     {
         return QualityReport::where('status', '!=', 'rejected')
             ->with('elevation:id,date_completed')
             ->get()
-            ->map(function (QualityReport $r) {
-                $r->anchor_date = $r->elevation?->date_completed ?? $r->pre_forge_completed_date ?? $r->report_date;
+            ->map(function (QualityReport $r) use ($basis) {
+                $completedDate = $r->elevation?->date_completed ?? $r->pre_forge_completed_date;
+                $r->anchor_date = $basis === 'completed_date'
+                    ? ($completedDate ?? $r->report_date)
+                    : ($r->report_date ?? $completedDate);
 
                 return $r;
             })
