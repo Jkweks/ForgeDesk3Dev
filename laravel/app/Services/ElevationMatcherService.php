@@ -42,10 +42,36 @@ class ElevationMatcherService
             return ['elevation_id' => null, 'work_order_id' => null, 'confidence' => null, 'candidates' => []];
         }
 
-        $scored = $candidates->map(function (FdWoElevation $elevation) use ($jobText, $elevationTagText, $reportDate) {
-            $jobScore = $this->similarity($jobText, $elevation->workOrder?->businessJob?->job_name);
+        // Phase 1 — find the job(s) whose name best matches jobText, and
+        // restrict the pool to their elevations before ever looking at tag
+        // text. Job name is the primary identifying signal; scoring tag
+        // similarity across every job first (the old approach) let an
+        // unrelated job's lucky tag match (tags are often generic, e.g.
+        // "Door 1") outscore a job whose *name* was actually the much
+        // better match — e.g. a report for "Wege Pharmacy" landing on "801
+        // Broadway" because that job's elevation tag happened to line up,
+        // even though "Wege Pharmacy" itself was a near-perfect job-name
+        // match. Ties — including "no job text at all", where every job
+        // scores 0 — merge into one combined pool, which naturally falls
+        // back to ranking by tag alone across every candidate.
+        $jobGroups = $candidates->groupBy(
+            fn (FdWoElevation $e) => $e->workOrder?->business_job_id ?? 'wo-'.$e->work_order_id
+        );
+
+        $jobScores = $jobGroups->map(
+            fn ($group) => $this->similarity($jobText, $group->first()->workOrder?->businessJob?->job_name)
+        );
+        $bestJobScore = $jobScores->max();
+        $bestJobKeys = $jobScores->filter(fn ($score) => abs($score - $bestJobScore) < 0.0001)->keys();
+        // Not ->only()->collapse(): Eloquent\Collection overrides only() to
+        // filter by model primary key (getKey()), which blows up here since
+        // these keys are group keys, not model IDs.
+        $pool = $bestJobKeys->reduce(fn ($carry, $key) => $carry->concat($jobGroups->get($key)), collect());
+
+        // Phase 2 — within the matched job(s), rank by elevation-tag similarity.
+        $scored = $pool->map(function (FdWoElevation $elevation) use ($bestJobScore, $elevationTagText, $reportDate) {
             $tagScore = $this->similarity($elevationTagText, $elevation->elevation_tag);
-            $score = ($jobScore * 0.4) + ($tagScore * 0.6);
+            $score = ($bestJobScore * 0.5) + ($tagScore * 0.5);
 
             if ($reportDate) {
                 $anchor = $elevation->date_completed ?? $elevation->date_requested;
