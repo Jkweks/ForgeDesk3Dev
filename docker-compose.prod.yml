@@ -249,11 +249,35 @@ networks:
     driver: bridge
 
 volumes:
+  # Still ordinary named volumes as far as service definitions above are
+  # concerned — driver_opts just pins each one's actual backing store to a
+  # host directory next to this compose file, instead of Docker's internal
+  # /var/lib/docker/volumes/.../_data/ store. Requires the ./_data/<name>
+  # directory to already exist on the host (created once, empty, before first
+  # `up`) — the local driver does not auto-create parent bind targets. Paths
+  # are relative to wherever `docker compose` is invoked from, so always run
+  # it from this file's own directory (matching existing convention: no -f).
   postgres_data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/postgres_data
   app_public:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/app_public
   app_storage:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/app_storage
   app_private:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/app_private

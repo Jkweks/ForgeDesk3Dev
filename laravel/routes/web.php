@@ -112,3 +112,11 @@ Route::get('/admin/location-assignment', function () {
 Route::get('/shop', function () {
     return view('shop-floor');
 });
+
+// Design-time preview of the maintenance page, so it can be checked without
+// actually toggling maintenance mode. Excluded entirely outside non-production
+// so the route doesn't exist at all in a prod build, even if this file ships
+// unchanged.
+if (! app()->environment('production')) {
+    Route::get('/dev/preview-503', fn () => response()->view('errors.503', [], 503));
+}

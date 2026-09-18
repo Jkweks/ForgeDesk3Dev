@@ -174,6 +174,9 @@
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-details" type="button" role="tab">Details</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-checklist" type="button" role="tab">Checklist</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-drawings" type="button" role="tab">Drawings</button></li>
+      <li class="nav-item" data-permission="jobs.documents.view">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-documents" type="button" role="tab" onclick="loadWoJobDocuments()">Job Documents</button>
+      </li>
     </ul>
 
     <div class="tab-content flex-grow-1 overflow-auto">
@@ -343,6 +346,50 @@
           <div id="drawings-loading" class="text-muted small" style="display:none;">Uploading…</div>
           <div id="drawings-list">
             <div class="text-muted small">No drawings attached.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Job Documents (SOF / EZ Estimate / PO / Other, read from the job) -->
+      <div class="tab-pane fade" id="wo-tab-documents" role="tabpanel" data-permission="jobs.documents.view">
+        <div class="wo-block">
+          <div class="wo-block-head">
+            <h6>Job Documents</h6>
+            <button class="btn btn-sm btn-ghost-primary" data-permission="jobs.documents.manage" onclick="showWoJobDocForm()">
+              <i class="ti ti-upload me-1"></i>Upload
+            </button>
+          </div>
+          <div id="wo-job-doc-loading" class="text-muted small" style="display:none;">Loading…</div>
+          <div id="wo-job-doc-content">
+            <div class="text-muted small">No documents yet.</div>
+          </div>
+          <!-- Upload inline form -->
+          <div id="wo-job-doc-form" style="display:none;" class="mt-2 p-2 border rounded">
+            <div class="row g-2">
+              <div class="col-12 col-md-4">
+                <label class="form-label form-label-sm mb-1">Type</label>
+                <select class="form-select form-select-sm" id="wo-job-doc-type" onchange="onWoJobDocTypeChange()">
+                  <option value="sof">SOF</option>
+                  <option value="ez_estimate">EZ Estimate</option>
+                  <option value="purchase_order">Purchase Order</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-8">
+                <label class="form-label form-label-sm mb-1" id="wo-job-doc-label-lbl">Label <span class="text-secondary">(optional)</span></label>
+                <input type="text" class="form-control form-control-sm" id="wo-job-doc-label" placeholder="e.g. PO #4821, revised SOF…">
+              </div>
+              <div class="col-12">
+                <label class="form-label form-label-sm mb-1">File</label>
+                <input type="file" class="form-control form-control-sm" id="wo-job-doc-file"
+                  accept=".pdf,.xlsx,.xlsm,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif,.txt">
+                <div class="form-hint mt-1">PDF, Excel, Word, image or text — up to 25&nbsp;MB.</div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-primary btn-sm" id="wo-job-doc-save" onclick="submitWoJobDocument()">Upload</button>
+              <button class="btn btn-link btn-sm text-secondary p-0" onclick="hideWoJobDocForm()">Cancel</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1008,6 +1055,15 @@ function woSortIcon(col) {
         : '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ms-1"><path d="M12 5l0 14"/><path d="M18 13l-6 6"/><path d="M6 13l6 6"/></svg>';
 }
 
+// Release column shows just the release number (e.g. job "123456-W1" → "1"),
+// not the full job-number-prefixed label — pulled from the custom release
+// code when set, otherwise the auto-incrementing release_number.
+function releaseNumberOnly(wo) {
+    const source = (wo.release_code || '').trim() || String(wo.release_number ?? '');
+    const digits = source.match(/\d+/);
+    return digits ? digits[0] : source;
+}
+
 function woSortTh(label, col, dataCol, extraStyle) {
     const dataAttr = dataCol ? ` data-col="${dataCol}"` : '';
     const style = extraStyle ? `cursor:pointer;user-select:none;${extraStyle}` : 'cursor:pointer;user-select:none;';
@@ -1148,7 +1204,7 @@ function renderWOList(wos) {
                 : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
             <td data-col="priority"><span class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</span></td>
-            <td><strong>${esc(wo.release_label)}</strong>${statusBadge}</td>
+            <td><strong>${esc(releaseNumberOnly(wo))}</strong>${statusBadge}</td>
             <td data-col="job_name">${esc(wo.job?.job_name || '—')}</td>
             <td data-col="pm">${pmPill(wo.job?.project_manager)}</td>
             <td data-col="due">${dueCell}</td>
@@ -1393,6 +1449,136 @@ function populateDetail(wo) {
     renderWoSteps(wo.id, wo.steps || []);
     renderDrawings(wo.drawings || []);
     renderElevations(wo.elevations || []);
+
+    woJobDocsLoaded = false;
+    document.getElementById('wo-job-doc-content').innerHTML = '<div class="text-muted small">No documents yet.</div>';
+    hideWoJobDocForm();
+}
+
+// ===== JOB DOCUMENTS (read-only-ish view of the job's SOF/EZ Estimate/PO/Other docs) =====
+const WO_JOB_DOC_TYPES = { sof: 'SOF', ez_estimate: 'EZ Estimate', purchase_order: 'Purchase Order', other: 'Other' };
+let woJobDocsLoaded = false;
+
+function woJobDocCanManage() {
+    if (typeof isAdmin === 'function' && isAdmin()) return true;
+    return typeof hasPermission === 'function' && hasPermission('jobs.documents.manage');
+}
+
+function woFmtFileSize(bytes) {
+    const b = Number(bytes) || 0;
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+}
+
+async function loadWoJobDocuments() {
+    if (woJobDocsLoaded) return;
+    const jobId = currentWO?.job?.id;
+    const loadingEl = document.getElementById('wo-job-doc-loading');
+    const contentEl = document.getElementById('wo-job-doc-content');
+    if (!jobId) { contentEl.innerHTML = '<div class="text-muted small">No linked job.</div>'; return; }
+
+    woJobDocsLoaded = true;
+    loadingEl.style.display = 'block';
+    try {
+        const r = await API(`/business-jobs/${jobId}/documents`);
+        if (!r.ok) {
+            contentEl.innerHTML = '<div class="text-muted small">You don’t have access to this job’s documents.</div>';
+            return;
+        }
+        const data = await r.json();
+        renderWoJobDocuments(jobId, data.documents || []);
+    } catch (e) {
+        console.error(e);
+        contentEl.innerHTML = '<div class="text-muted small">Failed to load documents.</div>';
+    } finally {
+        loadingEl.style.display = 'none';
+    }
+}
+
+function renderWoJobDocuments(jobId, docs) {
+    const contentEl = document.getElementById('wo-job-doc-content');
+    if (!contentEl) return;
+    const canManage = woJobDocCanManage();
+
+    const section = (typeKey) => {
+        const rows = docs.filter(d => d.doc_type === typeKey);
+        const items = rows.length ? rows.map(d => `
+            <div class="d-flex align-items-center gap-2 py-1">
+                <i class="ti ti-file-text text-secondary"></i>
+                <a href="${d.download_url}" target="_blank" rel="noopener" class="fw-medium text-decoration-none">${escapeHtml(d.original_name)}</a>
+                ${d.label ? `<span class="text-secondary small">— ${escapeHtml(d.label)}</span>` : ''}
+                <span class="text-secondary small ms-auto">${woFmtFileSize(d.file_size)} · ${fmtDate(d.created_at)}${d.uploaded_by_name ? ' · ' + escapeHtml(d.uploaded_by_name) : ''}</span>
+                ${canManage ? `<button class="btn btn-sm btn-icon btn-ghost-danger" data-permission="jobs.documents.manage" title="Delete" onclick="deleteWoJobDocument(${jobId}, ${d.id})"><i class="ti ti-trash"></i></button>` : ''}
+            </div>`).join('')
+            : '<div class="text-secondary small py-1">None</div>';
+        return `
+            <div class="mb-3">
+                <div class="subheader mb-1">${WO_JOB_DOC_TYPES[typeKey]}</div>
+                ${items}
+            </div>`;
+    };
+
+    contentEl.innerHTML = Object.keys(WO_JOB_DOC_TYPES).map(section).join('');
+}
+
+function showWoJobDocForm() {
+    document.getElementById('wo-job-doc-form').style.display = 'block';
+    onWoJobDocTypeChange();
+}
+function hideWoJobDocForm() {
+    document.getElementById('wo-job-doc-form').style.display = 'none';
+    document.getElementById('wo-job-doc-type').value = 'sof';
+    document.getElementById('wo-job-doc-label').value = '';
+    document.getElementById('wo-job-doc-file').value = '';
+}
+function onWoJobDocTypeChange() {
+    const isOther = document.getElementById('wo-job-doc-type').value === 'other';
+    document.getElementById('wo-job-doc-label-lbl').innerHTML =
+        isOther ? 'Label <span class="text-danger">*</span>' : 'Label <span class="text-secondary">(optional)</span>';
+}
+
+async function submitWoJobDocument() {
+    const jobId = currentWO?.job?.id;
+    if (!jobId) return;
+    const type = document.getElementById('wo-job-doc-type').value;
+    const label = document.getElementById('wo-job-doc-label').value.trim();
+    const fileInput = document.getElementById('wo-job-doc-file');
+    const file = fileInput.files[0];
+
+    if (!file) { alert('Choose a file to upload.'); return; }
+    if (type === 'other' && !label) { alert('A label is required for "Other" documents.'); return; }
+
+    const fd = new FormData();
+    fd.append('doc_type', type);
+    if (label) fd.append('label', label);
+    fd.append('file', file);
+
+    const btn = document.getElementById('wo-job-doc-save');
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    try {
+        const r = await authenticatedUpload(`/business-jobs/${jobId}/documents`, fd);
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(data.error || (data.errors ? Object.values(data.errors).flat().join(' ') : 'Upload failed')); return; }
+        hideWoJobDocForm();
+        woJobDocsLoaded = false;
+        await loadWoJobDocuments();
+    } catch (e) {
+        console.error(e);
+        alert('Upload failed.');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Upload';
+    }
+}
+
+async function deleteWoJobDocument(jobId, docId) {
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+    try {
+        const r = await API(`/business-jobs/${jobId}/documents/${docId}`, { method: 'DELETE' });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || d.message || 'Delete failed'); return; }
+        woJobDocsLoaded = false;
+        await loadWoJobDocuments();
+    } catch (e) { console.error(e); alert('Delete failed.'); }
 }
 
 // ============================================================

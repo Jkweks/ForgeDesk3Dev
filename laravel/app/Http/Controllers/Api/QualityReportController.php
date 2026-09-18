@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BusinessJob;
 use App\Models\FdUser;
 use App\Models\FdWoElevation;
 use App\Models\QualityReport;
@@ -23,7 +24,11 @@ class QualityReportController extends Controller
     /**
      * Flat list of elevations on open (active/on_hold) work orders, for the
      * manual elevation picker on upload/edit. Kept lightweight — no stage
-     * detail — since it's only used to populate a dropdown.
+     * detail — since it's only used to populate a dropdown. Also returns
+     * every in-flight business job (not just ones with a tracked
+     * elevation) — a large job mid-flight may have no elevations entered
+     * yet at all, and it still needs to be pickable so the report can be
+     * pinned to the real job with a manually-typed elevation.
      */
     public function elevationOptions()
     {
@@ -42,7 +47,13 @@ class QualityReportController extends Controller
             ])
             ->values();
 
-        return response()->json(['data' => $elevations]);
+        $jobs = BusinessJob::query()
+            ->whereIn('status', ['active', 'on_hold'])
+            ->orderBy('job_name')
+            ->get(['id', 'job_name'])
+            ->map(fn (BusinessJob $j) => ['id' => $j->id, 'job_name' => $j->job_name]);
+
+        return response()->json(['data' => $elevations, 'jobs' => $jobs]);
     }
 
     public function index(Request $request)
@@ -95,6 +106,7 @@ class QualityReportController extends Controller
         $query = QualityReport::with([
             'elevation.elevationType',
             'workOrder.businessJob',
+            'businessJob',
             'uploader:id,name',
             'verifier:id,name',
             'reviewer:id,name',
@@ -150,6 +162,7 @@ class QualityReportController extends Controller
             'elevation.elevationType',
             'elevation.stages.assignees',
             'workOrder.businessJob',
+            'businessJob',
             'uploader:id,name',
             'matchedByUser:id,name',
             'verifier:id,name',
@@ -165,16 +178,6 @@ class QualityReportController extends Controller
         $request->validate([
             'file' => 'required|file|mimes:pdf|max:20480',
             'elevation_id' => 'nullable|integer|exists:fd_wo_elevations,id',
-            // Manual override for issues that predate ForgeDesk tracking (the "Pre-Forge"
-            // picker option) — skips auto-matching and stamps this text as the reference
-            // instead of a real elevation. Ignored when elevation_id is also given.
-            'elevation_tag_guess' => 'nullable|string|max:255',
-            // Anchors a Pre-Forge report's incident-rate trending the same way a real
-            // elevation's date_completed would, since there's no elevation to read it from.
-            'pre_forge_completed_date' => 'nullable|date',
-            // Manual job reference, used when there's no real business job to read a name
-            // from. Defaults to whatever the PDF's own "Job" field extracted to.
-            'job_text_guess' => 'nullable|string|max:255',
         ]);
 
         try {
@@ -207,25 +210,18 @@ class QualityReportController extends Controller
                 'replacement_needed' => $extracted['replacement_needed'],
                 'issue_description' => $extracted['issue_description'],
                 'elevation_tag_guess' => $extracted['elevation_tag_guess'],
-                'job_text_guess' => $request->input('job_text_guess') ?: ($extracted['job_text'] ?? null),
+                'job_text_guess' => $extracted['job_text'] ?? null,
                 'raw_extracted_text' => $extracted['raw_extracted_text'],
                 'extracted_fields' => $extracted,
             ]);
 
             if ($request->filled('elevation_id')) {
                 $report->reassignElevation((int) $request->input('elevation_id'), $request->user()->id);
-            } elseif ($request->filled('elevation_tag_guess')) {
-                $report->update([
-                    'elevation_tag_guess' => $request->input('elevation_tag_guess'),
-                    'pre_forge_completed_date' => $request->input('pre_forge_completed_date'),
-                    'auto_matched' => false,
-                    'matched_by_user_id' => $request->user()->id,
-                ]);
             } else {
                 $this->applyMatch($report, $matcher, $extracted);
             }
 
-            $report->load(['elevation.elevationType', 'elevation.stages.assignees', 'workOrder.businessJob', 'uploader:id,name', 'files']);
+            $report->load(['elevation.elevationType', 'elevation.stages.assignees', 'workOrder.businessJob', 'businessJob', 'uploader:id,name', 'files']);
 
             return response()->json($this->format($report, detailed: true), 201);
         } catch (\Exception $e) {
@@ -245,11 +241,18 @@ class QualityReportController extends Controller
             'report_date' => $report->report_date?->toDateString(),
         ]);
 
-        $report->load(['elevation.elevationType', 'elevation.stages.assignees', 'workOrder.businessJob', 'uploader:id,name', 'files']);
+        $report->load(['elevation.elevationType', 'elevation.stages.assignees', 'workOrder.businessJob', 'businessJob', 'uploader:id,name', 'files']);
 
         return response()->json($this->format($report, detailed: true));
     }
 
+    /**
+     * A match below AUTO_MATCH_CONFIDENCE_THRESHOLD isn't treated as a real
+     * job — the report is flagged Pre-Forge instead, keeping the PDF's own
+     * parsed job/elevation text (already saved on the report by the caller)
+     * as the starting point for manual entry rather than pinning it to a
+     * low-confidence guess.
+     */
     private function applyMatch(QualityReport $report, ElevationMatcherService $matcher, array $extracted): void
     {
         $match = $matcher->match(
@@ -258,9 +261,12 @@ class QualityReportController extends Controller
             $extracted['report_date'] ?? null,
         );
 
+        $isPreForge = $match['confidence'] === null || $match['confidence'] < QualityReport::AUTO_MATCH_CONFIDENCE_THRESHOLD;
+
         $report->update([
-            'elevation_id' => $match['elevation_id'],
-            'work_order_id' => $match['work_order_id'],
+            'elevation_id' => $isPreForge ? null : $match['elevation_id'],
+            'work_order_id' => $isPreForge ? null : $match['work_order_id'],
+            'is_pre_forge' => $isPreForge,
             'match_confidence' => $match['confidence'],
             'match_candidates' => $match['candidates'],
             'auto_matched' => true,
@@ -274,6 +280,8 @@ class QualityReportController extends Controller
 
         $data = $request->validate([
             'elevation_id' => 'nullable|integer|exists:fd_wo_elevations,id',
+            'business_job_id' => 'sometimes|nullable|integer|exists:business_jobs,id',
+            'is_pre_forge' => 'sometimes|boolean',
             'elevation_tag_guess' => 'sometimes|nullable|string|max:255',
             'job_text_guess' => 'sometimes|nullable|string|max:255',
             'pre_forge_completed_date' => 'sometimes|nullable|date',
@@ -285,25 +293,45 @@ class QualityReportController extends Controller
             'issue_description' => 'nullable|string',
         ]);
 
-        if ($request->has('elevation_id')) {
+        if ($request->boolean('is_pre_forge')) {
+            // Manually flagged Pre-Forge (or kept as such) — no real elevation applies.
+            $report->update([
+                'elevation_id' => null,
+                'work_order_id' => null,
+                'business_job_id' => null,
+                'is_pre_forge' => true,
+                'auto_matched' => false,
+                'matched_by_user_id' => $request->user()->id,
+            ]);
+        } elseif ($request->has('elevation_id')) {
             if ($request->filled('elevation_id')) {
                 if ((int) $request->input('elevation_id') !== $report->elevation_id) {
                     $report->reassignElevation((int) $request->input('elevation_id'), $request->user()->id);
                 }
-            } elseif ($report->elevation_id !== null) {
-                // Explicitly cleared (e.g. reassigned to "Unassigned" or "Pre-Forge").
+                // A real elevation makes the direct job link redundant (job is read via elevation -> work order).
+                $report->update(['is_pre_forge' => false, 'business_job_id' => null]);
+            } else {
+                // No real elevation — a real, tracked job may still be pinned directly
+                // (a large job mid-flight, not yet broken into elevations); elevation_tag_guess
+                // carries the manually-typed elevation text for it (see qr-d-elevation-text-guess).
+                if ($report->elevation_id !== null || $report->is_pre_forge) {
+                    $report->update([
+                        'elevation_id' => null,
+                        'work_order_id' => null,
+                        'auto_matched' => false,
+                        'matched_by_user_id' => $request->user()->id,
+                    ]);
+                }
                 $report->update([
-                    'elevation_id' => null,
-                    'work_order_id' => null,
-                    'auto_matched' => false,
-                    'matched_by_user_id' => $request->user()->id,
+                    'business_job_id' => $data['business_job_id'] ?? null,
+                    'is_pre_forge' => false,
                 ]);
             }
         }
 
-        $report->update(array_diff_key($data, ['elevation_id' => null]));
+        $report->update(array_diff_key($data, ['elevation_id' => null, 'business_job_id' => null, 'is_pre_forge' => null]));
 
-        $report->load(['elevation.elevationType', 'elevation.stages.assignees', 'workOrder.businessJob', 'uploader:id,name', 'files']);
+        $report->load(['elevation.elevationType', 'elevation.stages.assignees', 'workOrder.businessJob', 'businessJob', 'uploader:id,name', 'files']);
 
         return response()->json($this->format($report, detailed: true));
     }
@@ -398,11 +426,12 @@ class QualityReportController extends Controller
             'id' => $r->id,
             'status' => $r->status,
             'elevation_id' => $r->elevation_id,
+            'is_pre_forge' => $r->is_pre_forge,
             'elevation_tag' => $this->elevationTagFor($r),
             'elevation_type' => $r->elevation?->elevationType?->name,
             'work_order_id' => $r->work_order_id,
             'work_order_label' => $r->workOrder?->releaseLabel(),
-            'business_job_id' => $r->workOrder?->business_job_id,
+            'business_job_id' => $r->workOrder?->business_job_id ?? $r->business_job_id,
             'business_job_name' => $this->jobNameFor($r),
             'report_date' => $r->report_date?->toDateString(),
             'pre_forge_completed_date' => $r->pre_forge_completed_date?->toDateString(),
@@ -453,10 +482,13 @@ class QualityReportController extends Controller
         return $r->elevation?->elevation_tag ?? $r->elevation_tag_guess;
     }
 
-    /** Real business job name when matched, else the reference job text kept from ingestion/import. */
+    /** Real business job name when matched via elevation, else a directly-linked job (real job, no tracked elevation yet), else the reference job text kept from ingestion/import. */
     private function jobNameFor(QualityReport $r): ?string
     {
-        return $r->workOrder?->businessJob?->job_name ?? $r->job_text_guess ?? ($r->extracted_fields['job_text'] ?? null);
+        return $r->workOrder?->businessJob?->job_name
+            ?? $r->businessJob?->job_name
+            ?? $r->job_text_guess
+            ?? ($r->extracted_fields['job_text'] ?? null);
     }
 
     private function employeeInitials(?FdWoElevation $elevation): ?string

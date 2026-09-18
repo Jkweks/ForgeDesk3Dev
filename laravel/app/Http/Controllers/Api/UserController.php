@@ -589,14 +589,16 @@ class UserController extends Controller
     }
 
     /**
-     * Persist the signed-in user's Quality Reports dashboard settings — right
-     * now just which date drives the incident-rate-by-month line — so it
-     * follows them to any device on next login.
+     * Persist the signed-in user's Quality Reports dashboard settings — which
+     * date drives the incident-rate-by-month line, and whether its month-to-
+     * date projection is shown — so it follows them to any device on next
+     * login.
      */
     public function updateQualityReportPrefs(Request $request)
     {
         $validated = $request->validate([
             'incident_rate_basis' => 'sometimes|nullable|in:report_date,completed_date',
+            'incident_rate_show_projection' => 'sometimes|nullable|boolean',
         ]);
 
         $user = auth()->user();

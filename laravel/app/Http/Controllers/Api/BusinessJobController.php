@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
+use App\Models\JobDocument;
 use App\Models\JobReservation;
 use App\Models\JobReservationItem;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class BusinessJobController extends Controller
 {
@@ -596,6 +600,7 @@ class BusinessJobController extends Controller
                 'items.*.product_id' => 'required|exists:products,id',
                 'items.*.requested_qty' => 'required|numeric|min:0',
                 'items.*.committed_qty' => 'nullable|numeric|min:0',
+                'material_check_file_token' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -650,6 +655,8 @@ class BusinessJobController extends Controller
                 ]);
             }
 
+            $this->attachMaterialCheckDocument($request, $job, $reservation);
+
             DB::commit();
 
             Log::info('Job reservation created', [
@@ -682,6 +689,46 @@ class BusinessJobController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Claims the file staged by MaterialCheckController::stageMaterialCheckFile()
+     * (the estimate/CSV this reservation's material check ran against) and
+     * attaches it to the job as a JobDocument tied to this reservation — see
+     * JobReservation::archiveLinkedDocuments() for what happens to it if the
+     * reservation is later cancelled/deleted. Silently a no-op when no token
+     * was passed, or the staged file already expired/was claimed — a missing
+     * source file should never block the reservation itself.
+     */
+    private function attachMaterialCheckDocument(Request $request, BusinessJob $job, JobReservation $reservation): void
+    {
+        $token = $request->input('material_check_file_token');
+        if (! $token) {
+            return;
+        }
+
+        $staged = Cache::pull("material_check_staging:{$token}");
+        if (! $staged || ! Storage::disk('local')->exists($staged['path'])) {
+            return;
+        }
+
+        $ext = strtolower(pathinfo($staged['path'], PATHINFO_EXTENSION) ?: 'dat');
+        $docType = in_array($ext, ['xlsx', 'xlsm'], true) ? 'ez_estimate' : 'other';
+        $newPath = "job_documents/{$job->id}/".Str::uuid().".{$ext}";
+
+        Storage::disk('local')->move($staged['path'], $newPath);
+
+        JobDocument::create([
+            'business_job_id' => $job->id,
+            'job_reservation_id' => $reservation->id,
+            'doc_type' => $docType,
+            'label' => 'Material check',
+            'original_name' => $staged['original_name'],
+            'file_path' => $newPath,
+            'file_size' => $staged['file_size'],
+            'file_mime' => $staged['file_mime'],
+            'uploaded_by' => $request->user()?->id,
+        ]);
     }
 
     /**

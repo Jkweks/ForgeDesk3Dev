@@ -1,19 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Cron runs with a minimal environment — no inherited ssh-agent, and often a
+# different (or unset) HOME/PATH than your interactive login shell, which is
+# why remote-copy steps can fail under cron while working fine when run by
+# hand. Harden both explicitly rather than relying on whatever cron happens
+# to provide.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+export HOME="${HOME:-/root}"
+echo "$(date): running as $(whoami), HOME=${HOME}, PATH=${PATH}, SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>}"
+
 # --- Config ---
-BACKUP_DIR="/opt/forgedesk/backup"
+BACKUP_DIR="/opt/forgedesk/backup/backup_storage"
 COMPOSE_ENV_FILE="/opt/forgedesk/.env"     # path to the .env with DB_PASSWORD (also holds FAB_UTILS_SHIM_PATH)
 DB_CONTAINER="forgedesk_postgres"
 APP_CONTAINER="forgedesk_app"              # container that holds storage/app (and receives backup:record)
 DB_NAME="forgedesk"
 DB_USER="forgedesk"
 STORAGE_PATH="/var/www/html/storage/app"   # Laravel uploaded files/documents/photos (inside APP_CONTAINER) —
-                                            # zipped recursively, so app/public, app/private, app/ez_estimates,
+                                            # tarred recursively, so app/public, app/private, app/ez_estimates,
                                             # app/templates etc. are all covered without listing them separately.
-RETENTION_DAYS=90
+LOCAL_RETENTION_DAYS=4
+REMOTE_RETENTION_DAYS=14
 REMOTE_USER="deploy"
 REMOTE_HOST="50.6.250.54"
-REMOTE_DIR="~/forgedesk/backup"
+REMOTE_DIR="~/forgedesk/backup/Vos"
+
 
 # fab_utils (shimshop + configurator) — in prod these live as separate
 # databases in the SAME postgres container/instance as forgedesk (DB_CONTAINER
@@ -31,7 +43,7 @@ RUN_DATE=$(date +"%Y-%m-%d")
 STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 DB_FILE="${BACKUP_DIR}/forgedesk_${TIMESTAMP}.sql.gz"
-FILES_FILE="${BACKUP_DIR}/forgedesk_${TIMESTAMP}_storage.zip"
+FILES_FILE="${BACKUP_DIR}/forgedesk_${TIMESTAMP}_storage.tar.gz"
 mkdir -p "${BACKUP_DIR}"
 
 # --- Status page reporting ---
@@ -96,29 +108,30 @@ else
 fi
 
 # --- Storage archive: uploaded files / documents / photos (non-fatal) ---
-# Zipped from inside the app container (no host bind-mount in prod). Paths inside
+# Tarred from inside the app container (no host bind-mount in prod). Paths inside
 # the archive are relative to storage/ ("app/public/...", "app/..."), so restore
 # with:
-#   docker cp forgedesk_<ts>_storage.zip forgedesk_app:/tmp/s.zip
-#   docker exec forgedesk_app sh -c 'cd /var/www/html/storage && unzip -o /tmp/s.zip && rm /tmp/s.zip'
+#   docker cp forgedesk_<ts>_storage.tar.gz forgedesk_app:/tmp/s.tar.gz
+#   docker exec forgedesk_app sh -c 'cd /var/www/html/storage && tar xzf /tmp/s.tar.gz && rm /tmp/s.tar.gz'
 STORAGE_PARENT="$(dirname "${STORAGE_PATH}")"
 STORAGE_LEAF="$(basename "${STORAGE_PATH}")"
 set +e
 docker exec "${APP_CONTAINER}" sh -c \
-  "cd '${STORAGE_PARENT}' && zip -r -q -y - '${STORAGE_LEAF}'" > "${FILES_FILE}"
-ZIP_RC=$?
+  "cd '${STORAGE_PARENT}' && tar czf - '${STORAGE_LEAF}'" > "${FILES_FILE}"
+TAR_RC=$?
 set -e
-# zip rc 0 == ok; 12 == nothing to archive; 18 == a file couldn't be read but the
-# rest was archived. Keep the archive as long as it isn't empty.
-if [ "${ZIP_RC}" -eq 0 ] && [ -s "${FILES_FILE}" ]; then
+# tar rc 0 == ok; 1 == some files changed/were skipped while reading (e.g. a
+# file vanished or was unreadable) but the rest was archived; 2 == fatal, no
+# usable archive. Keep the archive for rc 0 or 1 as long as it isn't empty.
+if [ "${TAR_RC}" -eq 0 ] && [ -s "${FILES_FILE}" ]; then
   echo "$(date): Storage archive succeeded -> ${FILES_FILE} ($(du -h "${FILES_FILE}" | cut -f1))"
   add_component "app_storage" 1 "OK -> $(basename "${FILES_FILE}")"
-elif [ "${ZIP_RC}" -ne 0 ] && [ -s "${FILES_FILE}" ]; then
-  echo "$(date): WARNING - storage zip returned rc=${ZIP_RC} but produced an archive; keeping ${FILES_FILE} ($(du -h "${FILES_FILE}" | cut -f1))" >&2
-  add_component "app_storage" 1 "zip rc=${ZIP_RC} but archive produced -> $(basename "${FILES_FILE}")"
+elif [ "${TAR_RC}" -eq 1 ] && [ -s "${FILES_FILE}" ]; then
+  echo "$(date): WARNING - storage tar returned rc=1 (some files skipped) but produced an archive; keeping ${FILES_FILE} ($(du -h "${FILES_FILE}" | cut -f1))" >&2
+  add_component "app_storage" 1 "tar rc=1 but archive produced -> $(basename "${FILES_FILE}")"
 else
-  echo "$(date): WARNING - storage archive failed (rc=${ZIP_RC}); DB backup still OK" >&2
-  add_component "app_storage" 0 "zip failed (rc=${ZIP_RC})"
+  echo "$(date): WARNING - storage archive failed (rc=${TAR_RC}); DB backup still OK" >&2
+  add_component "app_storage" 0 "tar failed (rc=${TAR_RC})"
   LOCAL_FAILURE=1
   rm -f "${FILES_FILE}"
   FILES_FILE=""
@@ -148,22 +161,24 @@ for db in ${FAB_UTILS_DBS}; do
 done
 
 # --- fab_utils storage: shim_files (planpic/planpdf plan images + PDFs), non-fatal ---
+# Archived directly on the host (bind-mounted into the fab_utils container, not
+# forgedesk_app), so this needs `tar` on the host itself, not inside a container.
 FAB_UTILS_SHIM_FILE=""
 if [ -d "${FAB_UTILS_SHIM_PATH}" ]; then
-  FAB_UTILS_SHIM_FILE="${BACKUP_DIR}/fab_utils_shimfiles_${TIMESTAMP}.zip"
+  FAB_UTILS_SHIM_FILE="${BACKUP_DIR}/fab_utils_shimfiles_${TIMESTAMP}.tar.gz"
   set +e
-  (cd "$(dirname "${FAB_UTILS_SHIM_PATH}")" && zip -r -q -y - "$(basename "${FAB_UTILS_SHIM_PATH}")") > "${FAB_UTILS_SHIM_FILE}"
-  SHIM_ZIP_RC=$?
+  tar czf "${FAB_UTILS_SHIM_FILE}" -C "$(dirname "${FAB_UTILS_SHIM_PATH}")" "$(basename "${FAB_UTILS_SHIM_PATH}")"
+  SHIM_TAR_RC=$?
   set -e
-  if [ "${SHIM_ZIP_RC}" -eq 0 ] && [ -s "${FAB_UTILS_SHIM_FILE}" ]; then
+  if [ "${SHIM_TAR_RC}" -eq 0 ] && [ -s "${FAB_UTILS_SHIM_FILE}" ]; then
     echo "$(date): fab_utils shim_files archive succeeded -> ${FAB_UTILS_SHIM_FILE} ($(du -h "${FAB_UTILS_SHIM_FILE}" | cut -f1))"
     add_component "fab_utils_shimfiles" 1 "OK -> $(basename "${FAB_UTILS_SHIM_FILE}")"
-  elif [ "${SHIM_ZIP_RC}" -ne 0 ] && [ -s "${FAB_UTILS_SHIM_FILE}" ]; then
-    echo "$(date): WARNING - shim_files zip returned rc=${SHIM_ZIP_RC} but produced an archive; keeping ${FAB_UTILS_SHIM_FILE}" >&2
-    add_component "fab_utils_shimfiles" 1 "zip rc=${SHIM_ZIP_RC} but archive produced -> $(basename "${FAB_UTILS_SHIM_FILE}")"
+  elif [ "${SHIM_TAR_RC}" -eq 1 ] && [ -s "${FAB_UTILS_SHIM_FILE}" ]; then
+    echo "$(date): WARNING - shim_files tar returned rc=1 (some files skipped) but produced an archive; keeping ${FAB_UTILS_SHIM_FILE}" >&2
+    add_component "fab_utils_shimfiles" 1 "tar rc=1 but archive produced -> $(basename "${FAB_UTILS_SHIM_FILE}")"
   else
-    echo "$(date): WARNING - fab_utils shim_files archive failed (rc=${SHIM_ZIP_RC}); other backups still OK" >&2
-    add_component "fab_utils_shimfiles" 0 "zip failed (rc=${SHIM_ZIP_RC})"
+    echo "$(date): WARNING - fab_utils shim_files archive failed (rc=${SHIM_TAR_RC}); other backups still OK" >&2
+    add_component "fab_utils_shimfiles" 0 "tar failed (rc=${SHIM_TAR_RC})"
     LOCAL_FAILURE=1
     rm -f "${FAB_UTILS_SHIM_FILE}"
     FAB_UTILS_SHIM_FILE=""
@@ -175,27 +190,66 @@ else
 fi
 
 # --- Copy backups to remote server (non-fatal per file) ---
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
+
+# One upfront connectivity check so an auth/host-key/network problem is logged
+# once with its real reason, instead of the same silent failure repeated for
+# every file in the loop below.
+PROBE_ERR=$(mktemp)
+if ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" true 2>"${PROBE_ERR}"; then
+  echo "$(date): Remote SSH connectivity check OK (${REMOTE_USER}@${REMOTE_HOST})"
+else
+  echo "$(date): WARNING - remote SSH connectivity check FAILED: $(tr -d '\n' < "${PROBE_ERR}")" >&2
+fi
+rm -f "${PROBE_ERR}"
+
 REMOTE_OK_COUNT=0
 REMOTE_FAIL_COUNT=0
 for f in "${DB_FILE}" ${FILES_FILE:+"${FILES_FILE}"} ${FAB_UTILS_DB_FILES} ${FAB_UTILS_SHIM_FILE:+"${FAB_UTILS_SHIM_FILE}"}; do
-  if scp -o BatchMode=yes -o ConnectTimeout=15 \
-      "${f}" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" >/dev/null 2>&1; then
+  SCP_ERR=$(mktemp)
+  if scp "${SSH_OPTS[@]}" \
+      "${f}" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" >/dev/null 2>"${SCP_ERR}"; then
     echo "$(date): Remote copy succeeded -> ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/$(basename "${f}")"
     REMOTE_OK_COUNT=$((REMOTE_OK_COUNT + 1))
   else
-    echo "$(date): WARNING - remote copy of $(basename "${f}") failed (local backup still OK)" >&2
+    echo "$(date): WARNING - remote copy of $(basename "${f}") failed (local backup still OK): $(tr -d '\n' < "${SCP_ERR}")" >&2
     REMOTE_FAIL_COUNT=$((REMOTE_FAIL_COUNT + 1))
     REMOTE_FAILURE=1
   fi
+  rm -f "${SCP_ERR}"
 done
 add_component "remote_copy" "$([ "${REMOTE_FAIL_COUNT}" -eq 0 ] && echo 1 || echo 0)" "${REMOTE_OK_COUNT} succeeded, ${REMOTE_FAIL_COUNT} failed"
 
-# --- Retention: drop DB dumps and storage archives older than RETENTION_DAYS ---
-find "${BACKUP_DIR}" -name "forgedesk_*.sql.gz"          -type f -mtime +${RETENTION_DAYS} -delete
-find "${BACKUP_DIR}" -name "forgedesk_*_storage.zip"     -type f -mtime +${RETENTION_DAYS} -delete
-find "${BACKUP_DIR}" -name "fab_utils_*.sql.gz"          -type f -mtime +${RETENTION_DAYS} -delete
-find "${BACKUP_DIR}" -name "fab_utils_shimfiles_*.zip"   -type f -mtime +${RETENTION_DAYS} -delete
-echo "$(date): Cleanup complete (retention: ${RETENTION_DAYS} days)"
+# --- Local retention: drop DB dumps and storage archives older than LOCAL_RETENTION_DAYS ---
+find "${BACKUP_DIR}" -name "forgedesk_*.sql.gz"          -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
+find "${BACKUP_DIR}" -name "forgedesk_*_storage.tar.gz"  -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
+find "${BACKUP_DIR}" -name "fab_utils_*.sql.gz"          -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
+find "${BACKUP_DIR}" -name "fab_utils_shimfiles_*.tar.gz" -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
+echo "$(date): Local cleanup complete (retention: ${LOCAL_RETENTION_DAYS} days)"
+
+# --- Remote retention: drop backups on the remote host older than REMOTE_RETENTION_DAYS (non-fatal) ---
+# Uses the same four filename patterns as the local cleanup above, just run via
+# ssh against REMOTE_DIR instead of BACKUP_DIR.
+set +e
+CLEANUP_ERR=$(mktemp)
+ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+  "find ${REMOTE_DIR} -type f \\( \
+      -name 'forgedesk_*.sql.gz' -o \
+      -name 'forgedesk_*_storage.tar.gz' -o \
+      -name 'fab_utils_*.sql.gz' -o \
+      -name 'fab_utils_shimfiles_*.tar.gz' \
+    \\) -mtime +${REMOTE_RETENTION_DAYS} -delete" >/dev/null 2>"${CLEANUP_ERR}"
+REMOTE_CLEANUP_RC=$?
+set -e
+if [ "${REMOTE_CLEANUP_RC}" -eq 0 ]; then
+  echo "$(date): Remote cleanup complete (retention: ${REMOTE_RETENTION_DAYS} days)"
+  add_component "remote_retention" 1 "OK (retention: ${REMOTE_RETENTION_DAYS} days)"
+else
+  echo "$(date): WARNING - remote cleanup failed (rc=${REMOTE_CLEANUP_RC}): $(tr -d '\n' < "${CLEANUP_ERR}"); local backups still OK" >&2
+  add_component "remote_retention" 0 "ssh cleanup failed (rc=${REMOTE_CLEANUP_RC})"
+  REMOTE_FAILURE=1
+fi
+rm -f "${CLEANUP_ERR}"
 
 # --- Report overall run status to the app (red > orange > yellow > green) ---
 if [ "${REMOTE_FAILURE}" -eq 1 ]; then

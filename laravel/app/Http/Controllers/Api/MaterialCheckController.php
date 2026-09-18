@@ -7,9 +7,12 @@ use App\Models\JobReservation;
 use App\Models\JobReservationItem;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -19,6 +22,53 @@ class MaterialCheckController extends Controller
      * In-memory product cache to avoid N+1 queries
      */
     private $productCache = [];
+
+    /**
+     * Staging lifetime for an unclaimed material-check file — long enough to
+     * cover a slow reviewer, short enough that CleanMaterialCheckStaging
+     * clears abandoned checks in a reasonable time.
+     */
+    private const STAGING_TTL_HOURS = 6;
+
+    /**
+     * Saves the just-uploaded estimate/CSV to a durable holding area (the
+     * request's PHP temp upload otherwise vanishes once this request ends)
+     * so a later, separate "commit to reservation" request can claim it as
+     * a JobDocument — see BusinessJobController::createReservation(). Not
+     * every check gets committed, so nothing is written to job_documents
+     * (and no business_job_id) until that commit actually happens.
+     */
+    private function stageMaterialCheckFile(UploadedFile $file): array
+    {
+        $token = (string) Str::uuid();
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'dat');
+        $path = $file->storeAs('material_check_staging', "{$token}.{$ext}", 'local');
+
+        $meta = [
+            'path' => $path,
+            'original_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+            'file_mime' => $file->getMimeType(),
+        ];
+
+        Cache::put("material_check_staging:{$token}", $meta, now()->addHours(self::STAGING_TTL_HOURS));
+
+        return ['token' => $token] + $meta;
+    }
+
+    /** Merges the staged-file token into an already-built JSON response so the frontend can pass it through to the commit-reservation call. */
+    private function attachStagedFile($response, array $staged)
+    {
+        if (! $response instanceof \Illuminate\Http\JsonResponse) {
+            return $response;
+        }
+
+        $data = $response->getData(true);
+        $data['material_check_file_token'] = $staged['token'];
+        $data['material_check_file_name'] = $staged['original_name'];
+
+        return response()->json($data, $response->getStatusCode());
+    }
 
     /**
      * Test endpoint
@@ -223,12 +273,18 @@ class MaterialCheckController extends Controller
 
             $spreadsheet = $reader->load($file->getRealPath());
 
+            // Stashed so a later "commit to reservation" call can attach the
+            // exact file this check ran against as a JobDocument, without
+            // creating one for a check the user never commits (see
+            // BusinessJobController::createReservation()).
+            $staged = $this->stageMaterialCheckFile($file);
+
             if ($mode === 'ez_estimate') {
                 $boneyardSharedOnly = filter_var($request->input('boneyard_shared_only', false), FILTER_VALIDATE_BOOLEAN);
 
-                return $this->checkEzEstimate($spreadsheet, $boneyardSharedOnly);
+                return $this->attachStagedFile($this->checkEzEstimate($spreadsheet, $boneyardSharedOnly), $staged);
             } else {
-                return $this->checkGenericEstimate($request, $spreadsheet);
+                return $this->attachStagedFile($this->checkGenericEstimate($request, $spreadsheet), $staged);
             }
 
         } catch (\PhpOffice\PhpSpreadsheet\Reader\Exception $e) {
@@ -749,7 +805,10 @@ class MaterialCheckController extends Controller
             return response()->json(['error' => 'Validation failed', 'details' => $validator->errors()], 422);
         }
 
-        $path = $request->file('file')->getRealPath();
+        $uploadedFile = $request->file('file');
+        $staged = $this->stageMaterialCheckFile($uploadedFile);
+
+        $path = $uploadedFile->getRealPath();
         $handle = fopen($path, 'r');
         if (! $handle) {
             return response()->json(['error' => 'Could not open uploaded file'], 500);
@@ -876,11 +935,11 @@ class MaterialCheckController extends Controller
 
         $results = $this->mergeResultsBySku($results, $summary);
 
-        return response()->json([
+        return $this->attachStagedFile(response()->json([
             'message' => 'Material check completed',
             'summary' => $summary,
             'results' => $results,
-        ]);
+        ]), $staged);
     }
 
     /**

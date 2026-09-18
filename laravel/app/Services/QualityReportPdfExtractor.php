@@ -28,6 +28,9 @@ class QualityReportPdfExtractor
         'description' => 'Short Description of Issue',
     ];
 
+    /** Bottom margin excluded from parsing on every page (0.5in @ 72pt/in — the form's persistent footer band). */
+    private const FOOTER_MARGIN_POINTS = 36.0;
+
     public function extract(string $filePath): array
     {
         $document = (new Parser)->parseFile($filePath);
@@ -36,12 +39,67 @@ class QualityReportPdfExtractor
         $fullText = implode("\n", array_map(fn ($p) => $this->pageText($p), $pages));
         $rawStream = implode("\n", array_map(fn ($p) => $this->rawContentStream($p), $pages));
 
-        $plain = $this->extractPlainFields($fullText);
+        // Geometrically-detected footer lines (whatever their exact wording)
+        // from every page, so extractPlainFields() can skip them by content
+        // even though it otherwise works off the plain (position-less) text
+        // layer. This is what actually fixes "label on page N, answer on
+        // page N+1" — the footer sitting between them in the concatenated
+        // text no longer gets mistaken for the answer.
+        $footerLines = [];
+        foreach ($pages as $page) {
+            $footerLines = array_merge($footerLines, $this->footerBandLines($page));
+        }
+        $footerLines = array_values(array_unique($footerLines));
+
+        $plain = $this->extractPlainFields($fullText, $footerLines);
         $choices = $this->extractHighlightedChoices($rawStream);
 
         return array_merge($plain, $choices, [
             'raw_extracted_text' => $fullText,
         ]);
+    }
+
+    /**
+     * Every distinct text fragment whose baseline falls within the bottom
+     * FOOTER_MARGIN_POINTS of this page, read from the PDF's actual
+     * text-positioning data (Tm matrices) rather than guessed from wording —
+     * so it doesn't matter what the footer says, only where it sits.
+     *
+     * Deliberately returned as separate fragments rather than merged into
+     * reconstructed lines: getText()'s own column-spacing heuristics glue
+     * adjacent footer fragments together with inconsistent separators (a
+     * literal tab between "Page 1 of 2" and "Powered by", nothing at all
+     * between "Powered by" and "Downloaded on ..."), so a merged fragment
+     * would rarely appear verbatim in the plain-text line to match against.
+     * isFooterLine() instead strips each fragment out individually and
+     * checks what's left — order- and separator-independent.
+     *
+     * @return list<string>
+     */
+    private function footerBandLines($page): array
+    {
+        try {
+            $items = $page->getDataTm();
+        } catch (\Throwable) {
+            // Same trailing-image-only-page quirk pageText() guards against.
+            return [];
+        }
+
+        $fragments = [];
+        foreach ($items as $item) {
+            $y = (float) ($item[0][5] ?? 0);
+            if ($y >= self::FOOTER_MARGIN_POINTS) {
+                continue;
+            }
+            $text = trim((string) $item[1]);
+            // Skip very short fragments (stray punctuation/whitespace runs) —
+            // stripping something that generic could eat real content.
+            if (mb_strlen($text) >= 4) {
+                $fragments[] = $text;
+            }
+        }
+
+        return $fragments;
     }
 
     /** A trailing image-only page can trip a harmless array-offset warning in smalot's whitespace-position calc; that's promoted to an exception under Laravel's error handler, so each page is isolated. */
@@ -84,7 +142,8 @@ class QualityReportPdfExtractor
      * label-scanning approach WorkOrderController::parseExcel() uses for
      * the Excel work-order import.
      */
-    private function extractPlainFields(string $text): array
+    /** @param list<string> $footerLines Geometrically-detected footer lines from footerBandLines(), skipped wherever they'd otherwise be mistaken for a field's value. */
+    private function extractPlainFields(string $text, array $footerLines = []): array
     {
         $lines = preg_split('/\r\n|\r|\n/', $text);
         $lines = array_values(array_filter(array_map('trim', $lines), fn ($l) => $l !== ''));
@@ -113,13 +172,13 @@ class QualityReportPdfExtractor
         // footer is the last thing in that page's text layer. Skip footer
         // lines rather than treating the first line after the label as the
         // value.
-        $labelValue = function (string $label) use ($lines): ?string {
+        $labelValue = function (string $label) use ($lines, $footerLines): ?string {
             $idx = array_search($label, $lines, true);
             if ($idx === false) {
                 return null;
             }
             for ($i = $idx + 1; $i < count($lines); $i++) {
-                if ($this->isFooterLine($lines[$i])) {
+                if ($this->isFooterLine($lines[$i], $footerLines)) {
                     continue;
                 }
 
@@ -136,16 +195,23 @@ class QualityReportPdfExtractor
         $result['elevation_tag_guess'] = $labelValue(self::LABELS['elevation'].'*');
 
         // The description can run past the next line and across a page
-        // break; take everything after the label to the end of the
-        // document, skipping (not stopping at) each page's footer so
-        // description text continuing on the following page is kept.
+        // break; take everything after the label up to whichever comes
+        // first: the end of the document, or the next field's label (this
+        // form has since grown a "Picture of issue*" field after the
+        // description — every real field label ends in "*", which a
+        // free-text description never legitimately would). Footer lines are
+        // skipped (not treated as a stopping point) so description text
+        // continuing on the following page is kept.
         $descLabel = self::LABELS['description'].'*';
         $idx = array_search($descLabel, $lines, true);
         if ($idx !== false) {
             $descLines = [];
             for ($i = $idx + 1; $i < count($lines); $i++) {
-                if ($this->isFooterLine($lines[$i])) {
+                if ($this->isFooterLine($lines[$i], $footerLines)) {
                     continue;
+                }
+                if (str_ends_with($lines[$i], '*') && $lines[$i] !== $descLabel) {
+                    break;
                 }
                 $descLines[] = $lines[$i];
             }
@@ -155,8 +221,26 @@ class QualityReportPdfExtractor
         return $result;
     }
 
-    private function isFooterLine(string $line): bool
+    /**
+     * @param list<string> $footerLines Lines geometrically detected in the bottom margin band (see footerBandLines()) — checked first since it's exact and wording-independent. The static patterns remain as a fallback for whenever position data wasn't available (e.g. footerBandLines() hit the same trailing-page quirk pageText() guards against).
+     */
+    /**
+     * True when $line is made up entirely of footer fragments (see
+     * footerBandLines()) plus incidental whitespace — i.e. stripping every
+     * known fragment out of it leaves nothing. Handles getText() gluing
+     * several footer fragments onto one line with inconsistent separators,
+     * which an exact-line or prefix match can't. Falls back to the old
+     * wording-based patterns for whenever position data wasn't available.
+     */
+    private function isFooterLine(string $line, array $footerFragments = []): bool
     {
+        if ($footerFragments !== []) {
+            $remainder = str_replace($footerFragments, '', $line);
+            if (trim($remainder) === '') {
+                return true;
+            }
+        }
+
         return str_starts_with($line, 'Downloaded on') || (bool) preg_match('/^Page\s+\d+\s+of\s+\d+$/', $line);
     }
 

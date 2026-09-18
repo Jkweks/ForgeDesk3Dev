@@ -16,3 +16,9 @@ Schedule::command('users:expire-temp-passwords')->hourly();
 
 // Rebuild work-order priority ranking from due dates (locked rows keep their slot)
 Schedule::command('fd:resequence-priorities')->dailyAt('01:30')->withoutOverlapping();
+
+// Warn admins via the nav bar bell once disk usage crosses 70%
+Schedule::command('disk:check')->hourly();
+
+// Delete material-check files that were never committed to a reservation
+Schedule::command('material-check:clean-staging')->daily();

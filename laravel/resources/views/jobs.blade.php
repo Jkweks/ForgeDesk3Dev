@@ -2776,6 +2776,7 @@
         // ===== MATERIAL CHECK FUNCTIONS =====
         let materialCheckResults = [];
         let selectedMaterialItems = new Set();
+        let materialCheckFileToken = null;
 
         function showMaterialCheckModal() {
             // Reset modal state
@@ -2784,6 +2785,7 @@
             document.getElementById('jobBoneyardSharedBanner').style.display = 'none';
             document.getElementById('materialCheckResults').style.display = 'none';
             materialCheckResults = [];
+            materialCheckFileToken = null;
             selectedMaterialItems.clear();
 
             showModal(document.getElementById('materialCheckModal'));
@@ -2831,6 +2833,7 @@
 
                 const data = await response.json();
                 materialCheckResults = data.results;
+                materialCheckFileToken = data.material_check_file_token || null;
                 const banner = document.getElementById('jobBoneyardSharedBanner');
                 if (banner) banner.style.display = (!isCsv && data.boneyard_shared_only) ? '' : 'none';
                 displayMaterialCheckResults(data.results, data.summary);
@@ -3028,7 +3031,8 @@
                         requested_by_id: requestedById,
                         needed_by: neededBy || null,
                         notes: notes || null,
-                        items: items
+                        items: items,
+                        material_check_file_token: materialCheckFileToken
                     })
                 });
 

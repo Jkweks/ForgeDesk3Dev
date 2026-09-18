@@ -14,7 +14,7 @@ class QualityReport extends Model
     public const STATUSES = ['pending_review', 'verified', 'reviewed', 'rejected'];
 
     protected $fillable = [
-        'elevation_id', 'work_order_id', 'status',
+        'elevation_id', 'work_order_id', 'business_job_id', 'is_pre_forge', 'status',
         'report_date', 'pre_forge_completed_date', 'completed_at', 'inspector_name', 'problem_type', 'replacement_needed', 'issue_description',
         'raw_extracted_text', 'extracted_fields', 'elevation_tag_guess', 'job_text_guess',
         'auto_matched', 'match_confidence', 'match_candidates', 'matched_by_user_id',
@@ -27,6 +27,7 @@ class QualityReport extends Model
         'report_date' => 'date',
         'pre_forge_completed_date' => 'date',
         'completed_at' => 'datetime',
+        'is_pre_forge' => 'boolean',
         'replacement_needed' => 'boolean',
         'extracted_fields' => 'array',
         'match_candidates' => 'array',
@@ -36,6 +37,9 @@ class QualityReport extends Model
         'reviewed_at' => 'datetime',
     ];
 
+    /** Confidence threshold below which an auto-match is treated as no real job match and flagged Pre-Forge instead. */
+    public const AUTO_MATCH_CONFIDENCE_THRESHOLD = 50.0;
+
     public function elevation(): BelongsTo
     {
         return $this->belongsTo(FdWoElevation::class, 'elevation_id');
@@ -44,6 +48,17 @@ class QualityReport extends Model
     public function workOrder(): BelongsTo
     {
         return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
+    }
+
+    /**
+     * Direct job link for a report that's on a real, tracked job but has no
+     * matched elevation yet (a large job mid-flight, not yet broken into
+     * elevations) — elevation_id/work_order_id stay null, and
+     * elevation_tag_guess carries the manually-typed elevation text.
+     */
+    public function businessJob(): BelongsTo
+    {
+        return $this->belongsTo(BusinessJob::class, 'business_job_id');
     }
 
     public function uploader(): BelongsTo

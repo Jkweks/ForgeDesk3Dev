@@ -23,6 +23,21 @@ class ElevationMatcherService
     {
         $candidates = $this->candidatePool();
 
+        // The report's "Elevation / Door Opening" field frequently just says
+        // "Door" or "Door 3" rather than naming an elevation tag — when it
+        // does, narrow the pool to Door-type elevations first so a door
+        // opening can't get matched against an unrelated SF/CW elevation
+        // that merely happens to share more characters. Falls back to the
+        // full pool if that leaves nothing to match against.
+        if ($elevationTagText !== null && str_contains(mb_strtolower($elevationTagText), 'door')) {
+            $doorCandidates = $candidates->filter(
+                fn (FdWoElevation $elevation) => in_array('door', $elevation->elevationType?->matchTerms() ?? [], true)
+            );
+            if ($doorCandidates->isNotEmpty()) {
+                $candidates = $doorCandidates->values();
+            }
+        }
+
         if ($candidates->isEmpty()) {
             return ['elevation_id' => null, 'work_order_id' => null, 'confidence' => null, 'candidates' => []];
         }
@@ -62,7 +77,7 @@ class ElevationMatcherService
     private function candidatePool()
     {
         return FdWoElevation::query()
-            ->with(['workOrder.businessJob'])
+            ->with(['workOrder.businessJob', 'elevationType'])
             ->whereHas('workOrder', function ($q) {
                 $q->whereIn('status', ['active', 'on_hold'])
                     ->orWhere(function ($q2) {

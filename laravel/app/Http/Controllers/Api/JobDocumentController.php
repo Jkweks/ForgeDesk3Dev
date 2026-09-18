@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\JobDocument;
+use App\Models\JobReservation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -18,15 +19,16 @@ use Illuminate\Validation\Rule;
  */
 class JobDocumentController extends Controller
 {
-    public function index(int $jobId)
+    public function index(Request $request, int $jobId)
     {
         BusinessJob::findOrFail($jobId);
 
-        $docs = JobDocument::with('uploader:id,name')
-            ->where('business_job_id', $jobId)
-            ->orderByDesc('created_at')
-            ->get()
-            ->map(fn ($d) => $this->format($d));
+        $query = JobDocument::with('uploader:id,name')->where('business_job_id', $jobId);
+        if (! $request->boolean('include_archived')) {
+            $query->active();
+        }
+
+        $docs = $query->orderByDesc('created_at')->get()->map(fn ($d) => $this->format($d));
 
         return response()->json([
             'documents' => $docs,
@@ -83,6 +85,14 @@ class JobDocumentController extends Controller
     {
         $doc = JobDocument::where('business_job_id', $jobId)->findOrFail($documentId);
 
+        if ($doc->job_reservation_id) {
+            $reservation = JobReservation::withTrashed()->find($doc->job_reservation_id);
+            $stillActive = $reservation && $reservation->deleted_at === null && $reservation->status !== 'cancelled';
+            if ($stillActive) {
+                return response()->json(['error' => 'This document is attached to an active reservation and cannot be deleted until it is cancelled.'], 422);
+            }
+        }
+
         Storage::disk('local')->delete($doc->file_path);
         $doc->delete();
 
@@ -94,6 +104,7 @@ class JobDocumentController extends Controller
         return [
             'id' => $d->id,
             'business_job_id' => $d->business_job_id,
+            'job_reservation_id' => $d->job_reservation_id,
             'doc_type' => $d->doc_type,
             'doc_type_label' => JobDocument::TYPES[$d->doc_type] ?? $d->doc_type,
             'label' => $d->label,
@@ -101,6 +112,8 @@ class JobDocumentController extends Controller
             'file_size' => $d->file_size,
             'file_mime' => $d->file_mime,
             'uploaded_by_name' => $d->uploader?->name,
+            'archived' => $d->archived,
+            'archived_at' => $d->archived_at?->toIso8601String(),
             'download_url' => "/api/v1/business-jobs/{$d->business_job_id}/documents/{$d->id}/download",
             'created_at' => $d->created_at->toIso8601String(),
         ];

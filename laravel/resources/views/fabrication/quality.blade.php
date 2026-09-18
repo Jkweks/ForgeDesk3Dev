@@ -126,7 +126,7 @@
                           <th class="qr-sortable" onclick="qrSortBy('work_order_label')">Work Order <i class="ti qr-sort-icon" id="qr-sort-icon-work_order_label"></i></th>
                           <th class="qr-sortable" onclick="qrSortBy('elevation_tag')">Elevation <i class="ti qr-sort-icon" id="qr-sort-icon-elevation_tag"></i></th>
                           <th class="qr-sortable" onclick="qrSortBy('report_date')">Issue Date <i class="ti qr-sort-icon" id="qr-sort-icon-report_date"></i></th>
-                          <th class="qr-sortable" onclick="qrSortBy('inspector_name')">Completed By <i class="ti qr-sort-icon" id="qr-sort-icon-inspector_name"></i></th>
+                          <th class="qr-sortable" onclick="qrSortBy('inspector_name')">Reported By <i class="ti qr-sort-icon" id="qr-sort-icon-inspector_name"></i></th>
                           <th class="qr-sortable" onclick="qrSortBy('problem_type')">Problem Type <i class="ti qr-sort-icon" id="qr-sort-icon-problem_type"></i></th>
                           <th class="qr-sortable" onclick="qrSortBy('replacement_needed')">Replacement? <i class="ti qr-sort-icon" id="qr-sort-icon-replacement_needed"></i></th>
                           <th class="qr-sortable" onclick="qrSortBy('match_confidence')">Match <i class="ti qr-sort-icon" id="qr-sort-icon-match_confidence"></i></th>
@@ -159,15 +159,11 @@
               <input type="file" class="form-control" id="qr-upload-file" accept="application/pdf">
             </div>
             <div class="mb-3">
-              <label class="form-label">Elevation (optional — leave blank to review later)</label>
-              <select class="form-select" id="qr-upload-elevation" onchange="qrToggleUploadPreForgeDate()">
+              <label class="form-label">Elevation (optional — leave blank to auto-match after upload)</label>
+              <select class="form-select" id="qr-upload-elevation">
                 <option value="">Not sure yet</option>
               </select>
-            </div>
-            <div class="mb-3" id="qr-upload-preforge-date-wrap" style="display:none;">
-              <label class="form-label">Completed date</label>
-              <input type="date" class="form-control" id="qr-upload-preforge-date">
-              <div class="form-text">When this job/elevation was actually finished — drives the incident-rate trend the same way a tracked elevation's completion date would.</div>
+              <div class="form-text">If left blank, or if no confident match is found, the report is flagged Pre-Forge for manual job/elevation entry on review.</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -197,6 +193,15 @@
             <div class="form-hint mt-1">
               Which date drives the incident-rate line: when the issue was reported, or when the underlying job/elevation was completed.
               The two 13-week charts always use date reported.
+            </div>
+
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="qr-settings-show-projection">
+              <label class="form-check-label" for="qr-settings-show-projection">Show month-to-date projection on incident rate chart</label>
+            </div>
+            <div class="form-hint mt-1">
+              A dashed run-rate estimate for the current, still-in-progress month. Off by default — early-month projections
+              can swing wildly on a handful of cases.
             </div>
           </div>
           <div class="modal-footer">
@@ -239,7 +244,7 @@
 
     <!-- Detail / edit modal -->
     <div class="modal" id="qr-detail-modal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">Quality report</h5>
@@ -247,58 +252,90 @@
           </div>
           <div class="modal-body">
             <div class="row">
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Job</label>
-                <select class="form-select" id="qr-d-job" onchange="qrOnJobChange()"></select>
-                <div class="form-hint mt-1" id="qr-d-job-source"></div>
-                <div class="mt-1" id="qr-d-job-text-wrap" style="display:none;">
-                  <input type="text" class="form-control form-control-sm" id="qr-d-job-text-guess" placeholder="Job name (not tied to a tracked elevation)">
-                  <div class="form-hint mt-1">Saved on the report directly since there's no tracked job to read a name from.</div>
+              <!-- Form -->
+              <div class="col-lg-6">
+                <div class="row">
+                  <div class="col-md-6 mb-3" id="qr-d-job-select-wrap">
+                    <label class="form-label">Job</label>
+                    <select class="form-select" id="qr-d-job" onchange="qrOnJobChange()"></select>
+                    <div class="form-hint mt-1" id="qr-d-job-source"></div>
+                  </div>
+                  <div class="col-md-6 mb-3" id="qr-d-job-text-wrap" style="display:none;">
+                    <label class="form-label">Job name</label>
+                    <input type="text" class="form-control" id="qr-d-job-text-guess" placeholder="Job name (parsed from the PDF)">
+                    <div class="form-hint mt-1">Pre-Forge — no tracked job. Pre-filled from the PDF; edit as needed.</div>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Date issue discovered</label>
+                    <input type="date" class="form-control" id="qr-d-report-date">
+                  </div>
+                  <div class="col-md-6 mb-3" id="qr-d-elevation-select-wrap">
+                    <label class="form-label">Elevation</label>
+                    <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeFields()"></select>
+                  </div>
+                  <div class="col-md-6 mb-3" id="qr-d-elevation-text-wrap" style="display:none;">
+                    <label class="form-label">Elevation</label>
+                    <input type="text" class="form-control" id="qr-d-elevation-text-guess" placeholder="Elevation (parsed from the PDF)">
+                    <div class="form-hint mt-1">Pre-filled from the PDF; edit as needed.</div>
+                  </div>
+                  <div class="col-md-6 mb-3" id="qr-d-preforge-date-wrap" style="display:none;">
+                    <label class="form-label">Completed date</label>
+                    <input type="date" class="form-control" id="qr-d-preforge-date">
+                    <div class="form-hint mt-1">Drives the incident-rate trend in place of a tracked elevation's completion date.</div>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Reported by</label>
+                    <input type="text" class="form-control" id="qr-d-inspector">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Date Reported</label>
+                    <input type="text" class="form-control" id="qr-d-completed-at" disabled>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Problem type</label>
+                    <select class="form-select" id="qr-d-problem-type" onchange="qrOnProblemTypeChange()"></select>
+                  </div>
+                  <div class="col-md-6 mb-3" id="qr-d-problem-type-other-wrap" style="display:none;">
+                    <label class="form-label">Type (other)</label>
+                    <input type="text" class="form-control" id="qr-d-problem-type-other" placeholder="Describe the problem type">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Replacement needed?</label>
+                    <select class="form-select" id="qr-d-replacement">
+                      <option value="">Unknown</option>
+                      <option value="1">Yes</option>
+                      <option value="0">No</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6 mb-3" style="display:none;">
+                    <label class="form-label">Match confidence</label>
+                    <input type="text" class="form-control" id="qr-d-confidence" disabled>
+                  </div>
+                  <div class="col-12 mb-3">
+                    <label class="form-label">Issue description</label>
+                    <textarea class="form-control" id="qr-d-description" rows="4"></textarea>
+                  </div>
+                  <div class="col-12">
+                    <div id="qr-d-files"></div>
+                  </div>
                 </div>
               </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Date issue discovered</label>
-                <input type="date" class="form-control" id="qr-d-report-date">
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Elevation</label>
-                <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeDate(); qrToggleDetailJobTextGuess();"></select>
-              </div>
-              <div class="col-md-6 mb-3" id="qr-d-preforge-date-wrap" style="display:none;">
-                <label class="form-label">Completed date</label>
-                <input type="date" class="form-control" id="qr-d-preforge-date">
-                <div class="form-hint mt-1">Drives the incident-rate trend in place of a tracked elevation's completion date.</div>
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Completed by</label>
-                <input type="text" class="form-control" id="qr-d-inspector">
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Completed at</label>
-                <input type="text" class="form-control" id="qr-d-completed-at" disabled>
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Problem type</label>
-                <input type="text" class="form-control" id="qr-d-problem-type">
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Replacement needed?</label>
-                <select class="form-select" id="qr-d-replacement">
-                  <option value="">Unknown</option>
-                  <option value="1">Yes</option>
-                  <option value="0">No</option>
-                </select>
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label">Match confidence</label>
-                <input type="text" class="form-control" id="qr-d-confidence" disabled>
-              </div>
-              <div class="col-12 mb-3">
-                <label class="form-label">Issue description</label>
-                <textarea class="form-control" id="qr-d-description" rows="4"></textarea>
-              </div>
-              <div class="col-12">
-                <div id="qr-d-files"></div>
+
+              <!-- PDF reader (side-by-side with the form) -->
+              <div class="col-lg-6">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <label class="form-label mb-0">Report PDF</label>
+                  <div class="btn-list" id="qr-d-pdf-actions" style="display:none;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="qrExpandInlinePdf()">
+                      <i class="ti ti-arrows-maximize me-1"></i>View
+                    </button>
+                    <a href="#" id="qr-d-pdf-download" class="btn btn-sm btn-outline-secondary">
+                      <i class="ti ti-download me-1"></i>Download
+                    </a>
+                  </div>
+                </div>
+                <div id="qr-d-pdf-empty" class="text-muted small">No files</div>
+                <iframe id="qr-d-pdf-frame" src="" style="width:100%; height:65vh; border:1px solid var(--tblr-border-color); border-radius:4px; display:none;"></iframe>
               </div>
             </div>
           </div>
@@ -329,6 +366,7 @@ let qrCharts = {};
 let qrSortKey = 'created_at';
 let qrSortDir = 'desc';
 let qrIncidentBasis = (typeof currentUser !== 'undefined' && currentUser?.quality_report_prefs?.incident_rate_basis) || 'report_date';
+let qrShowProjection = (typeof currentUser !== 'undefined' && currentUser?.quality_report_prefs?.incident_rate_show_projection) || false;
 
 document.addEventListener('DOMContentLoaded', () => {
   qrLoadReports();
@@ -337,8 +375,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('qr-status-filter').addEventListener('change', qrLoadReports);
   document.getElementById('qr-upload-btn').addEventListener('click', () => {
     document.getElementById('qr-upload-elevation').value = '';
-    document.getElementById('qr-upload-preforge-date').value = '';
-    qrToggleUploadPreForgeDate();
     qrShowModal('qr-upload-modal');
   });
 });
@@ -360,22 +396,29 @@ async function qrLoadAnalytics() {
 
 function qrOpenReportSettings() {
   document.getElementById('qr-settings-incident-basis').value = qrIncidentBasis;
+  document.getElementById('qr-settings-show-projection').checked = qrShowProjection;
   qrShowModal('qr-settings-modal');
 }
 
 async function qrSaveReportSettings() {
   const basis = document.getElementById('qr-settings-incident-basis').value;
+  const showProjection = document.getElementById('qr-settings-show-projection').checked;
   const btn = document.getElementById('qr-settings-save-btn');
   btn.disabled = true;
   try {
     await qrApiJson('/user/quality-report-prefs', {
       method: 'PUT',
-      body: JSON.stringify({ incident_rate_basis: basis }),
+      body: JSON.stringify({ incident_rate_basis: basis, incident_rate_show_projection: showProjection }),
     });
 
     qrIncidentBasis = basis;
+    qrShowProjection = showProjection;
     if (typeof currentUser !== 'undefined' && currentUser) {
-      currentUser.quality_report_prefs = { ...(currentUser.quality_report_prefs || {}), incident_rate_basis: basis };
+      currentUser.quality_report_prefs = {
+        ...(currentUser.quality_report_prefs || {}),
+        incident_rate_basis: basis,
+        incident_rate_show_projection: showProjection,
+      };
       try { localStorage.setItem('userData', JSON.stringify(currentUser)); } catch (e) { /* best-effort */ }
     }
 
@@ -450,10 +493,12 @@ function qrRenderIncidentRateChart(rows) {
   ];
 
   // Month-to-date run rate for the in-progress month only: a short dashed
-  // segment branching off the last completed month's actual point. Omitted
-  // entirely (not just hidden) when the backend suppressed it — no cases
-  // reported yet this month, or the month just isn't in the window.
-  if (lastProjected != null) {
+  // segment branching off the last completed month's actual point. Off by
+  // default (Report Settings) — early-month projections can swing wildly on
+  // a handful of cases. Also omitted entirely (not just hidden) when the
+  // backend suppressed it — no cases reported yet this month, or the month
+  // just isn't in the window.
+  if (qrShowProjection && lastProjected != null) {
     datasets.push({
       type: 'line',
       label: 'Projected (month to date)',
@@ -482,6 +527,17 @@ function qrRenderIncidentRateChart(rows) {
       scales: {
         y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Joints completed' } },
         y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Incident rate (%)' } },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            afterLabel: (item) => {
+              if (item.dataset.label !== 'Incident rate (%)') return undefined;
+              const cases = rows[item.dataIndex]?.case_count;
+              return cases != null ? `Cases reported: ${cases}` : undefined;
+            },
+          },
+        },
       },
     },
   });
@@ -604,26 +660,49 @@ function qrWorkOrderSuffix(workOrderLabel, workOrderId) {
   return parts.length > 1 ? parts[parts.length - 1] : workOrderLabel;
 }
 
-/** "Pre-Forge" picker option for issues on jobs that predate ForgeDesk tracking entirely — self-disables a year after the historical-data changeover so it doesn't linger indefinitely. */
+/** "Pre-Forge" picker option for jobs that predate ForgeDesk tracking entirely (or that no confident auto-match was found for) — self-disables a year after the historical-data changeover so it doesn't linger indefinitely. Lives on the Job dropdown (not Elevation) since it's fundamentally "no tracked job", not "no tracked elevation". */
 const QR_PRE_FORGE_CUTOFF = new Date('2027-09-16T00:00:00');
 function qrPreForgeAvailable() { return new Date() < QR_PRE_FORGE_CUTOFF; }
 const QR_PRE_FORGE_OPTION = '<option value="pre-forge">Pre-Forge (pre-tracking)</option>';
 
-function qrToggleUploadPreForgeDate() {
-  const isPreForge = document.getElementById('qr-upload-elevation').value === 'pre-forge';
-  document.getElementById('qr-upload-preforge-date-wrap').style.display = isPreForge ? '' : 'none';
+/** Problem type options, verbatim as they appear on the source PDF form (see QualityReportPdfExtractor); "Other" reveals a free-text box since the form itself offers it as a catch-all. */
+const QR_PROBLEM_TYPES = [
+  'Extrusion Defect', 'Fitment Issue', 'Hardware Prep Issue', 'Missing Hardware',
+  'Missing Vinyl', 'Missing Accessories (Setting blocks, screws, ect)', 'Missing Stops',
+  'Length/Size Issue', 'Other',
+];
+
+function qrRenderProblemTypeOptions(selectedType) {
+  const known = QR_PROBLEM_TYPES.includes(selectedType) ? selectedType : (selectedType ? 'Other' : '');
+  const options = ['<option value="">— Select —</option>']
+    .concat(QR_PROBLEM_TYPES.map(t => `<option value="${t}" ${t === known ? 'selected' : ''}>${t}</option>`));
+  document.getElementById('qr-d-problem-type').innerHTML = options.join('');
+  document.getElementById('qr-d-problem-type-other-wrap').style.display = known === 'Other' ? '' : 'none';
+  document.getElementById('qr-d-problem-type-other').value = known === 'Other' ? (selectedType || '') : '';
 }
 
-function qrToggleDetailPreForgeDate() {
-  const isPreForge = document.getElementById('qr-d-elevation').value === 'pre-forge';
+function qrOnProblemTypeChange() {
+  const isOther = document.getElementById('qr-d-problem-type').value === 'Other';
+  document.getElementById('qr-d-problem-type-other-wrap').style.display = isOther ? '' : 'none';
+}
+
+/**
+ * Two cases swap the Elevation select for free-text entry:
+ *  - Job = "Pre-Forge": no tracked job/elevation at all — the Job select
+ *    itself is also swapped for free-text, and the completed-date field
+ *    appears in place of a tracked elevation's completion date.
+ *  - Elevation = "Other — not tracked yet": a real, selected job whose
+ *    elevation for this issue just isn't entered in ForgeDesk yet (a large
+ *    job mid-flight). The Job select stays a real job either way.
+ */
+function qrToggleDetailPreForgeFields() {
+  const isPreForge = document.getElementById('qr-d-job').value === 'pre-forge';
+  const manualElevation = !isPreForge && document.getElementById('qr-d-elevation').value === 'manual';
+
+  document.getElementById('qr-d-job-text-wrap').style.display = isPreForge ? '' : 'none';
+  document.getElementById('qr-d-elevation-select-wrap').style.display = isPreForge ? 'none' : '';
+  document.getElementById('qr-d-elevation-text-wrap').style.display = (isPreForge || manualElevation) ? '' : 'none';
   document.getElementById('qr-d-preforge-date-wrap').style.display = isPreForge ? '' : 'none';
-}
-
-/** No tracked elevation (Unassigned or Pre-Forge) means there's no real business job to read a name from — show the manually-saved job text field instead of just the passive extraction hint. */
-function qrToggleDetailJobTextGuess() {
-  const elevationVal = document.getElementById('qr-d-elevation').value;
-  const hasTrackedElevation = elevationVal !== '' && elevationVal !== 'pre-forge';
-  document.getElementById('qr-d-job-text-wrap').style.display = hasTrackedElevation ? 'none' : '';
 }
 
 async function qrLoadElevations() {
@@ -637,47 +716,57 @@ async function qrLoadElevations() {
       label: `${el.elevation_tag} (${qrWorkOrderSuffix(el.work_order_label, el.work_order_id)})`,
     })).sort((a, b) => a.elevationTag.localeCompare(b.elevationTag, undefined, { numeric: true, sensitivity: 'base' }));
 
+    // Every in-flight job goes in the picker, not just ones with a tracked
+    // elevation already — a large job mid-flight may have none entered yet.
     const jobMap = new Map();
     qrElevations.forEach(el => {
       if (el.jobId != null && !jobMap.has(el.jobId)) jobMap.set(el.jobId, el.jobName);
     });
+    (data?.jobs ?? []).forEach(j => jobMap.set(j.id, j.job_name || ''));
     qrJobs = [...jobMap.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 
-    const options = [];
-    if (qrPreForgeAvailable()) options.push(QR_PRE_FORGE_OPTION);
-    options.push('<option value="">Not sure yet</option>');
-    options.push(...qrElevations.map(el => `<option value="${el.id}">${el.label}</option>`));
+    const options = ['<option value="">Not sure yet</option>']
+      .concat(qrElevations.map(el => `<option value="${el.id}">${el.label}</option>`));
     document.getElementById('qr-upload-elevation').innerHTML = options.join('');
   } catch (e) {
     console.error('Failed to load elevations for matching', e);
   }
 }
 
-/** Rebuilds the Job dropdown; called once per detail-modal open with the recommended job pre-selected. */
+/** Rebuilds the Job dropdown; called once per detail-modal open with the recommended job (or "pre-forge") pre-selected. */
 function qrRenderJobOptions(recommendedJobId) {
-  const options = ['<option value="">All jobs (unfiltered)</option>']
-    .concat(qrJobs.map(j => `<option value="${j.id}" ${j.id === recommendedJobId ? 'selected' : ''}>${j.name}</option>`));
+  const options = ['<option value="">All jobs (unfiltered)</option>'];
+  if (qrPreForgeAvailable()) {
+    options.push(`<option value="pre-forge" ${recommendedJobId === 'pre-forge' ? 'selected' : ''}>Pre-Forge (pre-tracking)</option>`);
+  }
+  options.push(...qrJobs.map(j => `<option value="${j.id}" ${j.id === recommendedJobId ? 'selected' : ''}>${j.name}</option>`));
   document.getElementById('qr-d-job').innerHTML = options.join('');
 }
 
 function qrOnJobChange() {
   qrRenderElevationOptions();
+  qrToggleDetailPreForgeFields();
 }
 
-/** Narrows the detail modal's elevation dropdown to elevations on the selected job, since the full list can span many unrelated jobs. */
+/**
+ * Narrows the detail modal's elevation dropdown to elevations on the
+ * selected job, since the full list can span many unrelated jobs. Also
+ * offers "Other — not tracked yet" for a real, selected job whose elevation
+ * for this issue isn't entered in ForgeDesk yet (see qrToggleDetailPreForgeFields()).
+ */
 function qrRenderElevationOptions() {
   const jobId = document.getElementById('qr-d-job').value;
+  const isPreForge = jobId === 'pre-forge';
 
   let pool = qrElevations;
-  if (jobId !== '') {
+  if (jobId !== '' && !isPreForge) {
     pool = qrElevations.filter(el => String(el.jobId) === jobId);
   }
 
-  const options = [];
-  if (qrPreForgeAvailable()) {
-    options.push(`<option value="pre-forge" ${qrDetailSelectedElevationId === 'pre-forge' ? 'selected' : ''}>Pre-Forge (pre-tracking)</option>`);
+  const options = ['<option value="">Unassigned</option>'];
+  if (!isPreForge) {
+    options.push(`<option value="manual" ${qrDetailSelectedElevationId === 'manual' ? 'selected' : ''}>Other — not tracked yet (enter manually)</option>`);
   }
-  options.push('<option value="">Unassigned</option>');
   options.push(...pool.map(el => `<option value="${el.id}" ${el.id === qrDetailSelectedElevationId ? 'selected' : ''}>${el.label}</option>`));
   document.getElementById('qr-d-elevation').innerHTML = options.join('');
 }
@@ -743,7 +832,7 @@ function qrRenderTable() {
     return `
     <tr onclick="qrOpenDetail(${r.id})" style="cursor:pointer;">
       <td>${new Date(r.created_at).toLocaleDateString()}</td>
-      <td>${r.work_order_label || '<span class="text-muted">-</span>'}</td>
+      <td>${r.work_order_label || (r.is_pre_forge ? '<span class="badge bg-secondary-lt text-secondary">Pre-Forge</span>' : '<span class="text-muted">-</span>')}</td>
       <td>${r.elevation_tag || '<span class="text-muted">Unassigned</span>'}</td>
       <td>${r.report_date || '<span class="text-muted">-</span>'}</td>
       <td>${r.inspector_name || '<span class="text-muted">-</span>'}</td>
@@ -768,13 +857,7 @@ async function qrUploadFile() {
     const fd = new FormData();
     fd.append('file', fileInput.files[0]);
     const elevationId = document.getElementById('qr-upload-elevation').value;
-    if (elevationId === 'pre-forge') {
-      fd.append('elevation_tag_guess', 'Pre-Forge');
-      const completedDate = document.getElementById('qr-upload-preforge-date').value;
-      if (completedDate) fd.append('pre_forge_completed_date', completedDate);
-    } else if (elevationId) {
-      fd.append('elevation_id', elevationId);
-    }
+    if (elevationId) fd.append('elevation_id', elevationId);
 
     const result = await qrApiMultipart('/quality-reports', fd);
     if (!result) return;
@@ -796,40 +879,53 @@ async function qrOpenDetail(id) {
     const r = await qrApiJson(`/quality-reports/${id}`);
     qrEditingId = id;
 
-    qrDetailSelectedElevationId = (r.elevation_id == null && r.elevation_tag_guess === 'Pre-Forge') ? 'pre-forge' : r.elevation_id;
-    qrRenderJobOptions(r.business_job_id ?? null);
+    qrDetailSelectedElevationId = r.elevation_id != null
+      ? r.elevation_id
+      : (!r.is_pre_forge && r.business_job_id != null) ? 'manual' : '';
+    qrRenderJobOptions(r.is_pre_forge ? 'pre-forge' : (r.business_job_id ?? ''));
     qrRenderElevationOptions();
+    qrToggleDetailPreForgeFields();
 
     const pdfJobText = r.extracted_fields?.job_text || '';
+    const pdfElevationText = r.extracted_fields?.elevation_tag_guess || '';
     document.getElementById('qr-d-job-source').textContent = (pdfJobText && r.elevation_id != null)
       ? `Reference: "${pdfJobText}"`
       : '';
     document.getElementById('qr-d-job-text-guess').value = r.job_text_guess || pdfJobText || '';
-    qrToggleDetailJobTextGuess();
+    document.getElementById('qr-d-elevation-text-guess').value = r.elevation_tag_guess || pdfElevationText || '';
 
     document.getElementById('qr-d-report-date').value = r.report_date || '';
     document.getElementById('qr-d-inspector').value = r.inspector_name || '';
-    document.getElementById('qr-d-completed-at').value = r.completed_at ? new Date(r.completed_at).toLocaleString() : '';
-    document.getElementById('qr-d-problem-type').value = r.problem_type || '';
+    document.getElementById('qr-d-completed-at').value = r.completed_at ? new Date(r.completed_at).toLocaleDateString() : '';
+    qrRenderProblemTypeOptions(r.problem_type || '');
     document.getElementById('qr-d-replacement').value = r.replacement_needed === true ? '1' : (r.replacement_needed === false ? '0' : '');
     document.getElementById('qr-d-confidence').value = r.match_confidence != null
       ? `${Math.round(r.match_confidence)}%${r.auto_matched ? ' (auto-matched)' : ' (manually assigned)'}`
       : '';
     document.getElementById('qr-d-description').value = r.issue_description || '';
     document.getElementById('qr-d-preforge-date').value = r.pre_forge_completed_date || '';
-    qrToggleDetailPreForgeDate();
 
-    const files = (r.files || []).map(f => `
+    const files = r.files || [];
+    const fileRows = files.map((f, i) => `
       <div class="d-flex align-items-center gap-2 mb-1">
         <i class="ti ti-file-text"></i>
         <span class="flex-fill">${f.original_name}</span>
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="qrViewPdf(${r.id}, ${f.id}, '${(f.original_name || 'Report PDF').replace(/'/g, "\\'")}')">
+        <button type="button" class="btn btn-sm ${i === 0 ? 'btn-primary' : 'btn-outline-secondary'}" id="qr-d-file-view-${f.id}" onclick="qrShowPdfInline(${r.id}, ${f.id}, '${(f.original_name || 'Report PDF').replace(/'/g, "\\'")}', '${f.download_url}')">
           <i class="ti ti-eye me-1"></i>View
         </button>
         <a href="${f.download_url}" class="btn btn-sm btn-outline-secondary"><i class="ti ti-download"></i></a>
       </div>
-    `).join('') || '<span class="text-muted">No files</span>';
-    document.getElementById('qr-d-files').innerHTML = files;
+    `).join('');
+    document.getElementById('qr-d-files').innerHTML = fileRows || '<span class="text-muted">No files</span>';
+
+    if (files.length) {
+      qrShowPdfInline(r.id, files[0].id, files[0].original_name || 'Report PDF', files[0].download_url);
+    } else {
+      document.getElementById('qr-d-pdf-frame').style.display = 'none';
+      document.getElementById('qr-d-pdf-frame').src = '';
+      document.getElementById('qr-d-pdf-actions').style.display = 'none';
+      document.getElementById('qr-d-pdf-empty').style.display = '';
+    }
 
     const isPending = r.status === 'pending_review';
     document.getElementById('qr-d-verify-btn').style.display = isPending ? '' : 'none';
@@ -846,21 +942,31 @@ async function qrOpenDetail(id) {
 async function qrSaveReport() {
   try {
     const replacementVal = document.getElementById('qr-d-replacement').value;
+    const jobVal = document.getElementById('qr-d-job').value;
+    const isPreForge = jobVal === 'pre-forge';
     const elevationVal = document.getElementById('qr-d-elevation').value;
+    const manualElevation = !isPreForge && elevationVal === 'manual';
+    const problemTypeVal = document.getElementById('qr-d-problem-type').value;
+
     const payload = {
-      elevation_id: elevationVal === 'pre-forge' ? null : (elevationVal || null),
+      is_pre_forge: isPreForge,
+      elevation_id: (isPreForge || manualElevation) ? null : (elevationVal || null),
+      // Real, tracked job with no matched elevation yet (large job mid-flight) — keep the direct job link.
+      business_job_id: (!isPreForge && manualElevation) ? (jobVal || null) : null,
       report_date: document.getElementById('qr-d-report-date').value || null,
       inspector_name: document.getElementById('qr-d-inspector').value.trim() || null,
-      problem_type: document.getElementById('qr-d-problem-type').value.trim() || null,
+      problem_type: problemTypeVal === 'Other'
+        ? (document.getElementById('qr-d-problem-type-other').value.trim() || 'Other')
+        : (problemTypeVal || null),
       replacement_needed: replacementVal === '' ? null : replacementVal === '1',
       issue_description: document.getElementById('qr-d-description').value.trim() || null,
     };
-    if (elevationVal === 'pre-forge') {
-      payload.elevation_tag_guess = 'Pre-Forge';
-      payload.pre_forge_completed_date = document.getElementById('qr-d-preforge-date').value || null;
-    }
-    if (elevationVal === '' || elevationVal === 'pre-forge') {
+    if (isPreForge) {
       payload.job_text_guess = document.getElementById('qr-d-job-text-guess').value.trim() || null;
+      payload.elevation_tag_guess = document.getElementById('qr-d-elevation-text-guess').value.trim() || null;
+      payload.pre_forge_completed_date = document.getElementById('qr-d-preforge-date').value || null;
+    } else if (manualElevation) {
+      payload.elevation_tag_guess = document.getElementById('qr-d-elevation-text-guess').value.trim() || null;
     }
     await qrApiJson(`/quality-reports/${qrEditingId}`, { method: 'PUT', body: JSON.stringify(payload) });
     qrHideModal('qr-detail-modal');
@@ -896,14 +1002,54 @@ async function qrReviewReport() {
   }
 }
 
-function qrViewPdf(reportId, fileId, title) {
-  document.getElementById('qr-pdf-modal-title').textContent = title;
-  document.getElementById('qr-pdf-modal-frame').src = `${API_BASE}/quality-reports/${reportId}/files/${fileId}/view`;
-  qrShowModal('qr-pdf-modal');
+let qrInlinePdfUrl = null;
+let qrInlinePdfTitle = null;
+
+/** Loads a file into the detail modal's side-by-side PDF pane (so the form and the PDF are visible together) instead of a separate popup. */
+function qrShowPdfInline(reportId, fileId, title, downloadUrl) {
+  qrInlinePdfUrl = `${API_BASE}/quality-reports/${reportId}/files/${fileId}/view`;
+  qrInlinePdfTitle = title;
+
+  const frame = document.getElementById('qr-d-pdf-frame');
+  frame.src = qrInlinePdfUrl;
+  frame.style.display = '';
+  document.getElementById('qr-d-pdf-empty').style.display = 'none';
+  document.getElementById('qr-d-pdf-actions').style.display = '';
+  document.getElementById('qr-d-pdf-download').href = downloadUrl || `${API_BASE}/quality-reports/${reportId}/files/${fileId}/download`;
+
+  document.querySelectorAll('[id^="qr-d-file-view-"]').forEach(btn => {
+    btn.classList.toggle('btn-primary', btn.id === `qr-d-file-view-${fileId}`);
+    btn.classList.toggle('btn-outline-secondary', btn.id !== `qr-d-file-view-${fileId}`);
+  });
 }
 
-document.getElementById('qr-pdf-modal').addEventListener('hidden.bs.modal', () => {
+/**
+ * Full-size popup of whichever file is currently loaded in the side-by-side
+ * pane — for zooming in without shrinking the form. Opened from inside the
+ * already-open detail modal, so Bootstrap's default equal z-index across
+ * modals would otherwise paint this one behind the detail modal (both sit
+ * at the same stacking level, and the detail modal comes later in the DOM);
+ * bump this modal and its own backdrop above the detail modal's.
+ */
+function qrExpandInlinePdf() {
+  if (!qrInlinePdfUrl) return;
+  document.getElementById('qr-pdf-modal-title').textContent = qrInlinePdfTitle || 'Report PDF';
+  document.getElementById('qr-pdf-modal-frame').src = qrInlinePdfUrl;
+
+  const pdfModalEl = document.getElementById('qr-pdf-modal');
+  pdfModalEl.style.zIndex = 1075;
+  qrShowModal('qr-pdf-modal');
+
+  requestAnimationFrame(() => {
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    const topBackdrop = backdrops[backdrops.length - 1];
+    if (topBackdrop) topBackdrop.style.zIndex = 1070;
+  });
+}
+
+document.getElementById('qr-pdf-modal').addEventListener('hidden.bs.modal', (e) => {
   document.getElementById('qr-pdf-modal-frame').src = '';
+  e.target.style.zIndex = '';
 });
 
 /** Downloads the chart's canvas as a PNG at its own native aspect ratio — no PDF/DOM roundtrip needed since Chart.js draws straight to a <canvas>. */
@@ -922,23 +1068,36 @@ function qrDownloadChartImage(canvasId, filename) {
 /** Tab-separated so it pastes as individual spreadsheet cells: date reported, job, elevation, replacement needed, problem type, description, reported by. Reads live from the modal's fields, not the cached report, so an edited-but-unsaved value is reflected. */
 function qrCopyRow() {
   const jobSelect = document.getElementById('qr-d-job');
+  const isPreForge = jobSelect.value === 'pre-forge';
   const jobName = jobSelect.selectedIndex >= 0 ? jobSelect.options[jobSelect.selectedIndex].text : '';
-  const jobLabel = jobSelect.value === '' ? '' : jobName;
+  const jobLabel = isPreForge
+    ? (document.getElementById('qr-d-job-text-guess').value.trim() || jobName)
+    : (jobSelect.value === '' ? '' : jobName);
 
   const elevationSelect = document.getElementById('qr-d-elevation');
-  const elevationId = elevationSelect.value ? parseInt(elevationSelect.value, 10) : null;
-  const elevation = qrElevations.find(el => el.id === elevationId);
-  const elevationTag = elevation ? elevation.elevationTag : '';
+  let elevationTag = '';
+  if (isPreForge || (!isPreForge && elevationSelect.value === 'manual')) {
+    elevationTag = document.getElementById('qr-d-elevation-text-guess').value.trim();
+  } else {
+    const elevationId = elevationSelect.value ? parseInt(elevationSelect.value, 10) : null;
+    const elevation = qrElevations.find(el => el.id === elevationId);
+    elevationTag = elevation ? elevation.elevationTag : '';
+  }
 
   const replacementVal = document.getElementById('qr-d-replacement').value;
   const replacement = replacementVal === '1' ? 'Yes' : (replacementVal === '0' ? 'No' : '');
+
+  const problemTypeVal = document.getElementById('qr-d-problem-type').value;
+  const problemType = problemTypeVal === 'Other'
+    ? (document.getElementById('qr-d-problem-type-other').value.trim() || 'Other')
+    : problemTypeVal;
 
   const cells = [
     document.getElementById('qr-d-report-date').value || '',
     jobLabel,
     elevationTag,
     replacement,
-    document.getElementById('qr-d-problem-type').value.trim(),
+    problemType,
     document.getElementById('qr-d-description').value.trim(),
     document.getElementById('qr-d-inspector').value.trim(),
   ];

@@ -57,14 +57,32 @@ class JobReservation extends Model
             if ($reservation->isDirty('status')) {
                 $reservation->syncAllProductCommittedQuantities();
                 $reservation->businessJob?->syncAutoStatus();
+
+                if ($reservation->status === 'cancelled') {
+                    $reservation->archiveLinkedDocuments();
+                }
             }
         });
 
-        // When reservation is deleted, sync all products and job status
+        // When reservation is deleted, sync all products and job status, and
+        // archive (never hard-delete) any document that was auto-attached to it.
         static::deleted(function ($reservation) {
             $reservation->syncAllProductCommittedQuantities();
             $reservation->businessJob?->syncAutoStatus();
+            $reservation->archiveLinkedDocuments();
         });
+    }
+
+    /** The job document(s) auto-attached to this reservation (e.g. the EZ Estimate a material check ran against). */
+    public function documents()
+    {
+        return $this->hasMany(JobDocument::class, 'job_reservation_id');
+    }
+
+    /** No longer needed once the reservation is cancelled/deleted — archived instead of deleted so the file stays available for audit. */
+    public function archiveLinkedDocuments(): void
+    {
+        $this->documents()->where('archived', false)->get()->each(fn (JobDocument $doc) => $doc->archive());
     }
 
     /**

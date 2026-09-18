@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Http\Request;
@@ -70,19 +69,6 @@ class DashboardController extends Controller
         // Single committed-by-product query — reused for both stats and row enrichment
         $committedByProduct = $this->getCommittedByProduct();
 
-        // Maintenance consumables (fittings, clamp pads, dust collector bags, etc)
-        // are ordinary inventory — they stay in Replenishment and Cycle Counting —
-        // but are noise on the main Inventory table, which is meant for regular
-        // stock. That page only, filtered out here.
-        $consumablesCategoryId = Category::where('code', 'maintenance_consumables')->value('id');
-        $excludeConsumables = function ($query) use ($consumablesCategoryId) {
-            if ($consumablesCategoryId) {
-                $query->whereDoesntHave('categories', function ($q) use ($consumablesCategoryId) {
-                    $q->where('categories.id', $consumablesCategoryId);
-                });
-            }
-        };
-
         // Special-order parts are ordered per job, not kept in ongoing stock —
         // they're noise on the main Inventory table when there's nothing to show
         // for them. Keep a special-order product visible only while it actually
@@ -105,8 +91,7 @@ class DashboardController extends Controller
         };
 
         // Base query for stats (apply filters once)
-        $statsQuery = Product::where('is_active', true);
-        $excludeConsumables($statsQuery);
+        $statsQuery = Product::where('is_active', true)->excludeMaintenanceConsumables();
         $excludeIdleSpecialOrder($statsQuery);
         if ($categoryId) {
             $statsQuery->whereHas('categories', function ($q) use ($categoryId) {
@@ -145,8 +130,8 @@ class DashboardController extends Controller
         ];
 
         $inventoryQuery = Product::with(['inventoryLocations', 'categories'])
-            ->where('is_active', true);
-        $excludeConsumables($inventoryQuery);
+            ->where('is_active', true)
+            ->excludeMaintenanceConsumables();
         $excludeIdleSpecialOrder($inventoryQuery);
 
         if ($categoryId) {
@@ -246,6 +231,7 @@ class DashboardController extends Controller
         }
 
         $query
+            ->excludeMaintenanceConsumables()
             ->when($categoryId, function ($q) use ($categoryId) {
                 return $q->whereHas('categories', function ($sq) use ($categoryId) {
                     $sq->where('categories.id', $categoryId);
@@ -303,7 +289,7 @@ class DashboardController extends Controller
 
     public function stats()
     {
-        $statRow = Product::where('is_active', true)->selectRaw("
+        $statRow = Product::where('is_active', true)->excludeMaintenanceConsumables()->selectRaw("
             COUNT(*) as skus_tracked,
             SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
             SUM(CASE WHEN status IN ('low', 'very_low', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,

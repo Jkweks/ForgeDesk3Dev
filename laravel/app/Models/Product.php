@@ -130,6 +130,27 @@ class Product extends Model
     }
 
     /**
+     * Maintenance consumables (fittings, clamp pads, dust collector bags,
+     * etc) are ordinary inventory rows, but they belong only on the
+     * Maintenance tab and the Replenishment flow — every other inventory
+     * view (main dashboard tabs, cycle counting, etc) should exclude them.
+     * Callers that intentionally need them (MaintenanceController::consumables(),
+     * the plain Product API behind Replenishment) must not apply this scope.
+     */
+    public function scopeExcludeMaintenanceConsumables($query)
+    {
+        $categoryId = Category::where('code', 'maintenance_consumables')->value('id');
+
+        if (! $categoryId) {
+            return $query;
+        }
+
+        return $query->whereDoesntHave('categories', function ($q) use ($categoryId) {
+            $q->where('categories.id', $categoryId);
+        });
+    }
+
+    /**
      * Get the primary category for this product
      */
     public function primaryCategory()

@@ -58,7 +58,7 @@
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="https://fab.vosglassintra.net/configurator" target="_blank" rel="noopener">Door Configurator <span class="badge bg-yellow-lt text-yellow ms-auto">Beta</span></a>
+                    <a class="dropdown-item" href="http://fab.vosglassintra.net/configurator" target="_blank" rel="noopener">Door Configurator <span class="badge bg-yellow-lt text-yellow ms-auto">Beta</span></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">

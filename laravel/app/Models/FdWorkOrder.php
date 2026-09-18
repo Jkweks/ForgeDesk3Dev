@@ -118,11 +118,15 @@ class FdWorkOrder extends Model
     }
 
     /**
-     * Rebuild the global `priority` ranking over non-archived work orders.
+     * Rebuild the global `priority` ranking over non-archived, not-yet-complete
+     * work orders.
      *
      * Locked WOs keep the position their stored `priority` names (de-duped and
      * clamped into range). Everything else is ordered by due date (nulls last),
      * then issue date, then id, and slotted into the remaining positions.
+     * Completed work orders never occupy a ranking slot — any leftover
+     * priority from before completion is cleared here regardless of whether
+     * anything else is left to rank.
      */
     public static function resequencePriorities(): void
     {
@@ -131,7 +135,12 @@ class FdWorkOrder extends Model
         }
 
         DB::transaction(function () {
-            $all = self::where('archived', false)->get();
+            self::where('archived', false)
+                ->where('status', 'complete')
+                ->whereNotNull('priority')
+                ->update(['priority' => null]);
+
+            $all = self::where('archived', false)->where('status', '!=', 'complete')->get();
             $total = $all->count();
             if ($total === 0) {
                 return;
