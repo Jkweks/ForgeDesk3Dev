@@ -98,7 +98,7 @@
                   <div class="card-header">
                     <h3 class="card-title">Material Check Results</h3>
                     <div class="col-auto ms-auto d-flex gap-2">
-                      <button class="btn btn-success btn-sm" id="commitButton" data-bs-toggle="modal" data-bs-target="#commitModal" onclick="prepareCommitModal()" style="display: none;">
+                      <button class="btn btn-success btn-sm" id="commitButton" data-permission="jobs.manage-reservations" data-bs-toggle="modal" data-bs-target="#commitModal" onclick="prepareCommitModal()" style="display: none;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                         Commit to Job
                       </button>
@@ -191,7 +191,7 @@
               <div class="row mb-3">
                 <div class="col-md-6">
                   <label class="form-label required">Requested By</label>
-                  <input type="text" class="form-control" id="requestedBy" required>
+                  <select class="form-select" id="requestedBy" required></select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Needed By</label>
@@ -222,6 +222,15 @@
         let checkResults = [];
         let filteredResults = [];
         let selectedItems = new Set();
+
+        // Populate the "Requested By" picker, defaulting to the signed-in user.
+        document.addEventListener('DOMContentLoaded', () => {
+            populatePeopleSelect(
+                document.getElementById('requestedBy'),
+                (typeof currentUser !== 'undefined' && currentUser) ? currentUser.id : '',
+                { placeholder: '— Select requester —' }
+            );
+        });
 
         async function checkMaterials() {
             const fileInput = document.getElementById('estimateFile');
@@ -425,13 +434,19 @@
             updateCommitButton();
         }
 
+        function canCommitToJob() {
+            if (typeof isAdmin === 'function' && isAdmin()) return true;
+            return typeof hasPermission === 'function' && hasPermission('jobs.manage-reservations');
+        }
+
         function updateCommitButton() {
             const commitButton = document.getElementById('commitButton');
-            if (selectedItems.size > 0) {
-                commitButton.style.display = 'inline-flex';
-            } else {
-                commitButton.style.display = 'none';
-            }
+            // Respect the same gate as the server: only show it for users who can
+            // create a committing reservation. (applyActionPermissions also hides
+            // it, but this runs on every selection change.)
+            commitButton.style.display = (canCommitToJob() && selectedItems.size > 0)
+                ? 'inline-flex'
+                : 'none';
         }
 
         function filterResults() {
@@ -454,6 +469,11 @@
         }
 
         function prepareCommitModal() {
+            if (!canCommitToJob()) {
+                alert('You do not have permission to commit materials to a job.');
+                event.preventDefault();
+                return false;
+            }
             if (selectedItems.size === 0) {
                 alert('Please select items to commit');
                 event.preventDefault(); // Prevent modal from opening
@@ -502,7 +522,7 @@
                 job_number: document.getElementById('jobNumber').value,
                 release_number: parseInt(document.getElementById('releaseNumber').value),
                 job_name: document.getElementById('jobName').value,
-                requested_by: document.getElementById('requestedBy').value,
+                requested_by_id: document.getElementById('requestedBy').value || null,
                 needed_by: document.getElementById('neededBy').value || null,
                 notes: document.getElementById('notes').value || null,
                 items: items
@@ -511,6 +531,7 @@
             try {
                 const response = await fetch('/api/v1/fulfillment/commit-materials', {
                     method: 'POST',
+                    credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',

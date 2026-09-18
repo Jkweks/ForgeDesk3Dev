@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\BusinessJob;
 use App\Models\FdUser;
 use App\Models\FdWoElevation;
-use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\FdWoStage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -31,17 +31,18 @@ class WorkQueueBoardTest extends TestCase
     private function wo(array $attr = []): FdWorkOrder
     {
         static $rel = 0;
+
         return FdWorkOrder::create(array_merge([
             'business_job_id' => $this->job->id,
-            'release_number'  => ++$rel,
+            'release_number' => ++$rel,
         ], $attr));
     }
 
     private function elevation(FdWorkOrder $wo, ?string $requested = null): FdWoElevation
     {
         return FdWoElevation::create([
-            'work_order_id'  => $wo->id,
-            'elevation_tag'  => 'E' . $wo->id,
+            'work_order_id' => $wo->id,
+            'elevation_tag' => 'E'.$wo->id,
             'date_requested' => $requested,
         ]);
     }
@@ -50,10 +51,10 @@ class WorkQueueBoardTest extends TestCase
     {
         return FdWoStage::create(array_merge([
             'elevation_id' => $e->id,
-            'name'         => $name,
-            'sort_order'   => $order,
-            'blocks_next'  => true,
-            'status'       => 'pending',
+            'name' => $name,
+            'sort_order' => $order,
+            'blocks_next' => true,
+            'status' => 'pending',
         ], $attr));
     }
 
@@ -68,15 +69,15 @@ class WorkQueueBoardTest extends TestCase
     public function test_groups_by_operator_and_marks_gated_stages(): void
     {
         $alice = FdUser::create(['name' => 'Alice', 'initials' => 'AL', 'role' => 'worker', 'active' => true]);
-        $bob   = FdUser::create(['name' => 'Bob', 'initials' => 'BO', 'role' => 'worker', 'active' => true]);
+        $bob = FdUser::create(['name' => 'Bob', 'initials' => 'BO', 'role' => 'worker', 'active' => true]);
 
         $wo = $this->wo(['priority' => 1, 'priority_locked' => true]);
-        $e  = $this->elevation($wo, '2026-09-01');
+        $e = $this->elevation($wo, '2026-09-01');
         $this->stage($e, 'Prep', 1, ['assigned_to_id' => $alice->id]);   // Alice, startable
         $this->stage($e, 'Fab', 2, ['assigned_to_id' => $bob->id]);      // Bob, GATED by Prep — still shown
 
         $wo2 = $this->wo(['priority' => 2, 'priority_locked' => true]);
-        $e2  = $this->elevation($wo2, '2026-09-10');
+        $e2 = $this->elevation($wo2, '2026-09-10');
         $this->stage($e2, 'Cut', 1, ['assigned_to_id' => null]);         // unassigned, startable
 
         $res = $this->getJson('/api/v1/work-queue')->assertOk();
@@ -126,14 +127,14 @@ class WorkQueueBoardTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $wo = $this->wo(['priority' => 3, 'due_date' => '2026-12-24', 'priority_locked' => true]);
-        $e  = $this->elevation($wo, '2026-08-01');
+        $e = $this->elevation($wo, '2026-08-01');
         $this->stage($e, 'Weld', 1, ['assigned_to_id' => $al->id]);
 
         $op = collect($this->getJson('/api/v1/work-queue')->json('operators'))->firstWhere('user.id', $al->id);
 
         $this->assertSame('2026-08-01', $op['oldest_date_requested']);
         $card = $op['stages'][0];
-        $this->assertSame('J1-R' . $wo->release_number, $card['release_label']);
+        $this->assertSame('J1-R'.$wo->release_number, $card['release_label']);
         $this->assertSame(3, $card['priority']);
         $this->assertSame('2026-12-24', $card['due_date']);
         $this->assertSame($wo->id, $card['work_order_id']);
@@ -150,12 +151,12 @@ class WorkQueueBoardTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $wo = $this->wo(['priority' => 1, 'priority_locked' => true]);
-        $e  = $this->elevation($wo);
-        $s  = $this->stage($e, 'Weld', 1, ['assigned_to_id' => null]);
+        $e = $this->elevation($wo);
+        $s = $this->stage($e, 'Weld', 1, ['assigned_to_id' => null]);
 
         $this->patchJson("/api/v1/work-order-stages/{$s->id}", [
             'assigned_to_id' => $al->id,
-            'log_message'    => 'Reassigned via Work Queue',
+            'log_message' => 'Reassigned via Work Queue',
         ])->assertOk();
 
         $this->assertSame($al->id, $s->fresh()->assigned_to_id);
@@ -186,7 +187,7 @@ class WorkQueueBoardTest extends TestCase
     {
         Sanctum::actingAs(User::factory()->create(['name' => 'Manager Mo', 'role' => 'admin', 'is_active' => true]), ['*']);
 
-        $al  = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
+        $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $bob = FdUser::create(['name' => 'Bob', 'role' => 'worker', 'active' => true]);
 
         $wo = $this->wo();
@@ -198,7 +199,7 @@ class WorkQueueBoardTest extends TestCase
 
         $res = $this->postJson('/api/v1/work-order-stages/bulk-assign', [
             'work_order_id' => $wo->id,
-            'assignments'   => [
+            'assignments' => [
                 ['stage_name' => 'Cutting', 'assigned_to_id' => $al->id],
             ],
         ])->assertOk();
@@ -211,7 +212,7 @@ class WorkQueueBoardTest extends TestCase
 
         $this->assertDatabaseHas('fd_stage_log', [
             'stage_id' => $cut1->id,
-            'message'  => 'Reassigned from Bob to Al via bulk assign by Manager Mo (bulk assign)',
+            'message' => 'Reassigned from Bob to Al via bulk assign by Manager Mo (bulk assign)',
         ]);
     }
 
@@ -219,11 +220,11 @@ class WorkQueueBoardTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $wo = $this->wo();
-        $s  = $this->stage($this->elevation($wo), 'Weld', 1, ['assigned_to_id' => $al->id]);
+        $s = $this->stage($this->elevation($wo), 'Weld', 1, ['assigned_to_id' => $al->id]);
 
         $this->postJson('/api/v1/work-order-stages/bulk-assign', [
             'work_order_id' => $wo->id,
-            'assignments'   => [['stage_name' => 'Weld', 'assigned_to_id' => null]],
+            'assignments' => [['stage_name' => 'Weld', 'assigned_to_id' => null]],
         ])->assertOk()->assertJson(['updated' => 1]);
 
         $this->assertNull($s->fresh()->assigned_to_id);
@@ -233,13 +234,13 @@ class WorkQueueBoardTest extends TestCase
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $wo = $this->wo();
-        $e  = $this->elevation($wo);
+        $e = $this->elevation($wo);
         $done = $this->stage($e, 'Cutting', 1, ['status' => 'complete', 'assigned_to_id' => null]);
         $already = $this->stage($e, 'Cutting', 2, ['assigned_to_id' => $al->id]);
 
         $res = $this->postJson('/api/v1/work-order-stages/bulk-assign', [
             'work_order_id' => $wo->id,
-            'assignments'   => [['stage_name' => 'cutting', 'assigned_to_id' => $al->id]], // case-insensitive match
+            'assignments' => [['stage_name' => 'cutting', 'assigned_to_id' => $al->id]], // case-insensitive match
         ])->assertOk();
 
         $this->assertSame(0, $res->json('updated')); // completed skipped, already-assigned is a no-op
@@ -249,19 +250,19 @@ class WorkQueueBoardTest extends TestCase
 
     public function test_bulk_assign_supports_multiple_stage_names_and_job_scope(): void
     {
-        $al  = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
+        $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
         $bob = FdUser::create(['name' => 'Bob', 'role' => 'worker', 'active' => true]);
 
         $job2 = BusinessJob::create(['job_number' => 'J2', 'job_name' => 'Other', 'status' => 'active']);
-        $woA  = $this->wo();
-        $woB  = $this->wo(['business_job_id' => $job2->id]);
+        $woA = $this->wo();
+        $woB = $this->wo(['business_job_id' => $job2->id]);
 
         $cutA = $this->stage($this->elevation($woA), 'Cutting', 1);
         $progA = $this->stage($this->elevation($woA), 'Programming', 1);
         $cutB = $this->stage($this->elevation($woB), 'Cutting', 1); // different job — untouched
 
         $res = $this->postJson('/api/v1/work-order-stages/bulk-assign', [
-            'job_id'      => $this->job->id,
+            'job_id' => $this->job->id,
             'assignments' => [
                 ['stage_name' => 'Cutting', 'assigned_to_id' => $al->id],
                 ['stage_name' => 'Programming', 'assigned_to_id' => $bob->id],
@@ -280,7 +281,7 @@ class WorkQueueBoardTest extends TestCase
         $wo = $this->wo();
         $this->postJson('/api/v1/work-order-stages/bulk-assign', [
             'work_order_id' => $wo->id,
-            'assignments'   => [['stage_name' => 'Cutting', 'assigned_to_id' => null]],
+            'assignments' => [['stage_name' => 'Cutting', 'assigned_to_id' => null]],
         ])->assertStatus(403);
     }
 }

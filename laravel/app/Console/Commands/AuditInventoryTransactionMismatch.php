@@ -57,6 +57,7 @@ class AuditInventoryTransactionMismatch extends Command
 
         if ($rows->isEmpty()) {
             $this->info('No mismatches found.');
+
             return 0;
         }
 
@@ -65,7 +66,7 @@ class AuditInventoryTransactionMismatch extends Command
 
         $this->table(
             ['ID', 'SKU', 'Description', 'Location Sum', 'Last Tx qty_after', 'Diff', 'Last Tx Date', 'Tx Type', 'Reference'],
-            $rows->map(fn($r) => [
+            $rows->map(fn ($r) => [
                 $r->id,
                 $r->sku,
                 str($r->description)->limit(40),

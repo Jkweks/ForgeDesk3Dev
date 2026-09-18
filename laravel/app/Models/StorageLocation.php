@@ -117,6 +117,7 @@ class StorageLocation extends Model
     public function getFullPathAttribute()
     {
         $pathNames = $this->ancestors()->pluck('name')->push($this->name);
+
         return $pathNames->implode(' > ');
     }
 
@@ -132,7 +133,7 @@ class StorageLocation extends Model
             $this->position ? "Pos {$this->position}" : null,
         ]);
 
-        return !empty($parts) ? implode(' ', $parts) : null;
+        return ! empty($parts) ? implode(' ', $parts) : null;
     }
 
     /**
@@ -195,7 +196,7 @@ class StorageLocation extends Model
                 $parent = StorageLocation::find($location->parent_id);
                 if ($parent) {
                     $location->depth = $parent->depth + 1;
-                    $location->path = $parent->path ? $parent->path . '/' . $parent->id : $parent->id;
+                    $location->path = $parent->path ? $parent->path.'/'.$parent->id : $parent->id;
                 }
             } else {
                 $location->depth = 0;
@@ -213,4 +214,3 @@ class StorageLocation extends Model
         });
     }
 }
-

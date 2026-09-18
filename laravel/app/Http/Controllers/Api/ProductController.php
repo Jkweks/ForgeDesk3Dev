@@ -15,13 +15,26 @@ class ProductController extends Controller
     {
         $query = Product::query()->with(['inventoryLocations.storageLocation', 'supplier', 'categories']);
 
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('sku', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhere('part_number', 'like', "%{$search}%");
-            });
+        if ($request->filled('search')) {
+            // Loose, "regex-style" matching: split the query into whitespace
+            // tokens; every token must appear (case-insensitively) in one of the
+            // searchable columns, in any order. Each token is also matched with
+            // separators stripped, so "ab-123 blk" finds SKU "AB123BLK".
+            $terms = preg_split('/\s+/', trim($request->search), -1, PREG_SPLIT_NO_EMPTY);
+            $cols = ['sku', 'part_number', 'description', 'finish'];
+            $stripExpr = fn (string $col) => "REPLACE(REPLACE(REPLACE(REPLACE(LOWER($col), '-', ''), ' ', ''), '.', ''), '/', '')";
+
+            foreach ($terms as $term) {
+                $like = '%'.mb_strtolower($term).'%';
+                $likeStripped = '%'.preg_replace('/[^a-z0-9]/', '', mb_strtolower($term)).'%';
+
+                $query->where(function ($q) use ($cols, $like, $likeStripped, $stripExpr) {
+                    foreach ($cols as $col) {
+                        $q->orWhereRaw("LOWER($col) LIKE ?", [$like])
+                            ->orWhereRaw($stripExpr($col).' LIKE ?', [$likeStripped]);
+                    }
+                });
+            }
         }
 
         if ($request->has('status')) {
@@ -37,6 +50,14 @@ class ProductController extends Controller
             $query->where('category_id', $request->category_id);
         }
 
+        if ($request->has('is_special_order')) {
+            $query->where('is_special_order', $request->boolean('is_special_order'));
+        }
+
+        if ($request->has('nonsof')) {
+            $query->where('nonsof', $request->boolean('nonsof'));
+        }
+
         if ($request->has('supplier_id')) {
             $query->where('supplier_id', $request->supplier_id);
         }
@@ -46,6 +67,7 @@ class ProductController extends Controller
         }
 
         $perPage = min((int) $request->get('per_page', 50), 500);
+
         return response()->json($query->paginate($perPage));
     }
 
@@ -85,7 +107,7 @@ class ProductController extends Controller
             'order_multiple' => 'nullable|integer|min:1',
 
             // Supplier
-            'supplier_id' => 'nullable|exists:suppliers,id',
+            'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
 
@@ -104,10 +126,11 @@ class ProductController extends Controller
 
             // Status
             'is_active' => 'nullable|boolean',
+            'is_special_order' => 'nullable|boolean',
         ]);
 
         // Auto-generate SKU if part_number is provided but not SKU
-        if (!empty($validated['part_number']) && empty($validated['sku'])) {
+        if (! empty($validated['part_number']) && empty($validated['sku'])) {
             $validated['sku'] = Product::generateSku(
                 $validated['part_number'],
                 $validated['finish'] ?? null
@@ -115,7 +138,7 @@ class ProductController extends Controller
         }
 
         // Auto-calculate reorder point if not provided
-        if (empty($validated['reorder_point']) && !empty($validated['average_daily_use']) && !empty($validated['lead_time_days'])) {
+        if (empty($validated['reorder_point']) && ! empty($validated['average_daily_use']) && ! empty($validated['lead_time_days'])) {
             $validated['reorder_point'] = round(
                 ($validated['average_daily_use'] * $validated['lead_time_days']) +
                 ($validated['safety_stock'] ?? 0)
@@ -203,7 +226,7 @@ class ProductController extends Controller
             'order_multiple' => 'nullable|integer|min:1',
 
             // Supplier
-            'supplier_id' => 'nullable|exists:suppliers,id',
+            'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
 
@@ -221,10 +244,11 @@ class ProductController extends Controller
             'tool_specifications' => 'nullable|array',
 
             // Status
-            'is_active'  => 'nullable|boolean',
-            'nonsof'     => 'nullable|boolean',
-            'cp_part'    => 'nullable|boolean',
-            'is_shared'  => 'nullable|boolean',
+            'is_active' => 'nullable|boolean',
+            'nonsof' => 'nullable|boolean',
+            'cp_part' => 'nullable|boolean',
+            'is_shared' => 'nullable|boolean',
+            'is_special_order' => 'nullable|boolean',
         ]);
 
         // Auto-generate SKU if part_number changed
@@ -252,7 +276,7 @@ class ProductController extends Controller
 
         // Handle multiple categories
         if ($request->has('category_ids')) {
-            if (is_array($request->category_ids) && !empty($request->category_ids)) {
+            if (is_array($request->category_ids) && ! empty($request->category_ids)) {
                 $primaryCategoryId = $request->primary_category_id ?? $request->category_ids[0] ?? null;
 
                 $syncData = [];
@@ -283,6 +307,7 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         $product->delete();
+
         return response()->json(null, 204);
     }
 
@@ -304,7 +329,7 @@ class ProductController extends Controller
 
         return response()->json([
             'message' => 'Inventory adjusted successfully',
-            'product' => $product->fresh()
+            'product' => $product->fresh(),
         ]);
     }
 
@@ -320,7 +345,7 @@ class ProductController extends Controller
         if ($product->quantity_available < $validated['quantity']) {
             return response()->json([
                 'message' => 'Insufficient available quantity',
-                'errors' => ['quantity' => ['Not enough available inventory']]
+                'errors' => ['quantity' => ['Not enough available inventory']],
             ], 422);
         }
 
@@ -336,7 +361,9 @@ class ProductController extends Controller
             ->get();
 
         foreach ($locations as $location) {
-            if ($remainingToRemove <= 0) break;
+            if ($remainingToRemove <= 0) {
+                break;
+            }
             $available = $location->quantity - $location->quantity_committed;
             $deduct = min($remainingToRemove, $available);
             if ($deduct > 0) {
@@ -349,7 +376,9 @@ class ProductController extends Controller
         // Force-deduct any remainder from locations that still have stock
         if ($remainingToRemove > 0) {
             foreach ($locations as $location) {
-                if ($remainingToRemove <= 0) break;
+                if ($remainingToRemove <= 0) {
+                    break;
+                }
                 if ($location->quantity > 0) {
                     $deduct = min($remainingToRemove, $location->quantity);
                     $location->quantity -= $deduct;
@@ -375,8 +404,8 @@ class ProductController extends Controller
             'reference_number' => $validated['job_name'],
             'reference_type' => 'job',
             'reference_id' => null,
-            'notes' => "Issued to job: {$validated['job_name']}" .
-                       ($validated['notes'] ? "\n" . $validated['notes'] : ''),
+            'notes' => "Issued to job: {$validated['job_name']}".
+                       ($validated['notes'] ? "\n".$validated['notes'] : ''),
             'user_id' => auth()->id(),
             'transaction_date' => now(),
         ]);
@@ -386,7 +415,7 @@ class ProductController extends Controller
 
         return response()->json([
             'message' => 'Material issued to job successfully',
-            'product' => $product->fresh()
+            'product' => $product->fresh(),
         ]);
     }
 
@@ -409,6 +438,7 @@ class ProductController extends Controller
         foreach (Product::$finishCodes as $code => $name) {
             $finishCodes[] = ['code' => $code, 'name' => $name];
         }
+
         return response()->json($finishCodes);
     }
 
@@ -421,6 +451,7 @@ class ProductController extends Controller
         foreach (Product::$unitOfMeasures as $code => $name) {
             $uoms[] = ['code' => $code, 'name' => $name];
         }
+
         return response()->json($uoms);
     }
 
@@ -457,7 +488,7 @@ class ProductController extends Controller
 
         return response()->json([
             'photo_path' => $product->photo_path,
-            'photo_url'  => $product->photo_url,
+            'photo_url' => $product->photo_url,
         ]);
     }
 
@@ -484,7 +515,7 @@ class ProductController extends Controller
 
         return response()->json([
             'refreshed' => $count,
-            'message'   => "Status recalculated for {$count} products.",
+            'message' => "Status recalculated for {$count} products.",
         ]);
     }
 }

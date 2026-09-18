@@ -121,39 +121,53 @@ Route::prefix('v1')->group(function () {
     // Kiosk stage mutations stay unauthenticated (shared tablets) but are
     // throttled so a stray script can't run away with production state.
     Route::patch('/shop/stages/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'cycleStage'])->middleware('throttle:120,1');
+    Route::patch('/shop/stages/{id}/status', [\App\Http\Controllers\Api\ShopFloorController::class, 'setStageStatus'])->middleware('throttle:120,1');
     Route::patch('/shop/stages/{id}/assign', [\App\Http\Controllers\Api\ShopFloorController::class, 'assignStage'])->middleware('throttle:120,1');
     Route::patch('/shop/elevations/{id}', [\App\Http\Controllers\Api\ShopFloorController::class, 'updateElevation'])->middleware('throttle:120,1');
     Route::patch('/shop/elevations/{id}/complete-stages', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteStages'])->middleware('throttle:120,1');
+    Route::patch('/shop/work-orders/{id}/stages/bulk-complete', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteWoStage'])->middleware('throttle:120,1');
     // ─────────────────────────────────────────────────────────────────────────
 
     Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
     Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials']);
     Route::post('/fulfillment/material-check-csv', [MaterialCheckController::class, 'checkCsv']);
-    Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials']);
+    // Commit-to-job creates a live (active) reservation and moves inventory —
+    // unlike the read-only material checks above it must be authenticated and
+    // permission-gated.
+    Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials'])
+        ->middleware(['auth:sanctum', 'permission:jobs.manage-reservations']);
 
-    // Job Reservations
-    // IMPORTANT: Specific routes MUST come before parameterized routes like {id}
-    Route::get('/job-reservations', [JobReservationController::class, 'index']);
-    Route::post('/job-reservations/create-manual', [JobReservationController::class, 'createManual']);
-    Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct']);
-    Route::get('/job-reservations/search-products', [JobReservationController::class, 'searchProducts']);
-    Route::get('/job-reservations/status-labels', [JobReservationController::class, 'statusLabels']);
-    Route::get('/job-reservations/{id}', [JobReservationController::class, 'show']);
-    Route::put('/job-reservations/{id}', [JobReservationController::class, 'updateReservation']);
-    Route::post('/job-reservations/{id}/status', [JobReservationController::class, 'updateStatus']);
-    Route::post('/job-reservations/{id}/complete', [JobReservationController::class, 'complete']);
-    Route::post('/job-reservations/{id}/items', [JobReservationController::class, 'addItem']);
-    Route::put('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'updateItem']);
-    Route::post('/job-reservations/{id}/items/{itemId}/replace', [JobReservationController::class, 'replaceItem']);
-    Route::delete('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'removeItem']);
+    // Job Reservations — authenticated. Reads need jobs.view, writes need
+    // jobs.manage-reservations (the same mapping as /business-jobs/{id}/reservations).
+    // admin/manager/fabricator hold both, so their workflow is unchanged; this
+    // only closes the endpoints to anonymous callers, viewers and office staff.
+    // IMPORTANT: specific routes MUST come before parameterized routes like {id}.
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/job-reservations', [JobReservationController::class, 'index'])->middleware('permission:jobs.view');
+        Route::post('/job-reservations/create-manual', [JobReservationController::class, 'createManual'])->middleware('permission:jobs.manage-reservations');
+        Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/search-products', [JobReservationController::class, 'searchProducts'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/status-labels', [JobReservationController::class, 'statusLabels'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/{id}', [JobReservationController::class, 'show'])->middleware('permission:jobs.view');
+        Route::put('/job-reservations/{id}', [JobReservationController::class, 'updateReservation'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/status', [JobReservationController::class, 'updateStatus'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/complete', [JobReservationController::class, 'complete'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/items', [JobReservationController::class, 'addItem'])->middleware('permission:jobs.manage-reservations');
+        Route::put('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'updateItem'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/job-reservations/{id}/items/{itemId}/replace', [JobReservationController::class, 'replaceItem'])->middleware('permission:jobs.manage-reservations');
+        Route::delete('/job-reservations/{id}/items/{itemId}', [JobReservationController::class, 'removeItem'])->middleware('permission:jobs.manage-reservations');
+    });
 
-    // EZ Estimate Management (called from admin web interface)
+    // EZ Estimate Management (admin web interface). Login required; upload is a
+    // file write and the debug endpoints dump parsed data.
     Route::get('/ez-estimate/test', [\App\Http\Controllers\Api\EzEstimateController::class, 'test']);
-    Route::get('/ez-estimate/debug', [\App\Http\Controllers\Api\EzEstimateController::class, 'debug']);
-    Route::get('/ez-estimate/test-pricing', [\App\Http\Controllers\Api\EzEstimateController::class, 'testPricing']);
-    Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
-    Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
-    Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/ez-estimate/debug', [\App\Http\Controllers\Api\EzEstimateController::class, 'debug']);
+        Route::get('/ez-estimate/test-pricing', [\App\Http\Controllers\Api\EzEstimateController::class, 'testPricing']);
+        Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
+        Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
+        Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
+    });
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -178,12 +192,20 @@ Route::middleware('auth:sanctum')->group(function () {
                 'permissions' => $permissions,
                 'must_change_password' => $user->must_change_password,
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
+                'theme_preferences' => $user->theme_preferences,
+                'wo_column_prefs' => $user->wo_column_prefs,
+                'quality_report_prefs' => $user->quality_report_prefs,
             ];
         });
+
+        // People picker (Requested by / Project manager) — any signed-in user.
+        Route::get('/people', [\App\Http\Controllers\Api\UserController::class, 'people']);
 
         // User Management
         Route::get('/users', [\App\Http\Controllers\Api\UserController::class, 'index'])->middleware('permission:users.view');
         Route::get('/users/statistics', [\App\Http\Controllers\Api\UserController::class, 'statistics'])->middleware('permission:users.view');
+        // Static path before the /users/{user} wildcard.
+        Route::post('/users/send-pending-invitations', [\App\Http\Controllers\Api\UserController::class, 'sendPendingInvitations'])->middleware('permission:users.create');
         Route::get('/users/{user}', [\App\Http\Controllers\Api\UserController::class, 'show'])->middleware('permission:users.view');
         Route::post('/users', [\App\Http\Controllers\Api\UserController::class, 'store'])->middleware('permission:users.create');
         Route::put('/users/{user}', [\App\Http\Controllers\Api\UserController::class, 'update'])->middleware('permission:users.edit');
@@ -195,6 +217,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Self-service user endpoints
         Route::post('/user/change-password', [\App\Http\Controllers\Api\UserController::class, 'changePassword']);
         Route::put('/user/profile', [\App\Http\Controllers\Api\UserController::class, 'updateProfile']);
+        Route::put('/user/theme-preferences', [\App\Http\Controllers\Api\UserController::class, 'updateThemePreferences']);
+        Route::put('/user/wo-column-prefs', [\App\Http\Controllers\Api\UserController::class, 'updateWoColumnPrefs']);
+        Route::put('/user/quality-report-prefs', [\App\Http\Controllers\Api\UserController::class, 'updateQualityReportPrefs']);
 
         // Role & Permission Management
         Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index'])->middleware('permission:roles.view');
@@ -207,6 +232,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // System Status
         Route::get('/status', [StatusController::class, 'index']);
+
+        // System Notifications (nav bar bell, admin-only — see NotificationController)
+        Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+        Route::post('/notifications/{notification}/dismiss', [\App\Http\Controllers\Api\NotificationController::class, 'dismiss']);
 
         // Dashboard
         Route::get('/dashboard', [DashboardController::class, 'index']);
@@ -334,6 +363,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/reports/monthly-statement', [ReportsController::class, 'monthlyInventoryStatement']);
             Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
             Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
+            Route::get('/reports/work-order-backlog', [ReportsController::class, 'workOrderBacklogReport']);
+            Route::get('/reports/job-status-summary', [ReportsController::class, 'jobStatusSummaryReport']);
+            Route::get('/reports/joints-completed', [ReportsController::class, 'jointsCompletedReport']);
 
             // Exports / PDF / CSV
             Route::middleware('permission:reports.export')->group(function () {
@@ -348,6 +380,9 @@ Route::middleware('auth:sanctum')->group(function () {
                 Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
                 Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
                 Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
+                Route::get('/reports/work-order-backlog/pdf', [ReportsController::class, 'workOrderBacklogPdf']);
+                Route::get('/reports/job-status-summary/pdf', [ReportsController::class, 'jobStatusSummaryPdf']);
+                Route::get('/reports/joints-completed/pdf', [ReportsController::class, 'jointsCompletedPdf']);
             });
         });
 
@@ -402,6 +437,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/maintenance/dashboard', [MaintenanceController::class, 'dashboard'])->middleware('permission:maintenance.view');
         Route::get('/maintenance/upcoming-tasks', [MaintenanceController::class, 'upcomingTasks'])->middleware('permission:maintenance.view');
         Route::get('/maintenance/recent-records', [MaintenanceController::class, 'recentRecords'])->middleware('permission:maintenance.view');
+        Route::get('/maintenance/consumables', [MaintenanceController::class, 'consumables'])->middleware('permission:maintenance.view');
         Route::get('/maintenance/service-history/pdf', [MaintenanceController::class, 'serviceHistoryPdf'])->middleware('permission:maintenance.view');
 
         // Machines
@@ -460,6 +496,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/business-jobs/{jobId}/reservations/{reservationId}/status', [BusinessJobController::class, 'updateReservationStatus'])->middleware('permission:jobs.manage-reservations');
         Route::delete('/business-jobs/{jobId}/reservations/{reservationId}', [BusinessJobController::class, 'deleteReservation'])->middleware('permission:jobs.manage-reservations');
 
+        // Job-specific Documents (SOF / EZ Estimate / PO / Other — storage only)
+        Route::get('/business-jobs/{jobId}/documents', [\App\Http\Controllers\Api\JobDocumentController::class, 'index'])->middleware('permission:jobs.documents.view');
+        Route::get('/business-jobs/{jobId}/documents/{documentId}/download', [\App\Http\Controllers\Api\JobDocumentController::class, 'download'])->middleware('permission:jobs.documents.view');
+        Route::post('/business-jobs/{jobId}/documents', [\App\Http\Controllers\Api\JobDocumentController::class, 'store'])->middleware('permission:jobs.documents.manage');
+        Route::delete('/business-jobs/{jobId}/documents/{documentId}', [\App\Http\Controllers\Api\JobDocumentController::class, 'destroy'])->middleware('permission:jobs.documents.manage');
+
         // Door/Frame Configurator
         Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.create');
@@ -487,6 +529,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/work-orders/{id}', [\App\Http\Controllers\Api\WorkOrderController::class, 'destroy'])->middleware('permission:fabrication.work-orders.delete');
             Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/work-orders/{id}/status', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateStatus'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/work-orders/{id}/completion-email', [\App\Http\Controllers\Api\WorkOrderController::class, 'sendCompletionEmail'])->middleware('permission:fabrication.work-orders.edit');
 
             // Work Order Drawings (shop drawings file uploads)
             Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
@@ -498,10 +542,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'index']);
             Route::post('/work-orders/{id}/elevations', [\App\Http\Controllers\Api\ElevationController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/elevations/{id}/complete-all-stages', [\App\Http\Controllers\Api\ElevationController::class, 'completeAllStages'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
             // Elevation Stage cycling (reuse existing stage controller)
             Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);
+            Route::patch('/work-orders/{id}/stages/bulk-complete', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'bulkComplete'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-order-stages/bulk-assign', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'bulkAssign'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/work-order-stages/{id}', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
@@ -545,5 +591,28 @@ Route::middleware('auth:sanctum')->group(function () {
         // already handles the frontend's multipart POST-with-_method=PUT edit calls.
         Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update'])->middleware('permission:fabrication.edit');
         Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy'])->middleware('permission:fabrication.delete');
+
+        // Quality Reports (PDF ingestion, elevation matching, verification)
+        Route::middleware('permission:quality.view')->group(function () {
+            Route::get('/quality-reports', [\App\Http\Controllers\Api\QualityReportController::class, 'index']);
+            // Static path BEFORE the /quality-reports/{id} wildcard.
+            Route::get('/quality-reports/elevation-options', [\App\Http\Controllers\Api\QualityReportController::class, 'elevationOptions']);
+            Route::get('/quality-reports/analytics/incident-rate', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'incidentRateByMonth']);
+            Route::get('/quality-reports/analytics/problem-types', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'problemTypeRolling13Week']);
+            Route::get('/quality-reports/analytics/weekly-trend', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'weeklyTrend13Week']);
+            Route::post('/quality-reports/analytics/export-pdf', [\App\Http\Controllers\Api\QualityAnalyticsController::class, 'exportPdf']);
+            Route::get('/quality-reports/export/csv', [\App\Http\Controllers\Api\QualityReportController::class, 'exportCsv']);
+            Route::get('/quality-reports/export/pdf', [\App\Http\Controllers\Api\QualityReportController::class, 'exportPdf']);
+            Route::get('/quality-reports/{id}', [\App\Http\Controllers\Api\QualityReportController::class, 'show']);
+            Route::get('/quality-reports/{id}/files/{fileId}/download', [\App\Http\Controllers\Api\QualityReportController::class, 'downloadFile']);
+            Route::get('/quality-reports/{id}/files/{fileId}/view', [\App\Http\Controllers\Api\QualityReportController::class, 'viewFile']);
+            Route::post('/quality-reports', [\App\Http\Controllers\Api\QualityReportController::class, 'store'])->middleware('permission:quality.create');
+            Route::put('/quality-reports/{id}', [\App\Http\Controllers\Api\QualityReportController::class, 'update'])->middleware('permission:quality.edit');
+            Route::post('/quality-reports/{id}/rematch', [\App\Http\Controllers\Api\QualityReportController::class, 'rematch'])->middleware('permission:quality.edit');
+            Route::post('/quality-reports/{id}/verify', [\App\Http\Controllers\Api\QualityReportController::class, 'verify'])->middleware('permission:quality.verify');
+            Route::post('/quality-reports/{id}/review', [\App\Http\Controllers\Api\QualityReportController::class, 'review'])->middleware('permission:quality.verify');
+            Route::post('/quality-reports/{id}/reject', [\App\Http\Controllers\Api\QualityReportController::class, 'reject'])->middleware('permission:quality.verify');
+            Route::delete('/quality-reports/{id}', [\App\Http\Controllers\Api\QualityReportController::class, 'destroy'])->middleware('permission:quality.delete');
+        });
     });
 });

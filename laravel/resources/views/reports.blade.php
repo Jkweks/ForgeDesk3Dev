@@ -83,6 +83,24 @@
                   Storage Locations
                 </button>
               </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <button class="btn btn-outline-orange w-100" onclick="showReport('workOrderBacklog')">
+                  <i class="ti ti-list-details me-1"></i>
+                  WO Backlog
+                </button>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <button class="btn btn-outline-indigo w-100" onclick="showReport('jobStatusSummary')">
+                  <i class="ti ti-clipboard-list me-1"></i>
+                  Job Status
+                </button>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <button class="btn btn-outline-lime w-100" onclick="showReport('jointsCompleted')">
+                  <i class="ti ti-git-merge me-1"></i>
+                  Joints Completed
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -884,6 +902,289 @@
         </div>
       </div>
 
+      <!-- Work Order Backlog / Queue Report -->
+      <div class="col-12" id="workOrderBacklogReport" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-list-details me-2"></i>Work Order Backlog / Queue</h3>
+            <div class="ms-auto d-flex gap-2">
+              <button class="btn btn-sm btn-outline-primary" onclick="exportReportPdf('work-order-backlog')">
+                <i class="ti ti-file-type-pdf me-1"></i>PDF
+              </button>
+              <button class="btn btn-sm btn-primary" onclick="exportReport('work_order_backlog')">
+                <i class="ti ti-download me-1"></i>CSV
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Total Open</div>
+                    <div class="h2 mb-0" id="woBacklogTotal">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Active</div>
+                    <div class="h2 mb-0 text-success" id="woBacklogActive">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">On Hold</div>
+                    <div class="h2 mb-0 text-warning" id="woBacklogOnHold">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Overdue</div>
+                    <div class="h2 mb-0 text-danger" id="woBacklogOverdue">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Due This Week</div>
+                    <div class="h2 mb-0 text-info" id="woBacklogDueSoon">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="woBacklogLoading" class="text-center py-4">
+              <div class="spinner-border" role="status"></div>
+              <div class="text-muted mt-2">Loading report...</div>
+            </div>
+
+            <div id="woBacklogContent" style="display: none;">
+              <div class="table-responsive">
+                <table class="table table-sm table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th>Pri</th>
+                      <th>Release</th>
+                      <th>Job</th>
+                      <th>Status</th>
+                      <th>Due Date</th>
+                      <th class="text-center">Days</th>
+                      <th>Assigned To</th>
+                      <th class="text-center">Elevations</th>
+                      <th class="text-center">Open Steps</th>
+                    </tr>
+                  </thead>
+                  <tbody id="woBacklogBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Job Status Summary Report -->
+      <div class="col-12" id="jobStatusSummaryReport" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-clipboard-list me-2"></i>Job Status Summary</h3>
+            <div class="ms-auto d-flex gap-2">
+              <select class="form-select form-select-sm" id="jobStatusFilter" style="max-width: 160px;" onchange="loadJobStatusSummaryReport()">
+                <option value="">Active + On Hold</option>
+                <option value="active">Active Only</option>
+                <option value="on_hold">On Hold Only</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <button class="btn btn-sm btn-outline-primary" onclick="exportReportPdf('job-status-summary')">
+                <i class="ti ti-file-type-pdf me-1"></i>PDF
+              </button>
+              <button class="btn btn-sm btn-primary" onclick="exportReport('job_status_summary')">
+                <i class="ti ti-download me-1"></i>CSV
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Total Jobs</div>
+                    <div class="h2 mb-0" id="jobStatusTotal">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Active</div>
+                    <div class="h2 mb-0 text-success" id="jobStatusActive">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">On Hold</div>
+                    <div class="h2 mb-0 text-warning" id="jobStatusOnHold">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">At Risk</div>
+                    <div class="h2 mb-0 text-danger" id="jobStatusAtRisk">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Avg Material Fulfillment</div>
+                    <div class="h2 mb-0 text-info" id="jobStatusAvgFulfillment">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="jobStatusLoading" class="text-center py-4">
+              <div class="spinner-border" role="status"></div>
+              <div class="text-muted mt-2">Loading report...</div>
+            </div>
+
+            <div id="jobStatusContent" style="display: none;">
+              <div class="table-responsive">
+                <table class="table table-sm table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th>Job #</th>
+                      <th>Job Name</th>
+                      <th>Customer</th>
+                      <th>Status</th>
+                      <th>Superintendent</th>
+                      <th>Target Completion</th>
+                      <th class="text-center">Days</th>
+                      <th class="text-center">Material %</th>
+                      <th class="text-center">Open Reservations</th>
+                      <th class="text-center">WOs (Active/Hold/Done)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jobStatusBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Joints Completed Report -->
+      <div class="col-12" id="jointsCompletedReport" style="display: none;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-git-merge me-2"></i>Joints Completed</h3>
+            <div class="ms-auto d-flex gap-2">
+              <input type="date" class="form-control form-control-sm" id="jointsStartDate" style="max-width: 150px;">
+              <input type="date" class="form-control form-control-sm" id="jointsEndDate" style="max-width: 150px;">
+              <button class="btn btn-sm btn-outline-secondary" onclick="loadJointsCompletedReport()">
+                <i class="ti ti-refresh me-1"></i>Apply
+              </button>
+              <button class="btn btn-sm btn-outline-primary" onclick="exportReportPdf('joints-completed')">
+                <i class="ti ti-file-type-pdf me-1"></i>PDF
+              </button>
+              <button class="btn btn-sm btn-primary" onclick="exportReport('joints_completed')">
+                <i class="ti ti-download me-1"></i>CSV
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-6 col-md-4">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Total Joints Completed</div>
+                    <div class="h2 mb-0" id="jointsTotal">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Elevations Completed</div>
+                    <div class="h2 mb-0 text-info" id="jointsElevations">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4">
+                <div class="card card-sm">
+                  <div class="card-body">
+                    <div class="text-muted">Top System</div>
+                    <div class="h3 mb-0 text-success" id="jointsTopSystem">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="jointsCompletedLoading" class="text-center py-4">
+              <div class="spinner-border" role="status"></div>
+              <div class="text-muted mt-2">Loading report...</div>
+            </div>
+
+            <div id="jointsCompletedContent" style="display: none;">
+              <h4>Breakdown by System</h4>
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th>System</th>
+                      <th class="text-end">Joints Completed</th>
+                      <th class="text-end">Elevations</th>
+                      <th class="text-end">Jobs</th>
+                      <th class="text-end">% of Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jointsBySystemBody"></tbody>
+                </table>
+              </div>
+
+              <h4>Breakdown by Complexity Tier</h4>
+              <div class="table-responsive mb-4">
+                <table class="table table-sm table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th>Tier</th>
+                      <th class="text-end">Joints Completed</th>
+                      <th class="text-end">Elevations</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jointsByTierBody"></tbody>
+                </table>
+              </div>
+
+              <h4>Daily Totals</h4>
+              <div class="table-responsive">
+                <table class="table table-sm table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th class="text-end">Joints Completed</th>
+                      <th class="text-end">Elevations</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jointsByDateBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -906,7 +1207,10 @@ function showReport(reportType) {
     'usage': 'usageReport',
     'monthlyStatement': 'monthlyStatementReport',
     'inventory': 'inventoryReport',
-    'storageLocation': 'storageLocationReport'
+    'storageLocation': 'storageLocationReport',
+    'workOrderBacklog': 'workOrderBacklogReport',
+    'jobStatusSummary': 'jobStatusSummaryReport',
+    'jointsCompleted': 'jointsCompletedReport'
   };
 
   const reportId = reportMap[reportType];
@@ -942,6 +1246,15 @@ function showReport(reportType) {
         break;
       case 'storageLocation':
         loadStorageLocationReport();
+        break;
+      case 'workOrderBacklog':
+        loadWorkOrderBacklogReport();
+        break;
+      case 'jobStatusSummary':
+        loadJobStatusSummaryReport();
+        break;
+      case 'jointsCompleted':
+        loadJointsCompletedReport();
         break;
     }
   }
@@ -1569,6 +1882,11 @@ async function exportReport(type) {
       const month = document.getElementById('statementMonth').value;
       const year = document.getElementById('statementYear').value;
       url += `&month=${month}&year=${year}`;
+    } else if (type === 'joints_completed') {
+      const startDate = document.getElementById('jointsStartDate')?.value;
+      const endDate = document.getElementById('jointsEndDate')?.value;
+      if (startDate) url += `&start_date=${startDate}`;
+      if (endDate) url += `&end_date=${endDate}`;
     }
 
     const response = await fetch(url, {
@@ -1618,6 +1936,11 @@ async function exportReportPdf(type) {
     } else if (type === 'usage-analytics') {
       const days = document.getElementById('usageDays')?.value || 30;
       params.append('days', days);
+    } else if (type === 'joints-completed') {
+      const startDate = document.getElementById('jointsStartDate')?.value;
+      const endDate = document.getElementById('jointsEndDate')?.value;
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
     }
 
     if (params.toString()) {
@@ -1843,6 +2166,153 @@ async function exportStorageLocationPdf() {
   } catch (error) {
     console.error('Error exporting storage location PDF:', error);
     showNotification('Error generating PDF report', 'danger');
+  }
+}
+
+// Work Order Backlog / Queue Report
+async function loadWorkOrderBacklogReport() {
+  try {
+    document.getElementById('woBacklogLoading').style.display = 'block';
+    document.getElementById('woBacklogContent').style.display = 'none';
+
+    const response = await authenticatedFetch('/reports/work-order-backlog');
+
+    document.getElementById('woBacklogTotal').textContent = response.summary.total_open;
+    document.getElementById('woBacklogActive').textContent = response.summary.active_count;
+    document.getElementById('woBacklogOnHold').textContent = response.summary.on_hold_count;
+    const overdueEl = document.getElementById('woBacklogOverdue');
+    overdueEl.textContent = response.summary.overdue_count;
+    document.getElementById('woBacklogDueSoon').textContent = response.summary.due_this_week;
+
+    const tbody = document.getElementById('woBacklogBody');
+    if (response.work_orders.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No open work orders found.</td></tr>';
+    } else {
+      tbody.innerHTML = response.work_orders.map(wo => `
+        <tr>
+          <td>${wo.priority ?? '—'}</td>
+          <td>${escapeHtml(wo.release_label)}</td>
+          <td>${escapeHtml(wo.job_number || '—')} <span class="text-muted small">${escapeHtml(wo.job_name || '')}</span></td>
+          <td><span class="badge ${wo.status === 'on_hold' ? 'bg-warning-lt text-warning' : 'bg-success-lt text-success'}">${escapeHtml(wo.status.replace('_', ' '))}</span></td>
+          <td>${wo.due_date ?? '—'}</td>
+          <td class="text-center ${wo.is_overdue ? 'text-danger fw-bold' : ''}">${wo.days_until_due ?? '—'}</td>
+          <td>${escapeHtml(wo.assigned_users.join(', ') || '—')}</td>
+          <td class="text-center">${wo.elevations_complete_count}/${wo.elevation_count}</td>
+          <td class="text-center">${wo.open_steps_count}</td>
+        </tr>`).join('');
+    }
+
+    document.getElementById('woBacklogLoading').style.display = 'none';
+    document.getElementById('woBacklogContent').style.display = 'block';
+  } catch (error) {
+    console.error('Error loading work order backlog report:', error);
+    showNotification('Error loading work order backlog report', 'danger');
+  }
+}
+
+// Job Status Summary Report
+async function loadJobStatusSummaryReport() {
+  try {
+    document.getElementById('jobStatusLoading').style.display = 'block';
+    document.getElementById('jobStatusContent').style.display = 'none';
+
+    const status = document.getElementById('jobStatusFilter').value;
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    const response = await authenticatedFetch(`/reports/job-status-summary${query}`);
+
+    document.getElementById('jobStatusTotal').textContent = response.summary.total_jobs;
+    document.getElementById('jobStatusActive').textContent = response.summary.active_jobs;
+    document.getElementById('jobStatusOnHold').textContent = response.summary.on_hold_jobs;
+    document.getElementById('jobStatusAtRisk').textContent = response.summary.at_risk_jobs;
+    document.getElementById('jobStatusAvgFulfillment').textContent =
+      response.summary.avg_material_fulfillment_pct !== null ? `${response.summary.avg_material_fulfillment_pct}%` : 'N/A';
+
+    const tbody = document.getElementById('jobStatusBody');
+    if (response.jobs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No jobs found.</td></tr>';
+    } else {
+      tbody.innerHTML = response.jobs.map(job => `
+        <tr>
+          <td>${escapeHtml(job.job_number)}</td>
+          <td>${escapeHtml(job.job_name)}</td>
+          <td>${escapeHtml(job.customer_name || '—')}</td>
+          <td><span class="badge bg-secondary-lt text-secondary">${escapeHtml(job.status.replace('_', ' '))}</span></td>
+          <td>${escapeHtml(job.superintendent || '—')}</td>
+          <td>${job.target_completion_date ?? '—'}</td>
+          <td class="text-center ${job.is_at_risk ? 'text-danger fw-bold' : ''}">${job.days_until_completion ?? '—'}</td>
+          <td class="text-center">${job.material_fulfillment_pct !== null ? job.material_fulfillment_pct + '%' : 'N/A'}</td>
+          <td class="text-center">${job.open_reservation_count}</td>
+          <td class="text-center">${job.work_orders_active} / ${job.work_orders_on_hold} / ${job.work_orders_complete}</td>
+        </tr>`).join('');
+    }
+
+    document.getElementById('jobStatusLoading').style.display = 'none';
+    document.getElementById('jobStatusContent').style.display = 'block';
+  } catch (error) {
+    console.error('Error loading job status summary report:', error);
+    showNotification('Error loading job status summary report', 'danger');
+  }
+}
+
+// Joints Completed Report
+async function loadJointsCompletedReport() {
+  try {
+    document.getElementById('jointsCompletedLoading').style.display = 'block';
+    document.getElementById('jointsCompletedContent').style.display = 'none';
+
+    const startDate = document.getElementById('jointsStartDate').value;
+    const endDate = document.getElementById('jointsEndDate').value;
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const response = await authenticatedFetch(`/reports/joints-completed${query}`);
+
+    if (!startDate) document.getElementById('jointsStartDate').value = response.summary.start_date;
+    if (!endDate) document.getElementById('jointsEndDate').value = response.summary.end_date;
+
+    document.getElementById('jointsTotal').textContent = response.summary.total_joints.toLocaleString();
+    document.getElementById('jointsElevations').textContent = response.summary.total_elevations.toLocaleString();
+    document.getElementById('jointsTopSystem').textContent = response.summary.top_system || 'N/A';
+
+    const bySystemBody = document.getElementById('jointsBySystemBody');
+    bySystemBody.innerHTML = response.by_system.length === 0
+      ? '<tr><td colspan="5" class="text-center text-muted py-3">No completed joints in this date range.</td></tr>'
+      : response.by_system.map(row => `
+          <tr>
+            <td>${escapeHtml(row.system)}</td>
+            <td class="text-end">${row.joints.toLocaleString()}</td>
+            <td class="text-end">${row.elevation_count.toLocaleString()}</td>
+            <td class="text-end">${row.job_count.toLocaleString()}</td>
+            <td class="text-end">${row.percent_of_total}%</td>
+          </tr>`).join('');
+
+    const byTierBody = document.getElementById('jointsByTierBody');
+    byTierBody.innerHTML = response.by_tier.length === 0
+      ? '<tr><td colspan="3" class="text-center text-muted py-3">No completed joints in this date range.</td></tr>'
+      : response.by_tier.map(row => `
+          <tr>
+            <td>${escapeHtml(row.tier)}</td>
+            <td class="text-end">${row.joints.toLocaleString()}</td>
+            <td class="text-end">${row.elevation_count.toLocaleString()}</td>
+          </tr>`).join('');
+
+    const byDateBody = document.getElementById('jointsByDateBody');
+    byDateBody.innerHTML = response.by_date.length === 0
+      ? '<tr><td colspan="3" class="text-center text-muted py-3">No completed joints in this date range.</td></tr>'
+      : response.by_date.map(row => `
+          <tr>
+            <td>${row.date}</td>
+            <td class="text-end">${row.joints.toLocaleString()}</td>
+            <td class="text-end">${row.elevation_count.toLocaleString()}</td>
+          </tr>`).join('');
+
+    document.getElementById('jointsCompletedLoading').style.display = 'none';
+    document.getElementById('jointsCompletedContent').style.display = 'block';
+  } catch (error) {
+    console.error('Error loading joints completed report:', error);
+    showNotification('Error loading joints completed report', 'danger');
   }
 }
 

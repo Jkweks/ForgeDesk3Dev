@@ -31,6 +31,13 @@ COPY laravel/ .
 # Build frontend assets and clean up dev dependencies
 RUN npm run build && rm -rf node_modules
 
+# Preserve a pristine copy of the freshly built public/ dir outside the app root.
+# In prod, a named volume is mounted directly onto /var/www/html/public for
+# persistence, which shadows this directory at container start before the
+# entrypoint runs. This copy is the only way each new image's assets (JS/CSS,
+# Vite build output) can reach that volume — see entrypoint.sh.
+RUN cp -r /var/www/html/public /var/www/public_src
+
 # Regenerate optimized autoloader now that all app files are present
 RUN composer dump-autoload --optimize --no-dev
 

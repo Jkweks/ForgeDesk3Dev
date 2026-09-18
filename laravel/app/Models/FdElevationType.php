@@ -9,9 +9,28 @@ class FdElevationType extends Model
 {
     protected $table = 'fd_elevation_types';
 
-    protected $fillable = ['name', 'color', 'sort_order', 'active'];
+    protected $fillable = ['name', 'color', 'sort_order', 'active', 'aliases', 'standard_joint_count'];
 
-    protected $casts = ['active' => 'boolean'];
+    protected $casts = ['active' => 'boolean', 'aliases' => 'array', 'standard_joint_count' => 'integer'];
+
+    /**
+     * Every string that should resolve a work-order import row to this type:
+     * its canonical name plus any configured aliases, trimmed + lower-cased and
+     * de-duplicated. The name is always included, so exact-name matching keeps
+     * working even when no aliases are set.
+     *
+     * @return list<string>
+     */
+    public function matchTerms(): array
+    {
+        return collect([$this->name])
+            ->merge($this->aliases ?? [])
+            ->map(fn ($s) => mb_strtolower(trim((string) $s)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
 
     public function stageTemplates(): HasMany
     {

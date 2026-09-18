@@ -88,7 +88,7 @@ class CompanyLogoTest extends TestCase
         ])->assertOk();
 
         $supplier = Supplier::create(['name' => 'Acme']);
-        $product = Product::create(['sku' => 'X1', 'description' => 'X', 'net_cost' => 1]);
+        $product = Product::create(['sku' => 'X1', 'description' => 'X', 'net_cost' => 1, 'supplier_id' => $supplier->id]);
         $po = PurchaseOrder::create([
             'po_number' => 'PO-LOGO-1',
             'supplier_id' => $supplier->id,

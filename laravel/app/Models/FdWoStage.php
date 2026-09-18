@@ -19,14 +19,20 @@ class FdWoStage extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_id', 'template_id', 'name', 'description',
-        'sort_order', 'blocks_next', 'minutes_per_joint', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
+        'sort_order', 'phase', 'blocks_next', 'minutes_per_joint', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
     ];
 
+    /** Gate ordering key: explicit phase, or the row's sort_order when unset. */
+    public function getEffectivePhaseAttribute(): int
+    {
+        return $this->phase ?? $this->sort_order;
+    }
+
     protected $casts = [
-        'blocks_next'       => 'boolean',
+        'blocks_next' => 'boolean',
         'minutes_per_joint' => 'decimal:2',
-        'started_at'        => 'datetime',
-        'completed_at'      => 'datetime',
+        'started_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     public function isTerminal(): bool

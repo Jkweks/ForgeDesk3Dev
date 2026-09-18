@@ -31,6 +31,7 @@ class PurchaseOrderEditTest extends TestCase
         $this->supplier = Supplier::create(['name' => 'Acme']);
         $this->product = Product::create([
             'sku' => 'W1', 'description' => 'Widget', 'net_cost' => 2, 'on_order_qty' => 0,
+            'supplier_id' => $this->supplier->id,
         ]);
     }
 
@@ -93,7 +94,7 @@ class PurchaseOrderEditTest extends TestCase
         $this->assertEquals(25.00, $po->fresh()->total_amount);
 
         // add a second line
-        $p2 = Product::create(['sku' => 'W2', 'description' => 'Widget 2', 'net_cost' => 1]);
+        $p2 = Product::create(['sku' => 'W2', 'description' => 'Widget 2', 'net_cost' => 1, 'supplier_id' => $this->supplier->id]);
         $this->postJson("/api/v1/purchase-orders/{$po->id}/items", [
             'product_id' => $p2->id, 'quantity' => 3, 'unit_cost' => 1,
         ])->assertCreated();

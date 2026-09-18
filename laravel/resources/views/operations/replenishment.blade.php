@@ -99,6 +99,8 @@
                 <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning)">Very Low</button>
                 <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info)">Low</button>
                 <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success)">In Stock</button>
+                <button class="btn btn-sm status-pill" data-status="__special_order__" onclick="setStatusPill(this)" title="Special-order parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-purple,#ae3ec9);color:#fff;border-color:var(--tblr-purple,#ae3ec9)">Special Order</button>
+                <button class="btn btn-sm status-pill" data-status="__boneyard__" onclick="setStatusPill(this)" title="Boneyard parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-gray-600,#868e96);color:#fff;border-color:var(--tblr-gray-600,#868e96)">Boneyard</button>
               </div>
             </div>
             <div style="min-width:180px">
@@ -269,6 +271,11 @@ let pendingPOSupplier = null;  // Supplier being confirmed
 let searchTimeout = null;
 let currentSortBy  = 'status';  // Default sort: urgency
 let currentSortDir = 'asc';
+// Persistent selection/qty state keyed by product id. Unlike a per-render
+// snapshot, this survives items dropping out of view under a filter change —
+// entries are only ever updated (merged), never wiped, so a checked item
+// stays checked (and its qty stays put) when it's later filtered back in.
+let selectionState = {};
 const URGENT_STATUSES  = ['out_of_stock', 'critical', 'very_low', 'low'];
 let activeStatuses = new Set(URGENT_STATUSES);  // multi-select; all urgent active by default
 
@@ -293,8 +300,20 @@ async function loadReplenishmentItems() {
   document.getElementById('emptyState').style.display = 'none';
 
   try {
-    const data = await authenticatedFetch('/products?status=critical,very_low,low,out_of_stock&per_page=500&with_supplier=1');
-    allItems = (data.data || data).filter(p => p.supplier_id);
+    const [urgentData, specialOrderData] = await Promise.all([
+      authenticatedFetch('/products?status=critical,very_low,low,out_of_stock&per_page=500&with_supplier=1'),
+      authenticatedFetch('/products?is_special_order=1&per_page=500&with_supplier=1'),
+    ]);
+    const urgentItems = (urgentData.data || urgentData).filter(p => p.supplier_id);
+    const specialOrderItems = (specialOrderData.data || specialOrderData).filter(p => p.supplier_id);
+
+    // Special-order parts can have any status (most aren't kept in ongoing
+    // stock) — merge them in regardless so the Special Order pill and the
+    // overcommitted override below have the full set to work with, not just
+    // whichever ones happened to also have an urgent status.
+    const byId = new Map(urgentItems.map(p => [p.id, p]));
+    specialOrderItems.forEach(p => byId.set(p.id, p));
+    allItems = Array.from(byId.values());
 
     allInStockItems = []; // Reset so in-stock list is re-fetched on next request
     buildVendorFilter(allItems);
@@ -378,23 +397,46 @@ function syncStatusPills() {
 }
 
 function snapshotSelections() {
-  const state = {};
+  // Merge currently-rendered rows' live state into the persistent store;
+  // rows not currently rendered (hidden by the active filter) keep whatever
+  // was last recorded for them instead of being dropped.
   document.querySelectorAll('[data-product-id][type="checkbox"]:not([id^="selectAll"])').forEach(cb => {
     const pid = cb.dataset.productId;
     const qtyEl = document.getElementById(`qty-${pid}`);
-    state[pid] = { checked: cb.checked, qty: qtyEl ? qtyEl.value : '' };
+    selectionState[pid] = { checked: cb.checked, qty: qtyEl ? qtyEl.value : '' };
   });
-  return state;
+  return selectionState;
+}
+
+// Committed exceeds on-hand — the one case a special-order part must show up
+// even when the Special Order pill is off, since it needs action regardless.
+function isOvercommitted(p) {
+  return (p.quantity_available ?? 0) < 0;
 }
 
 async function applyFilters() {
   const vendor = document.getElementById('filterVendor').value;
   const search = document.getElementById('filterSearch').value.toLowerCase().trim();
+  const showSpecialOrder = activeStatuses.has('__special_order__');
+  const showBoneyard = activeStatuses.has('__boneyard__');
 
-  // Merge sources based on active statuses
-  let sourceItems = allItems.filter(p => activeStatuses.has(p.status));
+  // Merge sources based on active statuses. Special-order parts are excluded
+  // from the normal status buckets by default — they're ordered per job, not
+  // kept in ongoing stock — unless the Special Order pill is on or the part
+  // is overcommitted (committed reservations exceed on-hand). Boneyard
+  // (nonsof) parts get the same treatment via the Boneyard pill.
+  let sourceItems = allItems.filter(p => {
+    if (p.is_special_order && !(showSpecialOrder || isOvercommitted(p))) return false;
+    if (p.nonsof && !(showBoneyard || isOvercommitted(p))) return false;
+    if (p.is_special_order) return true;
+    return activeStatuses.has(p.status);
+  });
   if (activeStatuses.has('in_stock')) {
-    sourceItems = sourceItems.concat(allInStockItems);
+    sourceItems = sourceItems.concat(allInStockItems.filter(p => {
+      if (p.is_special_order && !(showSpecialOrder || isOvercommitted(p))) return false;
+      if (p.nonsof && !(showBoneyard || isOvercommitted(p))) return false;
+      return true;
+    }));
   }
 
   // Rebuild vendor dropdown for the active source so vendors match what's visible
@@ -687,7 +729,7 @@ function renderItemRow(p, sid) {
       </td>
       <td class="text-end text-muted">${formatCurrency(unitCost)}${packCostLabel}</td>
       <td class="text-end fw-bold" id="lineTotal-${p.id}">—</td>
-      <td>${statusBadge}</td>
+      <td>${statusBadge}${p.is_special_order ? ' <span class="badge bg-purple-lt text-purple">Special Order</span>' : ''}${p.nonsof ? ' <span class="badge bg-secondary-lt text-secondary">Boneyard</span>' : ''}</td>
     </tr>
   `;
 }

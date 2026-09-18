@@ -31,10 +31,10 @@ class StageOverrideResolver
         if ($appUser && method_exists($appUser, 'hasPermission')
             && $appUser->hasPermission('fabrication.work-orders.edit')) {
             return [
-                'allowed'     => $wants,
+                'allowed' => $wants,
                 // fd_stage_log.user_id FKs fd_users, not users — keep null, name in message.
                 'log_user_id' => null,
-                'actor_label' => trim(($appUser->name ?? 'Office user')) . ' (office)',
+                'actor_label' => trim(($appUser->name ?? 'Office user')).' (office)',
             ];
         }
 
@@ -43,7 +43,7 @@ class StageOverrideResolver
             $fabUser = FdUser::find($fabUserId);
             if ($fabUser && in_array($fabUser->role, ['manager', 'admin'], true)) {
                 return [
-                    'allowed'     => $wants,
+                    'allowed' => $wants,
                     'log_user_id' => $fabUser->id,
                     'actor_label' => $fabUser->name,
                 ];
@@ -61,8 +61,8 @@ class StageOverrideResolver
         return function ($blocking) use ($stage, $resolution) {
             FdStageLog::create([
                 'stage_id' => $stage->id,
-                'user_id'  => $resolution['log_user_id'],
-                'message'  => sprintf(
+                'user_id' => $resolution['log_user_id'],
+                'message' => sprintf(
                     'Gate overridden by %s: proceeded past "%s"',
                     $resolution['actor_label'] ?: 'unknown',
                     $blocking->name
@@ -80,10 +80,10 @@ class StageOverrideResolver
         return function ($blocking) use ($step, $resolution) {
             Log::info('Job-step gate overridden', [
                 'work_order_id' => $step->work_order_id,
-                'step_id'       => $step->id,
-                'step'          => $step->name,
+                'step_id' => $step->id,
+                'step' => $step->name,
                 'blocking_step' => $blocking->name,
-                'by'            => $resolution['actor_label'] ?: 'unknown',
+                'by' => $resolution['actor_label'] ?: 'unknown',
             ]);
         };
     }

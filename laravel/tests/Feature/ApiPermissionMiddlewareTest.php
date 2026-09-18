@@ -36,9 +36,10 @@ class ApiPermissionMiddlewareTest extends TestCase
     public function test_manager_can_create_a_product(): void
     {
         $manager = User::factory()->create(['role' => 'manager', 'is_active' => true]);
+        $supplier = \App\Models\Supplier::create(['name' => 'Manager Test Supplier']);
         Sanctum::actingAs($manager, ['*']);
 
-        $response = $this->postJson('/api/v1/products', $this->validProductPayload('MANAGER-TEST'));
+        $response = $this->postJson('/api/v1/products', $this->validProductPayload('MANAGER-TEST', $supplier->id));
 
         $response->assertCreated();
     }
@@ -47,7 +48,7 @@ class ApiPermissionMiddlewareTest extends TestCase
     {
         $manager = User::factory()->create(['role' => 'manager', 'is_active' => true]);
         $supplier = \App\Models\Supplier::create(['name' => 'Test Supplier']);
-        $product = \App\Models\Product::create(['sku' => 'PO-PERM-TEST', 'description' => 'Test']);
+        $product = \App\Models\Product::create(['sku' => 'PO-PERM-TEST', 'description' => 'Test', 'supplier_id' => $supplier->id]);
         Sanctum::actingAs($manager, ['*']);
 
         $response = $this->postJson('/api/v1/purchase-orders', [
@@ -64,18 +65,20 @@ class ApiPermissionMiddlewareTest extends TestCase
     public function test_admin_can_create_a_product(): void
     {
         $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        $supplier = \App\Models\Supplier::create(['name' => 'Admin Test Supplier']);
         Sanctum::actingAs($admin, ['*']);
 
-        $response = $this->postJson('/api/v1/products', $this->validProductPayload('ADMIN-TEST'));
+        $response = $this->postJson('/api/v1/products', $this->validProductPayload('ADMIN-TEST', $supplier->id));
 
         $response->assertCreated();
     }
 
-    private function validProductPayload(string $sku): array
+    private function validProductPayload(string $sku, int $supplierId): array
     {
         return [
             'sku' => $sku,
             'description' => 'Test product',
+            'supplier_id' => $supplierId,
             'unit_cost' => 1,
             'quantity_on_hand' => 0,
             'minimum_quantity' => 0,

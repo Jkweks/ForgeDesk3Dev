@@ -21,6 +21,7 @@ class StageTemplateTierTest extends TestCase
     use RefreshDatabase;
 
     private FdElevationType $type;
+
     private FdStageTemplateSet $standard;
 
     protected function setUp(): void
@@ -43,16 +44,17 @@ class StageTemplateTierTest extends TestCase
     {
         return FdStageTemplate::create([
             'elevation_type_id' => $set->elevation_type_id,
-            'template_set_id'   => $set->id,
-            'name'              => $name,
-            'sort_order'        => $order,
-            'blocks_next'       => $blocksNext,
+            'template_set_id' => $set->id,
+            'name' => $name,
+            'sort_order' => $order,
+            'blocks_next' => $blocksNext,
         ]);
     }
 
     private function workOrder(): FdWorkOrder
     {
-        $job = BusinessJob::create(['job_number' => 'J-' . uniqid(), 'job_name' => 'J', 'status' => 'active']);
+        $job = BusinessJob::create(['job_number' => 'J-'.uniqid(), 'job_name' => 'J', 'status' => 'active']);
+
         return FdWorkOrder::create(['business_job_id' => $job->id, 'release_number' => 1]);
     }
 
@@ -63,7 +65,7 @@ class StageTemplateTierTest extends TestCase
         $wo = $this->workOrder();
 
         $res = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
-            'elevation_tag'     => 'CW-1',
+            'elevation_tag' => 'CW-1',
             'elevation_type_id' => $this->type->id,
         ])->assertCreated();
 
@@ -86,9 +88,9 @@ class StageTemplateTierTest extends TestCase
 
         $wo = $this->workOrder();
         $res = $this->postJson("/api/v1/work-orders/{$wo->id}/elevations", [
-            'elevation_tag'     => 'CW-2',
+            'elevation_tag' => 'CW-2',
             'elevation_type_id' => $this->type->id,
-            'template_set_id'   => $adv->id,
+            'template_set_id' => $adv->id,
         ])->assertCreated();
 
         $res->assertJsonPath('template_set_id', $adv->id);
@@ -100,8 +102,8 @@ class StageTemplateTierTest extends TestCase
         // Create via API with a rate.
         $created = $this->postJson('/api/v1/stage-templates', [
             'elevation_type_id' => $this->type->id,
-            'template_set_id'   => $this->standard->id,
-            'name'              => 'Weld Out',
+            'template_set_id' => $this->standard->id,
+            'name' => 'Weld Out',
             'minutes_per_joint' => 4.5,
         ])->assertCreated()->json('template');
         $this->assertEquals(4.5, $created['minutes_per_joint']);
@@ -228,10 +230,10 @@ class StageTemplateTierTest extends TestCase
         $this->tpl($adv, 'Material Check', 1);
         FdStageTemplate::create([
             'elevation_type_id' => $adv->elevation_type_id,
-            'template_set_id'   => $adv->id,
-            'name'              => 'Thermal Break',
-            'sort_order'        => 2,
-            'default_user_id'   => $defaultUser->id,
+            'template_set_id' => $adv->id,
+            'name' => 'Thermal Break',
+            'sort_order' => 2,
+            'default_user_id' => $defaultUser->id,
         ]);
 
         $wo = $this->workOrder();
@@ -345,11 +347,11 @@ class StageTemplateTierTest extends TestCase
 
         $this->postJson('/api/v1/stage-templates', [
             'elevation_type_id' => $this->type->id,
-            'template_set_id'   => $adv->id,
-            'name'              => 'CNC',
-            'blocks_next'       => false,
+            'template_set_id' => $adv->id,
+            'name' => 'CNC',
+            'blocks_next' => false,
         ])->assertCreated()
-          ->assertJsonPath('template.template_set_id', $adv->id)
-          ->assertJsonPath('template.blocks_next', false);
+            ->assertJsonPath('template.template_set_id', $adv->id)
+            ->assertJsonPath('template.blocks_next', false);
     }
 }

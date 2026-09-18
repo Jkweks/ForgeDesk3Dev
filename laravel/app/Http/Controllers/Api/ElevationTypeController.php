@@ -6,9 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FdElevationType;
 use App\Models\FdStageTemplate;
 use App\Models\FdStageTemplateSet;
-use App\Models\FdUser;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class ElevationTypeController extends Controller
 {
@@ -17,15 +15,16 @@ class ElevationTypeController extends Controller
         $types = FdElevationType::orderBy('sort_order')->orderBy('name')->get();
 
         if ($request->boolean('with_templates')) {
-            $mapTpl = fn($t) => [
-                'id'                => $t->id,
-                'name'              => $t->name,
-                'description'       => $t->description,
-                'sort_order'        => $t->sort_order,
-                'blocks_next'       => (bool) $t->blocks_next,
+            $mapTpl = fn ($t) => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'description' => $t->description,
+                'sort_order' => $t->sort_order,
+                'phase' => $t->phase,
+                'blocks_next' => (bool) $t->blocks_next,
                 'minutes_per_joint' => $t->minutes_per_joint !== null ? (float) $t->minutes_per_joint : null,
-                'default_user_id'   => $t->default_user_id,
-                'default_user'      => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
+                'default_user_id' => $t->default_user_id,
+                'default_user' => $t->defaultUser ? ['id' => $t->defaultUser->id, 'name' => $t->defaultUser->name] : null,
             ];
 
             $types = $types->map(function ($type) use ($mapTpl) {
@@ -34,13 +33,13 @@ class ElevationTypeController extends Controller
                     ->orderBy('sort_order')
                     ->get();
 
-                $setsPayload = $sets->map(fn($s) => [
-                    'id'                => $s->id,
-                    'name'              => $s->name,
-                    'is_default'        => $s->is_default,
-                    'sort_order'        => $s->sort_order,
+                $setsPayload = $sets->map(fn ($s) => [
+                    'id' => $s->id,
+                    'name' => $s->name,
+                    'is_default' => $s->is_default,
+                    'sort_order' => $s->sort_order,
                     'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
-                    'stage_templates'   => $s->templates->map($mapTpl)->values(),
+                    'stage_templates' => $s->templates->map($mapTpl)->values(),
                 ])->values();
 
                 // Back-compat: the flat `stage_templates` key is the default tier's list.
@@ -49,7 +48,7 @@ class ElevationTypeController extends Controller
 
                 return array_merge($type->toArray(), [
                     'stage_template_sets' => $setsPayload,
-                    'stage_templates'     => $flat,
+                    'stage_templates' => $flat,
                 ]);
             });
         }
@@ -59,20 +58,27 @@ class ElevationTypeController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate(['name' => 'required|string|max:100']);
+        $request->validate([
+            'name' => 'required|string|max:100',
+            'aliases' => 'sometimes|array',
+            'aliases.*' => 'nullable|string|max:100',
+            'standard_joint_count' => 'sometimes|nullable|integer|min:0|max:65535',
+        ]);
 
         $maxOrder = FdElevationType::max('sort_order') ?? 0;
         $type = FdElevationType::create([
-            'name'       => $request->name,
-            'color'      => $request->color ?? '#6b7280',
+            'name' => $request->name,
+            'aliases' => $this->cleanAliases($request->input('aliases'), $request->name),
+            'color' => $request->color ?? '#6b7280',
             'sort_order' => $request->sort_order ?? ($maxOrder + 1),
-            'active'     => true,
+            'standard_joint_count' => $request->filled('standard_joint_count') ? (int) $request->standard_joint_count : null,
+            'active' => true,
         ]);
 
         // Every type needs at least one tier so elevations have something to seed from.
         FdStageTemplateSet::create([
             'elevation_type_id' => $type->id,
-            'name'       => 'Standard',
+            'name' => 'Standard',
             'sort_order' => 0,
             'is_default' => true,
         ]);
@@ -82,11 +88,46 @@ class ElevationTypeController extends Controller
 
     public function update(Request $request, int $id)
     {
+        $request->validate([
+            'name' => 'sometimes|string|max:100',
+            'aliases' => 'sometimes|array',
+            'aliases.*' => 'nullable|string|max:100',
+            'standard_joint_count' => 'sometimes|nullable|integer|min:0|max:65535',
+        ]);
+
         $type = FdElevationType::findOrFail($id);
         $type->fill($request->only(['name', 'color', 'sort_order', 'active']));
+
+        if ($request->has('aliases')) {
+            $type->aliases = $this->cleanAliases($request->input('aliases'), $type->name);
+        }
+
+        if ($request->has('standard_joint_count')) {
+            $type->standard_joint_count = $request->filled('standard_joint_count') ? (int) $request->standard_joint_count : null;
+        }
+
         $type->save();
 
         return response()->json(['elevation_type' => $type]);
+    }
+
+    /**
+     * Normalise an alias list from the form: trim, drop blanks, drop any that
+     * just repeat the type name, and de-dupe case-insensitively (first spelling
+     * wins). Returns a plain re-indexed array for the JSON column.
+     *
+     * @return list<string>
+     */
+    private function cleanAliases($raw, ?string $name): array
+    {
+        $nameKey = mb_strtolower(trim((string) $name));
+
+        return collect(is_array($raw) ? $raw : [])
+            ->map(fn ($s) => trim((string) $s))
+            ->filter(fn ($s) => $s !== '' && mb_strtolower($s) !== $nameKey)
+            ->unique(fn ($s) => mb_strtolower($s))
+            ->values()
+            ->all();
     }
 
     public function destroy(int $id)
@@ -115,6 +156,9 @@ class ElevationTypeController extends Controller
         if ($request->has('sort_order')) {
             $template->sort_order = (int) $request->sort_order;
         }
+        if ($request->has('phase')) {
+            $template->phase = $request->filled('phase') ? max(1, (int) $request->phase) : null;
+        }
         if ($request->has('blocks_next')) {
             $template->blocks_next = $request->boolean('blocks_next');
         }
@@ -130,13 +174,14 @@ class ElevationTypeController extends Controller
         $template->save();
 
         return response()->json(['updated' => $id, 'template' => [
-            'id'                => $template->id,
-            'name'              => $template->name,
-            'description'       => $template->description,
-            'sort_order'        => $template->sort_order,
-            'blocks_next'       => (bool) $template->blocks_next,
+            'id' => $template->id,
+            'name' => $template->name,
+            'description' => $template->description,
+            'sort_order' => $template->sort_order,
+            'phase' => $template->phase,
+            'blocks_next' => (bool) $template->blocks_next,
             'minutes_per_joint' => $template->minutes_per_joint !== null ? (float) $template->minutes_per_joint : null,
-            'template_set_id'   => $template->template_set_id,
+            'template_set_id' => $template->template_set_id,
         ]]);
     }
 
@@ -145,9 +190,10 @@ class ElevationTypeController extends Controller
     {
         $request->validate([
             'elevation_type_id' => 'required|integer|exists:fd_elevation_types,id',
-            'name'              => 'required|string|max:255',
-            'template_set_id'   => 'sometimes|nullable|integer|exists:fd_stage_template_sets,id',
-            'blocks_next'       => 'sometimes|boolean',
+            'name' => 'required|string|max:255',
+            'template_set_id' => 'sometimes|nullable|integer|exists:fd_stage_template_sets,id',
+            'phase' => 'sometimes|nullable|integer|min:1',
+            'blocks_next' => 'sometimes|boolean',
             'minutes_per_joint' => 'sometimes|nullable|numeric|min:0',
         ]);
 
@@ -161,25 +207,27 @@ class ElevationTypeController extends Controller
 
         $template = FdStageTemplate::create([
             'elevation_type_id' => $request->elevation_type_id,
-            'template_set_id'   => $setId,
-            'name'              => $request->name,
-            'description'       => $request->description ?? null,
-            'sort_order'        => $maxOrder + 1,
-            'blocks_next'       => $request->boolean('blocks_next', true),
+            'template_set_id' => $setId,
+            'name' => $request->name,
+            'description' => $request->description ?? null,
+            'sort_order' => $maxOrder + 1,
+            'phase' => $request->filled('phase') ? max(1, (int) $request->phase) : null,
+            'blocks_next' => $request->boolean('blocks_next', true),
             'minutes_per_joint' => $request->filled('minutes_per_joint') ? max(0, round((float) $request->minutes_per_joint, 2)) : null,
-            'default_user_id'   => $request->default_user_id ?? null,
+            'default_user_id' => $request->default_user_id ?? null,
         ]);
 
         return response()->json(['id' => $template->id, 'template' => [
-            'id'                => $template->id,
-            'name'              => $template->name,
-            'description'       => $template->description,
-            'sort_order'        => $template->sort_order,
-            'blocks_next'       => (bool) $template->blocks_next,
+            'id' => $template->id,
+            'name' => $template->name,
+            'description' => $template->description,
+            'sort_order' => $template->sort_order,
+            'phase' => $template->phase,
+            'blocks_next' => (bool) $template->blocks_next,
             'minutes_per_joint' => $template->minutes_per_joint !== null ? (float) $template->minutes_per_joint : null,
-            'template_set_id'   => $template->template_set_id,
-            'default_user_id'   => $template->default_user_id,
-            'default_user'      => null,
+            'template_set_id' => $template->template_set_id,
+            'default_user_id' => $template->default_user_id,
+            'default_user' => null,
         ]], 201);
     }
 
@@ -188,6 +236,7 @@ class ElevationTypeController extends Controller
     {
         $template = FdStageTemplate::findOrFail($id);
         $template->delete();
+
         return response()->json(['deleted' => $id]);
     }
 }

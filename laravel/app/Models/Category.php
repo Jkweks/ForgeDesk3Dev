@@ -85,6 +85,7 @@ class Category extends Model
     public function getFullPathAttribute()
     {
         $pathNames = $this->ancestors()->pluck('name')->push($this->name);
+
         return $pathNames->implode(' > ');
     }
 

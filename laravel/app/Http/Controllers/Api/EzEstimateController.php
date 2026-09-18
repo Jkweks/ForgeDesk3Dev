@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class EzEstimateController extends Controller
@@ -28,7 +28,7 @@ class EzEstimateController extends Controller
             ->select('id', 'sku', 'part_number', 'supplier_id', 'finish')
             ->limit(10)
             ->get()
-            ->map(function($p) {
+            ->map(function ($p) {
                 return [
                     'id' => $p->id,
                     'sku' => $p->sku,
@@ -70,7 +70,7 @@ class EzEstimateController extends Controller
                 'file' => 'required|file|mimes:xlsx,xls|max:10240', // Max 10MB
             ]);
 
-            if (!$request->hasFile('file')) {
+            if (! $request->hasFile('file')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No file uploaded',
@@ -79,17 +79,17 @@ class EzEstimateController extends Controller
 
             $file = $request->file('file');
 
-            if (!$file->isValid()) {
+            if (! $file->isValid()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'File upload failed: ' . $file->getErrorMessage(),
+                    'message' => 'File upload failed: '.$file->getErrorMessage(),
                 ], 400);
             }
 
             // Ensure directory exists
             $directory = storage_path('app/ez_estimates');
-            if (!file_exists($directory)) {
-                if (!mkdir($directory, 0775, true)) {
+            if (! file_exists($directory)) {
+                if (! mkdir($directory, 0775, true)) {
                     throw new \Exception('Failed to create storage directory');
                 }
             }
@@ -105,23 +105,23 @@ class EzEstimateController extends Controller
                 $extension = 'xlsx'; // Default fallback
             }
 
-            $fileName = 'ez_estimate_' . time() . '.' . $extension;
+            $fileName = 'ez_estimate_'.time().'.'.$extension;
 
             // Store file in storage/app/ez_estimates
             $path = $file->storeAs('ez_estimates', $fileName);
 
-            if (!$path) {
+            if (! $path) {
                 throw new \Exception('Failed to store uploaded file');
             }
 
             // Get the full filesystem path and verify it exists
             $fullPath = Storage::path($path);
 
-            if (!file_exists($fullPath)) {
+            if (! file_exists($fullPath)) {
                 throw new \Exception("File was not created at: {$fullPath}");
             }
 
-            if (!is_readable($fullPath)) {
+            if (! is_readable($fullPath)) {
                 throw new \Exception("File exists but is not readable: {$fullPath}");
             }
 
@@ -140,7 +140,7 @@ class EzEstimateController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Validation failed: ' . implode(', ', $e->validator->errors()->all()),
+                'message' => 'Validation failed: '.implode(', ', $e->validator->errors()->all()),
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -154,7 +154,7 @@ class EzEstimateController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to process EZ Estimate: ' . $e->getMessage(),
+                'message' => 'Failed to process EZ Estimate: '.$e->getMessage(),
                 'debug' => [
                     'file' => basename($e->getFile()),
                     'line' => $e->getLine(),
@@ -177,11 +177,11 @@ class EzEstimateController extends Controller
             ini_set('max_execution_time', '300'); // 5 minutes
 
             // Verify file exists and is readable
-            if (!file_exists($filePath)) {
+            if (! file_exists($filePath)) {
                 throw new \Exception("File does not exist: {$filePath}");
             }
 
-            if (!is_readable($filePath)) {
+            if (! is_readable($filePath)) {
                 throw new \Exception("File is not readable: {$filePath}");
             }
 
@@ -193,8 +193,8 @@ class EzEstimateController extends Controller
             // Load the spreadsheet with optimized settings
             $spreadsheet = $reader->load($filePath);
 
-            if (!$spreadsheet) {
-                throw new \Exception("Failed to load Excel file");
+            if (! $spreadsheet) {
+                throw new \Exception('Failed to load Excel file');
             }
 
             // Parse data from all worksheets
@@ -203,9 +203,9 @@ class EzEstimateController extends Controller
             $finishCodes = $this->parseFinishCodes($spreadsheet);
             $multipliers = $this->parseMultipliers($spreadsheet);
         } catch (\PhpOffice\PhpSpreadsheet\Reader\Exception $e) {
-            throw new \Exception("Excel parsing error: " . $e->getMessage());
+            throw new \Exception('Excel parsing error: '.$e->getMessage());
         } catch (\Exception $e) {
-            throw new \Exception("Failed to process Excel file: " . $e->getMessage());
+            throw new \Exception('Failed to process Excel file: '.$e->getMessage());
         }
 
         $stats = [
@@ -247,7 +247,7 @@ class EzEstimateController extends Controller
     private function parseSLFormulas($spreadsheet)
     {
         $worksheet = $spreadsheet->getSheetByName('SL Formulas');
-        if (!$worksheet) {
+        if (! $worksheet) {
             throw new \Exception('SL Formulas worksheet not found');
         }
 
@@ -282,7 +282,7 @@ class EzEstimateController extends Controller
     private function parsePFormulas($spreadsheet)
     {
         $worksheet = $spreadsheet->getSheetByName('P Formulas');
-        if (!$worksheet) {
+        if (! $worksheet) {
             throw new \Exception('P Formulas worksheet not found');
         }
 
@@ -316,7 +316,7 @@ class EzEstimateController extends Controller
     private function parseFinishCodes($spreadsheet)
     {
         $worksheet = $spreadsheet->getSheetByName('Finish Codes');
-        if (!$worksheet) {
+        if (! $worksheet) {
             throw new \Exception('Finish Codes worksheet not found');
         }
 
@@ -345,7 +345,7 @@ class EzEstimateController extends Controller
     private function parseMultipliers($spreadsheet)
     {
         $worksheet = $spreadsheet->getSheetByName('Multipliers');
-        if (!$worksheet) {
+        if (! $worksheet) {
             throw new \Exception('Multipliers worksheet not found');
         }
 
@@ -366,7 +366,7 @@ class EzEstimateController extends Controller
 
             foreach ($categoryList as $category) {
                 $category = trim($category);
-                if (!empty($category)) {
+                if (! empty($category)) {
                     $data[$category] = (float) $multiplier;
                 }
             }
@@ -390,11 +390,11 @@ class EzEstimateController extends Controller
         $products = Product::join('suppliers', 'products.supplier_id', '=', 'suppliers.id')
             ->where('products.part_number', $partNumber)
             ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
-            ->where(function($query) {
+            ->where(function ($query) {
                 $query->where('products.sku', 'LIKE', 'A%')
-                      ->orWhere('products.sku', 'LIKE', 'E%')
-                      ->orWhere('products.sku', 'LIKE', 'M%')
-                      ->orWhere('products.sku', 'LIKE', 'T%');
+                    ->orWhere('products.sku', 'LIKE', 'E%')
+                    ->orWhere('products.sku', 'LIKE', 'M%')
+                    ->orWhere('products.sku', 'LIKE', 'T%');
             })
             ->select('products.*')
             ->get();
@@ -450,10 +450,10 @@ class EzEstimateController extends Controller
         $products = Product::join('suppliers', 'products.supplier_id', '=', 'suppliers.id')
             ->where('products.part_number', $partNumber)
             ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
-            ->where(function($query) {
+            ->where(function ($query) {
                 $query->where('products.sku', 'LIKE', 'P%')
-                      ->orWhere('products.sku', 'LIKE', 'S%')
-                      ->orWhere('products.sku', 'LIKE', 'CP%');
+                    ->orWhere('products.sku', 'LIKE', 'S%')
+                    ->orWhere('products.sku', 'LIKE', 'CP%');
             })
             ->select('products.*')
             ->get();
@@ -504,7 +504,7 @@ class EzEstimateController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'PhpSpreadsheet error: ' . $e->getMessage(),
+                'message' => 'PhpSpreadsheet error: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -526,7 +526,7 @@ class EzEstimateController extends Controller
                 ], 404);
             }
 
-            usort($files, function($a, $b) {
+            usort($files, function ($a, $b) {
                 return Storage::lastModified($b) - Storage::lastModified($a);
             });
             $latestFile = $files[0];
@@ -565,11 +565,11 @@ class EzEstimateController extends Controller
                     $products = Product::join('suppliers', 'products.supplier_id', '=', 'suppliers.id')
                         ->where('products.part_number', $partNumber)
                         ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
-                        ->where(function($query) {
+                        ->where(function ($query) {
                             $query->where('products.sku', 'LIKE', 'A%')
-                                  ->orWhere('products.sku', 'LIKE', 'E%')
-                                  ->orWhere('products.sku', 'LIKE', 'M%')
-                                  ->orWhere('products.sku', 'LIKE', 'T%');
+                                ->orWhere('products.sku', 'LIKE', 'E%')
+                                ->orWhere('products.sku', 'LIKE', 'M%')
+                                ->orWhere('products.sku', 'LIKE', 'T%');
                         })
                         ->select('products.*', 'suppliers.name as supplier_name')
                         ->get();
@@ -616,9 +616,9 @@ class EzEstimateController extends Controller
                     $products = Product::join('suppliers', 'products.supplier_id', '=', 'suppliers.id')
                         ->where('products.part_number', $partNumber)
                         ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
-                        ->where(function($query) {
+                        ->where(function ($query) {
                             $query->where('products.sku', 'LIKE', 'P%')
-                                  ->orWhere('products.sku', 'LIKE', 'S%');
+                                ->orWhere('products.sku', 'LIKE', 'S%');
                         })
                         ->select('products.*', 'suppliers.name as supplier_name')
                         ->get();
@@ -649,7 +649,7 @@ class EzEstimateController extends Controller
                     }
                 }
 
-                if (!$slData && !$pData) {
+                if (! $slData && ! $pData) {
                     $result['error'] = 'Part number not found in EZ Estimate file';
                 }
 
@@ -667,7 +667,7 @@ class EzEstimateController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Test failed: ' . $e->getMessage(),
+                'message' => 'Test failed: '.$e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ], 500);
         }
@@ -689,7 +689,7 @@ class EzEstimateController extends Controller
             }
 
             // Get the most recent file
-            usort($files, function($a, $b) {
+            usort($files, function ($a, $b) {
                 return Storage::lastModified($b) - Storage::lastModified($a);
             });
 
@@ -733,18 +733,18 @@ class EzEstimateController extends Controller
                     ->count(),
                 'stock_length' => Product::join('suppliers', 'products.supplier_id', '=', 'suppliers.id')
                     ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
-                    ->where(function($query) {
+                    ->where(function ($query) {
                         $query->where('products.sku', 'LIKE', 'A%')
-                              ->orWhere('products.sku', 'LIKE', 'E%')
-                              ->orWhere('products.sku', 'LIKE', 'M%')
-                              ->orWhere('products.sku', 'LIKE', 'T%');
+                            ->orWhere('products.sku', 'LIKE', 'E%')
+                            ->orWhere('products.sku', 'LIKE', 'M%')
+                            ->orWhere('products.sku', 'LIKE', 'T%');
                     })
                     ->count(),
                 'accessories' => Product::join('suppliers', 'products.supplier_id', '=', 'suppliers.id')
                     ->whereRaw('LOWER(suppliers.name) = ?', ['tubelite'])
-                    ->where(function($query) {
+                    ->where(function ($query) {
                         $query->where('products.sku', 'LIKE', 'P%')
-                              ->orWhere('products.sku', 'LIKE', 'S%');
+                            ->orWhere('products.sku', 'LIKE', 'S%');
                     })
                     ->count(),
             ];

@@ -17,7 +17,7 @@ class FdStageTemplateSet extends Model
     protected $fillable = ['elevation_type_id', 'name', 'sort_order', 'is_default', 'minutes_per_joint'];
 
     protected $casts = [
-        'is_default'        => 'boolean',
+        'is_default' => 'boolean',
         'minutes_per_joint' => 'decimal:2',
     ];
 

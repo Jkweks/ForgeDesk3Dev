@@ -47,12 +47,12 @@ class JobReservationItem extends Model
      */
     public function syncProductCommittedQuantity()
     {
-        if (!$this->product_id) {
+        if (! $this->product_id) {
             return;
         }
 
         $product = Product::find($this->product_id);
-        if (!$product) {
+        if (! $product) {
             return;
         }
 
@@ -107,13 +107,12 @@ class JobReservationItem extends Model
     public static function binAwareCommitted(int $productId): float
     {
         $items = self::where('product_id', $productId)
-            ->whereHas('reservation', fn($q) =>
-                $q->whereIn('status', ['active', 'in_progress', 'on_hold'])
-                  ->whereNull('deleted_at')
+            ->whereHas('reservation', fn ($q) => $q->whereIn('status', ['active', 'in_progress', 'on_hold'])
+                ->whereNull('deleted_at')
             )
             ->orderByDesc('committed_qty')
             ->pluck('committed_qty')
-            ->map(fn($v) => (float) $v)
+            ->map(fn ($v) => (float) $v)
             ->toArray();
 
         if (empty($items)) {
@@ -135,7 +134,7 @@ class JobReservationItem extends Model
                 }
             }
             unset($used);
-            if (!$placed) {
+            if (! $placed) {
                 $bins[] = round($item * 10) / 10;
             }
         }

@@ -109,9 +109,15 @@
                     <div class="tab-pane active show" id="tab-users" role="tabpanel">
                       <div class="mb-3 d-flex justify-content-between align-items-center">
                         <h3 class="mb-0">Users</h3>
-                        <button class="btn btn-primary" onclick="showAddUserModal()" data-permission="users.create">
-                          <i class="ti ti-plus me-1"></i>Add User
-                        </button>
+                        <div class="btn-list">
+                          <button class="btn btn-outline-primary" id="sendPendingInvitesBtn" onclick="sendPendingInvites()"
+                                  data-permission="users.create" style="display:none">
+                            <i class="ti ti-mail-fast me-1"></i><span id="sendPendingInvitesLabel">Send held invitations</span>
+                          </button>
+                          <button class="btn btn-primary" onclick="showAddUserModal()" data-permission="users.create">
+                            <i class="ti ti-plus me-1"></i>Add User
+                          </button>
+                        </div>
                       </div>
 
                       <div class="row mb-3">
@@ -634,13 +640,14 @@
                             <tr>
                               <th style="width:50px">Color</th>
                               <th>Name</th>
+                              <th>Standard Joints</th>
                               <th>Sort</th>
                               <th>Status</th>
                               <th class="w-1">Actions</th>
                             </tr>
                           </thead>
                           <tbody id="elev-types-tbody">
-                            <tr><td colspan="5" class="text-muted text-center py-3">Click "Elevation Types" tab to load.</td></tr>
+                            <tr><td colspan="6" class="text-muted text-center py-3">Click "Elevation Types" tab to load.</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -716,9 +723,25 @@
                 </div>
               </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Sort Order</label>
-              <input type="number" class="form-control" id="elevTypeSortOrder" value="99" min="1">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label">Sort Order</label>
+                <input type="number" class="form-control" id="elevTypeSortOrder" value="99" min="1">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Standard Joints / Unit</label>
+                <input type="number" class="form-control" id="elevTypeJointCount" min="0" placeholder="e.g. 6 for a door">
+                <div class="form-text">Auto-fills a new elevation's joint count as quantity × this value. Leave blank if not applicable; always editable per elevation.</div>
+              </div>
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Linked names</label>
+              <textarea class="form-control" id="elevTypeAliases" rows="3"
+                placeholder="One per line or comma-separated — e.g. Curtainwall, Curtain Wall, CWall"></textarea>
+              <div class="form-text">
+                Work-order imports match a row to this type when its Type cell equals or contains
+                any of these, or the type name itself. Case doesn’t matter.
+              </div>
             </div>
           </div>
           <div class="modal-footer">
@@ -731,7 +754,7 @@
 
     <!-- Stage Templates Default-User Modal -->
     <div class="modal modal-blur fade" id="tplModal" tabindex="-1">
-      <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-dialog modal-xl modal-fullscreen-lg-down modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="tplModalTypeName">Stage Templates</h5>
@@ -831,7 +854,7 @@
             <div class="mb-3">
               <label class="form-label required">Email</label>
               <input type="email" class="form-control" id="addUserEmail" placeholder="user@example.com">
-              <small class="form-hint">A welcome email with a temporary password is sent to this address. The user must set a new password within 48 hours.</small>
+              <small class="form-hint">The welcome email carries a temporary password the user must change within 7 days. A held invitation gets a fresh temporary password when you finally send it.</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
@@ -845,6 +868,13 @@
                 <input class="form-check-input" type="checkbox" id="addUserActive" checked>
                 <span class="form-check-label">Active</span>
               </label>
+            </div>
+            <div class="mb-1">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" id="addUserSendWelcome" checked>
+                <span class="form-check-label">Send welcome email now</span>
+              </label>
+              <small class="form-hint">Uncheck to hold it — set up the profile, roles and permissions first, then send held invitations one by one or all at once from the Users list.</small>
             </div>
           </div>
           <div class="modal-footer">
@@ -1057,6 +1087,7 @@
         document.getElementById('addUserEmail').value = '';
         document.getElementById('addUserRole').value = '';
         document.getElementById('addUserActive').checked = true;
+        document.getElementById('addUserSendWelcome').checked = true;
 
         // Ensure role dropdown is populated
         if (roles.length > 0) {
@@ -1072,6 +1103,7 @@
         const email = document.getElementById('addUserEmail').value;
         const role = document.getElementById('addUserRole').value;
         const active = document.getElementById('addUserActive').checked;
+        const sendWelcome = document.getElementById('addUserSendWelcome').checked;
 
         if (!firstName || !lastName || !email || !role) {
           showNotification('Please fill in all required fields', 'danger');
@@ -1086,11 +1118,13 @@
               last_name: lastName,
               email: email,
               role: role,
-              is_active: active
+              is_active: active,
+              send_welcome_email: sendWelcome
             })
           });
 
-          showNotification(response.message || 'User created. Welcome email sent.', response.email_sent === false ? 'warning' : 'success');
+          const tone = response.welcome_held ? 'info' : (response.email_sent === false ? 'warning' : 'success');
+          showNotification(response.message || 'User created.', tone);
           hideModal(document.getElementById('addUserModal'));
           loadUsers();
           loadStatistics();
@@ -1462,7 +1496,9 @@
             ? '<span class="badge bg-success">Active</span>'
             : '<span class="badge text-bg-secondary">Inactive</span>';
 
-          if (user.must_change_password) {
+          if (user.invitation_pending) {
+            statusBadge += ' <span class="badge bg-azure" title="Account created — welcome email not sent yet">Not invited</span>';
+          } else if (user.must_change_password) {
             statusBadge += user.temp_password_expired
               ? ' <span class="badge bg-red" title="Temporary password expired">Invite expired</span>'
               : ' <span class="badge bg-yellow" title="Waiting for the user to set a new password">Pending invite</span>';
@@ -1473,11 +1509,15 @@
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
 
-          const resendBtn = user.must_change_password
-            ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="resendInvitation(${user.id})" title="Resend invitation" data-permission="users.edit">
+          const resendBtn = user.invitation_pending
+            ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="sendInvitation(${user.id})" title="Send welcome email now" data-permission="users.create">
+                  <i class="ti ti-send"></i>
+                </button>`
+            : (user.must_change_password
+              ? `<button class="btn btn-sm btn-icon btn-ghost-primary" onclick="resendInvitation(${user.id})" title="Resend invitation" data-permission="users.edit">
                   <i class="ti ti-mail-forward"></i>
                 </button>`
-            : '';
+              : '');
 
           return `
             <tr>
@@ -1500,9 +1540,60 @@
           `;
         }).join('');
 
+        updatePendingInvitesButton();
+
         // Apply action permissions to dynamically created buttons
         if (typeof applyActionPermissions === 'function') {
           applyActionPermissions();
+        }
+      }
+
+      // Show/label the bulk "Send held invitations" button from the loaded users.
+      function updatePendingInvitesButton() {
+        const btn = document.getElementById('sendPendingInvitesBtn');
+        if (!btn) return;
+        const n = (users || []).filter(u => u.invitation_pending && u.is_active).length;
+        document.getElementById('sendPendingInvitesLabel').textContent =
+          n ? `Send ${n} held invitation${n === 1 ? '' : 's'}` : 'Send held invitations';
+        btn.style.display = n ? '' : 'none';
+      }
+
+      async function sendInvitation(userId) {
+        const user = (users || []).find(u => u.id === userId);
+        const who = user ? `${user.name} <${user.email}>` : 'this user';
+        if (!confirm(`Send the welcome email to ${who} now? A fresh temporary password will be issued.`)) return;
+        try {
+          const res = await authenticatedFetch(`/users/${userId}/resend-invitation`, { method: 'POST' });
+          showNotification(res.message || 'Invitation sent.', res.email_sent === false ? 'warning' : 'success');
+          loadUsers();
+          loadStatistics();
+        } catch (error) {
+          console.error('Error sending invitation:', error);
+          showNotification(error.message || 'Failed to send invitation', 'danger');
+        }
+      }
+
+      async function sendPendingInvites() {
+        const n = (users || []).filter(u => u.invitation_pending && u.is_active).length;
+        if (!n) { showNotification('No held invitations to send.', 'info'); return; }
+        if (!confirm(`Send ${n} held welcome email${n === 1 ? '' : 's'} now? Each user gets a fresh temporary password valid for 7 days.`)) return;
+
+        const btn = document.getElementById('sendPendingInvitesBtn');
+        btn.disabled = true;
+        try {
+          const res = await authenticatedFetch('/users/send-pending-invitations', { method: 'POST', body: JSON.stringify({}) });
+          const tone = res.failed && res.failed.length ? 'warning' : 'success';
+          showNotification(res.message || `Sent ${res.sent} invitation(s).`, tone);
+          if (res.failed && res.failed.length) {
+            console.warn('Invitations that failed to send:', res.failed);
+          }
+          loadUsers();
+          loadStatistics();
+        } catch (error) {
+          console.error('Error sending held invitations:', error);
+          showNotification(error.message || 'Failed to send held invitations', 'danger');
+        } finally {
+          btn.disabled = false;
         }
       }
 
@@ -2155,13 +2246,19 @@
       function renderElevTypes() {
         const tbody = document.getElementById('elev-types-tbody');
         if (!elevationTypes.length) {
-          tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No elevation types defined.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3">No elevation types defined.</td></tr>';
           return;
         }
         tbody.innerHTML = elevationTypes.map(t => `
           <tr>
             <td><span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:${locEscHtml(t.color)}"></span></td>
-            <td><strong>${locEscHtml(t.name)}</strong></td>
+            <td>
+              <strong>${locEscHtml(t.name)}</strong>
+              ${(t.aliases && t.aliases.length)
+                ? `<div class="text-muted small">${t.aliases.map(locEscHtml).join(', ')}</div>`
+                : ''}
+            </td>
+            <td>${t.standard_joint_count != null ? `${t.standard_joint_count} / unit` : '<span class="text-muted">—</span>'}</td>
             <td>${t.sort_order}</td>
             <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
             <td>
@@ -2187,6 +2284,8 @@
         document.getElementById('elevTypeColor').value = '#3b82f6';
         document.getElementById('elevTypeColorHex').value = '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = (elevationTypes.length + 1);
+        document.getElementById('elevTypeJointCount').value = '';
+        document.getElementById('elevTypeAliases').value = '';
         // Use data-bs-dismiss or manual show
         const modal = document.getElementById('elevTypeModal');
         if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
@@ -2202,6 +2301,8 @@
         document.getElementById('elevTypeColor').value = t.color || '#3b82f6';
         document.getElementById('elevTypeColorHex').value = t.color || '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = t.sort_order;
+        document.getElementById('elevTypeJointCount').value = t.standard_joint_count ?? '';
+        document.getElementById('elevTypeAliases').value = (t.aliases || []).join('\n');
         const modal = document.getElementById('elevTypeModal');
         if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
         else modal.classList.add('show'), modal.style.display = 'block', document.body.classList.add('modal-open');
@@ -2210,10 +2311,15 @@
       async function saveElevType() {
         const id = document.getElementById('elevTypeId').value;
         const color = document.getElementById('elevTypeColorHex').value || document.getElementById('elevTypeColor').value;
+        const aliases = document.getElementById('elevTypeAliases').value
+          .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        const jointCountVal = document.getElementById('elevTypeJointCount').value;
         const body = {
           name: document.getElementById('elevTypeName').value,
           color: color,
           sort_order: parseInt(document.getElementById('elevTypeSortOrder').value) || 99,
+          standard_joint_count: jointCountVal === '' ? null : Math.max(0, parseInt(jointCountVal) || 0),
+          aliases: aliases,
         };
         if (!body.name) { fabToast('Name is required.', 'info'); return; }
         try {
@@ -2549,6 +2655,13 @@
               </div>
             </td>
             <td style="width:36px" class="text-muted small">${t.sort_order}</td>
+            <td style="width:74px">
+              <input type="number" min="1" step="1" class="form-control form-control-sm" style="width:64px"
+                value="${t.phase ?? ''}" placeholder="—"
+                title="Steps sharing a phase run in parallel; a later phase waits for every 'Blocks next' step in earlier phases. Blank = run in list order."
+                onblur="saveTplField(${t.id}, 'phase', this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </td>
             <td>
               <input type="text" class="form-control form-control-sm" value="${escT(t.name)}"
                 style="min-width:140px"
@@ -2609,8 +2722,10 @@
           <p class="text-muted small mb-2">
             Each tier is an independent step list — pick it when creating an elevation, or bump an
             elevation up later. “Blocks next” gates the following stage until this one is done.
-            Set <strong>Min / joint</strong> per step, or leave the steps blank and set one
-            <strong>Tier min / joint</strong> for the whole list. Saves on blur.
+            Give steps the same <strong>Phase</strong> to let them run in parallel (any order, or at
+            once); a later phase waits for every “Blocks next” step in earlier phases. Blank phase =
+            run in list order. Set <strong>Min / joint</strong> per step, or leave the steps blank and
+            set one <strong>Tier min / joint</strong> for the whole list. Saves on blur.
           </p>
           <div class="table-responsive">
             <table class="table table-sm table-vcenter align-middle mb-2">
@@ -2618,6 +2733,7 @@
                 <tr>
                   <th style="width:52px"></th>
                   <th style="width:36px">#</th>
+                  <th style="width:74px" title="Steps sharing a phase run in parallel">Phase</th>
                   <th>Stage Name</th>
                   <th>Description</th>
                   <th style="width:70px" class="text-center">Blocks next</th>
@@ -2626,7 +2742,7 @@
                   <th style="width:48px"></th>
                 </tr>
               </thead>
-              <tbody>${rows || '<tr><td colspan="8" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
+              <tbody>${rows || '<tr><td colspan="9" class="text-muted text-center py-3">No stages in this tier yet. Add one below.</td></tr>'}</tbody>
             </table>
           </div>
           <div class="border-top pt-3">
@@ -2977,12 +3093,7 @@
         const fd = new FormData();
         fd.append('logo', file);
         try {
-          const res = await fetch(`${API_BASE}/company-settings/logo`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
-            body: fd,
-          });
+          const res = await authenticatedUpload('/company-settings/logo', fd);
           const json = await res.json();
           if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
           input.value = '';

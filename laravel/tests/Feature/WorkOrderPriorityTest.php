@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\BusinessJob;
 use App\Models\FdUser;
 use App\Models\FdWoElevation;
-use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\FdWoStage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -31,9 +31,10 @@ class WorkOrderPriorityTest extends TestCase
     private function wo(array $attr = []): FdWorkOrder
     {
         static $rel = 0;
+
         return FdWorkOrder::create(array_merge([
             'business_job_id' => $this->job->id,
-            'release_number'  => ++$rel,
+            'release_number' => ++$rel,
         ], $attr));
     }
 
@@ -41,8 +42,8 @@ class WorkOrderPriorityTest extends TestCase
 
     public function test_ranks_by_due_date_then_issue_date_nulls_last(): void
     {
-        $late  = $this->wo(['due_date' => '2026-10-01']);
-        $none  = $this->wo(['due_date' => null, 'date_issued' => '2026-01-01']);
+        $late = $this->wo(['due_date' => '2026-10-01']);
+        $none = $this->wo(['due_date' => null, 'date_issued' => '2026-01-01']);
         $early = $this->wo(['due_date' => '2026-09-01']);
         $none2 = $this->wo(['due_date' => null, 'date_issued' => '2026-02-01']);
 
@@ -91,7 +92,7 @@ class WorkOrderPriorityTest extends TestCase
 
         $newId = $this->postJson('/api/v1/work-orders', [
             'business_job_id' => $this->job->id,
-            'due_date'        => '2026-06-01',
+            'due_date' => '2026-06-01',
         ])->assertCreated()->json('id');
 
         // new (earlier due) WO takes slot 1, existing drops to 2
@@ -184,7 +185,7 @@ class WorkOrderPriorityTest extends TestCase
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
         $wo = $this->wo();
         $worker = FdUser::create(['name' => 'Worker', 'role' => 'worker', 'active' => true]);
-        $other  = FdUser::create(['name' => 'Other', 'role' => 'worker', 'active' => true]);
+        $other = FdUser::create(['name' => 'Other', 'role' => 'worker', 'active' => true]);
 
         $elev = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'A']);
         $open = FdWoStage::create(['elevation_id' => $elev->id, 'name' => 'Prep', 'sort_order' => 1, 'status' => 'pending', 'assigned_to_id' => $other->id]);
@@ -269,7 +270,7 @@ class WorkOrderPriorityTest extends TestCase
         $wo1 = $this->wo(['due_date' => '2026-09-01', 'priority' => 1, 'priority_locked' => true]);
         $e1 = FdWoElevation::create(['work_order_id' => $wo1->id, 'elevation_tag' => 'E1', 'date_requested' => '2026-09-01']);
         $prep = FdWoStage::create(['elevation_id' => $e1->id, 'name' => 'Prep', 'sort_order' => 1, 'blocks_next' => true, 'status' => 'pending', 'assigned_to_id' => $me->id]);
-        $fab  = FdWoStage::create(['elevation_id' => $e1->id, 'name' => 'Fab', 'sort_order' => 2, 'blocks_next' => true, 'status' => 'pending', 'assigned_to_id' => $me->id]);
+        $fab = FdWoStage::create(['elevation_id' => $e1->id, 'name' => 'Fab', 'sort_order' => 2, 'blocks_next' => true, 'status' => 'pending', 'assigned_to_id' => $me->id]);
 
         // WO 2: priority 2, unassigned stage but I'm on the crew
         $wo2 = $this->wo(['due_date' => '2026-09-02', 'priority' => 2, 'priority_locked' => true]);

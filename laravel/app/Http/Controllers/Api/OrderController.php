@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CommittedInventory;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Product;
-use App\Models\CommittedInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -29,9 +28,9 @@ class OrderController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('order_number', 'like', "%{$search}%")
-                  ->orWhere('customer_name', 'like', "%{$search}%");
+                    ->orWhere('customer_name', 'like', "%{$search}%");
             });
         }
 
@@ -56,7 +55,7 @@ class OrderController extends Controller
             'items.*.notes' => 'nullable',
         ]);
 
-        return DB::transaction(function () use ($validated, $request) {
+        return DB::transaction(function () use ($validated) {
             $order = Order::create([
                 'order_number' => Order::generateOrderNumber(),
                 'customer_name' => $validated['customer_name'],
@@ -101,7 +100,7 @@ class OrderController extends Controller
         return response()->json($order->load([
             'items.product',
             'user',
-            'committedInventory.product'
+            'committedInventory.product',
         ]));
     }
 
@@ -128,6 +127,7 @@ class OrderController extends Controller
     {
         $order->committedInventory()->delete();
         $order->delete();
+
         return response()->json(null, 204);
     }
 
@@ -140,10 +140,10 @@ class OrderController extends Controller
         return DB::transaction(function () use ($order, $validated) {
             foreach ($order->items as $item) {
                 $product = $item->product;
-                
+
                 if ($product->quantity_available < $item->quantity) {
                     return response()->json([
-                        'error' => "Insufficient inventory for {$product->sku}"
+                        'error' => "Insufficient inventory for {$product->sku}",
                     ], 422);
                 }
 
@@ -167,7 +167,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'message' => 'Inventory committed successfully',
-                'order' => $order->fresh()->load('items.product', 'committedInventory')
+                'order' => $order->fresh()->load('items.product', 'committedInventory'),
             ]);
         });
     }
@@ -191,7 +191,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'message' => 'Inventory released successfully',
-                'order' => $order->fresh()->load('items.product')
+                'order' => $order->fresh()->load('items.product'),
             ]);
         });
     }
@@ -205,7 +205,7 @@ class OrderController extends Controller
         return DB::transaction(function () use ($order, $validated) {
             foreach ($order->items as $item) {
                 $product = $item->product;
-                
+
                 $product->adjustQuantity(
                     -$item->quantity,
                     'shipment',
@@ -230,7 +230,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'message' => 'Order shipped successfully',
-                'order' => $order->fresh()->load('items.product')
+                'order' => $order->fresh()->load('items.product'),
             ]);
         });
     }

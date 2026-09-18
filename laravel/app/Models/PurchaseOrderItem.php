@@ -51,7 +51,10 @@ class PurchaseOrderItem extends Model
 
     public function getReceiveProgressAttribute()
     {
-        if ($this->quantity_ordered == 0) return 0;
+        if ($this->quantity_ordered == 0) {
+            return 0;
+        }
+
         return round(($this->quantity_received / $this->quantity_ordered) * 100, 1);
     }
 

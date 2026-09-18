@@ -72,9 +72,10 @@ class DoorFrameFrameConfig extends Model
      */
     public function getTransomGlazingLabelAttribute()
     {
-        if (!$this->has_transom || !$this->transom_glazing) {
+        if (! $this->has_transom || ! $this->transom_glazing) {
             return null;
         }
+
         return self::$glazingOptions[$this->transom_glazing] ?? $this->transom_glazing;
     }
 }

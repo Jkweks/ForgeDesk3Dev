@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BusinessJob extends Model
@@ -16,6 +15,9 @@ class BusinessJob extends Model
         'job_name',
         'customer_name',
         'project_manager',
+        'project_manager_id',
+        'superintendent',
+        'superintendent_id',
         'site_address',
         'contact_name',
         'contact_phone',
@@ -34,7 +36,6 @@ class BusinessJob extends Model
         'actual_completion_date' => 'date',
     ];
 
-
     // Status configuration
     public static $statuses = [
         'active' => 'Active',
@@ -49,6 +50,25 @@ class BusinessJob extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    /**
+     * The user account this job's project manager points to (nullable — the
+     * `project_manager` string stays as the display label).
+     */
+    public function projectManager()
+    {
+        return $this->belongsTo(User::class, 'project_manager_id');
+    }
+
+    /**
+     * The user account this job's site superintendent points to (nullable — the
+     * `superintendent` string stays as the display label). Named *User to avoid
+     * colliding with the `superintendent` string column.
+     */
+    public function superintendentUser()
+    {
+        return $this->belongsTo(User::class, 'superintendent_id');
     }
 
     /**
@@ -122,7 +142,7 @@ class BusinessJob extends Model
             ->count();
 
         $nonArchivedWOs = $this->workOrders()->where('archived', false)->with('elevations.stages')->get();
-        $openWorkOrders = $nonArchivedWOs->filter(fn($wo) => !$wo->isComplete())->count();
+        $openWorkOrders = $nonArchivedWOs->filter(fn ($wo) => ! $wo->isComplete())->count();
 
         $totalItems = $this->jobReservations()->count() + $this->workOrders()->count();
 
@@ -134,14 +154,18 @@ class BusinessJob extends Model
     }
 
     /**
-     * Get days until target completion
+     * Whole days until the target completion date (negative when overdue).
+     * Measured from the start of today so it lands on a whole day rather than a
+     * fractional value like 12.457.
      */
     public function getDaysUntilCompletionAttribute()
     {
-        if (!$this->target_completion_date || $this->isCompleted()) {
+        if (! $this->target_completion_date || $this->isCompleted()) {
             return null;
         }
 
-        return now()->diffInDays($this->target_completion_date, false);
+        return (int) floor(
+            now()->startOfDay()->diffInDays($this->target_completion_date, false)
+        );
     }
 }

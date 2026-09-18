@@ -28,10 +28,10 @@ class NormalizeApiErrorResponse
                 $hasMessage = array_key_exists('message', $data) && $data['message'] !== null;
                 $hasError = array_key_exists('error', $data) && $data['error'] !== null;
 
-                if ($hasError && !$hasMessage) {
+                if ($hasError && ! $hasMessage) {
                     $data['message'] = $data['error'];
                     $response->setData($data);
-                } elseif ($hasMessage && !$hasError) {
+                } elseif ($hasMessage && ! $hasError) {
                     $data['error'] = $data['message'];
                     $response->setData($data);
                 }

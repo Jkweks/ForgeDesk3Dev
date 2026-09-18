@@ -37,6 +37,7 @@ class PurchaseOrderPdfTest extends TestCase
             'pack_size' => 12,
             'net_cost' => 4.25,
             'unit_cost' => 9.99,
+            'supplier_id' => $supplier->id,
         ]);
 
         $po = PurchaseOrder::create(array_merge([
@@ -90,7 +91,7 @@ class PurchaseOrderPdfTest extends TestCase
 
         $ship = CompanyLocation::create(['name' => 'Dock 5', 'is_primary' => false]);
         $supplier = Supplier::create(['name' => 'Bolt Co']);
-        $product = Product::create(['sku' => 'B1', 'description' => 'Bolt', 'net_cost' => 1]);
+        $product = Product::create(['sku' => 'B1', 'description' => 'Bolt', 'net_cost' => 1, 'supplier_id' => $supplier->id]);
 
         $created = $this->postJson('/api/v1/purchase-orders', [
             'supplier_id' => $supplier->id,

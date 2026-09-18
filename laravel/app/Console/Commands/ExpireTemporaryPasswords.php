@@ -19,7 +19,7 @@ class ExpireTemporaryPasswords extends Command
 
     public function handle(): int
     {
-        $cutoff = now()->subHours((int) config('auth.temp_password.ttl_hours', 48));
+        $cutoff = now()->subHours((int) config('auth.temp_password.ttl_hours', 168));
 
         $stale = User::query()
             ->where('must_change_password', true)

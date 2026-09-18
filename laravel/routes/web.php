@@ -7,6 +7,12 @@ Route::get('/login', function () {
     return view('dashboard'); // The dashboard view handles login UI
 })->name('login');
 
+// Password reset landing — the app layout's JS reads ?token & ?email from the
+// query string, verifies via /api/password/verify-token, and opens the reset modal.
+Route::get('/password/reset', function () {
+    return view('dashboard');
+})->name('password.reset');
+
 Route::get('/', function () {
     return view('dashboard');
 });
@@ -84,6 +90,10 @@ Route::get('/fabrication/work-queue', function () {
     return view('fabrication.work-queue');
 });
 
+Route::get('/fabrication/quality', function () {
+    return view('fabrication.quality');
+});
+
 // System Status
 Route::get('/status', function () {
     return view('status');
@@ -102,3 +112,11 @@ Route::get('/admin/location-assignment', function () {
 Route::get('/shop', function () {
     return view('shop-floor');
 });
+
+// Design-time preview of the maintenance page, so it can be checked without
+// actually toggling maintenance mode. Excluded entirely outside non-production
+// so the route doesn't exist at all in a prod build, even if this file ships
+// unchanged.
+if (! app()->environment('production')) {
+    Route::get('/dev/preview-503', fn () => response()->view('errors.503', [], 503));
+}

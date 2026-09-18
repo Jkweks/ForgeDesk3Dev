@@ -23,10 +23,10 @@ class StageGatedException extends RuntimeException
     public function render(): JsonResponse
     {
         return response()->json([
-            'message'        => $this->getMessage(),
-            'code'           => 'stage_gated',
+            'message' => $this->getMessage(),
+            'code' => 'stage_gated',
             'blocking_stage' => [
-                'id'   => $this->blockingId,
+                'id' => $this->blockingId,
                 'name' => $this->blockingName,
             ],
         ], 422);

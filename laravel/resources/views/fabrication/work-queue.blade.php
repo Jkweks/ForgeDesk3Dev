@@ -4,19 +4,21 @@
 
 @section('styles')
 .wq-board { display:flex; gap:.75rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start; }
-.wq-scroll-top { position:sticky; top:0; z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface, #fff); border-bottom:1px solid var(--tblr-border-color, #dbe0e5); }
+.wq-scroll-top { position:sticky; top:0; z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface); border-bottom:1px solid var(--tblr-border-color); }
 .wq-scroll-top-inner { height:1px; }
-.wq-col { min-width:280px; max-width:320px; flex:0 0 auto; background:var(--tblr-bg-surface-secondary, var(--tblr-light)); border-radius:8px; padding:.5rem; }
-.wq-col.drop-hover { outline:2px dashed var(--tblr-primary, #206bc4); outline-offset:-2px; }
+.wq-col { min-width:280px; max-width:320px; flex:0 0 auto; background:var(--tblr-bg-surface-secondary); border-radius:8px; padding:.5rem; }
+.wq-col.drop-hover { outline:2px dashed var(--tblr-primary); outline-offset:-2px; }
 .wq-col-head { display:flex; align-items:center; gap:.4rem; font-weight:600; padding:.25rem .35rem .5rem; }
-.wq-card { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color, #dbe0e5); border-radius:6px; padding:.5rem .6rem; margin-bottom:.4rem; cursor:grab; font-size:.82rem; }
+.wq-card { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); border-radius:6px; padding:.5rem .6rem; margin-bottom:.4rem; cursor:grab; font-size:.85rem; }
 .wq-card:active { cursor:grabbing; }
 .wq-card.dragging { opacity:.4; }
 .wq-card.locked { opacity:.6; border-style:dashed; }
-.wq-card.locked .wq-lock { color:var(--tblr-danger, #d63939); }
+.wq-card.locked .wq-lock { color:var(--tblr-danger); }
 .wq-meta { display:flex; flex-wrap:wrap; gap:.35rem .5rem; align-items:center; margin-top:.3rem; }
 .wq-inline { border:none; background:transparent; font:inherit; color:inherit; padding:0 .1rem; max-width:8.5rem; }
-.wq-inline:focus { outline:1px solid var(--tblr-primary, #206bc4); border-radius:3px; }
+.wq-inline:focus { outline:1px solid var(--tblr-primary); border-radius:3px; }
+.wq-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1060; align-items:center; justify-content:center; }
+.wq-overlay > .card { box-shadow:0 1rem 3rem rgba(0,0,0,.5); }
 @endsection
 
 @section('content')
@@ -34,7 +36,7 @@
           </button>
         </div>
       </div>
-      <div class="text-muted small mt-1">
+      <div class="text-secondary small mt-1">
         Every stage grouped by operator. Drag a card to reassign it — including
         <span class="text-danger">locked</span> stages (still waiting on an earlier step), so the
         workflow can be planned ahead.
@@ -70,7 +72,7 @@
   </div>
 </div>
 
-<div id="wq-bulk-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1050; align-items:center; justify-content:center;">
+<div id="wq-bulk-overlay" class="wq-overlay" style="display:none;">
   <div class="card" style="width:min(640px, 92vw); max-height:85vh; display:flex; flex-direction:column;">
     <div class="card-header">
       <h3 class="card-title">Bulk assign steps</h3>
@@ -98,7 +100,7 @@
   </div>
 </div>
 
-<div id="wq-assignee-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1050; align-items:center; justify-content:center;">
+<div id="wq-assignee-overlay" class="wq-overlay" style="display:none;">
   <div class="card" style="width:min(420px, 92vw); max-height:80vh; display:flex; flex-direction:column;">
     <div class="card-header">
       <h3 class="card-title">Assignees — <span id="wq-as-name"></span></h3>
@@ -145,16 +147,27 @@ async function wqLoadFilters() {
     wqWOs  = (await wr.json()).work_orders || [];
   } catch (e) { console.error(e); }
 
+  // The queue only concerns active work orders — restrict the job (and work
+  // order) pickers to jobs that have at least one. `/work-orders` already
+  // excludes archived ones; older rows with no status fall back to "active".
+  const isActiveWo = w => (w.status ?? 'active') === 'active';
+  const activeJobIds = new Set(wqWOs.filter(isActiveWo).map(w => String(w.business_job_id)));
+
   const jobSel = document.getElementById('wq-job');
   jobSel.innerHTML = '<option value="">All jobs</option>' +
-    wqJobs.map(j => `<option value="${j.id}">${esc(j.job_number)} – ${esc(j.job_name)}</option>`).join('');
+    wqJobs
+      .filter(j => activeJobIds.has(String(j.id)))
+      .map(j => `<option value="${j.id}">${esc(j.job_number)} – ${esc(j.job_name)}</option>`)
+      .join('');
   wqFillWorkOrderOptions();
 }
 
 function wqFillWorkOrderOptions() {
   const jobId = document.getElementById('wq-job').value;
   const woSel = document.getElementById('wq-wo');
-  const list = jobId ? wqWOs.filter(w => String(w.business_job_id) === jobId) : wqWOs;
+  const isActiveWo = w => (w.status ?? 'active') === 'active';
+  let list = wqWOs.filter(isActiveWo);
+  if (jobId) list = list.filter(w => String(w.business_job_id) === jobId);
   woSel.innerHTML = '<option value="">All work orders</option>' +
     list.map(w => `<option value="${w.id}">${esc(w.release_label)}${w.job?.job_name ? ' – ' + esc(w.job.job_name) : ''}</option>`).join('');
 }
@@ -191,7 +204,7 @@ function cardHtml(c) {
   const prio = `#<input type="number" min="1" class="wq-inline" style="width:2.8rem" value="${c.priority ?? ''}"
       title="Priority — editing pins this work order" onclick="event.stopPropagation()"
       onchange="wqSetPriority(${c.work_order_id}, this.value)">`;
-  const due = `<input type="date" class="wq-inline ${isPast(c.due_date) ? 'text-danger' : 'text-muted'}"
+  const due = `<input type="date" class="wq-inline ${isPast(c.due_date) ? 'text-danger' : 'text-secondary'}"
       value="${c.due_date || ''}" title="Due date" onclick="event.stopPropagation()"
       onchange="wqSetDue(${c.work_order_id}, this.value)">`;
   const active = c.status === 'in_progress' ? ' <span class="badge bg-warning-lt text-warning">active</span>' : '';
@@ -210,11 +223,11 @@ function cardHtml(c) {
       <button class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Edit assignees"
           onclick="event.stopPropagation(); wqEditAssignees(${c.stage_id})"><i class="ti ti-user-plus"></i></button>
     </div>
-    <div class="text-muted">${esc(c.release_label)} · ${esc(c.elevation_tag)}${c.job_name ? ' · ' + esc(c.job_name) : ''}</div>
+    <div class="text-secondary">${esc(c.release_label)} · ${esc(c.elevation_tag)}${c.job_name ? ' · ' + esc(c.job_name) : ''}</div>
     <div class="wq-meta">
-      <span class="text-muted">${prio}</span>
+      <span class="text-secondary">${prio}</span>
       ${due}
-      ${c.date_requested ? `<span class="text-muted">need ${esc(c.date_requested)}</span>` : ''}
+      ${c.date_requested ? `<span class="text-secondary">need ${esc(c.date_requested)}</span>` : ''}
     </div>
   </div>`;
 }
@@ -227,11 +240,11 @@ function colHtml(opId, title, oldest, stages, initials, muted) {
   return `<div class="wq-col" data-op="${opId}"
       ondragover="wqDragOver(event)" ondragleave="wqDragLeave(event)" ondrop="wqDrop(event, ${opId})">
     <div class="wq-col-head">
-      ${initials ? `<span class="badge bg-blue-lt text-blue">${esc(initials)}</span>` : '<i class="ti ti-inbox text-muted"></i>'}
-      <span class="${muted ? 'text-muted' : ''}">${esc(title)}</span>
-      <span class="ms-auto text-muted small">${countLabel}${oldest ? ` · oldest ${esc(oldest)}` : ''}</span>
+      ${initials ? `<span class="badge bg-blue-lt text-blue">${esc(initials)}</span>` : '<i class="ti ti-inbox text-secondary"></i>'}
+      <span class="${muted ? 'text-secondary' : ''}">${esc(title)}</span>
+      <span class="ms-auto text-secondary small">${countLabel}${oldest ? ` · oldest ${esc(oldest)}` : ''}</span>
     </div>
-    <div>${shown.map(cardHtml).join('') || '<div class="text-muted small text-center py-2">—</div>'}</div>
+    <div>${shown.map(cardHtml).join('') || '<div class="text-secondary small text-center py-2">—</div>'}</div>
   </div>`;
 }
 

@@ -125,7 +125,45 @@
     return next;
   }
 
+  // ── Contrast helper ─────────────────────────────────────────────────────
+  // Pick a readable text color for an arbitrary background (e.g. a user-chosen
+  // elevation-type color). Returns near-black or white based on perceived
+  // luminance. Accepts #rgb / #rrggbb (with or without '#'); falls back to
+  // white text for anything it can't parse.
+  function pickTextColor(bg) {
+    if (typeof bg !== 'string') return '#fff';
+    let h = bg.trim().replace(/^#/, '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return '#fff';
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const lin = c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.55 ? '#1a202c' : '#fff';
+  }
+
+  // ── Shared stage-status vocabulary ──────────────────────────────────────
+  // One label + one CSS class per stage status, used by the WO dashboard,
+  // the WO detail table, the work queue and the shop-floor kiosk. The visual
+  // treatment lives in partials/fab-status-styles.blade.php (.fab-stage.<status>,
+  // with a [data-bs-theme=dark] pair for each).
+  const FAB_STAGE_LABEL = {
+    pending:      'Pending',
+    in_progress:  'In Progress',
+    complete:     'Complete',
+    blocked:      'Blocked',
+    not_required: 'N/R',
+    on_hold:      'On Hold',
+  };
+
+  function fabStageClass(status) {
+    return 'fab-stage ' + (FAB_STAGE_LABEL[status] ? status : 'pending');
+  }
+
   global.fabToast = fabToast;
   global.fabConfirm = fabConfirm;
+  global.pickTextColor = pickTextColor;
   global.FabStep = { STEP_STATUS_META, stepBadgeHtml, cycleStepStatus };
+  global.FabStage = { LABEL: FAB_STAGE_LABEL, className: fabStageClass };
 })(window);

@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\Order;
+use App\Models\Product;
+use App\Models\Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -34,13 +35,13 @@ class ImportExportController extends Controller
             ->pluck('committed_qty', 'product_id')
             ->toArray();
 
-        $filename = 'products_export_' . date('Y-m-d_His') . '.csv';
+        $filename = 'products_export_'.date('Y-m-d_His').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($products, $committedByProduct) {
+        $callback = function () use ($products, $committedByProduct) {
             $file = fopen('php://output', 'w');
 
             fputcsv($file, [
@@ -117,6 +118,26 @@ class ImportExportController extends Controller
 
         DB::beginTransaction();
 
+        // supplier_id is now required on products; resolve each row's free-text
+        // "Supplier" column to a real Supplier (matched/created by name), falling
+        // back to the "No Supplier" placeholder when the column is blank.
+        $noSupplierId = Supplier::firstOrCreate(
+            ['code' => 'NO_SUPPLIER'],
+            ['name' => 'No Supplier', 'is_active' => true]
+        )->id;
+        $supplierIdCache = [];
+        $resolveSupplierId = function (?string $name) use (&$supplierIdCache, $noSupplierId) {
+            $name = trim((string) $name);
+            if ($name === '') {
+                return $noSupplierId;
+            }
+            if (! isset($supplierIdCache[$name])) {
+                $supplierIdCache[$name] = Supplier::firstOrCreate(['name' => $name])->id;
+            }
+
+            return $supplierIdCache[$name];
+        };
+
         try {
             foreach ($rows as $index => $row) {
                 $rowNumber = $index + 2;
@@ -124,6 +145,7 @@ class ImportExportController extends Controller
                 if (count($row) !== count($header)) {
                     $results['errors']++;
                     $results['details'][] = "Row {$rowNumber}: Column count mismatch";
+
                     continue;
                 }
 
@@ -141,14 +163,15 @@ class ImportExportController extends Controller
 
                 if ($validator->fails()) {
                     $results['errors']++;
-                    $results['details'][] = "Row {$rowNumber}: " . implode(', ', $validator->errors()->all());
+                    $results['details'][] = "Row {$rowNumber}: ".implode(', ', $validator->errors()->all());
+
                     continue;
                 }
 
                 $product = Product::where('sku', $data['SKU'])->first();
 
                 if ($product) {
-                    $product->update([
+                    $updateData = [
                         'description' => $data['Description'],
                         'long_description' => $data['Long Description'] ?? null,
                         'category' => $data['Category'] ?? null,
@@ -161,7 +184,14 @@ class ImportExportController extends Controller
                         'supplier_sku' => $data['Supplier SKU'] ?? null,
                         'lead_time_days' => $data['Lead Time Days'] ?? null,
                         'is_active' => ($data['Active'] ?? 'Yes') === 'Yes',
-                    ]);
+                    ];
+                    // Only touch supplier_id when the sheet actually names one — an
+                    // existing product's real supplier must not be silently replaced
+                    // with the placeholder just because this column was left blank.
+                    if (trim((string) ($data['Supplier'] ?? '')) !== '') {
+                        $updateData['supplier_id'] = $resolveSupplierId($data['Supplier']);
+                    }
+                    $product->update($updateData);
                     $product->updateStatus();
                     $results['success']++;
                 } else {
@@ -176,6 +206,7 @@ class ImportExportController extends Controller
                         'maximum_quantity' => $data['Maximum Quantity'] ?? null,
                         'unit_of_measure' => $data['Unit of Measure'],
                         'supplier' => $data['Supplier'] ?? null,
+                        'supplier_id' => $resolveSupplierId($data['Supplier'] ?? null),
                         'supplier_sku' => $data['Supplier SKU'] ?? null,
                         'lead_time_days' => $data['Lead Time Days'] ?? null,
                         'is_active' => ($data['Active'] ?? 'Yes') === 'Yes',
@@ -194,8 +225,9 @@ class ImportExportController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
-                'error' => 'Import failed: ' . $e->getMessage(),
+                'error' => 'Import failed: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -213,15 +245,15 @@ class ImportExportController extends Controller
 
         $orders = $query->get();
 
-        $filename = 'orders_export_' . date('Y-m-d_His') . '.csv';
+        $filename = 'orders_export_'.date('Y-m-d_His').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($orders) {
+        $callback = function () use ($orders) {
             $file = fopen('php://output', 'w');
-            
+
             fputcsv($file, [
                 'Order Number', 'Customer Name', 'Customer Email', 'Status',
                 'Priority', 'Order Date', 'Expected Ship Date', 'Subtotal',
@@ -259,15 +291,15 @@ class ImportExportController extends Controller
     {
         $type = $request->get('type', 'products');
 
-        $filename = $type . '_import_template.csv';
+        $filename = $type.'_import_template.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function() use ($type) {
+        $callback = function () use ($type) {
             $file = fopen('php://output', 'w');
-            
+
             if ($type === 'products') {
                 fputcsv($file, [
                     'SKU', 'Description', 'Long Description', 'Category',

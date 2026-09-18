@@ -105,6 +105,7 @@ class DoorFrameOpeningSpec extends Model
         } elseif ($this->opening_type === 'pair') {
             return self::$handPairOptions[$this->hand_pair] ?? $this->hand_pair;
         }
+
         return null;
     }
 

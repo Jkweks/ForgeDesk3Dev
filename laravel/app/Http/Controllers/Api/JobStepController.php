@@ -20,10 +20,10 @@ class JobStepController extends Controller
 
     public function index(int $workOrderId)
     {
-        $wo    = FdWorkOrder::findOrFail($workOrderId);
+        $wo = FdWorkOrder::findOrFail($workOrderId);
         $steps = $wo->steps()->with('completedBy')->get();
 
-        return response()->json(['steps' => $steps->map(fn($s) => $this->fmt($s))]);
+        return response()->json(['steps' => $steps->map(fn ($s) => $this->fmt($s))]);
     }
 
     public function completeAll(Request $request, int $workOrderId)
@@ -51,8 +51,8 @@ class JobStepController extends Controller
                         $this->overrides->jobStepLogger($step, $resolution),
                     );
 
-                    $step->status          = 'complete';
-                    $step->completed_at    = now();
+                    $step->status = 'complete';
+                    $step->completed_at = now();
                     $step->completed_by_id = $completedById;
                     $step->save();
                 }
@@ -65,7 +65,7 @@ class JobStepController extends Controller
 
         return response()->json([
             'updated' => $steps->count(),
-            'steps'   => $all->map(fn($s) => $this->fmt($s)),
+            'steps' => $all->map(fn ($s) => $this->fmt($s)),
         ]);
     }
 
@@ -73,15 +73,15 @@ class JobStepController extends Controller
     {
         $request->validate([
             'work_order_id' => 'required|integer|exists:fd_work_orders,id',
-            'name'          => 'required|string|max:255',
+            'name' => 'required|string|max:255',
         ]);
 
-        $max  = FdJobStep::where('work_order_id', $request->work_order_id)->max('sort_order') ?? 0;
+        $max = FdJobStep::where('work_order_id', $request->work_order_id)->max('sort_order') ?? 0;
         $step = FdJobStep::create([
             'work_order_id' => $request->work_order_id,
-            'name'          => $request->name,
-            'sort_order'    => $max + 1,
-            'status'        => 'pending',
+            'name' => $request->name,
+            'sort_order' => $max + 1,
+            'status' => 'pending',
         ]);
 
         return response()->json(['step' => $this->fmt($step)], 201);
@@ -92,7 +92,7 @@ class JobStepController extends Controller
         $step = FdJobStep::findOrFail($id);
 
         $request->validate([
-            'status'   => ['sometimes', Rule::in(FdJobStep::STATUSES)],
+            'status' => ['sometimes', Rule::in(FdJobStep::STATUSES)],
             'override' => 'sometimes|boolean',
         ]);
 
@@ -113,13 +113,17 @@ class JobStepController extends Controller
                     ? \App\Models\FdUser::whereKey($request->completed_by_id)->value('id')
                     : null;
             } else {
-                $step->completed_at    = null;
+                $step->completed_at = null;
                 $step->completed_by_id = null;
             }
         }
 
-        if ($request->has('name'))       $step->name       = $request->name;
-        if ($request->has('sort_order')) $step->sort_order = $request->sort_order;
+        if ($request->has('name')) {
+            $step->name = $request->name;
+        }
+        if ($request->has('sort_order')) {
+            $step->sort_order = $request->sort_order;
+        }
 
         $step->save();
 
@@ -129,20 +133,21 @@ class JobStepController extends Controller
     public function destroy(int $id)
     {
         FdJobStep::findOrFail($id)->delete();
+
         return response()->json(['deleted' => $id]);
     }
 
     private function fmt(FdJobStep $s): array
     {
         return [
-            'id'                => $s->id,
-            'work_order_id'     => $s->work_order_id,
-            'name'              => $s->name,
-            'sort_order'        => $s->sort_order,
-            'status'            => $s->status,
-            'completed_by_id'   => $s->completed_by_id,
+            'id' => $s->id,
+            'work_order_id' => $s->work_order_id,
+            'name' => $s->name,
+            'sort_order' => $s->sort_order,
+            'status' => $s->status,
+            'completed_by_id' => $s->completed_by_id,
             'completed_by_name' => $s->completedBy?->name,
-            'completed_at'      => $s->completed_at?->toIso8601String(),
+            'completed_at' => $s->completed_at?->toIso8601String(),
         ];
     }
 }

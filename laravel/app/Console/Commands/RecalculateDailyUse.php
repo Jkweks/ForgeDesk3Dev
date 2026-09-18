@@ -15,7 +15,7 @@ class RecalculateDailyUse extends Command
 
     public function handle(): int
     {
-        $startDate  = $this->option('start-date');
+        $startDate = $this->option('start-date');
         $productOpt = $this->option('product');
         $productIds = $productOpt
             ? array_map('intval', explode(',', $productOpt))
@@ -27,6 +27,7 @@ class RecalculateDailyUse extends Command
         Product::recalculateDailyUse($productIds, $startDate);
 
         $this->info('Done.');
+
         return self::SUCCESS;
     }
 }

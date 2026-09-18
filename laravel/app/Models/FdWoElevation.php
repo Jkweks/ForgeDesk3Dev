@@ -18,7 +18,7 @@ class FdWoElevation extends Model
     protected $casts = [
         'date_requested' => 'date',
         'date_completed' => 'date',
-        'joint_qty'      => 'integer',
+        'joint_qty' => 'integer',
     ];
 
     /**
@@ -55,8 +55,41 @@ class FdWoElevation extends Model
             : null;
 
         return [
-            'computed'  => $computed,
-            'rate'      => $rate,
+            'computed' => $computed,
+            'rate' => $rate,
+            'effective' => $computed,
+        ];
+    }
+
+    /**
+     * Time estimate for the portion of this line not yet complete. Mirrors
+     * estimateMinutes(), but when per-step rates exist it only sums the rate
+     * for stages that aren't terminal yet, so a partially-worked line only
+     * counts its open steps' share. A line with no per-step rates (only a
+     * tier-level fallback) can't be split by stage, so its full rate counts
+     * as remaining until the whole line is marked complete.
+     *
+     * @return array{computed: int|null, rate: float, effective: int|null}
+     */
+    public function remainingMinutes(): array
+    {
+        if ($this->date_completed) {
+            return ['computed' => 0, 'rate' => 0.0, 'effective' => 0];
+        }
+
+        $stages = $this->relationLoaded('stages') ? $this->stages : $this->stages()->get();
+        $stepRates = $stages->map(fn ($s) => $s->minutes_per_joint)->filter(fn ($v) => $v !== null);
+
+        $rate = $stepRates->isNotEmpty()
+            ? (float) $stages->filter(fn ($s) => $s->minutes_per_joint !== null && ! $s->isTerminal())->sum('minutes_per_joint')
+            : $this->minutesPerJoint();
+
+        $joints = $this->joint_qty;
+        $computed = ($joints !== null && $rate > 0) ? (int) round($joints * $rate) : null;
+
+        return [
+            'computed' => $computed,
+            'rate' => $rate,
             'effective' => $computed,
         ];
     }
@@ -84,5 +117,10 @@ class FdWoElevation extends Model
     public function stages(): HasMany
     {
         return $this->hasMany(FdWoStage::class, 'elevation_id')->orderBy('sort_order');
+    }
+
+    public function qualityReports(): HasMany
+    {
+        return $this->hasMany(QualityReport::class, 'elevation_id');
     }
 }

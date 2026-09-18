@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\BusinessJob;
 use App\Models\InventoryLocation;
 use App\Models\Product;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -33,6 +34,7 @@ class BusinessJobTransactionTest extends TestCase
         $product = Product::create([
             'sku' => 'BJ-TEST-001',
             'description' => 'Business job test product',
+            'supplier_id' => Supplier::create(['name' => 'BJ Test Supplier 1'])->id,
         ]);
 
         Sanctum::actingAs($user, ['*']);
@@ -67,6 +69,7 @@ class BusinessJobTransactionTest extends TestCase
         $product = Product::create([
             'sku' => 'BJ-TEST-002',
             'description' => 'Business job test product 2',
+            'supplier_id' => Supplier::create(['name' => 'BJ Test Supplier 2'])->id,
         ]);
 
         $storageLocation = \App\Models\StorageLocation::create([

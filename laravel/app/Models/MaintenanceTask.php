@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Carbon\Carbon;
 
 class MaintenanceTask extends Model
 {
@@ -48,7 +48,7 @@ class MaintenanceTask extends Model
 
     public function getNextDueDateAttribute()
     {
-        if (!$this->start_date || !$this->interval_count || !$this->interval_unit) {
+        if (! $this->start_date || ! $this->interval_count || ! $this->interval_unit) {
             return null;
         }
 
@@ -58,13 +58,13 @@ class MaintenanceTask extends Model
 
         $baseDate = $lastRecord ? $lastRecord->performed_at : $this->start_date;
 
-        return Carbon::parse($baseDate)->add($this->interval_count, $this->interval_unit . 's');
+        return Carbon::parse($baseDate)->add($this->interval_count, $this->interval_unit.'s');
     }
 
     public function getIsOverdueAttribute()
     {
         $nextDue = $this->next_due_date;
-        if (!$nextDue) {
+        if (! $nextDue) {
             return false;
         }
 
@@ -74,7 +74,7 @@ class MaintenanceTask extends Model
     public function getIsDueSoonAttribute()
     {
         $nextDue = $this->next_due_date;
-        if (!$nextDue) {
+        if (! $nextDue) {
             return false;
         }
 

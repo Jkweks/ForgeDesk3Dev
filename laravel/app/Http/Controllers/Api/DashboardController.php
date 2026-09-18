@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\Order;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -54,14 +54,14 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $categoryId = $request->get('category_id');
-        $perPage    = $request->get('per_page', 50);
-        $sortBy     = $request->get('sort_by', 'sku');
-        $sortDir    = $request->get('sort_dir', 'asc');
-        $search     = $request->get('search');
+        $perPage = $request->get('per_page', 50);
+        $sortBy = $request->get('sort_by', 'sku');
+        $sortDir = $request->get('sort_dir', 'asc');
+        $search = $request->get('search');
 
         // Validate sort column to prevent SQL injection
         $allowedSortColumns = ['sku', 'description', 'quantity_on_hand', 'quantity_committed', 'quantity_available', 'status'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'sku';
         }
         $sortDir = strtolower($sortDir) === 'desc' ? 'desc' : 'asc';
@@ -69,8 +69,30 @@ class DashboardController extends Controller
         // Single committed-by-product query — reused for both stats and row enrichment
         $committedByProduct = $this->getCommittedByProduct();
 
+        // Special-order parts are ordered per job, not kept in ongoing stock —
+        // they're noise on the main Inventory table when there's nothing to show
+        // for them. Keep a special-order product visible only while it actually
+        // has material on hand or committed against an active job reservation;
+        // once both hit zero it drops off here (Replenishment/Cycle Counting are
+        // unaffected — this filter lives only in this method).
+        $excludeIdleSpecialOrder = function ($query) {
+            $query->where(function ($q) {
+                $q->where('is_special_order', false)
+                    ->orWhere('quantity_on_hand', '>', 0)
+                    ->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('job_reservation_items as ri')
+                            ->join('job_reservations as r', 'ri.reservation_id', '=', 'r.id')
+                            ->whereColumn('ri.product_id', 'products.id')
+                            ->whereIn('r.status', ['active', 'in_progress', 'on_hold'])
+                            ->whereNull('r.deleted_at');
+                    });
+            });
+        };
+
         // Base query for stats (apply filters once)
-        $statsQuery = Product::where('is_active', true);
+        $statsQuery = Product::where('is_active', true)->excludeMaintenanceConsumables();
+        $excludeIdleSpecialOrder($statsQuery);
         if ($categoryId) {
             $statsQuery->whereHas('categories', function ($q) use ($categoryId) {
                 $q->where('categories.id', $categoryId);
@@ -80,9 +102,9 @@ class DashboardController extends Controller
             $searchLower = strtolower($search);
             $statsQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
+                    ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
+                    ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                    ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
@@ -94,21 +116,23 @@ class DashboardController extends Controller
             SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
         ")->first();
 
-        $unitsOnHand   = (float) ($statRow->units_on_hand ?? 0);
+        $unitsOnHand = (float) ($statRow->units_on_hand ?? 0);
         $unitsCommitted = $this->calcUnitsCommitted($categoryId);
 
         $stats = [
-            'skus_tracked'    => (int) ($statRow->skus_tracked ?? 0),
-            'units_on_hand'   => $unitsOnHand,
+            'skus_tracked' => (int) ($statRow->skus_tracked ?? 0),
+            'units_on_hand' => $unitsOnHand,
             'units_committed' => $unitsCommitted,
             'units_available' => (int) floor(max(0, $unitsOnHand - $unitsCommitted)),
             'low_stock_alerts' => (int) ($statRow->low_stock_alerts ?? 0),
-            'critical_count'  => (int) ($statRow->critical_count ?? 0),
-            'pending_orders'  => Order::whereIn('status', ['pending', 'processing'])->count(),
+            'critical_count' => (int) ($statRow->critical_count ?? 0),
+            'pending_orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
         ];
 
         $inventoryQuery = Product::with(['inventoryLocations', 'categories'])
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->excludeMaintenanceConsumables();
+        $excludeIdleSpecialOrder($inventoryQuery);
 
         if ($categoryId) {
             $inventoryQuery->whereHas('categories', function ($q) use ($categoryId) {
@@ -120,22 +144,23 @@ class DashboardController extends Controller
             $searchLower = strtolower($search);
             $inventoryQuery->where(function ($q) use ($searchLower) {
                 $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
-                  ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
+                    ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
+                    ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                    ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
             });
         }
 
         // Enrich callback — shared between both branches
         $enrich = function ($product) use ($committedByProduct) {
-            $committedQty  = $committedByProduct[$product->id] ?? 0;
+            $committedQty = $committedByProduct[$product->id] ?? 0;
             $committedPacks = $product->eachesToPacksNeeded($committedQty);
-            $onHandPacks   = $product->eachesToFullPacks($product->quantity_on_hand);
+            $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
 
-            $product->quantity_committed       = $committedQty;
-            $product->quantity_committed_packs  = $committedPacks;
-            $product->quantity_available        = $product->quantity_on_hand - $committedQty;
-            $product->quantity_available_packs  = max(0, $onHandPacks - $committedPacks);
+            $product->quantity_committed = $committedQty;
+            $product->quantity_committed_packs = $committedPacks;
+            $product->quantity_available = $product->quantity_on_hand - $committedQty;
+            $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
+
             return $product;
         };
 
@@ -164,7 +189,7 @@ class DashboardController extends Controller
         $inventory->getCollection()->transform($enrich);
 
         return response()->json([
-            'stats'     => $stats,
+            'stats' => $stats,
             'inventory' => $inventory,
         ]);
     }
@@ -172,13 +197,13 @@ class DashboardController extends Controller
     public function inventoryByStatus(Request $request, $status)
     {
         $categoryId = $request->get('category_id');
-        $perPage    = $request->get('per_page', 50);
-        $sortBy     = $request->get('sort_by', 'sku');
-        $sortDir    = $request->get('sort_dir', 'asc');
-        $search     = $request->get('search');
+        $perPage = $request->get('per_page', 50);
+        $sortBy = $request->get('sort_by', 'sku');
+        $sortDir = $request->get('sort_dir', 'asc');
+        $search = $request->get('search');
 
         $allowedSortColumns = ['sku', 'description', 'quantity_on_hand', 'quantity_committed', 'quantity_available', 'status'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'sku';
         }
         $sortDir = strtolower($sortDir) === 'desc' ? 'desc' : 'asc';
@@ -193,9 +218,12 @@ class DashboardController extends Controller
             $query = Product::where('cp_part', true)
                 ->where('is_active', true);
         } elseif ($status === 'special_order') {
-            $query = Product::whereHas('inventoryLocations.storageLocation', function ($q) {
-                $q->whereRaw("LOWER(name) = 'special order'");
-            })->where('is_active', true);
+            // Every is_special_order product, regardless of stock status — this
+            // tab is the one place they should always be visible (unlike the
+            // main "All Inventory" tab, which hides idle ones with none on hand
+            // and nothing committed).
+            $query = Product::where('is_special_order', true)
+                ->where('is_active', true);
         } else {
             $statusFilter = $status === 'low_stock' ? ['low', 'very_low'] : [$status];
             $query = Product::whereIn('status', $statusFilter)
@@ -203,6 +231,7 @@ class DashboardController extends Controller
         }
 
         $query
+            ->excludeMaintenanceConsumables()
             ->when($categoryId, function ($q) use ($categoryId) {
                 return $q->whereHas('categories', function ($sq) use ($categoryId) {
                     $sq->where('categories.id', $categoryId);
@@ -210,24 +239,26 @@ class DashboardController extends Controller
             })
             ->when($search, function ($q) use ($search) {
                 $searchLower = strtolower($search);
+
                 return $q->where(function ($sq) use ($searchLower) {
                     $sq->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
-                       ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                       ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
-                       ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
+                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
                 });
             })
             ->with('categories');
 
         $enrich = function ($product) use ($committedByProduct) {
-            $committedQty  = $committedByProduct[$product->id] ?? 0;
+            $committedQty = $committedByProduct[$product->id] ?? 0;
             $committedPacks = $product->eachesToPacksNeeded($committedQty);
-            $onHandPacks   = $product->eachesToFullPacks($product->quantity_on_hand);
+            $onHandPacks = $product->eachesToFullPacks($product->quantity_on_hand);
 
-            $product->quantity_committed       = $committedQty;
-            $product->quantity_committed_packs  = $committedPacks;
-            $product->quantity_available        = $product->quantity_on_hand - $committedQty;
-            $product->quantity_available_packs  = max(0, $onHandPacks - $committedPacks);
+            $product->quantity_committed = $committedQty;
+            $product->quantity_committed_packs = $committedPacks;
+            $product->quantity_available = $product->quantity_on_hand - $committedQty;
+            $product->quantity_available_packs = max(0, $onHandPacks - $committedPacks);
+
             return $product;
         };
 
@@ -258,24 +289,24 @@ class DashboardController extends Controller
 
     public function stats()
     {
-        $statRow = Product::where('is_active', true)->selectRaw("
+        $statRow = Product::where('is_active', true)->excludeMaintenanceConsumables()->selectRaw("
             COUNT(*) as skus_tracked,
             SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
             SUM(CASE WHEN status IN ('low', 'very_low', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
             SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
         ")->first();
 
-        $unitsOnHand    = (float) ($statRow->units_on_hand ?? 0);
+        $unitsOnHand = (float) ($statRow->units_on_hand ?? 0);
         $unitsCommitted = $this->calcUnitsCommitted();
 
         return response()->json([
-            'skus_tracked'    => (int) ($statRow->skus_tracked ?? 0),
-            'units_on_hand'   => $unitsOnHand,
+            'skus_tracked' => (int) ($statRow->skus_tracked ?? 0),
+            'units_on_hand' => $unitsOnHand,
             'units_committed' => $unitsCommitted,
             'units_available' => (int) floor(max(0, $unitsOnHand - $unitsCommitted)),
             'low_stock_alerts' => (int) ($statRow->low_stock_alerts ?? 0),
-            'critical_count'  => (int) ($statRow->critical_count ?? 0),
-            'pending_orders'  => Order::whereIn('status', ['pending', 'processing'])->count(),
+            'critical_count' => (int) ($statRow->critical_count ?? 0),
+            'pending_orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
         ]);
     }
 }

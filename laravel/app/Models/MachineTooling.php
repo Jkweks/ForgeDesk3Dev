@@ -88,7 +88,7 @@ class MachineTooling extends Model
      */
     public function updateStatusFromLife()
     {
-        if (!$this->product || !$this->product->isConsumableTool() || !$this->product->tool_life_max) {
+        if (! $this->product || ! $this->product->isConsumableTool() || ! $this->product->tool_life_max) {
             return;
         }
 
@@ -117,6 +117,7 @@ class MachineTooling extends Model
         if ($this->product && $this->product->isConsumableTool() && $this->product->tool_life_max > 0) {
             return round(($this->tool_life_used / $this->product->tool_life_max) * 100, 1);
         }
+
         return null;
     }
 
@@ -153,12 +154,13 @@ class MachineTooling extends Model
      */
     public function getFormattedToolLifeAttribute()
     {
-        if (!$this->product || !$this->product->isConsumableTool()) {
+        if (! $this->product || ! $this->product->isConsumableTool()) {
             return 'N/A';
         }
 
         $unit = $this->product->tool_life_unit_name ?? $this->product->tool_life_unit;
-        return number_format($this->tool_life_used, 0) . ' / ' . number_format($this->product->tool_life_max, 0) . ' ' . $unit;
+
+        return number_format($this->tool_life_used, 0).' / '.number_format($this->product->tool_life_max, 0).' '.$unit;
     }
 
     /**
@@ -166,7 +168,7 @@ class MachineTooling extends Model
      */
     public function getStatusColorAttribute()
     {
-        return match($this->status) {
+        return match ($this->status) {
             'active' => 'green',
             'warning' => 'yellow',
             'needs_replacement' => 'red',
@@ -180,7 +182,7 @@ class MachineTooling extends Model
      */
     public function getStatusTextAttribute()
     {
-        return match($this->status) {
+        return match ($this->status) {
             'active' => 'Active',
             'warning' => 'Warning',
             'needs_replacement' => 'Needs Replacement',

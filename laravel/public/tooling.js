@@ -531,8 +531,11 @@ document.addEventListener('DOMContentLoaded', function() {
 // ADD TOOLING PRODUCT FUNCTIONS
 // ============================================================================
 
-let categories = [];
-let suppliers = [];
+// Named toolingProductCategories/toolingProductSuppliers (not categories/suppliers)
+// to avoid colliding with the identically-named globals declared by
+// partials/product-modal.blade.php, which this page also includes.
+let toolingProductCategories = [];
+let toolingProductSuppliers = [];
 let machineTypes = [];
 
 // Open add tooling product modal
@@ -541,7 +544,7 @@ async function openAddToolingProductModal() {
   form.reset();
 
   // Only load data if not already cached
-  if (categories.length === 0 || suppliers.length === 0 || machineTypes.length === 0) {
+  if (toolingProductCategories.length === 0 || toolingProductSuppliers.length === 0 || machineTypes.length === 0) {
     // Disable form while loading
     const submitBtn = document.querySelector('#addToolingProductForm button[type="submit"]');
     if (submitBtn) {
@@ -582,28 +585,28 @@ async function loadCategoriesForTooling() {
 
     // Handle both array response and paginated response
     if (Array.isArray(response)) {
-      categories = response;
+      toolingProductCategories = response;
     } else if (response && Array.isArray(response.data)) {
-      categories = response.data;
+      toolingProductCategories = response.data;
     } else if (response && response.data && Array.isArray(response.data.data)) {
       // Handle double-nested data (paginated within paginated)
-      categories = response.data.data;
+      toolingProductCategories = response.data.data;
     } else {
       console.warn('Unexpected response format:', response);
-      categories = [];
+      toolingProductCategories = [];
     }
 
-    console.log('Parsed categories:', categories);
+    console.log('Parsed categories:', toolingProductCategories);
 
     const select = document.getElementById('newToolCategory');
 
-    if (!Array.isArray(categories) || categories.length === 0) {
+    if (!Array.isArray(toolingProductCategories) || toolingProductCategories.length === 0) {
       select.innerHTML = '<option value="">No Categories Available</option>';
       return;
     }
 
     select.innerHTML = '<option value="">No Category</option>' +
-      categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+      toolingProductCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   } catch (error) {
     console.error('Failed to load categories:', error);
     const select = document.getElementById('newToolCategory');
@@ -619,28 +622,28 @@ async function loadSuppliersForTooling() {
 
     // Handle both array response and paginated response
     if (Array.isArray(response)) {
-      suppliers = response;
+      toolingProductSuppliers = response;
     } else if (response && Array.isArray(response.data)) {
-      suppliers = response.data;
+      toolingProductSuppliers = response.data;
     } else if (response && response.data && Array.isArray(response.data.data)) {
       // Handle double-nested data (paginated within paginated)
-      suppliers = response.data.data;
+      toolingProductSuppliers = response.data.data;
     } else {
       console.warn('Unexpected response format:', response);
-      suppliers = [];
+      toolingProductSuppliers = [];
     }
 
-    console.log('Parsed suppliers:', suppliers);
+    console.log('Parsed suppliers:', toolingProductSuppliers);
 
     const select = document.getElementById('newToolSupplier');
 
-    if (!Array.isArray(suppliers) || suppliers.length === 0) {
+    if (!Array.isArray(toolingProductSuppliers) || toolingProductSuppliers.length === 0) {
       select.innerHTML = '<option value="">No Suppliers Available</option>';
       return;
     }
 
     select.innerHTML = '<option value="">No Supplier</option>' +
-      suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      toolingProductSuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   } catch (error) {
     console.error('Failed to load suppliers:', error);
     const select = document.getElementById('newToolSupplier');

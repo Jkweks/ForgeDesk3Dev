@@ -125,7 +125,7 @@ return [
     */
 
     'temp_password' => [
-        'ttl_hours' => (int) env('TEMP_PASSWORD_TTL_HOURS', 48),
+        'ttl_hours' => (int) env('TEMP_PASSWORD_TTL_HOURS', 168), // 7 days
         'length' => (int) env('TEMP_PASSWORD_LENGTH', 16),
     ],
 

@@ -8,6 +8,7 @@ use App\Models\JobReservationItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -29,6 +30,7 @@ class CommittedQuantityIntegrationTest extends TestCase
         $product = Product::create([
             'sku' => 'TEST-001',
             'description' => 'Test product',
+            'supplier_id' => Supplier::create(['name' => 'Test Supplier 1'])->id,
         ]);
 
         $user = User::factory()->create(['role' => 'admin', 'is_active' => true]);
@@ -100,6 +102,7 @@ class CommittedQuantityIntegrationTest extends TestCase
             'sku' => 'TEST-002',
             'description' => 'Test product 2',
             'quantity_on_hand' => 20,
+            'supplier_id' => Supplier::create(['name' => 'Test Supplier 2'])->id,
         ]);
 
         $user = User::factory()->create(['role' => 'admin', 'is_active' => true]);

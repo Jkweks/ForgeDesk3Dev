@@ -17,6 +17,7 @@ class JobReservation extends Model
         'release_number',
         'job_name',
         'requested_by',
+        'requested_by_id',
         'needed_by',
         'status',
         'notes',
@@ -36,7 +37,7 @@ class JobReservation extends Model
 
         // Auto-generate sequential reservation_id per job when creating
         static::creating(function ($reservation) {
-            if (!$reservation->reservation_id && $reservation->business_job_id) {
+            if (! $reservation->reservation_id && $reservation->business_job_id) {
                 // Get the next reservation_id for this job
                 $maxReservationId = static::where('business_job_id', $reservation->business_job_id)
                     ->max('reservation_id') ?? 0;
@@ -44,7 +45,7 @@ class JobReservation extends Model
             }
 
             // Auto-generate sequential release_number per job_number when not explicitly provided
-            if (!$reservation->release_number) {
+            if (! $reservation->release_number) {
                 $maxRelease = static::where('job_number', $reservation->job_number)
                     ->max('release_number') ?? 0;
                 $reservation->release_number = $maxRelease + 1;
@@ -56,14 +57,32 @@ class JobReservation extends Model
             if ($reservation->isDirty('status')) {
                 $reservation->syncAllProductCommittedQuantities();
                 $reservation->businessJob?->syncAutoStatus();
+
+                if ($reservation->status === 'cancelled') {
+                    $reservation->archiveLinkedDocuments();
+                }
             }
         });
 
-        // When reservation is deleted, sync all products and job status
+        // When reservation is deleted, sync all products and job status, and
+        // archive (never hard-delete) any document that was auto-attached to it.
         static::deleted(function ($reservation) {
             $reservation->syncAllProductCommittedQuantities();
             $reservation->businessJob?->syncAutoStatus();
+            $reservation->archiveLinkedDocuments();
         });
+    }
+
+    /** The job document(s) auto-attached to this reservation (e.g. the EZ Estimate a material check ran against). */
+    public function documents()
+    {
+        return $this->hasMany(JobDocument::class, 'job_reservation_id');
+    }
+
+    /** No longer needed once the reservation is cancelled/deleted — archived instead of deleted so the file stays available for audit. */
+    public function archiveLinkedDocuments(): void
+    {
+        $this->documents()->where('archived', false)->get()->each(fn (JobDocument $doc) => $doc->archive());
     }
 
     /**
@@ -76,7 +95,9 @@ class JobReservation extends Model
 
         foreach ($productIds as $productId) {
             $product = Product::find($productId);
-            if (!$product) continue;
+            if (! $product) {
+                continue;
+            }
 
             $product->quantity_committed = JobReservationItem::binAwareCommitted($productId);
             $product->save();
@@ -90,6 +111,15 @@ class JobReservation extends Model
     public function businessJob()
     {
         return $this->belongsTo(BusinessJob::class, 'business_job_id');
+    }
+
+    /**
+     * The user account this reservation's requester points to (nullable — the
+     * `requested_by` string stays as the display label).
+     */
+    public function requestedByUser()
+    {
+        return $this->belongsTo(User::class, 'requested_by_id');
     }
 
     /**
@@ -145,6 +175,7 @@ class JobReservation extends Model
     public function getStatusLabelAttribute()
     {
         $labels = self::statusLabels();
+
         return $labels[$this->status] ?? $this->status;
     }
 }

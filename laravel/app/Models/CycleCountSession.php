@@ -84,15 +84,21 @@ class CycleCountSession extends Model
     public function getAccuracyPercentageAttribute()
     {
         $total = $this->total_items;
-        if ($total == 0) return 100;
+        if ($total == 0) {
+            return 100;
+        }
         $accurate = $this->items()->where('variance', 0)->count();
+
         return round(($accurate / $total) * 100, 1);
     }
 
     public function getProgressPercentageAttribute()
     {
         $total = $this->total_items;
-        if ($total == 0) return 0;
+        if ($total == 0) {
+            return 0;
+        }
+
         return round(($this->counted_items / $total) * 100, 1);
     }
 
@@ -127,7 +133,7 @@ class CycleCountSession extends Model
             $nextNum = 1;
         }
 
-        return "CC-{$date}-" . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
+        return "CC-{$date}-".str_pad($nextNum, 3, '0', STR_PAD_LEFT);
     }
 
     // Start counting

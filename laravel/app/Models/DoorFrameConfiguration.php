@@ -140,11 +140,11 @@ class DoorFrameConfiguration extends Model
     public function isComplete()
     {
         // Check required relationships exist
-        if (!$this->openingSpecs) {
+        if (! $this->openingSpecs) {
             return false;
         }
 
-        if ($this->includesFrame() && !$this->frameConfig) {
+        if ($this->includesFrame() && ! $this->frameConfig) {
             return false;
         }
 
@@ -162,11 +162,11 @@ class DoorFrameConfiguration extends Model
     {
         $errors = [];
 
-        if (!$this->openingSpecs) {
+        if (! $this->openingSpecs) {
             $errors[] = 'Opening specifications are required';
         }
 
-        if ($this->includesFrame() && !$this->frameConfig) {
+        if ($this->includesFrame() && ! $this->frameConfig) {
             $errors[] = 'Frame configuration is required';
         }
 

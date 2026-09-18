@@ -9,9 +9,9 @@ use App\Models\JobReservation;
 use App\Models\JobReservationItem;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
 
 class JobReservationController extends Controller
 {
@@ -28,29 +28,29 @@ class JobReservationController extends Controller
                 $reservations = JobReservation::whereHas('items', function ($query) use ($product) {
                     $query->where('product_id', $product);
                 })
-                ->with(['items' => function ($query) use ($product) {
-                    $query->where('product_id', $product);
-                }])
-                ->orderByRaw("CASE WHEN status IN ('fulfilled', 'cancelled') THEN 1 ELSE 0 END")
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function ($reservation) {
-                    $item = $reservation->items->first(); // Get this product's line item
+                    ->with(['items' => function ($query) use ($product) {
+                        $query->where('product_id', $product);
+                    }])
+                    ->orderByRaw("CASE WHEN status IN ('fulfilled', 'cancelled') THEN 1 ELSE 0 END")
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->map(function ($reservation) {
+                        $item = $reservation->items->first(); // Get this product's line item
 
-                    return [
-                        'id' => $reservation->id,
-                        'job_number' => $reservation->job_number,
-                        'job_name' => $reservation->job_name,
-                        'status' => $reservation->status,
-                        'quantity_reserved' => $item->committed_qty,
-                        'quantity_fulfilled' => $item->consumed_qty,
-                        'reserved_date' => $reservation->created_at->format('Y-m-d'),
-                        'needed_date' => $reservation->needed_by?->format('Y-m-d'),
-                        'notes' => $reservation->notes,
-                        'created_at' => $reservation->created_at->toISOString(),
-                        'updated_at' => $reservation->updated_at->toISOString(),
-                    ];
-                });
+                        return [
+                            'id' => $reservation->id,
+                            'job_number' => $reservation->job_number,
+                            'job_name' => $reservation->job_name,
+                            'status' => $reservation->status,
+                            'quantity_reserved' => $item->committed_qty,
+                            'quantity_fulfilled' => $item->consumed_qty,
+                            'reserved_date' => $reservation->created_at->format('Y-m-d'),
+                            'needed_date' => $reservation->needed_by?->format('Y-m-d'),
+                            'notes' => $reservation->notes,
+                            'created_at' => $reservation->created_at->toISOString(),
+                            'updated_at' => $reservation->updated_at->toISOString(),
+                        ];
+                    });
 
                 return response()->json($reservations);
             }
@@ -67,6 +67,7 @@ class JobReservationController extends Controller
                         'release_number' => $reservation->release_number,
                         'job_name' => $reservation->job_name,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'status' => $reservation->status,
                         'status_label' => $reservation->status_label,
@@ -146,6 +147,7 @@ class JobReservationController extends Controller
                     'release_number' => $reservation->release_number,
                     'job_name' => $reservation->job_name,
                     'requested_by' => $reservation->requested_by,
+                    'requested_by_id' => $reservation->requested_by_id,
                     'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                     'status' => $reservation->status,
                     'status_label' => $reservation->status_label,
@@ -220,7 +222,7 @@ class JobReservationController extends Controller
                         }
                     }
 
-                    if (!empty($insufficientItems)) {
+                    if (! empty($insufficientItems)) {
                         $warnings[] = 'Some items have insufficient stock to fulfill commitment';
                     }
                 }
@@ -309,7 +311,7 @@ class JobReservationController extends Controller
                 foreach ($reservation->items as $item) {
                     $productId = $item->product_id;
 
-                    if (!isset($consumedQuantities[$productId])) {
+                    if (! isset($consumedQuantities[$productId])) {
                         return response()->json([
                             'error' => 'Missing consumption data',
                             'message' => "Consumed quantity required for product ID {$productId}",
@@ -427,7 +429,7 @@ class JobReservationController extends Controller
                             'quantity' => -$consumedDelta,
                             'quantity_before' => $stockBefore,
                             'quantity_after' => $product->quantity_on_hand,
-                            'reference_number' => $reservation->job_number . '-R' . $reservation->release_number,
+                            'reference_number' => $reservation->job_number.'-R'.$reservation->release_number,
                             'notes' => "Job completion: {$reservation->job_number} R{$reservation->release_number}",
                             'transaction_date' => now(),
                         ]);
@@ -459,7 +461,7 @@ class JobReservationController extends Controller
 
                 // Recalculate average daily use for all consumed products
                 $consumedProductIds = collect($itemsData)->pluck('product_id')->unique()->values()->all();
-                if (!empty($consumedProductIds)) {
+                if (! empty($consumedProductIds)) {
                     \App\Models\Product::recalculateDailyUse($consumedProductIds);
                 }
 
@@ -513,6 +515,7 @@ class JobReservationController extends Controller
             $validator = Validator::make($request->all(), [
                 'job_name' => 'sometimes|nullable|string|max:255',
                 'requested_by' => 'sometimes|nullable|string|max:255',
+                'requested_by_id' => 'sometimes|nullable|integer|exists:users,id',
                 'needed_by' => 'sometimes|nullable|date',
                 'notes' => 'sometimes|nullable|string',
             ]);
@@ -541,8 +544,14 @@ class JobReservationController extends Controller
                 if ($request->has('job_name')) {
                     $reservation->job_name = $request->job_name;
                 }
-                if ($request->has('requested_by')) {
-                    $reservation->requested_by = $request->requested_by;
+                if ($request->has('requested_by_id')) {
+                    $resolved = \App\Models\User::resolvePersonField($request->input('requested_by_id'), $request->input('requested_by'));
+                    $reservation->requested_by = $resolved['label'] ?? '';
+                    $reservation->requested_by_id = $resolved['id'];
+                } elseif ($request->has('requested_by')) {
+                    $resolved = \App\Models\User::resolvePersonField(null, $request->input('requested_by'));
+                    $reservation->requested_by = $resolved['label'] ?? '';
+                    $reservation->requested_by_id = $resolved['id'];
                 }
                 if ($request->has('needed_by')) {
                     $reservation->needed_by = $request->needed_by;
@@ -569,6 +578,7 @@ class JobReservationController extends Controller
                         'release_number' => $reservation->release_number,
                         'job_name' => $reservation->job_name,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'notes' => $reservation->notes,
                         'status' => $reservation->status,
@@ -860,7 +870,7 @@ class JobReservationController extends Controller
         try {
             $sku = $request->get('sku');
 
-            if (!$sku) {
+            if (! $sku) {
                 return response()->json([
                     'error' => 'SKU parameter required',
                 ], 400);
@@ -871,7 +881,7 @@ class JobReservationController extends Controller
                 return strcasecmp($p->sku, $sku) === 0;
             });
 
-            if (!$product) {
+            if (! $product) {
                 return response()->json([
                     'error' => 'Product not found',
                     'message' => "No product found with SKU: {$sku}",
@@ -913,7 +923,7 @@ class JobReservationController extends Controller
             $query = $request->get('q') ?: $request->get('search');
             $perPage = min($request->get('per_page', 10), 50); // Max 50 results
 
-            if (!$query || strlen($query) < 2) {
+            if (! $query || strlen($query) < 2) {
                 return response()->json([
                     'data' => [],
                     'total' => 0,
@@ -921,22 +931,22 @@ class JobReservationController extends Controller
             }
 
             // Search across SKU, part number, and description (case-insensitive)
-            $searchTerm = '%' . strtolower($query) . '%';
+            $searchTerm = '%'.strtolower($query).'%';
 
-            $products = Product::where(function($q) use ($searchTerm) {
+            $products = Product::where(function ($q) use ($searchTerm) {
                 $q->whereRaw('LOWER(sku) LIKE ?', [$searchTerm])
-                  ->orWhere(function($subQ) use ($searchTerm) {
-                      $subQ->whereNotNull('part_number')
-                           ->whereRaw('LOWER(part_number) LIKE ?', [$searchTerm]);
-                  })
-                  ->orWhere(function($subQ) use ($searchTerm) {
-                      $subQ->whereNotNull('description')
-                           ->whereRaw('LOWER(description) LIKE ?', [$searchTerm]);
-                  });
+                    ->orWhere(function ($subQ) use ($searchTerm) {
+                        $subQ->whereNotNull('part_number')
+                            ->whereRaw('LOWER(part_number) LIKE ?', [$searchTerm]);
+                    })
+                    ->orWhere(function ($subQ) use ($searchTerm) {
+                        $subQ->whereNotNull('description')
+                            ->whereRaw('LOWER(description) LIKE ?', [$searchTerm]);
+                    });
             })
-            ->orderBy('sku')
-            ->limit($perPage)
-            ->get();
+                ->orderBy('sku')
+                ->limit($perPage)
+                ->get();
 
             $results = $products->map(function ($product) {
                 return [
@@ -1025,7 +1035,7 @@ class JobReservationController extends Controller
         try {
             // Get product quantity_on_hand for ATP calculation
             $productModel = Product::find($product);
-            if (!$productModel) {
+            if (! $productModel) {
                 return response()->json([
                     'active_reservations_count' => 0,
                     'quantity_committed' => 0,
@@ -1095,7 +1105,8 @@ class JobReservationController extends Controller
                 'job_number' => 'required|string|max:100',
                 'release_number' => 'nullable|integer|min:1',
                 'job_name' => 'required|string|max:255',
-                'requested_by' => 'required|string|max:255',
+                'requested_by' => 'required_without:requested_by_id|nullable|string|max:255',
+                'requested_by_id' => 'nullable|integer|exists:users,id',
                 'needed_by' => 'nullable|date',
                 'notes' => 'nullable|string',
                 'items' => 'required|array|min:1',
@@ -1111,6 +1122,8 @@ class JobReservationController extends Controller
                 ], 422);
             }
 
+            $requestedBy = \App\Models\User::resolvePersonField($request->requested_by_id, $request->requested_by);
+
             DB::beginTransaction();
 
             try {
@@ -1122,7 +1135,8 @@ class JobReservationController extends Controller
                     'job_number' => $request->job_number,
                     'release_number' => $request->release_number ?: null,
                     'job_name' => $request->job_name,
-                    'requested_by' => $request->requested_by,
+                    'requested_by' => $requestedBy['label'] ?? '',
+                    'requested_by_id' => $requestedBy['id'],
                     'needed_by' => $request->needed_by,
                     'notes' => $request->notes,
                     'status' => $initialStatus,
@@ -1206,6 +1220,7 @@ class JobReservationController extends Controller
                         'release_number' => $reservation->release_number,
                         'job_name' => $reservation->job_name,
                         'requested_by' => $reservation->requested_by,
+                        'requested_by_id' => $reservation->requested_by_id,
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'status' => $reservation->status,
                         'status_label' => $reservation->status_label,
@@ -1250,7 +1265,7 @@ class JobReservationController extends Controller
             // Cannot edit fulfilled or cancelled reservations
             if (in_array($reservation->status, ['fulfilled', 'cancelled'])) {
                 return response()->json([
-                    'error' => 'Cannot replace items in a ' . $reservation->status . ' reservation',
+                    'error' => 'Cannot replace items in a '.$reservation->status.' reservation',
                 ], 400);
             }
 
@@ -1300,7 +1315,7 @@ class JobReservationController extends Controller
 
             if ($existingItem) {
                 return response()->json([
-                    'error' => 'Product ' . $newProduct->sku . ' already exists in this reservation',
+                    'error' => 'Product '.$newProduct->sku.' already exists in this reservation',
                     'message' => 'Consider updating the existing item quantities instead',
                 ], 400);
             }
@@ -1330,7 +1345,7 @@ class JobReservationController extends Controller
                         $newProduct->sku,
                         $reason
                     );
-                    $reservation->notes = ($reservation->notes ?? '') . $logMessage;
+                    $reservation->notes = ($reservation->notes ?? '').$logMessage;
                     $reservation->save();
                 }
 

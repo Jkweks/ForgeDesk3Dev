@@ -23,7 +23,7 @@ class InventoryLocationController extends Controller
                 ->get();
 
             // Ensure all locations have valid data
-            $locations = $locations->map(function($location) {
+            $locations = $locations->map(function ($location) {
                 // Ensure numeric values are not null
                 $location->quantity = $location->quantity ?? 0;
                 $location->quantity_committed = $location->quantity_committed ?? 0;
@@ -36,7 +36,7 @@ class InventoryLocationController extends Controller
             \Log::error('Error loading product locations', [
                 'product_id' => $product->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             // Return empty array to prevent frontend crashes
@@ -66,7 +66,7 @@ class InventoryLocationController extends Controller
         if ($exists) {
             return response()->json([
                 'message' => 'This storage location already exists for this product',
-                'errors' => ['storage_location_id' => ['Storage location already exists']]
+                'errors' => ['storage_location_id' => ['Storage location already exists']],
             ], 422);
         }
 
@@ -120,7 +120,7 @@ class InventoryLocationController extends Controller
             if ($exists) {
                 return response()->json([
                     'message' => 'This storage location already exists for this product',
-                    'errors' => ['storage_location_id' => ['Storage location already exists']]
+                    'errors' => ['storage_location_id' => ['Storage location already exists']],
                 ], 422);
             }
         }
@@ -157,7 +157,7 @@ class InventoryLocationController extends Controller
         if ($location->quantity > 0) {
             return response()->json([
                 'message' => 'Cannot delete location with inventory. Please transfer or adjust quantity to zero first.',
-                'errors' => ['quantity' => ['Location has inventory']]
+                'errors' => ['quantity' => ['Location has inventory']],
             ], 422);
         }
 
@@ -193,7 +193,7 @@ class InventoryLocationController extends Controller
         if ($fromLocation->quantity_available < $validated['quantity']) {
             return response()->json([
                 'message' => 'Insufficient available quantity at source location',
-                'errors' => ['quantity' => ['Not enough available inventory']]
+                'errors' => ['quantity' => ['Not enough available inventory']],
             ], 422);
         }
 
@@ -230,8 +230,8 @@ class InventoryLocationController extends Controller
                 'reference_number' => "Transfer: {$fromLocationName} → {$toLocationName}",
                 'reference_type' => 'location_transfer',
                 'reference_id' => $toLocation->id,
-                'notes' => "Transferred {$validated['quantity']} from {$fromLocationName} to {$toLocationName}" .
-                           ($validated['notes'] ? "\n" . $validated['notes'] : ''),
+                'notes' => "Transferred {$validated['quantity']} from {$fromLocationName} to {$toLocationName}".
+                           ($validated['notes'] ? "\n".$validated['notes'] : ''),
                 'user_id' => auth()->id(),
                 'transaction_date' => now(),
             ]);
@@ -245,6 +245,7 @@ class InventoryLocationController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['message' => 'Transfer failed'], 500);
         }
     }
@@ -271,7 +272,7 @@ class InventoryLocationController extends Controller
         if ($location->quantity < 0) {
             return response()->json([
                 'message' => 'Adjustment would result in negative quantity',
-                'errors' => ['quantity' => ['Invalid adjustment']]
+                'errors' => ['quantity' => ['Invalid adjustment']],
             ], 422);
         }
 
@@ -301,8 +302,8 @@ class InventoryLocationController extends Controller
             'reference_number' => "Location: {$locationName}",
             'reference_type' => 'location_adjustment',
             'reference_id' => $location->id,
-            'notes' => "Adjusted quantity at {$locationName} by {$validated['quantity']} (Location: {$locationQuantityBefore} → {$location->quantity})" .
-                       ($validated['notes'] ? "\n" . $validated['notes'] : ''),
+            'notes' => "Adjusted quantity at {$locationName} by {$validated['quantity']} (Location: {$locationQuantityBefore} → {$location->quantity})".
+                       ($validated['notes'] ? "\n".$validated['notes'] : ''),
             'user_id' => auth()->id(),
             'transaction_date' => now(),
         ]);
@@ -326,10 +327,10 @@ class InventoryLocationController extends Controller
             'total_locations' => $locations->count(),
             'total_quantity' => $locations->sum('quantity'),
             'total_committed' => $locations->sum('quantity_committed'),
-            'total_available' => $locations->sum(function($loc) {
+            'total_available' => $locations->sum(function ($loc) {
                 return $loc->quantity - $loc->quantity_committed;
             }),
-            'locations' => $locations->map(function($loc) {
+            'locations' => $locations->map(function ($loc) {
                 return [
                     'id' => $loc->id,
                     'storage_location_id' => $loc->storage_location_id,
@@ -345,8 +346,9 @@ class InventoryLocationController extends Controller
 
         // Calculate percentage distribution
         if ($stats['total_quantity'] > 0) {
-            $stats['locations'] = $stats['locations']->map(function($loc) use ($stats) {
+            $stats['locations'] = $stats['locations']->map(function ($loc) use ($stats) {
                 $loc['percentage'] = round(($loc['quantity'] / $stats['total_quantity']) * 100, 1);
+
                 return $loc;
             });
         }
@@ -365,21 +367,21 @@ class InventoryLocationController extends Controller
             ->with('product')
             ->orderBy('is_primary', 'desc')
             ->get()
-            ->map(fn($il) => [
-                'inv_location_id'    => $il->id,
-                'product_id'         => $il->product_id,
-                'sku'                => $il->product->sku,
-                'part_number'        => $il->product->part_number,
-                'description'        => $il->product->description,
-                'photo_url'          => $il->product->photo_url,
-                'quantity'           => $il->quantity,
+            ->map(fn ($il) => [
+                'inv_location_id' => $il->id,
+                'product_id' => $il->product_id,
+                'sku' => $il->product->sku,
+                'part_number' => $il->product->part_number,
+                'description' => $il->product->description,
+                'photo_url' => $il->product->photo_url,
+                'quantity' => $il->quantity,
                 'quantity_committed' => $il->quantity_committed,
-                'is_primary'         => (bool) $il->is_primary,
+                'is_primary' => (bool) $il->is_primary,
             ]);
 
         return response()->json([
             'storage_location' => [
-                'id'   => $storageLocation->id,
+                'id' => $storageLocation->id,
                 'name' => $storageLocation->name,
                 'code' => $storageLocation->code,
             ],
@@ -395,17 +397,16 @@ class InventoryLocationController extends Controller
     public function productsWithoutStorageLocation()
     {
         $products = Product::whereNull('deleted_at')
-            ->whereDoesntHave('inventoryLocations', fn($q) =>
-                $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
+            ->whereDoesntHave('inventoryLocations', fn ($q) => $q->whereNotNull('storage_location_id')->whereNull('deleted_at')
             )
             ->orderBy('sku')
             ->get()
-            ->map(fn($p) => [
-                'product_id'         => $p->id,
-                'sku'                => $p->sku,
-                'part_number'        => $p->part_number,
-                'description'        => $p->description,
-                'quantity_on_hand'   => $p->quantity_on_hand,
+            ->map(fn ($p) => [
+                'product_id' => $p->id,
+                'sku' => $p->sku,
+                'part_number' => $p->part_number,
+                'description' => $p->description,
+                'quantity_on_hand' => $p->quantity_on_hand,
                 'quantity_committed' => $p->quantity_committed,
             ]);
 

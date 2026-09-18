@@ -3,14 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\CycleCountSession;
 use App\Models\CycleCountItem;
+use App\Models\CycleCountSession;
 use App\Models\Product;
-use App\Models\InventoryLocation;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class CycleCountController extends Controller
 {
@@ -48,10 +47,10 @@ class CycleCountController extends Controller
             // Search
             if ($request->has('search')) {
                 $search = $request->search;
-                $query->where(function($q) use ($search) {
+                $query->where(function ($q) use ($search) {
                     $q->where('session_number', 'like', "%{$search}%")
-                      ->orWhere('location', 'like', "%{$search}%")
-                      ->orWhere('notes', 'like', "%{$search}%");
+                        ->orWhere('location', 'like', "%{$search}%")
+                        ->orWhere('notes', 'like', "%{$search}%");
                 });
             }
 
@@ -65,6 +64,7 @@ class CycleCountController extends Controller
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return response()->json([
                 'error' => 'Failed to load cycle count sessions',
                 'message' => $e->getMessage(),
@@ -79,9 +79,9 @@ class CycleCountController extends Controller
     {
         $cycleCountSession = CycleCountSession::find($id);
 
-        if (!$cycleCountSession) {
+        if (! $cycleCountSession) {
             return response()->json([
-                'message' => 'Cycle count session not found'
+                'message' => 'Cycle count session not found',
             ], 404);
         }
 
@@ -91,7 +91,7 @@ class CycleCountController extends Controller
             'reviewer',
             'items.product',
             'items.location.storageLocation',
-            'items.counter'
+            'items.counter',
         ]);
 
         return response()->json($cycleCountSession);
@@ -117,7 +117,7 @@ class CycleCountController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -166,7 +166,7 @@ class CycleCountController extends Controller
 
                 // Filter by storage locations if selected (includes descendants)
                 if (count($allStorageLocationIds) > 0) {
-                    $query->whereHas('inventoryLocations', function($q) use ($allStorageLocationIds) {
+                    $query->whereHas('inventoryLocations', function ($q) use ($allStorageLocationIds) {
                         $q->whereIn('storage_location_id', $allStorageLocationIds);
                     });
                 }
@@ -177,9 +177,10 @@ class CycleCountController extends Controller
             // Validate we have products to count
             if ($products->count() === 0) {
                 DB::rollBack();
+
                 return response()->json([
                     'message' => 'No products found matching the specified criteria. Please adjust your filters or select specific products.',
-                    'error' => 'No products to count'
+                    'error' => 'No products to count',
                 ], 422);
             }
 
@@ -262,7 +263,7 @@ class CycleCountController extends Controller
 
             return response()->json([
                 'message' => 'Cycle count session created successfully',
-                'session' => $session
+                'session' => $session,
             ], 201);
 
         } catch (\Exception $e) {
@@ -294,7 +295,7 @@ class CycleCountController extends Controller
 
         if ($cycleCountSession->status !== 'planned') {
             return response()->json([
-                'message' => 'Only planned sessions can be started'
+                'message' => 'Only planned sessions can be started',
             ], 422);
         }
 
@@ -302,7 +303,7 @@ class CycleCountController extends Controller
 
         return response()->json([
             'message' => 'Cycle count session started',
-            'session' => $cycleCountSession
+            'session' => $cycleCountSession,
         ]);
     }
 
@@ -313,9 +314,9 @@ class CycleCountController extends Controller
     {
         $cycleCountSession = CycleCountSession::findOrFail($id);
 
-        if (!in_array($cycleCountSession->status, ['planned', 'in_progress'])) {
+        if (! in_array($cycleCountSession->status, ['planned', 'in_progress'])) {
             return response()->json([
-                'message' => 'Session must be planned or in progress to record counts'
+                'message' => 'Session must be planned or in progress to record counts',
             ], 422);
         }
 
@@ -328,7 +329,7 @@ class CycleCountController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -337,7 +338,7 @@ class CycleCountController extends Controller
         // Verify item belongs to this session
         if ($item->session_id !== $cycleCountSession->id) {
             return response()->json([
-                'message' => 'Item does not belong to this session'
+                'message' => 'Item does not belong to this session',
             ], 422);
         }
 
@@ -355,7 +356,7 @@ class CycleCountController extends Controller
 
         return response()->json([
             'message' => 'Count recorded successfully',
-            'item' => $item->load(['product', 'location'])
+            'item' => $item->load(['product', 'location']),
         ]);
     }
 
@@ -368,7 +369,7 @@ class CycleCountController extends Controller
 
         if ($cycleCountSession->status !== 'in_progress') {
             return response()->json([
-                'message' => 'Session must be in progress to approve variances'
+                'message' => 'Session must be in progress to approve variances',
             ], 422);
         }
 
@@ -380,7 +381,7 @@ class CycleCountController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -405,14 +406,15 @@ class CycleCountController extends Controller
 
             return response()->json([
                 'message' => 'Variances approved and adjustments created',
-                'items' => $adjustedItems
+                'items' => $adjustedItems,
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Error approving variances',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -426,7 +428,7 @@ class CycleCountController extends Controller
 
         if ($cycleCountSession->status !== 'in_progress') {
             return response()->json([
-                'message' => 'Only in-progress sessions can be completed'
+                'message' => 'Only in-progress sessions can be completed',
             ], 422);
         }
 
@@ -437,7 +439,7 @@ class CycleCountController extends Controller
 
         if ($uncounted > 0) {
             return response()->json([
-                'message' => "Cannot complete session: {$uncounted} items have not been counted"
+                'message' => "Cannot complete session: {$uncounted} items have not been counted",
             ], 422);
         }
 
@@ -449,7 +451,7 @@ class CycleCountController extends Controller
 
         if ($unapproved > 0) {
             return response()->json([
-                'message' => "Cannot complete session: {$unapproved} variance(s) have not been approved. Review and approve all variances before completing."
+                'message' => "Cannot complete session: {$unapproved} variance(s) have not been approved. Review and approve all variances before completing.",
             ], 422);
         }
 
@@ -457,7 +459,7 @@ class CycleCountController extends Controller
 
         return response()->json([
             'message' => 'Cycle count session completed successfully',
-            'session' => $cycleCountSession->load(['items.product'])
+            'session' => $cycleCountSession->load(['items.product']),
         ]);
     }
 
@@ -470,7 +472,7 @@ class CycleCountController extends Controller
 
         if ($cycleCountSession->status === 'completed') {
             return response()->json([
-                'message' => 'Cannot cancel completed sessions'
+                'message' => 'Cannot cancel completed sessions',
             ], 422);
         }
 
@@ -478,7 +480,7 @@ class CycleCountController extends Controller
 
         return response()->json([
             'message' => 'Cycle count session cancelled',
-            'session' => $cycleCountSession
+            'session' => $cycleCountSession,
         ]);
     }
 
@@ -525,9 +527,9 @@ class CycleCountController extends Controller
                 'completed' => CycleCountSession::where('status', 'completed')->count(),
                 'cancelled' => CycleCountSession::where('status', 'cancelled')->count(),
                 'active_sessions' => CycleCountSession::active()->count(),
-                'items_counted_this_month' => CycleCountItem::whereHas('session', function($q) {
+                'items_counted_this_month' => CycleCountItem::whereHas('session', function ($q) {
                     $q->whereMonth('completed_at', date('m'))
-                      ->whereYear('completed_at', date('Y'));
+                        ->whereYear('completed_at', date('Y'));
                 })->whereNotNull('counted_quantity')->count(),
                 'accuracy_this_month' => $this->calculateMonthlyAccuracy(),
             ];
@@ -539,6 +541,7 @@ class CycleCountController extends Controller
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return response()->json([
                 'error' => 'Failed to load statistics',
                 'message' => $e->getMessage(),
@@ -574,6 +577,7 @@ class CycleCountController extends Controller
         }
 
         $totalAccuracy = $completedSessions->sum('accuracy_percentage');
+
         return round($totalAccuracy / $completedSessions->count(), 1);
     }
 
@@ -588,7 +592,7 @@ class CycleCountController extends Controller
             'reviewer',
             'items.product',
             'items.location.storageLocation',
-            'items.counter'
+            'items.counter',
         ])->findOrFail($id);
 
         // Get committed quantities for comparison

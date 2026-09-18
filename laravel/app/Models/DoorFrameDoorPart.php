@@ -57,7 +57,7 @@ class DoorFrameDoorPart extends Model
         $config = $this->doorConfig;
         $openingSpecs = $config->configuration->openingSpecs;
 
-        if (!$openingSpecs) {
+        if (! $openingSpecs) {
             return null;
         }
 

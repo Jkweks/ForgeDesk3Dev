@@ -7,6 +7,7 @@ use App\Models\CycleCountSession;
 use App\Models\InventoryLocation;
 use App\Models\Product;
 use App\Models\StorageLocation;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -29,6 +30,7 @@ class CycleCountItemApproveVarianceTest extends TestCase
         $product = Product::create([
             'sku' => 'CC-TEST-001',
             'description' => 'Cycle count test product',
+            'supplier_id' => Supplier::create(['name' => 'CC Test Supplier 1'])->id,
         ]);
 
         $session = CycleCountSession::create([
@@ -72,6 +74,7 @@ class CycleCountItemApproveVarianceTest extends TestCase
         $product = Product::create([
             'sku' => 'CC-TEST-002',
             'description' => 'Cycle count test product 2',
+            'supplier_id' => Supplier::create(['name' => 'CC Test Supplier 2'])->id,
         ]);
 
         // Product already has stock elsewhere; the legacy count only covers part of it.

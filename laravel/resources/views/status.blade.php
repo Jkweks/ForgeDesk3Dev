@@ -319,6 +319,58 @@
         </div>
       </div>
 
+      <!-- Backups -->
+      <div class="row row-deck row-cards mb-3">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ti ti-database-export me-2"></i>Backup Health</h3>
+              <div class="ms-auto" id="backupOverallBadge"></div>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 mb-3">
+                <div class="col-6 col-md-3">
+                  <div class="text-muted">Last Run</div>
+                  <div class="h4 mb-0" id="backupLastRun">-</div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="text-muted">Last Run Status</div>
+                  <div class="h4 mb-0" id="backupLastStatus">-</div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="text-muted">Last Successful Backup</div>
+                  <div class="h4 mb-0" id="backupLastSuccess">-</div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="text-muted">Since Last Success</div>
+                  <div class="h4 mb-0" id="backupHoursSinceSuccess">-</div>
+                </div>
+              </div>
+
+              <div class="text-muted small mb-1">Last 60 days</div>
+              <div id="backupHistoryChart" class="d-flex align-items-end gap-1 mb-1" style="overflow-x:auto; padding-bottom:2px;"></div>
+              <div class="d-flex gap-3 small text-muted mb-3">
+                <span><span class="d-inline-block rounded-1" style="width:10px;height:10px;background:#2fb344;"></span> Success</span>
+                <span><span class="d-inline-block rounded-1" style="width:10px;height:10px;background:#f59f00;"></span> Local file failure</span>
+                <span><span class="d-inline-block rounded-1" style="width:10px;height:10px;background:#4299e1;"></span> Remote copy failure</span>
+                <span><span class="d-inline-block rounded-1" style="width:10px;height:10px;background:#d63939;"></span> Failed</span>
+                <span><span class="d-inline-block rounded-1" style="width:10px;height:10px;background:#dce1e7;"></span> No run recorded</span>
+              </div>
+
+              <div class="text-muted small mb-1">Latest run — component breakdown</div>
+              <div class="table-responsive">
+                <table class="table table-sm table-vcenter mb-0">
+                  <thead>
+                    <tr><th>Component</th><th>Status</th><th>Detail</th></tr>
+                  </thead>
+                  <tbody id="backupComponentsTable"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Users -->
       <div class="row row-deck row-cards mb-3">
         <div class="col-lg-6">
@@ -390,6 +442,73 @@
   function num(v) {
     if (v === null || v === undefined) return '-';
     return Number(v).toLocaleString();
+  }
+
+  const BACKUP_STATUS_META = {
+    'success':       { color: '#2fb344', label: 'Success',              badge: 'bg-success' },
+    'local_failed':  { color: '#f59f00', label: 'Local file failure',   badge: 'bg-warning' },
+    'remote_failed': { color: '#4299e1', label: 'Remote copy failure',  badge: 'text-bg-blue' },
+    'failed':        { color: '#d63939', label: 'Failed',               badge: 'bg-danger' },
+  };
+  const BACKUP_NO_RUN_COLOR = '#dce1e7';
+
+  function renderBackupStatus(backups) {
+    if (!backups) return;
+
+    // Overall badge (from the latest run)
+    const overallBadge = document.getElementById('backupOverallBadge');
+    if (backups.latest) {
+      const meta = BACKUP_STATUS_META[backups.latest.status] || { badge: 'text-bg-secondary', label: backups.latest.status };
+      overallBadge.innerHTML = '<span class="badge ' + meta.badge + '">' + meta.label + '</span>';
+    } else {
+      overallBadge.innerHTML = '<span class="badge text-bg-secondary">No runs recorded</span>';
+    }
+
+    // Summary tiles
+    document.getElementById('backupLastRun').textContent = backups.latest?.started_at
+      ? new Date(backups.latest.started_at).toLocaleString()
+      : 'Never';
+    const lastStatusEl = document.getElementById('backupLastStatus');
+    if (backups.latest) {
+      const meta = BACKUP_STATUS_META[backups.latest.status] || { badge: 'text-bg-secondary', label: backups.latest.status };
+      lastStatusEl.innerHTML = '<span class="badge ' + meta.badge + '">' + meta.label + '</span>';
+    } else {
+      lastStatusEl.textContent = '-';
+    }
+    document.getElementById('backupLastSuccess').textContent = backups.last_success_at
+      ? new Date(backups.last_success_at).toLocaleString()
+      : 'Never';
+    const hoursEl = document.getElementById('backupHoursSinceSuccess');
+    if (backups.hours_since_last_success === null || backups.hours_since_last_success === undefined) {
+      hoursEl.textContent = 'N/A';
+      hoursEl.className = 'h4 mb-0';
+    } else {
+      hoursEl.textContent = num(backups.hours_since_last_success) + 'h';
+      hoursEl.className = 'h4 mb-0' + (backups.hours_since_last_success > 30 ? ' text-danger' : backups.hours_since_last_success > 26 ? ' text-warning' : '');
+    }
+
+    // Daily history chart — one bar per day, worst status of that day
+    const chart = document.getElementById('backupHistoryChart');
+    chart.innerHTML = (backups.history || []).map(day => {
+      const meta = BACKUP_STATUS_META[day.status];
+      const color = meta ? meta.color : BACKUP_NO_RUN_COLOR;
+      const label = meta ? meta.label : 'No run recorded';
+      const title = day.date + ': ' + label + (day.error_message ? ' — ' + day.error_message : '');
+      return '<div title="' + title.replace(/"/g, '&quot;') + '" style="width:6px;height:24px;flex:0 0 auto;border-radius:2px;background:' + color + ';"></div>';
+    }).join('');
+
+    // Latest run's component breakdown
+    const compBody = document.getElementById('backupComponentsTable');
+    const components = backups.latest?.components || {};
+    const rows = Object.keys(components).map(key => {
+      const c = components[key];
+      const ok = !!c.success;
+      const badge = ok ? '<span class="badge bg-success">OK</span>' : '<span class="badge bg-danger">Failed</span>';
+      return '<tr><td>' + key.replace(/_/g, ' ') + '</td><td>' + badge + '</td><td class="text-muted">' + (c.message || '') + '</td></tr>';
+    });
+    compBody.innerHTML = rows.length
+      ? rows.join('')
+      : '<tr><td colspan="3" class="text-muted text-center">No backup runs recorded yet.</td></tr>';
   }
 
   async function loadStatus() {
@@ -504,6 +623,9 @@
       document.getElementById('opsMtLastService').textContent = ops.maintenance.last_service
         ? new Date(ops.maintenance.last_service).toLocaleDateString()
         : 'None';
+
+      // Backups
+      renderBackupStatus(data.backups);
 
       // Users
       const usr = data.users;

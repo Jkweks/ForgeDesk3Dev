@@ -1,34 +1,21 @@
-# Production deployment for VPS (Ubuntu + Docker Compose).
-#
-# Prerequisites on the host:
-#   1. Copy .env.prod.example → .env and fill in APP_KEY, DB_PASSWORD, APP_URL
-#   2. docker compose -f docker-compose.prod.yml up -d
-#   3. In Nginx Proxy Manager: add a Proxy Host for your domain → forward to
-#      http://<VPS_PUBLIC_IP>:80  (HTTP — NPM handles SSL termination off-site)
-#      Enable "Websockets Support" if needed; no other special settings required.
-#
-# Credentials are read from a .env file in this directory (Docker Compose
-# automatically loads it for ${VAR} substitution and env_file injection).
-# Never commit a populated .env to source control.
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: forgedesk_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-forgedesk}
-      POSTGRES_USER: ${DB_USERNAME:-forgedesk}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      POSTGRES_DB: forgedesk
+      POSTGRES_USER: forgedesk
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # No host port — postgres is internal only.
-    # If you need psql access from the host: docker compose exec postgres psql -U forgedesk
     networks:
       - forgedesk_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-forgedesk}"]
+      test: ["CMD-SHELL", "pg_isready -U forgedesk"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,7 +24,6 @@ services:
     image: redis:7-alpine
     container_name: forgedesk_redis
     restart: unless-stopped
-    # No host port — redis is internal only
     networks:
       - forgedesk_network
     healthcheck:
@@ -47,39 +33,71 @@ services:
       retries: 5
 
   app:
-    image: ghcr.io/jkweks/forgedesk-web:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/jkweks/forgedesk3dev:latest
     container_name: forgedesk_app
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
-      # Shared volume: entrypoint syncs compiled public assets here for nginx
-      - app_public:/var/www/public_shared
-      # Persists user-uploaded files across deployments
+      - app_public:/var/www/html/public
       - app_storage:/var/www/html/storage/app/public
-    env_file: .env
+      - app_private:/var/www/html/storage/app/private
     environment:
-      # Service-discovery values — override anything in .env for these
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      # Production Laravel settings
+      APP_NAME: ForgeDesk
       APP_ENV: production
       APP_DEBUG: "false"
-      QUEUE_CONNECTION: redis
-      SESSION_DRIVER: redis
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: forgedesk
+      DB_USERNAME: forgedesk
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
       LOG_CHANNEL: stack
+      TRUSTED_PROXIES: "*"
+      SANCTUM_EXPIRATION: 480
       RUN_MIGRATIONS: "true"
+      MAIL_MAILER: ${MAIL_MAILER}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - forgedesk_network
+
+  fab_utils:
+    image: ghcr.io/jkweks/fab_utils:latest
+    container_name: forgedesk_fab_utils
+    restart: unless-stopped
+    volumes:
+      # Shim plan pics/PDFs bind-mounted to the host for easy scp access.
+      # Defaults to ./shim_files next to this compose file; override with
+      # FAB_UTILS_SHIM_PATH in .env for an absolute path.
+      # First run: seed these dirs from the image, e.g.
+      #   docker compose -f docker-compose.prod.yml run --rm --no-deps --entrypoint sh fab_utils \
+      #     -c 'cp -rn /var/www/html/shimshop/planpic/. /tmp' ...
+      # or simply copy your existing planpic/planpdf contents into shim_files/.
+      - ${FAB_UTILS_SHIM_PATH:-./shim_files}/planpic:/var/www/html/shimshop/planpic
+      - ${FAB_UTILS_SHIM_PATH:-./shim_files}/planpdf:/var/www/html/shimshop/planpdf
+    environment:
+      DB_HOST: ${FAB_UTILS_DB_HOST}
+      DB_PORT: ${FAB_UTILS_DB_PORT:-5439}
+      DB_NAME: ${FAB_UTILS_DB_NAME:-shimshop}
+      DB_USER: ${FAB_UTILS_DB_USER:-shimshop}
+      DB_PASS: ${FAB_UTILS_DB_PASS}
+      SHIMSHOP_TOKEN: ${FAB_UTILS_SHIMSHOP_TOKEN}
     networks:
       - forgedesk_network
 
@@ -88,45 +106,55 @@ services:
     container_name: forgedesk_nginx
     restart: unless-stopped
     ports:
-      # NPM off-site proxies to this server's public IP — bind on all interfaces.
-      # Keep a firewall rule limiting port 80 to your NPM host IP if desired.
       - "80:80"
     volumes:
-      # Compiled public assets synced from app container on startup
       - app_public:/var/www/html/public:ro
-      # User-uploaded files (storage/app/public)
       - app_storage:/var/www/html/storage/app/public:ro
     configs:
       - source: nginx_conf
         target: /etc/nginx/conf.d/default.conf
     depends_on:
       - app
+      - fab_utils
     networks:
       - forgedesk_network
 
   queue:
-    image: ghcr.io/jkweks/forgedesk-web:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/jkweks/forgedesk3dev:latest
     container_name: forgedesk_queue
     restart: unless-stopped
     working_dir: /var/www/html
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
     volumes:
       - app_storage:/var/www/html/storage/app/public
-    env_file: .env
+      - app_private:/var/www/html/storage/app/private
     environment:
+      APP_NAME: ForgeDesk
+      APP_ENV: production
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL}
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
       DB_CONNECTION: pgsql
       DB_HOST: postgres
-      DB_PORT: "5432"
+      DB_PORT: 5432
+      DB_DATABASE: forgedesk
+      DB_USERNAME: forgedesk
+      DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      APP_ENV: production
-      APP_DEBUG: "false"
+      REDIS_PORT: 6379
       QUEUE_CONNECTION: redis
       LOG_CHANNEL: stack
       RUN_MIGRATIONS: "false"
+      SANCTUM_EXPIRATION: 480
+      TRUSTED_PROXIES: "*"
+      MAIL_MAILER: ${MAIL_MAILER}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME}
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,21 +163,6 @@ services:
     networks:
       - forgedesk_network
 
-networks:
-  forgedesk_network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-    driver: local
-  # Compiled JS/CSS/assets from the image, served by nginx
-  app_public:
-    driver: local
-  # User-uploaded files, persisted across deployments
-  app_storage:
-    driver: local
-
-# Nginx config embedded inline — no host file needed
 configs:
   nginx_conf:
     content: |
@@ -162,6 +175,42 @@ configs:
 
           location /storage/ {
               alias /var/www/html/storage/app/public/;
+          }
+
+          location = /utils {
+              return 301 /utils/shimshop/;
+          }
+
+          location ^~ /utils/ {
+              proxy_pass http://fab_utils:80/;
+              proxy_redirect http://fab_utils/ http://$$host/utils/;
+              proxy_http_version 1.1;
+              proxy_set_header Host $$host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_set_header X-Forwarded-Host $$host;
+              proxy_set_header X-Forwarded-Port $$server_port;
+          }
+
+          # Door/frame configurator (fab_utils' configurator/ directory), reachable
+          # at fab.vosglassintra.net/doorconfig — same host as /utils above, just a
+          # friendlier dedicated path straight to the configurator app instead of
+          # nested under /utils/.
+          location = /configurator {
+              return 301 /configurator/;
+          }
+
+          location ^~ /configurator/ {
+              proxy_pass http://fab_utils:80/configurator/;
+              proxy_redirect http://fab_utils/ http://$$host/configurator/;
+              proxy_http_version 1.1;
+              proxy_set_header Host $$host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_set_header X-Forwarded-Host $$host;
+              proxy_set_header X-Forwarded-Port $$server_port;
           }
 
           location / {
@@ -178,16 +227,13 @@ configs:
               fastcgi_param SCRIPT_FILENAME $$realpath_root$$fastcgi_script_name;
               include fastcgi_params;
               fastcgi_hide_header X-Powered-By;
-
               fastcgi_read_timeout 600;
               fastcgi_send_timeout 600;
               fastcgi_connect_timeout 600;
-
               fastcgi_param HTTP_X_FORWARDED_FOR $$http_x_forwarded_for;
               fastcgi_param HTTP_X_FORWARDED_HOST $$http_x_forwarded_host;
               fastcgi_param HTTP_X_FORWARDED_PORT $$http_x_forwarded_port;
               fastcgi_param HTTP_X_FORWARDED_PROTO $$http_x_forwarded_proto;
-              fastcgi_param HTTP_X_FORWARDED_PREFIX $$http_x_forwarded_prefix;
               fastcgi_param HTTPS $$https if_not_empty;
           }
 
@@ -197,3 +243,41 @@ configs:
 
           client_max_body_size 50M;
       }
+
+networks:
+  forgedesk_network:
+    driver: bridge
+
+volumes:
+  # Still ordinary named volumes as far as service definitions above are
+  # concerned — driver_opts just pins each one's actual backing store to a
+  # host directory next to this compose file, instead of Docker's internal
+  # /var/lib/docker/volumes/.../_data/ store. Requires the ./_data/<name>
+  # directory to already exist on the host (created once, empty, before first
+  # `up`) — the local driver does not auto-create parent bind targets. Paths
+  # are relative to wherever `docker compose` is invoked from, so always run
+  # it from this file's own directory (matching existing convention: no -f).
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/postgres_data
+  app_public:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/app_public
+  app_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/app_storage
+  app_private:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./_data/app_private

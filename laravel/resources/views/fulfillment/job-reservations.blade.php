@@ -266,7 +266,7 @@
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By</label>
-                      <input type="text" class="form-control" id="editRequestedBy" placeholder="Enter requester name">
+                      <select class="form-select" id="editRequestedBy"></select>
                     </div>
                   </div>
                 </div>
@@ -461,7 +461,7 @@
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By <span class="text-danger">*</span></label>
-                      <input type="text" class="form-control" id="manualRequestedBy" required>
+                      <select class="form-select" id="manualRequestedBy" required></select>
                     </div>
                   </div>
                 </div>
@@ -696,17 +696,17 @@
                                 <button class="btn btn-sm btn-primary" onclick="viewDetails(${res.id})" title="View Details">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
                                 </button>
-                                ${res.status === 'draft' && hasPermission('orders.edit') ? `
+                                ${res.status === 'draft' && hasPermission('jobs.manage-reservations') ? `
                                     <button class="btn btn-sm btn-warning" onclick="activateDraftReservation(${res.id})" title="Activate Reservation">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l9 18h-18z" /></svg>
                                     </button>
                                 ` : ''}
-                                ${res.status === 'in_progress' ? `
+                                ${res.status === 'in_progress' && hasPermission('jobs.manage-reservations') ? `
                                     <button class="btn btn-sm btn-success" onclick="showCompleteModal(${res.id})" title="Complete Job">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                                     </button>
                                 ` : ''}
-                                ${res.status !== 'draft' && res.status !== 'fulfilled' && res.status !== 'cancelled' ? `
+                                ${res.status !== 'draft' && res.status !== 'fulfilled' && res.status !== 'cancelled' && hasPermission('jobs.manage-reservations') ? `
                                     <button class="btn btn-sm btn-secondary" onclick="showStatusModal(${res.id}, '${res.status}')" title="Change Status">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /><path d="M9 12l2 2l4 -4" /></svg>
                                     </button>
@@ -899,9 +899,9 @@
                 </div>
             `;
 
-            // Add Edit button if not in terminal state
+            // Add Edit button if not in terminal state — writers only
             const detailModalActions = document.getElementById('detailModalActions');
-            if (!['fulfilled', 'cancelled'].includes(res.status)) {
+            if (!['fulfilled', 'cancelled'].includes(res.status) && hasPermission('jobs.manage-reservations')) {
                 detailModalActions.innerHTML = `
                     <button type="button" class="btn btn-primary" onclick="openEditModal(${res.id})">
                         <i class="ti ti-edit me-1"></i>Edit Reservation
@@ -1217,7 +1217,7 @@
             document.getElementById('editJobNumber').value = res.job_number;
             document.getElementById('editReleaseNumber').value = res.release_number;
             document.getElementById('editJobName').value = res.job_name || '';
-            document.getElementById('editRequestedBy').value = res.requested_by || '';
+            await populatePeopleSelect(document.getElementById('editRequestedBy'), res.requested_by_id, { legacyLabel: res.requested_by });
             document.getElementById('editNeededBy').value = res.needed_by || '';
             document.getElementById('editStatus').value = res.status_label || res.status;
             document.getElementById('editNotes').value = res.notes || '';
@@ -1412,7 +1412,7 @@
         async function saveReservation() {
             const id = document.getElementById('editReservationId').value;
             const jobName = document.getElementById('editJobName').value;
-            const requestedBy = document.getElementById('editRequestedBy').value;
+            const requestedById = document.getElementById('editRequestedBy').value;
             const neededBy = document.getElementById('editNeededBy').value;
             const notes = document.getElementById('editNotes').value;
 
@@ -1427,7 +1427,7 @@
                     },
                     body: JSON.stringify({
                         job_name: jobName,
-                        requested_by: requestedBy,
+                        requested_by_id: requestedById || null,
                         needed_by: neededBy,
                         notes: notes
                     })
@@ -1661,7 +1661,7 @@
             document.getElementById('manualReleaseNumber').value = '';
             document.getElementById('manualReleaseNumberHint').textContent = '';
             document.getElementById('manualJobName').value = '';
-            document.getElementById('manualRequestedBy').value = '';
+            populatePeopleSelect(document.getElementById('manualRequestedBy'), (typeof currentUser !== 'undefined' && currentUser) ? currentUser.id : '', { placeholder: '— Select requester —' });
             document.getElementById('manualNeededBy').value = '';
             document.getElementById('manualNotes').value = '';
 
@@ -1864,7 +1864,7 @@
             const releaseNumberRaw = document.getElementById('manualReleaseNumber').value.trim();
             const releaseNumber = releaseNumberRaw ? parseInt(releaseNumberRaw) : null;
             const jobName = document.getElementById('manualJobName').value.trim();
-            const requestedBy = document.getElementById('manualRequestedBy').value.trim();
+            const requestedById = document.getElementById('manualRequestedBy').value;
             const neededBy = document.getElementById('manualNeededBy').value;
             const notes = document.getElementById('manualNotes').value.trim();
 
@@ -1878,7 +1878,7 @@
                 return;
             }
 
-            if (!requestedBy) {
+            if (!requestedById) {
                 alert('Requested By is required');
                 return;
             }
@@ -1900,7 +1900,7 @@
                         job_number: jobNumber,
                         ...(releaseNumber ? { release_number: releaseNumber } : {}),
                         job_name: jobName,
-                        requested_by: requestedBy,
+                        requested_by_id: requestedById,
                         needed_by: neededBy || null,
                         notes: notes || null,
                         items: manualItems

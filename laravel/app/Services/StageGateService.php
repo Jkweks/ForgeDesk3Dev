@@ -10,9 +10,11 @@ use Illuminate\Support\Collection;
 /**
  * The single source of truth for step gating.
  *
- * Elevation stages gate per-step: a stage is blocked while any *earlier*
- * (`sort_order`) sibling in the same elevation that is flagged `blocks_next`
- * has not reached a terminal status. Non-blocking predecessors are ignored.
+ * Elevation stages gate per-phase: a stage is blocked while any sibling in the
+ * same elevation that is flagged `blocks_next`, sits in an *earlier* phase, and
+ * has not reached a terminal status. A stage's phase is its explicit `phase`
+ * column, or its `sort_order` when that is null — so stages sharing a phase run
+ * concurrently and never gate each other. Non-blocking predecessors are ignored.
  *
  * Job steps (the flat WO checklist) gate strict-sequentially: every earlier
  * step must be terminal.
@@ -20,7 +22,8 @@ use Illuminate\Support\Collection;
 class StageGateService
 {
     public const TERMINAL = ['complete', 'not_required'];
-    public const ACTIVE   = ['in_progress', 'complete'];
+
+    public const ACTIVE = ['in_progress', 'complete'];
 
     public function blockingStageFor(FdWoStage $stage): ?FdWoStage
     {
@@ -28,13 +31,15 @@ class StageGateService
             return null; // legacy WO-scoped stages carry no elevation ordering
         }
 
+        $myPhase = $stage->phase ?? $stage->sort_order;
+
         $siblings = FdWoStage::query()
             ->where('elevation_id', $stage->elevation_id)
             ->where('id', '!=', $stage->id)
-            ->where('sort_order', '<', $stage->sort_order)
             ->where('blocks_next', true)
-            ->orderBy('sort_order')
-            ->get(['id', 'name', 'status', 'sort_order']);
+            ->whereRaw('COALESCE(phase, sort_order) < ?', [$myPhase])
+            ->orderByRaw('COALESCE(phase, sort_order)')
+            ->get(['id', 'name', 'status', 'sort_order', 'phase']);
 
         return $this->firstNonTerminal($siblings);
     }
@@ -49,11 +54,13 @@ class StageGateService
             return null;
         }
 
+        $myPhase = $stage->phase ?? $stage->sort_order;
+
         $candidates = $siblings
             ->filter(fn ($s) => $s->id !== $stage->id
                 && $s->blocks_next
-                && $s->sort_order < $stage->sort_order)
-            ->sortBy('sort_order');
+                && ($s->phase ?? $s->sort_order) < $myPhase)
+            ->sortBy(fn ($s) => $s->phase ?? $s->sort_order);
 
         return $this->firstNonTerminal($candidates);
     }
@@ -128,6 +135,7 @@ class StageGateService
         if ($to === 'complete') {
             return true;
         }
+
         return ! in_array($from, self::ACTIVE, true);
     }
 

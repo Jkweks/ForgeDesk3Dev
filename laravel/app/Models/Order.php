@@ -48,9 +48,9 @@ class Order extends Model
         $lastOrder = self::whereYear('created_at', $year)
             ->orderBy('id', 'desc')
             ->first();
-        
+
         $number = $lastOrder ? intval(substr($lastOrder->order_number, -4)) + 1 : 1;
-        
-        return 'ORD-' . $year . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
+
+        return 'ORD-'.$year.'-'.str_pad($number, 4, '0', STR_PAD_LEFT);
     }
 }

@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Supplier;
 use App\Models\Product;
+use App\Models\Supplier;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class SupplierController extends Controller
 {
@@ -28,9 +28,9 @@ class SupplierController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhere('contact_name', 'like', "%{$search}%")
-                  ->orWhere('contact_email', 'like', "%{$search}%");
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('contact_name', 'like', "%{$search}%")
+                    ->orWhere('contact_email', 'like', "%{$search}%");
             });
         }
 
@@ -52,6 +52,7 @@ class SupplierController extends Controller
 
         if ($perPage === 'all') {
             $suppliers = $query->orderBy('name')->get();
+
             return response()->json($suppliers);
         }
 
@@ -87,7 +88,7 @@ class SupplierController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -97,7 +98,7 @@ class SupplierController extends Controller
 
         return response()->json([
             'message' => 'Supplier created successfully',
-            'supplier' => $supplier
+            'supplier' => $supplier,
         ], 201);
     }
 
@@ -133,7 +134,7 @@ class SupplierController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
-            'code' => 'nullable|string|max:255|unique:suppliers,code,' . $supplier->id,
+            'code' => 'nullable|string|max:255|unique:suppliers,code,'.$supplier->id,
             'contact_name' => 'nullable|string|max:255',
             'contact_email' => 'nullable|email|max:255',
             'contact_phone' => 'nullable|string|max:255',
@@ -153,7 +154,7 @@ class SupplierController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -162,7 +163,7 @@ class SupplierController extends Controller
 
         return response()->json([
             'message' => 'Supplier updated successfully',
-            'supplier' => $supplier
+            'supplier' => $supplier,
         ]);
     }
 
@@ -175,14 +176,14 @@ class SupplierController extends Controller
         if ($supplier->products()->count() > 0) {
             return response()->json([
                 'message' => 'Cannot delete supplier with associated products',
-                'products_count' => $supplier->products()->count()
+                'products_count' => $supplier->products()->count(),
             ], 422);
         }
 
         $supplier->delete();
 
         return response()->json([
-            'message' => 'Supplier deleted successfully'
+            'message' => 'Supplier deleted successfully',
         ]);
     }
 
@@ -260,7 +261,7 @@ class SupplierController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -282,7 +283,7 @@ class SupplierController extends Controller
                 foreach ($suppliers->get() as $supplier) {
                     if ($supplier->products()->count() > 0) {
                         return response()->json([
-                            'message' => 'Cannot delete suppliers with associated products'
+                            'message' => 'Cannot delete suppliers with associated products',
                         ], 422);
                     }
                 }
@@ -292,7 +293,7 @@ class SupplierController extends Controller
         }
 
         return response()->json([
-            'message' => $message
+            'message' => $message,
         ]);
     }
 
