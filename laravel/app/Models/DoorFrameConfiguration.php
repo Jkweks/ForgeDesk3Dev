@@ -12,6 +12,7 @@ class DoorFrameConfiguration extends Model
 
     protected $fillable = [
         'business_job_id',
+        'work_order_id',
         'configuration_name',
         'job_scope',
         'quantity',
@@ -52,6 +53,15 @@ class DoorFrameConfiguration extends Model
     public function businessJob()
     {
         return $this->belongsTo(BusinessJob::class, 'business_job_id');
+    }
+
+    /**
+     * The work order that will actually produce this configuration, once one
+     * exists. Null for a job pre-configured ahead of production scheduling.
+     */
+    public function workOrder()
+    {
+        return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
     }
 
     /**

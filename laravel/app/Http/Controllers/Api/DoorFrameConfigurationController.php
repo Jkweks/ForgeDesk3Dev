@@ -44,7 +44,7 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $configurations = $query
-                ->with(['businessJob', 'doors', 'createdBy'])
+                ->with(['businessJob', 'doors', 'createdBy', 'workOrder'])
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($config) {
@@ -62,6 +62,8 @@ class DoorFrameConfigurationController extends Controller
                         'door_tags' => $config->doors->pluck('door_tag')->implode(', '),
                         'is_complete' => $config->isComplete(),
                         'can_edit' => $config->canEdit(),
+                        'work_order_id' => $config->work_order_id,
+                        'work_order_release_token' => $config->workOrder?->release_token,
                         'created_at' => $config->created_at->format('Y-m-d H:i:s'),
                     ];
                 });
@@ -89,6 +91,7 @@ class DoorFrameConfigurationController extends Controller
         try {
             $config = DoorFrameConfiguration::with([
                 'businessJob',
+                'workOrder',
                 'doors',
                 'openingSpecs',
                 'frameConfig.frameSeries.frameSystem',
@@ -775,13 +778,14 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Release configuration to production
      */
-    public function release($id)
+    public function release($id, \App\Services\Configurator\ElevationConfigurationMatcher $matcher)
     {
         try {
             $config = DoorFrameConfiguration::with([
                 'openingSpecs',
                 'frameConfig',
                 'doorConfigs',
+                'doors',
             ])->findOrFail($id);
 
             if ($config->status !== 'draft') {
@@ -803,9 +807,24 @@ class DoorFrameConfigurationController extends Controller
             $config->status = 'released';
             $config->save();
 
+            // A configuration built ahead of production scheduling may not have
+            // a work order yet — try to pick one up now, in case one has since
+            // been created (going-forward matching normally handles this from
+            // the elevation side, but this covers the reverse timing too).
+            $workOrder = null;
+            try {
+                $workOrder = $matcher->linkConfigurationToWorkOrder($config);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to auto-link configuration to a work order on release', [
+                    'config_id' => $id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+
             Log::info('Configuration released', [
                 'config_id' => $id,
                 'released_by' => auth()->id(),
+                'work_order_id' => $workOrder?->id,
             ]);
 
             return response()->json([
@@ -814,6 +833,8 @@ class DoorFrameConfigurationController extends Controller
                     'id' => $config->id,
                     'status' => $config->status,
                     'status_label' => $config->status_label,
+                    'work_order_id' => $config->work_order_id,
+                    'work_order_release_token' => $workOrder?->release_token,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -841,6 +862,11 @@ class DoorFrameConfigurationController extends Controller
                 'job_number' => $config->businessJob->job_number,
                 'job_name' => $config->businessJob->job_name,
             ],
+            'work_order' => $config->workOrder ? [
+                'id' => $config->workOrder->id,
+                'release_token' => $config->workOrder->release_token,
+                'status' => $config->workOrder->status,
+            ] : null,
             'configuration_name' => $config->configuration_name,
             'job_scope' => $config->job_scope,
             'scope_label' => $config->scope_label,

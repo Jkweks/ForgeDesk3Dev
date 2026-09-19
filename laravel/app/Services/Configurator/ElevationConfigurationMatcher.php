@@ -20,9 +20,12 @@ use Illuminate\Support\Facades\DB;
  * matching, since the configurator's job_scope (door_and_frame/frame_only/
  * door_only) and multi-tag door_tags list already model exactly this.
  *
- * Idempotent and side-effect-free on existing data: an opening already
- * covered by a configuration (matched by any of its door_tags on the same
- * business job) is left alone, never duplicated or overwritten.
+ * Idempotent on existing data: an opening already covered by a configuration
+ * (matched by any of its door_tags on the same business job) is never
+ * duplicated. A pre-existing configuration for a job that was configured
+ * ahead of production scheduling — before any work order existed — gets its
+ * work_order_id backfilled the first time a matching elevation shows up,
+ * rather than being left permanently unlinked.
  */
 class ElevationConfigurationMatcher
 {
@@ -44,7 +47,11 @@ class ElevationConfigurationMatcher
         foreach ($groups as $baseTag => $group) {
             $tags = array_merge($group['door'], $group['frame']);
 
-            if ($this->alreadyMatched($workOrder->business_job_id, $tags)) {
+            $existing = $this->findMatchingConfiguration($workOrder->business_job_id, $tags);
+            if ($existing) {
+                if ($existing->work_order_id === null) {
+                    $existing->update(['work_order_id' => $workOrder->id]);
+                }
                 $skipped++;
 
                 continue;
@@ -95,11 +102,53 @@ class ElevationConfigurationMatcher
         return preg_replace('/-(LH|RH|L|R)$/i', '', $tag);
     }
 
-    private function alreadyMatched(int $businessJobId, array $tags): bool
+    /**
+     * The reverse direction: given a configuration (possibly pre-made for a
+     * job well before any work order existed), search every Door/Frame
+     * elevation on that same business job for one whose opening tag matches
+     * this configuration's door_tags, and tie the two together if found.
+     * Used at release time so a long-since-configured opening picks up its
+     * work order as soon as one shows up, without waiting on the elevation
+     * side to trigger the match first.
+     */
+    public function linkConfigurationToWorkOrder(DoorFrameConfiguration $config): ?FdWorkOrder
     {
-        return DoorFrameConfigurationDoor::whereIn('door_tag', $tags)
+        if ($config->work_order_id) {
+            return $config->workOrder;
+        }
+
+        $tags = $config->doors->pluck('door_tag')->all();
+        if (empty($tags)) {
+            return null;
+        }
+
+        $baseTags = array_map(fn ($t) => $this->stripLeafSuffix($t), $tags);
+
+        $elevation = FdWoElevation::with('workOrder')
+            ->whereHas('workOrder', fn ($q) => $q->where('business_job_id', $config->business_job_id))
+            ->whereHas('elevationType', fn ($q) => $q->whereIn('name', ['Door', 'Frame']))
+            ->where(function ($q) use ($tags, $baseTags) {
+                $q->whereIn('elevation_tag', $tags)->orWhereIn('elevation_tag', $baseTags);
+            })
+            ->first();
+
+        if (! $elevation) {
+            return null;
+        }
+
+        $config->update(['work_order_id' => $elevation->work_order_id]);
+
+        return $elevation->workOrder;
+    }
+
+    public function findMatchingConfiguration(int $businessJobId, array $tags): ?DoorFrameConfiguration
+    {
+        $door = DoorFrameConfigurationDoor::whereIn('door_tag', $tags)
             ->whereHas('configuration', fn ($q) => $q->where('business_job_id', $businessJobId))
-            ->exists();
+            ->with('configuration')
+            ->first();
+
+        return $door?->configuration;
     }
 
     private function createConfiguration(FdWorkOrder $workOrder, string $baseTag, array $group): void
@@ -120,6 +169,7 @@ class ElevationConfigurationMatcher
         DB::transaction(function () use ($workOrder, $jobScope, $group, $tags) {
             $config = DoorFrameConfiguration::create([
                 'business_job_id' => $workOrder->business_job_id,
+                'work_order_id' => $workOrder->id,
                 'job_scope' => $jobScope,
                 'quantity' => $group['quantity'],
                 'status' => 'draft',

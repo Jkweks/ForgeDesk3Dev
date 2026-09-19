@@ -27,10 +27,17 @@
       <div class="row row-cards">
         <div class="col-12 col-lg-4">
           <div class="card">
-            <div class="card-header"><h3 class="card-title">Configurations</h3></div>
+            <div class="card-header">
+              <h3 class="card-title">Configurations</h3>
+              <div class="card-actions">
+                <select class="form-select form-select-sm" id="fb-list-job-filter" style="min-width:180px" onchange="fbLoadList()">
+                  <option value="">All Jobs</option>
+                </select>
+              </div>
+            </div>
             <div class="table-responsive">
               <table class="table table-vcenter card-table">
-                <thead><tr><th>Job</th><th>Scope</th><th>Status</th></tr></thead>
+                <thead><tr><th>Job</th><th>Scope</th><th>Status</th><th>WO</th></tr></thead>
                 <tbody id="fb-list-tbody"></tbody>
               </table>
             </div>
@@ -53,290 +60,297 @@
           </div>
 
           <div class="card mb-3">
-            <div class="card-header"><h3 class="card-title">1. Opening Specifications</h3></div>
+            <div class="card-header p-0">
+              <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <a href="#fb-tab-opening" class="nav-link active" data-bs-toggle="tab" role="tab">Opening</a>
+                </li>
+                <li class="nav-item" role="presentation" id="fb-tab-frame-nav" style="display:none">
+                  <a href="#fb-tab-frame" class="nav-link" data-bs-toggle="tab" role="tab">Frame</a>
+                </li>
+                <li class="nav-item" role="presentation" id="fb-tab-door-nav" style="display:none">
+                  <a href="#fb-tab-door" class="nav-link" data-bs-toggle="tab" role="tab">Door</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <a href="#fb-tab-hardware" class="nav-link" data-bs-toggle="tab" role="tab">Hardware</a>
+                </li>
+              </ul>
+            </div>
             <div class="card-body">
-              <form id="fb-opening-form" class="row g-3">
-                <div class="col-md-4">
-                  <label class="form-label">Opening Type</label>
-                  <select class="form-select" id="fb-op-type" onchange="fbToggleHand()">
-                    <option value="single">Single</option>
-                    <option value="pair">Pair</option>
-                  </select>
-                </div>
-                <div class="col-md-4" id="fb-op-hand-single-wrap">
-                  <label class="form-label">Hand</label>
-                  <select class="form-select" id="fb-op-hand-single">
-                    <option value="lh_inswing">LH Inswing</option>
-                    <option value="rh_inswing">RH Inswing</option>
-                    <option value="lhr">LHR</option>
-                    <option value="rhr">RHR</option>
-                  </select>
-                </div>
-                <div class="col-md-4" id="fb-op-hand-pair-wrap" style="display:none">
-                  <label class="form-label">Hand (Pair)</label>
-                  <select class="form-select" id="fb-op-hand-pair">
-                    <option value="rhr_active">RHR Active</option>
-                    <option value="lhra_active">LHRA Active</option>
-                  </select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Hinging</label>
-                  <select class="form-select" id="fb-op-hinging">
-                    <option value="continuous">Continuous</option>
-                    <option value="butt">Butt</option>
-                    <option value="pivot_offset">Pivot Offset</option>
-                    <option value="pivot_center">Pivot Center</option>
-                  </select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Opening Width (in)</label>
-                  <input type="number" step="0.01" class="form-control" id="fb-op-width" required>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Opening Height (in)</label>
-                  <input type="number" step="0.01" class="form-control" id="fb-op-height" required>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Finish</label>
-                  <select class="form-select" id="fb-op-finish">
-                    <option value="c2">C2 - Clear Anodized</option>
-                    <option value="db">DB - Dark Bronze</option>
-                    <option value="bl">BL - Black</option>
-                  </select>
-                </div>
-                <div class="col-12">
-                  <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Opening Specs</button>
-                </div>
-              </form>
-            </div>
-          </div>
+              <div class="tab-content">
 
-          <div class="card mb-3" id="fb-frame-card" style="display:none">
-            <div class="card-header"><h3 class="card-title">2. Frame Configuration</h3></div>
-            <div class="card-body">
-              <form id="fb-frame-form" class="row g-3">
-                <div class="col-md-4">
-                  <label class="form-label">Frame System</label>
-                  <select class="form-select" id="fb-frame-system" onchange="fbFilterSeries()"></select>
+                <div class="tab-pane active show" id="fb-tab-opening" role="tabpanel">
+                  <form id="fb-opening-form" class="row g-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Opening Type</label>
+                      <select class="form-select" id="fb-op-type" onchange="fbToggleHand()">
+                        <option value="single">Single</option>
+                        <option value="pair">Pair</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4" id="fb-op-hand-single-wrap">
+                      <label class="form-label">Hand</label>
+                      <select class="form-select" id="fb-op-hand-single">
+                        <option value="lh_inswing">LH Inswing</option>
+                        <option value="rh_inswing">RH Inswing</option>
+                        <option value="lhr">LHR</option>
+                        <option value="rhr">RHR</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4" id="fb-op-hand-pair-wrap" style="display:none">
+                      <label class="form-label">Hand (Pair)</label>
+                      <select class="form-select" id="fb-op-hand-pair">
+                        <option value="rhr_active">RHR Active</option>
+                        <option value="lhra_active">LHRA Active</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Hinging</label>
+                      <select class="form-select" id="fb-op-hinging">
+                        <option value="continuous">Continuous</option>
+                        <option value="butt">Butt</option>
+                        <option value="pivot_offset">Pivot Offset</option>
+                        <option value="pivot_center">Pivot Center</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Opening Width (in)</label>
+                      <input type="number" step="0.01" class="form-control" id="fb-op-width" required>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Opening Height (in)</label>
+                      <input type="number" step="0.01" class="form-control" id="fb-op-height" required>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Finish</label>
+                      <select class="form-select" id="fb-op-finish">
+                        <option value="c2">C2 - Clear Anodized</option>
+                        <option value="db">DB - Dark Bronze</option>
+                        <option value="bl">BL - Black</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Opening Specs</button>
+                    </div>
+                  </form>
                 </div>
-                <div class="col-md-4">
-                  <label class="form-label">Frame Series</label>
-                  <select class="form-select" id="fb-frame-series" required></select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Glazing</label>
-                  <select class="form-select" id="fb-frame-glazing">
-                    <option value="0.25">1/4"</option>
-                    <option value="0.5">1/2"</option>
-                    <option value="1.0">1"</option>
-                  </select>
-                </div>
-                <div class="col-md-3 form-check form-switch pt-4">
-                  <input class="form-check-input" type="checkbox" id="fb-frame-transom" onchange="fbToggleTransom()">
-                  <label class="form-check-label">Has Transom</label>
-                </div>
-                <div class="col-md-3 form-check form-switch pt-4">
-                  <input class="form-check-input" type="checkbox" id="fb-frame-threshold">
-                  <label class="form-check-label">Has Threshold</label>
-                </div>
-                <div class="col-md-3" id="fb-frame-transom-glazing-wrap" style="display:none">
-                  <label class="form-label">Transom Glazing</label>
-                  <select class="form-select" id="fb-frame-transom-glazing">
-                    <option value="0.25">1/4"</option>
-                    <option value="0.5">1/2"</option>
-                    <option value="1.0">1"</option>
-                  </select>
-                </div>
-                <div class="col-md-3" id="fb-frame-height-wrap" style="display:none">
-                  <label class="form-label">Total Frame Height (in)</label>
-                  <input type="number" step="0.01" class="form-control" id="fb-frame-height">
-                </div>
-                <div class="col-12">
-                  <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Frame Configuration</button>
-                </div>
-              </form>
-            </div>
-          </div>
 
-          <div class="card mb-3" id="fb-bom-card" style="display:none">
-            <div class="card-header">
-              <h3 class="card-title">Frame Parts BOM</h3>
-              <div class="card-actions">
-                <button class="btn btn-outline-primary btn-sm" onclick="fbAddManualPart('frame')" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>Add Manual Part</button>
-                <button class="btn btn-primary btn-sm" onclick="fbGenerateParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+                <div class="tab-pane" id="fb-tab-frame" role="tabpanel">
+                  <form id="fb-frame-form" class="row g-3 mb-4">
+                    <div class="col-md-4">
+                      <label class="form-label">Frame System</label>
+                      <select class="form-select" id="fb-frame-system" onchange="fbFilterSeries()"></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Frame Series</label>
+                      <select class="form-select" id="fb-frame-series" required></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Glazing</label>
+                      <select class="form-select" id="fb-frame-glazing">
+                        <option value="0.25">1/4"</option>
+                        <option value="0.5">1/2"</option>
+                        <option value="1.0">1"</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3 form-check form-switch pt-4">
+                      <input class="form-check-input" type="checkbox" id="fb-frame-transom" onchange="fbToggleTransom()">
+                      <label class="form-check-label">Has Transom</label>
+                    </div>
+                    <div class="col-md-3 form-check form-switch pt-4">
+                      <input class="form-check-input" type="checkbox" id="fb-frame-threshold">
+                      <label class="form-check-label">Has Threshold</label>
+                    </div>
+                    <div class="col-md-3" id="fb-frame-transom-glazing-wrap" style="display:none">
+                      <label class="form-label">Transom Glazing</label>
+                      <select class="form-select" id="fb-frame-transom-glazing">
+                        <option value="0.25">1/4"</option>
+                        <option value="0.5">1/2"</option>
+                        <option value="1.0">1"</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3" id="fb-frame-height-wrap" style="display:none">
+                      <label class="form-label">Total Frame Height (in)</label>
+                      <input type="number" step="0.01" class="form-control" id="fb-frame-height">
+                    </div>
+                    <div class="col-12">
+                      <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Frame Configuration</button>
+                    </div>
+                  </form>
+
+                  <hr>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h4 class="mb-0">Frame Parts BOM</h4>
+                    <div class="btn-list">
+                      <button class="btn btn-outline-primary btn-sm" onclick="fbAddManualPart('frame')" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>Add Manual Part</button>
+                      <button class="btn btn-primary btn-sm" onclick="fbGenerateParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                      <thead><tr><th>Part</th><th>Product</th><th>Length</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                      <tbody id="fb-parts-tbody"></tbody>
+                    </table>
+                    <div class="text-muted p-3" id="fb-parts-empty">No parts yet — save a frame series above, then click Generate.</div>
+                  </div>
+                </div>
+
+                <div class="tab-pane" id="fb-tab-door" role="tabpanel">
+                  <form id="fb-door-form" class="row g-3 mb-4">
+                    <div class="col-md-4">
+                      <label class="form-label">Door Series</label>
+                      <select class="form-select" id="fb-door-series" onchange="fbFilterDoorStiles()" required>
+                        <option value="STANDARD">Standard</option>
+                        <option value="THERMAL">Thermal</option>
+                        <option value="MONUMENTAL">Monumental</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Stile Width</label>
+                      <select class="form-select" id="fb-door-stile" required></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Glazing</label>
+                      <select class="form-select" id="fb-door-glazing"></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Handing</label>
+                      <select class="form-select" id="fb-door-handing" required>
+                        <option value="LH (INSWING)">LH Inswing</option>
+                        <option value="RH (INSWING)">RH Inswing</option>
+                        <option value="LHR">LHR</option>
+                        <option value="RHR">RHR</option>
+                        <option value="CP SINGLE">Center Pivot Single</option>
+                        <option value="PAIR-RHRA">Pair - RHRA Active</option>
+                        <option value="PAIR-LHRA">Pair - LHRA Active</option>
+                        <option value="CP PAIR">Center Pivot Pair</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Hinge Type</label>
+                      <select class="form-select" id="fb-door-hinge" required>
+                        <option value="BUTT HINGES">Butt Hinges</option>
+                        <option value="OFFSET PIVOTS">Offset Pivots</option>
+                        <option value="CONTINUOUS HINGE">Continuous Hinge</option>
+                        <option value="CENTER PIVOTS">Center Pivots</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Bottom Gap (in)</label>
+                      <input type="number" step="0.0001" class="form-control" id="fb-door-bottomgap" value="0.6875">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Top Rail</label>
+                      <select class="form-select" id="fb-door-toprail" required></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Bottom Rail</label>
+                      <select class="form-select" id="fb-door-botrail" required></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Mid Rail Qty</label>
+                      <select class="form-select" id="fb-door-midqty" onchange="fbToggleMidRail()">
+                        <option value="0">None</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4" id="fb-door-midrail-wrap" style="display:none">
+                      <label class="form-label">Mid Rail</label>
+                      <select class="form-select" id="fb-door-midrail"></select>
+                    </div>
+                    <div class="col-md-4" id="fb-door-midloc1-wrap" style="display:none">
+                      <label class="form-label">Mid Rail Location #1 (in from bottom)</label>
+                      <input type="number" step="0.0001" class="form-control" id="fb-door-midloc1">
+                    </div>
+                    <div class="col-md-4" id="fb-door-midloc2-wrap" style="display:none">
+                      <label class="form-label">Mid Rail Location #2 (in from bottom)</label>
+                      <input type="number" step="0.0001" class="form-control" id="fb-door-midloc2">
+                    </div>
+                    <div class="col-12">
+                      <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Door Configuration</button>
+                    </div>
+                  </form>
+
+                  <hr>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h4 class="mb-0">Door Parts BOM</h4>
+                    <div class="btn-list">
+                      <button class="btn btn-outline-primary btn-sm" onclick="fbAddManualPart('door')" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>Add Manual Part</button>
+                      <button class="btn btn-primary btn-sm" onclick="fbGenerateDoorParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                      <thead><tr><th>Part</th><th>Product</th><th>Length</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                      <tbody id="fb-door-parts-tbody"></tbody>
+                    </table>
+                    <div class="text-muted p-3" id="fb-door-parts-empty">No parts yet — save a door configuration above, then click Generate.</div>
+                  </div>
+                </div>
+
+                <div class="tab-pane" id="fb-tab-hardware" role="tabpanel">
+                  <form id="fb-hardware-add-form" class="row g-2 align-items-end mb-3">
+                    <div class="col-md-3">
+                      <label class="form-label">Category</label>
+                      <select class="form-select" id="fb-hw-category" onchange="fbFilterHwItems()" required></select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Item</label>
+                      <select class="form-select" id="fb-hw-item" required></select>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Series</label>
+                      <select class="form-select" id="fb-hw-series">
+                        <option value="Standard">Standard</option>
+                        <option value="Thermal">Thermal</option>
+                        <option value="Monumental">Monumental</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Leaf</label>
+                      <select class="form-select" id="fb-hw-leaf">
+                        <option value="both">Both</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                    <div class="col-md-1">
+                      <label class="form-label">Qty</label>
+                      <input type="number" class="form-control" id="fb-hw-qty" value="1" min="1">
+                    </div>
+                    <div class="col-md-1">
+                      <button type="submit" class="btn btn-primary w-100" data-permission="configurator.edit"><i class="ti ti-plus"></i></button>
+                    </div>
+                  </form>
+
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
+                    <tbody id="fb-hw-links-tbody"></tbody>
+                  </table>
+                  <div class="text-muted p-3" id="fb-hw-links-empty">No hardware linked yet.</div>
+
+                  <div id="fb-hw-resolved-wrap" style="display:none">
+                    <hr>
+                    <h4>Resolved Prep Values</h4>
+                    <div id="fb-hw-resolved"></div>
+                  </div>
+
+                  <hr>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h4 class="mb-0">Hardware BOM</h4>
+                    <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                      <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                      <tbody id="fb-hw-parts-tbody"></tbody>
+                    </table>
+                    <div class="text-muted p-3" id="fb-hw-parts-empty">No parts yet — link hardware above, then click Generate.</div>
+                  </div>
+                </div>
+
               </div>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-vcenter card-table">
-                <thead><tr><th>Part</th><th>Product</th><th>Length</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
-                <tbody id="fb-parts-tbody"></tbody>
-              </table>
-              <div class="text-muted p-3" id="fb-parts-empty">No parts yet — save a frame series above, then click Generate.</div>
-            </div>
-          </div>
-
-          <div class="card mb-3" id="fb-door-card" style="display:none">
-            <div class="card-header"><h3 class="card-title">Door Configuration</h3></div>
-            <div class="card-body">
-              <form id="fb-door-form" class="row g-3">
-                <div class="col-md-4">
-                  <label class="form-label">Door Series</label>
-                  <select class="form-select" id="fb-door-series" onchange="fbFilterDoorStiles()" required>
-                    <option value="STANDARD">Standard</option>
-                    <option value="THERMAL">Thermal</option>
-                    <option value="MONUMENTAL">Monumental</option>
-                  </select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Stile Width</label>
-                  <select class="form-select" id="fb-door-stile" required></select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Glazing</label>
-                  <select class="form-select" id="fb-door-glazing"></select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Handing</label>
-                  <select class="form-select" id="fb-door-handing" required>
-                    <option value="LH (INSWING)">LH Inswing</option>
-                    <option value="RH (INSWING)">RH Inswing</option>
-                    <option value="LHR">LHR</option>
-                    <option value="RHR">RHR</option>
-                    <option value="CP SINGLE">Center Pivot Single</option>
-                    <option value="PAIR-RHRA">Pair - RHRA Active</option>
-                    <option value="PAIR-LHRA">Pair - LHRA Active</option>
-                    <option value="CP PAIR">Center Pivot Pair</option>
-                  </select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Hinge Type</label>
-                  <select class="form-select" id="fb-door-hinge" required>
-                    <option value="BUTT HINGES">Butt Hinges</option>
-                    <option value="OFFSET PIVOTS">Offset Pivots</option>
-                    <option value="CONTINUOUS HINGE">Continuous Hinge</option>
-                    <option value="CENTER PIVOTS">Center Pivots</option>
-                  </select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Bottom Gap (in)</label>
-                  <input type="number" step="0.0001" class="form-control" id="fb-door-bottomgap" value="0.6875">
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Top Rail</label>
-                  <select class="form-select" id="fb-door-toprail" required></select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Bottom Rail</label>
-                  <select class="form-select" id="fb-door-botrail" required></select>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Mid Rail Qty</label>
-                  <select class="form-select" id="fb-door-midqty" onchange="fbToggleMidRail()">
-                    <option value="0">None</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                  </select>
-                </div>
-                <div class="col-md-4" id="fb-door-midrail-wrap" style="display:none">
-                  <label class="form-label">Mid Rail</label>
-                  <select class="form-select" id="fb-door-midrail"></select>
-                </div>
-                <div class="col-md-4" id="fb-door-midloc1-wrap" style="display:none">
-                  <label class="form-label">Mid Rail Location #1 (in from bottom)</label>
-                  <input type="number" step="0.0001" class="form-control" id="fb-door-midloc1">
-                </div>
-                <div class="col-md-4" id="fb-door-midloc2-wrap" style="display:none">
-                  <label class="form-label">Mid Rail Location #2 (in from bottom)</label>
-                  <input type="number" step="0.0001" class="form-control" id="fb-door-midloc2">
-                </div>
-                <div class="col-12">
-                  <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Door Configuration</button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <div class="card mb-3" id="fb-door-bom-card" style="display:none">
-            <div class="card-header">
-              <h3 class="card-title">Door Parts BOM</h3>
-              <div class="card-actions">
-                <button class="btn btn-outline-primary btn-sm" onclick="fbAddManualPart('door')" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>Add Manual Part</button>
-                <button class="btn btn-primary btn-sm" onclick="fbGenerateDoorParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
-              </div>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-vcenter card-table">
-                <thead><tr><th>Part</th><th>Product</th><th>Length</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
-                <tbody id="fb-door-parts-tbody"></tbody>
-              </table>
-              <div class="text-muted p-3" id="fb-door-parts-empty">No parts yet — save a door configuration above, then click Generate.</div>
-            </div>
-          </div>
-
-          <div class="card mb-3" id="fb-hardware-card" style="display:none">
-            <div class="card-header"><h3 class="card-title">Hardware</h3></div>
-            <div class="card-body">
-              <form id="fb-hardware-add-form" class="row g-2 align-items-end mb-3">
-                <div class="col-md-3">
-                  <label class="form-label">Category</label>
-                  <select class="form-select" id="fb-hw-category" onchange="fbFilterHwItems()" required></select>
-                </div>
-                <div class="col-md-3">
-                  <label class="form-label">Item</label>
-                  <select class="form-select" id="fb-hw-item" required></select>
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label">Series</label>
-                  <select class="form-select" id="fb-hw-series">
-                    <option value="Standard">Standard</option>
-                    <option value="Thermal">Thermal</option>
-                    <option value="Monumental">Monumental</option>
-                  </select>
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label">Leaf</label>
-                  <select class="form-select" id="fb-hw-leaf">
-                    <option value="both">Both</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-                <div class="col-md-1">
-                  <label class="form-label">Qty</label>
-                  <input type="number" class="form-control" id="fb-hw-qty" value="1" min="1">
-                </div>
-                <div class="col-md-1">
-                  <button type="submit" class="btn btn-primary w-100" data-permission="configurator.edit"><i class="ti ti-plus"></i></button>
-                </div>
-              </form>
-
-              <table class="table table-vcenter card-table">
-                <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
-                <tbody id="fb-hw-links-tbody"></tbody>
-              </table>
-              <div class="text-muted p-3" id="fb-hw-links-empty">No hardware linked yet.</div>
-
-              <div id="fb-hw-resolved-wrap" style="display:none">
-                <hr>
-                <h4>Resolved Prep Values</h4>
-                <div id="fb-hw-resolved"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card mb-3" id="fb-hardware-bom-card" style="display:none">
-            <div class="card-header">
-              <h3 class="card-title">Hardware BOM</h3>
-              <div class="card-actions">
-                <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
-              </div>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-vcenter card-table">
-                <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
-                <tbody id="fb-hw-parts-tbody"></tbody>
-              </table>
-              <div class="text-muted p-3" id="fb-hw-parts-empty">No parts yet — link hardware above, then click Generate.</div>
             </div>
           </div>
         </div>
@@ -609,8 +623,19 @@ function fbFilterSeries() {
   seriesSelect.innerHTML = all.map(s => `<option value="${s.id}" ${s.id == current ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
 }
 
+async function fbLoadJobFilterOptions() {
+  const select = document.getElementById('fb-list-job-filter');
+  const current = select.value;
+  const data = await authenticatedFetch('/business-jobs');
+  select.innerHTML = '<option value="">All Jobs</option>' +
+    (data.jobs || []).map(j => `<option value="${j.id}">${esc(j.job_number)} — ${esc(j.job_name)}</option>`).join('');
+  select.value = current;
+}
+
 async function fbLoadList() {
-  const data = await authenticatedFetch('/door-frame-configurations');
+  const jobId = document.getElementById('fb-list-job-filter').value;
+  const qs = jobId ? `?business_job_id=${jobId}` : '';
+  const data = await authenticatedFetch(`/door-frame-configurations${qs}`);
   fbConfigs = data.configurations || [];
   fbRenderList();
 }
@@ -622,7 +647,8 @@ function fbRenderList() {
       <td>${esc(c.job_number)}<div class="text-muted small">${esc(c.door_tags)}</div></td>
       <td>${esc(c.scope_label)}</td>
       <td><span class="badge ${c.status === 'released' ? 'bg-green-lt' : 'bg-yellow-lt'}">${esc(c.status_label)}</span></td>
-    </tr>`).join('') || '<tr><td colspan="3" class="text-muted">No configurations yet.</td></tr>';
+      <td>${c.work_order_release_token ? `<span class="badge bg-blue-lt">${esc(c.work_order_release_token)}</span>` : '<span class="text-muted">—</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="text-muted">No configurations yet.</td></tr>';
 }
 
 async function fbSelect(id) {
@@ -644,7 +670,8 @@ async function fbLoadDetail() {
 function fbRenderDetail() {
   const c = fbSelectedDetail;
   document.getElementById('fb-detail-title').textContent = `${c.business_job.job_number} — ${c.configuration_name || c.scope_label}`;
-  document.getElementById('fb-detail-subtitle').textContent = `${c.business_job.job_name} · Qty ${c.quantity} · ${c.door_tags.join(', ')}`;
+  const woLabel = c.work_order ? ` · WO ${c.work_order.release_token}` : ' · No work order yet';
+  document.getElementById('fb-detail-subtitle').textContent = `${c.business_job.job_name} · Qty ${c.quantity} · ${c.door_tags.join(', ')}${woLabel}`;
   const badge = document.getElementById('fb-status-badge');
   badge.textContent = c.status_label;
   badge.className = 'badge ' + (c.status === 'released' ? 'bg-green-lt' : 'bg-yellow-lt');
@@ -656,12 +683,14 @@ function fbRenderDetail() {
 
   const includesFrame = ['door_and_frame', 'frame_only'].includes(c.job_scope);
   const includesDoor = ['door_and_frame', 'door_only'].includes(c.job_scope);
-  document.getElementById('fb-frame-card').style.display = includesFrame ? '' : 'none';
-  document.getElementById('fb-bom-card').style.display = includesFrame ? '' : 'none';
-  document.getElementById('fb-door-card').style.display = includesDoor ? '' : 'none';
-  document.getElementById('fb-door-bom-card').style.display = includesDoor ? '' : 'none';
-  document.getElementById('fb-hardware-card').style.display = '';
-  document.getElementById('fb-hardware-bom-card').style.display = '';
+  document.getElementById('fb-tab-frame-nav').style.display = includesFrame ? '' : 'none';
+  document.getElementById('fb-tab-door-nav').style.display = includesDoor ? '' : 'none';
+  // If the currently-active tab just got hidden (e.g. scope changed), fall back to Opening.
+  const activeTabLink = document.querySelector('#fb-detail-col .nav-link.active');
+  if (activeTabLink && activeTabLink.closest('.nav-item').style.display === 'none') {
+    const openingTab = document.querySelector('a[href="#fb-tab-opening"]');
+    if (window.bootstrap?.Tab) new bootstrap.Tab(openingTab).show();
+  }
 
   const editable = c.can_edit;
   document.querySelectorAll('#fb-opening-form input, #fb-opening-form select, #fb-frame-form input, #fb-frame-form select, #fb-door-form input, #fb-door-form select').forEach(el => el.disabled = !editable);
@@ -955,6 +984,6 @@ async function fbRelease() {
   } catch (err) { showNotification(err.message, 'danger'); }
 }
 
-window.sessionReady?.then(() => fbLoadList());
+window.sessionReady?.then(() => { fbLoadJobFilterOptions(); fbLoadList(); });
 </script>
 @endsection
