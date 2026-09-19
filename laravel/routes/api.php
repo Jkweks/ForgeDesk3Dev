@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CycleCountController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ConfiguratorCatalogController;
 use App\Http\Controllers\Api\ConfiguratorDoorCatalogController;
+use App\Http\Controllers\Api\ConfiguratorHwlibCatalogController;
 use App\Http\Controllers\Api\DoorFrameConfigurationController;
 use App\Http\Controllers\Api\FabricationDocumentController;
 use App\Http\Controllers\Api\ImportExportController;
@@ -519,6 +520,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/door-frame-configurations/{id}/door-parts/generate', [DoorFrameConfigurationController::class, 'generateDoorParts'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/door-parts/{partId}', [DoorFrameConfigurationController::class, 'updateDoorPart'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/door-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyDoorPart'])->middleware('permission:configurator.edit');
+
+        // Hardware library links + BOM
+        Route::post('/door-frame-configurations/{id}/hardware-links', [DoorFrameConfigurationController::class, 'addHardwareLink'])->middleware('permission:configurator.edit');
+        Route::put('/door-frame-configurations/{id}/hardware-links/{linkId}', [DoorFrameConfigurationController::class, 'updateHardwareLink'])->middleware('permission:configurator.edit');
+        Route::delete('/door-frame-configurations/{id}/hardware-links/{linkId}', [DoorFrameConfigurationController::class, 'destroyHardwareLink'])->middleware('permission:configurator.edit');
+        Route::get('/door-frame-configurations/{id}/hardware-values', [DoorFrameConfigurationController::class, 'resolvedHardwareValues'])->middleware('permission:configurator.view');
+        Route::post('/door-frame-configurations/{id}/hardware-parts/generate', [DoorFrameConfigurationController::class, 'generateHardwareParts'])->middleware('permission:configurator.edit');
+        Route::put('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'updateHardwarePart'])->middleware('permission:configurator.edit');
+        Route::delete('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyHardwarePart'])->middleware('permission:configurator.edit');
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release'])->middleware('permission:configurator.release');
 
         // Configurator Catalog (frame systems / series / profiles / components / fasteners)
@@ -574,6 +584,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/configurator/tie-rods', [ConfiguratorDoorCatalogController::class, 'storeTieRod'])->middleware('permission:configurator.catalog.manage');
         Route::put('/configurator/tie-rods/{id}', [ConfiguratorDoorCatalogController::class, 'updateTieRod'])->middleware('permission:configurator.catalog.manage');
         Route::delete('/configurator/tie-rods/{id}', [ConfiguratorDoorCatalogController::class, 'destroyTieRod'])->middleware('permission:configurator.catalog.manage');
+
+        // Hardware Library Catalog (read-only browse for the hardware step)
+        Route::get('/configurator/hwlib-catalog', [ConfiguratorHwlibCatalogController::class, 'index'])->middleware('permission:configurator.view');
 
         // Fabrication Work Orders and everything scoped under them (drawings,
         // elevations, stages, steps, fab-user list, elevation-type config).

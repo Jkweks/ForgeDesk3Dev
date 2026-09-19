@@ -272,6 +272,73 @@
               <div class="text-muted p-3" id="fb-door-parts-empty">No parts yet — save a door configuration above, then click Generate.</div>
             </div>
           </div>
+
+          <div class="card mb-3" id="fb-hardware-card" style="display:none">
+            <div class="card-header"><h3 class="card-title">Hardware</h3></div>
+            <div class="card-body">
+              <form id="fb-hardware-add-form" class="row g-2 align-items-end mb-3">
+                <div class="col-md-3">
+                  <label class="form-label">Category</label>
+                  <select class="form-select" id="fb-hw-category" onchange="fbFilterHwItems()" required></select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Item</label>
+                  <select class="form-select" id="fb-hw-item" required></select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Series</label>
+                  <select class="form-select" id="fb-hw-series">
+                    <option value="Standard">Standard</option>
+                    <option value="Thermal">Thermal</option>
+                    <option value="Monumental">Monumental</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Leaf</label>
+                  <select class="form-select" id="fb-hw-leaf">
+                    <option value="both">Both</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+                <div class="col-md-1">
+                  <label class="form-label">Qty</label>
+                  <input type="number" class="form-control" id="fb-hw-qty" value="1" min="1">
+                </div>
+                <div class="col-md-1">
+                  <button type="submit" class="btn btn-primary w-100" data-permission="configurator.edit"><i class="ti ti-plus"></i></button>
+                </div>
+              </form>
+
+              <table class="table table-vcenter card-table">
+                <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
+                <tbody id="fb-hw-links-tbody"></tbody>
+              </table>
+              <div class="text-muted p-3" id="fb-hw-links-empty">No hardware linked yet.</div>
+
+              <div id="fb-hw-resolved-wrap" style="display:none">
+                <hr>
+                <h4>Resolved Prep Values</h4>
+                <div id="fb-hw-resolved"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mb-3" id="fb-hardware-bom-card" style="display:none">
+            <div class="card-header">
+              <h3 class="card-title">Hardware BOM</h3>
+              <div class="card-actions">
+                <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-vcenter card-table">
+                <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                <tbody id="fb-hw-parts-tbody"></tbody>
+              </table>
+              <div class="text-muted p-3" id="fb-hw-parts-empty">No parts yet — link hardware above, then click Generate.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -417,6 +484,119 @@ function fbToggleMidRail() {
   document.getElementById('fb-door-midloc2-wrap').style.display = midQty >= 2 ? '' : 'none';
 }
 
+// ---- Hardware ----
+let fbHwCategories = [];
+
+async function fbLoadHwCatalog() {
+  const data = await authenticatedFetch('/configurator/hwlib-catalog');
+  fbHwCategories = data.categories || [];
+  const catSelect = document.getElementById('fb-hw-category');
+  catSelect.innerHTML = fbHwCategories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  fbFilterHwItems();
+}
+
+function fbFilterHwItems() {
+  const catId = document.getElementById('fb-hw-category').value;
+  const cat = fbHwCategories.find(c => c.id == catId);
+  const itemSelect = document.getElementById('fb-hw-item');
+  itemSelect.innerHTML = (cat?.items || []).map(i =>
+    `<option value="${i.id}">${esc(i.name)}${i.pn ? ' — ' + esc(i.pn) : ''}</option>`
+  ).join('');
+}
+
+function fbRenderHwLinks(links) {
+  const tbody = document.getElementById('fb-hw-links-tbody');
+  document.getElementById('fb-hw-links-empty').style.display = links.length ? 'none' : 'block';
+  tbody.innerHTML = links.map(l => `
+    <tr>
+      <td>${esc(l.item.name)}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}</td>
+      <td>${esc(l.item.category.name)}</td>
+      <td>${esc(l.series)}</td>
+      <td>${esc(l.leaf)}</td>
+      <td>${l.quantity}</td>
+      <td class="text-end">
+        <button type="button" class="btn btn-sm btn-icon text-danger" onclick="fbDeleteHwLink(${l.id})" data-permission="configurator.edit"><i class="ti ti-trash"></i></button>
+      </td>
+    </tr>`).join('');
+  applyActionPermissions();
+}
+
+document.getElementById('fb-hardware-add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    item_id: document.getElementById('fb-hw-item').value,
+    series: document.getElementById('fb-hw-series').value,
+    leaf: document.getElementById('fb-hw-leaf').value,
+    quantity: parseInt(document.getElementById('fb-hw-qty').value || 1, 10),
+  };
+  if (!payload.item_id) { showNotification('Select an item first', 'warning'); return; }
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-links`, { method: 'POST', body: JSON.stringify(payload) });
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+});
+
+async function fbDeleteHwLink(linkId) {
+  if (!confirm('Remove this hardware item?')) return;
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}`, { method: 'DELETE' });
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+async function fbLoadHwResolvedValues() {
+  try {
+    const data = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-values`);
+    const wrap = document.getElementById('fb-hw-resolved-wrap');
+    const links = (data.links || []).filter(l => l.values.length);
+    wrap.style.display = links.length ? '' : 'none';
+    document.getElementById('fb-hw-resolved').innerHTML = links.map(l => `
+      <div class="mb-2">
+        <div class="fw-bold">${esc(l.item_name)}</div>
+        <div class="d-flex flex-wrap gap-3 small text-muted">
+          ${l.values.map(v => `<span>${esc(v.label)}: <strong class="text-body">${v.value ?? '—'}${v.unit ? esc(v.unit) : ''}</strong>${v.overridden ? ' <span class="badge bg-yellow-lt">override</span>' : ''}</span>`).join('')}
+        </div>
+      </div>`).join('');
+  } catch (err) { /* non-fatal — resolved values are a convenience display */ }
+}
+
+function fbRenderHwParts(parts) {
+  const tbody = document.getElementById('fb-hw-parts-tbody');
+  document.getElementById('fb-hw-parts-empty').style.display = parts.length ? 'none' : 'block';
+  const sourceBadge = { item: 'bg-blue-lt', backer: 'bg-azure-lt', fastener: 'bg-purple-lt', manual: 'bg-secondary-lt' };
+  tbody.innerHTML = parts.map(p => `
+    <tr>
+      <td>${esc(p.formatted_label)}</td>
+      <td>${esc(p.product.part_number)}<div class="text-muted small">${esc(p.product.description || '')}</div></td>
+      <td>${p.quantity}</td>
+      <td><span class="badge ${sourceBadge[p.source_type] || 'bg-secondary-lt'}">${esc(p.source_type)}</span></td>
+      <td class="text-end">
+        ${!p.is_auto_generated ? `<button type="button" class="btn btn-sm btn-icon text-danger" onclick="fbDeleteHwPart(${p.id})" data-permission="configurator.edit"><i class="ti ti-trash"></i></button>` : ''}
+      </td>
+    </tr>`).join('');
+  applyActionPermissions();
+}
+
+async function fbGenerateHardwareParts() {
+  try {
+    const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-parts/generate`, { method: 'POST' });
+    showNotification('Hardware parts generated', 'success');
+    if (res.warnings && res.warnings.length) {
+      showNotification(`${res.warnings.length} PN(s) could not be matched to a product — see console.`, 'warning');
+      console.warn('Hardware BOM warnings:', res.warnings);
+    }
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+async function fbDeleteHwPart(partId) {
+  if (!confirm('Remove this part?')) return;
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-parts/${partId}`, { method: 'DELETE' });
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
 function fbFilterSeries() {
   const systemId = document.getElementById('fb-frame-system').value;
   const seriesSelect = document.getElementById('fb-frame-series');
@@ -451,6 +631,7 @@ async function fbSelect(id) {
   document.getElementById('fb-detail-col').style.display = '';
   await fbLoadCatalogTree();
   await fbLoadDoorCatalog();
+  await fbLoadHwCatalog();
   await fbLoadDetail();
 }
 
@@ -479,6 +660,8 @@ function fbRenderDetail() {
   document.getElementById('fb-bom-card').style.display = includesFrame ? '' : 'none';
   document.getElementById('fb-door-card').style.display = includesDoor ? '' : 'none';
   document.getElementById('fb-door-bom-card').style.display = includesDoor ? '' : 'none';
+  document.getElementById('fb-hardware-card').style.display = '';
+  document.getElementById('fb-hardware-bom-card').style.display = '';
 
   const editable = c.can_edit;
   document.querySelectorAll('#fb-opening-form input, #fb-opening-form select, #fb-frame-form input, #fb-frame-form select, #fb-door-form input, #fb-door-form select').forEach(el => el.disabled = !editable);
@@ -526,6 +709,15 @@ function fbRenderDetail() {
     fbToggleMidRail();
 
     fbRenderParts('fb-door-parts-tbody', 'fb-door-parts-empty', dc?.parts || [], 'door');
+  }
+
+  // Hardware
+  fbRenderHwLinks(c.hardware_links || []);
+  fbRenderHwParts(c.hardware_parts || []);
+  if ((c.hardware_links || []).length) {
+    fbLoadHwResolvedValues();
+  } else {
+    document.getElementById('fb-hw-resolved-wrap').style.display = 'none';
   }
 }
 

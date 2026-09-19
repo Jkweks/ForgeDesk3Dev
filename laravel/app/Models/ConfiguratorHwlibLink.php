@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * Attaches a hardware item to a door/frame configuration (opening). This is
+ * ForgeDesk's equivalent of fab_utils' hwlib_saved_config_links.
+ */
+class ConfiguratorHwlibLink extends Model
+{
+    use HasFactory;
+
+    protected $fillable = ['configuration_id', 'item_id', 'quantity', 'notes', 'series', 'leaf'];
+
+    protected $casts = ['quantity' => 'integer'];
+
+    public function configuration()
+    {
+        return $this->belongsTo(DoorFrameConfiguration::class, 'configuration_id');
+    }
+
+    public function item()
+    {
+        return $this->belongsTo(ConfiguratorHwlibItem::class, 'item_id');
+    }
+
+    public function values()
+    {
+        return $this->hasMany(ConfiguratorHwlibLinkValue::class, 'link_id');
+    }
+}

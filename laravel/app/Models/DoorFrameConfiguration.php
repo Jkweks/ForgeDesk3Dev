@@ -95,6 +95,22 @@ class DoorFrameConfiguration extends Model
     }
 
     /**
+     * Get hardware items linked to this configuration
+     */
+    public function hardwareLinks()
+    {
+        return $this->hasMany(ConfiguratorHwlibLink::class, 'configuration_id');
+    }
+
+    /**
+     * Get the generated hardware BOM parts
+     */
+    public function hardwareParts()
+    {
+        return $this->hasMany(DoorFrameHardwarePart::class, 'configuration_id');
+    }
+
+    /**
      * Check if configuration includes frame
      */
     public function includesFrame()

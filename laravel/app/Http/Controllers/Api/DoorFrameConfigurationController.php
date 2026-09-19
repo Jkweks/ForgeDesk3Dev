@@ -3,15 +3,20 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ConfiguratorHwlibLink;
+use App\Models\ConfiguratorHwlibLinkValue;
 use App\Models\DoorFrameConfiguration;
 use App\Models\DoorFrameConfigurationDoor;
 use App\Models\DoorFrameDoorConfig;
 use App\Models\DoorFrameDoorPart;
 use App\Models\DoorFrameFrameConfig;
 use App\Models\DoorFrameFramePart;
+use App\Models\DoorFrameHardwarePart;
 use App\Models\DoorFrameOpeningSpec;
 use App\Services\Configurator\DoorBomGenerator;
 use App\Services\Configurator\FrameBomGenerator;
+use App\Services\Configurator\HwlibBomGenerator;
+use App\Services\Configurator\HwlibResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -89,6 +94,8 @@ class DoorFrameConfigurationController extends Controller
                 'frameConfig.frameSeries.frameSystem',
                 'frameConfig.parts.product',
                 'doorConfigs.parts.product',
+                'hardwareLinks.item.category',
+                'hardwareParts.product',
                 'createdBy',
             ])->findOrFail($id);
 
@@ -844,7 +851,9 @@ class DoorFrameConfigurationController extends Controller
             'door_tags' => $config->doors->map(fn ($d) => $d->door_tag),
             'opening_specs' => $config->openingSpecs ? $this->formatOpeningSpecs($config->openingSpecs) : null,
             'frame_config' => $config->frameConfig ? $this->formatFrameConfig($config->frameConfig) : null,
-            'door_configs' => $config->doorConfigs->map(fn ($d) => $this->formatDoorConfig($d)),
+            'door_config' => $config->doorConfigs->first() ? $this->formatDoorConfig($config->doorConfigs->first()) : null,
+            'hardware_links' => $config->hardwareLinks->map(fn ($l) => $this->formatHardwareLink($l)),
+            'hardware_parts' => $config->hardwareParts->map(fn ($p) => $this->formatPart($p)),
             'is_complete' => $config->isComplete(),
             'can_edit' => $config->canEdit(),
             'validation_errors' => $config->getValidationErrors(),
@@ -949,5 +958,337 @@ class DoorFrameConfigurationController extends Controller
             'is_auto_generated' => $part->is_auto_generated,
             'sort_order' => $part->sort_order,
         ];
+    }
+
+    /**
+     * Helper: Format a hardware link (without resolved variable values —
+     * see resolvedHardwareValues() for those, fetched separately since
+     * resolution requires walking every link on the configuration).
+     */
+    private function formatHardwareLink($link)
+    {
+        return [
+            'id' => $link->id,
+            'item' => [
+                'id' => $link->item->id,
+                'name' => $link->item->name,
+                'manufacturer' => $link->item->manufacturer,
+                'model_number' => $link->item->model_number,
+                'pn' => $link->item->pn,
+                'category' => [
+                    'id' => $link->item->category->id,
+                    'name' => $link->item->category->name,
+                ],
+            ],
+            'quantity' => $link->quantity,
+            'series' => $link->series,
+            'leaf' => $link->leaf,
+            'notes' => $link->notes,
+        ];
+    }
+
+    /**
+     * Add a hardware item to a configuration.
+     */
+    public function addHardwareLink(Request $request, $id)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'item_id' => 'required|exists:configurator_hwlib_items,id',
+            'quantity' => 'nullable|integer|min:1',
+            'series' => 'nullable|in:Standard,Thermal,Monumental',
+            'leaf' => 'nullable|in:both,active,inactive',
+            'notes' => 'nullable|string',
+            'values' => 'nullable|array',
+            'values.*.variable_id' => 'required_with:values|exists:configurator_hwlib_variables,id',
+            'values.*.value_text' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $link = ConfiguratorHwlibLink::create([
+            'configuration_id' => $config->id,
+            'item_id' => $request->item_id,
+            'quantity' => $request->quantity ?? 1,
+            'series' => $request->series ?? 'Standard',
+            'leaf' => $request->leaf ?? 'both',
+            'notes' => $request->notes,
+        ]);
+
+        foreach ($request->input('values', []) as $value) {
+            if (($value['value_text'] ?? '') === '') {
+                continue;
+            }
+            ConfiguratorHwlibLinkValue::create([
+                'link_id' => $link->id,
+                'variable_id' => $value['variable_id'],
+                'value_text' => $value['value_text'],
+            ]);
+        }
+
+        $link->load('item.category');
+
+        return response()->json([
+            'message' => 'Hardware item added successfully',
+            'hardware_link' => $this->formatHardwareLink($link),
+        ], 201);
+    }
+
+    /**
+     * Update a hardware link's quantity/series/leaf/overrides.
+     */
+    public function updateHardwareLink(Request $request, $id, $linkId)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $link = ConfiguratorHwlibLink::where('configuration_id', $config->id)->findOrFail($linkId);
+
+        $validator = Validator::make($request->all(), [
+            'quantity' => 'nullable|integer|min:1',
+            'series' => 'nullable|in:Standard,Thermal,Monumental',
+            'leaf' => 'nullable|in:both,active,inactive',
+            'notes' => 'nullable|string',
+            'values' => 'nullable|array',
+            'values.*.variable_id' => 'required_with:values|exists:configurator_hwlib_variables,id',
+            'values.*.value_text' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $link->update($request->only(['quantity', 'series', 'leaf', 'notes']));
+
+        if ($request->has('values')) {
+            ConfiguratorHwlibLinkValue::where('link_id', $link->id)->delete();
+            foreach ($request->input('values', []) as $value) {
+                if (($value['value_text'] ?? '') === '') {
+                    continue;
+                }
+                ConfiguratorHwlibLinkValue::create([
+                    'link_id' => $link->id,
+                    'variable_id' => $value['variable_id'],
+                    'value_text' => $value['value_text'],
+                ]);
+            }
+        }
+
+        $link->load('item.category');
+
+        return response()->json([
+            'message' => 'Hardware item updated successfully',
+            'hardware_link' => $this->formatHardwareLink($link),
+        ]);
+    }
+
+    /**
+     * Remove a hardware item from a configuration.
+     */
+    public function destroyHardwareLink($id, $linkId)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $link = ConfiguratorHwlibLink::where('configuration_id', $config->id)->findOrFail($linkId);
+        $link->delete();
+
+        return response()->json(['message' => 'Hardware item removed successfully']);
+    }
+
+    /**
+     * Resolved prep-location values for every hardware link on this
+     * configuration (report-worthy variables only).
+     */
+    public function resolvedHardwareValues($id)
+    {
+        $config = DoorFrameConfiguration::with(['hardwareLinks.item.category', 'openingSpecs', 'doorConfigs', 'frameConfig'])
+            ->findOrFail($id);
+
+        $resolver = new HwlibResolver($config);
+        $resolvedByLink = $resolver->resolveAll();
+
+        $variables = \App\Models\ConfiguratorHwlibVariable::whereIn('code', collect($resolvedByLink)->flatMap(fn ($v) => array_keys($v))->unique())
+            ->get()->keyBy('code');
+
+        $out = [];
+        foreach ($config->hardwareLinks as $link) {
+            $rows = [];
+            foreach ($resolvedByLink[$link->id] ?? [] as $code => $result) {
+                $variable = $variables->get($code);
+                if (! $variable || ! $variable->show_in_report) {
+                    continue;
+                }
+                $rows[] = [
+                    'code' => $code,
+                    'label' => $variable->label,
+                    'value' => $result['value'],
+                    'overridden' => $result['overridden'],
+                    'unit' => $variable->unit,
+                ];
+            }
+            $out[] = [
+                'link_id' => $link->id,
+                'item_name' => $link->item->name,
+                'values' => $rows,
+            ];
+        }
+
+        return response()->json(['links' => $out]);
+    }
+
+    /**
+     * Auto-generate the hardware BOM (item + backers + fasteners) from every
+     * linked hardware item. Replaces previously auto-generated rows; manual
+     * rows are untouched.
+     */
+    public function generateHardwareParts($id, HwlibBomGenerator $generator)
+    {
+        $config = DoorFrameConfiguration::with(['hardwareLinks.item', 'openingSpecs'])->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        try {
+            $result = $generator->generate($config);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'error' => 'Cannot generate parts',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            DoorFrameHardwarePart::where('configuration_id', $config->id)
+                ->where('is_auto_generated', true)
+                ->delete();
+
+            foreach ($result['rows'] as $row) {
+                $row['configuration_id'] = $config->id;
+                DoorFrameHardwarePart::create($row);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to generate hardware parts', [
+                'config_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to generate hardware parts',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
+        $config->load('hardwareParts.product');
+
+        return response()->json([
+            'message' => 'Hardware parts generated successfully',
+            'parts' => $config->hardwareParts->map(fn ($p) => $this->formatPart($p)),
+            'warnings' => $result['warnings'],
+        ]);
+    }
+
+    /**
+     * Override a single generated (or manual) hardware part's product/quantity.
+     */
+    public function updateHardwarePart(Request $request, $id, $partId)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $part = DoorFrameHardwarePart::where('configuration_id', $config->id)->findOrFail($partId);
+
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'sometimes|exists:products,id',
+            'quantity' => 'sometimes|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $part->fill($validator->validated());
+        $part->save();
+        $part->load('product');
+
+        return response()->json([
+            'message' => 'Part updated successfully',
+            'part' => $this->formatPart($part),
+        ]);
+    }
+
+    /**
+     * Remove a single manual hardware part row.
+     */
+    public function destroyHardwarePart($id, $partId)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $part = DoorFrameHardwarePart::where('configuration_id', $config->id)->findOrFail($partId);
+
+        if ($part->is_auto_generated) {
+            return response()->json([
+                'error' => 'Cannot delete part',
+                'message' => 'Auto-generated parts can only be removed by adjusting the catalog and regenerating.',
+            ], 422);
+        }
+
+        $part->delete();
+
+        return response()->json(['message' => 'Part removed successfully']);
     }
 }
