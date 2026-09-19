@@ -1023,6 +1023,12 @@ async function fbExportPdf() {
   }
 }
 
-window.sessionReady?.then(() => { fbLoadJobFilterOptions(); fbLoadList(); });
+document.addEventListener('DOMContentLoaded', () => {
+  // window.sessionReady is defined by partials.auth-scripts, which is
+  // included after this page's content in layouts/app — by the time
+  // DOMContentLoaded fires the whole document (including that script)
+  // has run, so it's safe to reference here unguarded.
+  window.sessionReady.then(() => { fbLoadJobFilterOptions(); fbLoadList(); });
+});
 </script>
 @endsection

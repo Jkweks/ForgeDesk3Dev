@@ -101,8 +101,7 @@
                       </a>
                     </li>
                     <li class="nav-item" role="presentation" data-permission="configurator.catalog.manage">
-                      <a href="#tab-configurator-catalog" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
-                         onclick="cfgLoadTree()">
+                      <a href="#tab-configurator-catalog" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
                         <i class="ti ti-door me-2"></i>Frame Catalog
                       </a>
                     </li>
@@ -3724,6 +3723,14 @@
         if (tab) tab.addEventListener('shown.bs.tab', () => {
           loadCompanyLocations();
           loadCompanySettings();
+        }, { once: false });
+
+        // Use shown.bs.tab (not onclick) so this also fires when the tab is
+        // shown programmatically via the deep-link support below — a real
+        // click fires onclick, but bootstrap.Tab(...).show() does not.
+        const cfgTab = document.querySelector('a[href="#tab-configurator-catalog"]');
+        if (cfgTab) cfgTab.addEventListener('shown.bs.tab', () => {
+          cfgLoadTree();
         }, { once: false });
 
         // Deep link support, e.g. /admin#tab-configurator-catalog
