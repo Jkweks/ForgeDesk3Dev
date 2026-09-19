@@ -446,31 +446,30 @@
 
             <!-- Configurator Tab -->
             <div class="tab-pane fade" id="configurator" role="tabpanel">
-              <!-- Configurator Settings -->
+              <!-- Physical Specs (shared across finish variants) -->
               <div class="mb-4">
-                <h4 class="mb-3"><i class="ti ti-settings me-2"></i>Configurator Settings</h4>
-                <div class="row">
+                <h4 class="mb-1"><i class="ti ti-ruler-3 me-2"></i>Physical Specs</h4>
+                <p class="text-muted mb-3">Stock length and weight don't change with finish/color — saving here updates every product sharing this part number.</p>
+                <div class="row g-2 align-items-end">
                   <div class="col-md-3">
-                    <div class="form-check form-switch mb-2">
-                      <input class="form-check-input" type="checkbox" id="configuratorAvailable" disabled>
-                      <label class="form-check-label" for="configuratorAvailable">
-                        <strong>Configurator Available</strong>
-                      </label>
-                    </div>
+                    <label class="form-label">Stock Length (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorLength">
                   </div>
                   <div class="col-md-3">
-                    <label class="form-label"><strong>Type</strong></label>
-                    <div id="configuratorType" class="text-muted">-</div>
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label"><strong>Use Path</strong></label>
-                    <div id="configuratorUsePath" class="text-muted">-</div>
+                    <label class="form-label">Weight per Inch (lb)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorWeightPerInch">
                   </div>
                   <div class="col-md-3">
                     <label class="form-label"><strong>Dimensions</strong></label>
                     <div id="configuratorDimensions" class="text-muted">-</div>
                   </div>
+                  <div class="col-auto">
+                    <button type="button" class="btn btn-primary" onclick="saveConfiguratorSpecs()" data-permission="inventory.edit">
+                      <i class="ti ti-device-floppy me-1"></i>Save
+                    </button>
+                  </div>
                 </div>
+                <div class="mt-2 small text-muted" id="configuratorLinkedVariants"></div>
               </div>
 
               <hr>
@@ -1004,13 +1003,16 @@
         await loadProductBOM(id);
 
         // Populate configurator settings
-        document.getElementById('configuratorAvailable').checked = product.configurator_available || false;
-        document.getElementById('configuratorType').textContent = product.configurator_type || '-';
-        document.getElementById('configuratorUsePath').textContent = product.configurator_use_path || '-';
         const dimensions = [];
         if (product.dimension_height) dimensions.push(`H: ${product.dimension_height}`);
         if (product.dimension_depth) dimensions.push(`D: ${product.dimension_depth}`);
         document.getElementById('configuratorDimensions').textContent = dimensions.length > 0 ? dimensions.join(', ') : '-';
+        document.getElementById('configuratorLength').value = product.configurator_length ?? '';
+        document.getElementById('configuratorWeightPerInch').value = product.configurator_weight_per_inch ?? '';
+        document.getElementById('configuratorLinkedVariants').textContent = '';
+        if (product.part_number) {
+          loadConfiguratorLinkedVariants(product.part_number, product.id);
+        }
 
         // Show modal
         showModal(document.getElementById('viewProductModal'));
@@ -1500,6 +1502,62 @@
       } catch (error) {
         console.error('Error saving product:', error);
         showNotification('Failed to save changes: ' + error.message, 'danger');
+      }
+    }
+
+    // Shows the other finish variants (same part_number) that Save will also update.
+    async function loadConfiguratorLinkedVariants(partNumber, currentId) {
+      const el = document.getElementById('configuratorLinkedVariants');
+      try {
+        const response = await apiCall(`/products?search=${encodeURIComponent(partNumber)}&per_page=50`);
+        if (!response.ok) return;
+        const data = await response.json();
+        const matches = (data.data || []).filter(p => p.part_number === partNumber);
+        if (matches.length <= 1) {
+          el.textContent = 'No other finish variants share this part number.';
+          return;
+        }
+        const labels = matches.map(p => `${p.sku || p.part_number}${p.id == currentId ? ' (this one)' : ''}`);
+        el.innerHTML = `<strong>Linked finish variants (saved together):</strong> ${labels.join(', ')}`;
+      } catch (error) {
+        el.textContent = '';
+      }
+    }
+
+    async function saveConfiguratorSpecs() {
+      try {
+        const length = document.getElementById('configuratorLength').value;
+        const weightPerInch = document.getElementById('configuratorWeightPerInch').value;
+
+        const response = await apiCall(`/products/${currentProductId}/configurator-specs`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            configurator_length: length === '' ? null : length,
+            configurator_weight_per_inch: weightPerInch === '' ? null : weightPerInch,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to save configurator specs');
+        }
+
+        const result = await response.json();
+        const linked = result.linked_products || [];
+        const el = document.getElementById('configuratorLinkedVariants');
+        if (linked.length <= 1) {
+          el.textContent = 'No other finish variants share this part number.';
+        } else {
+          const labels = linked.map(p => `${p.sku || p.part_number}${p.id == currentProductId ? ' (this one)' : ''}`);
+          el.innerHTML = `<strong>Updated ${linked.length} linked finish variant(s):</strong> ${labels.join(', ')}`;
+        }
+
+        showNotification(`Saved${linked.length > 1 ? ` — applied to ${linked.length} finish variants` : ''}`, 'success');
+        if (typeof refreshTable === 'function') refreshTable();
+      } catch (error) {
+        console.error('Error saving configurator specs:', error);
+        showNotification('Failed to save: ' + error.message, 'danger');
       }
     }
 

@@ -6,13 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\DoorFrameConfiguration;
 use App\Models\DoorFrameConfigurationDoor;
 use App\Models\DoorFrameDoorConfig;
+use App\Models\DoorFrameDoorPart;
 use App\Models\DoorFrameFrameConfig;
 use App\Models\DoorFrameFramePart;
 use App\Models\DoorFrameOpeningSpec;
+use App\Services\Configurator\DoorBomGenerator;
+use App\Services\Configurator\FrameBomGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use RuntimeException;
 
 class DoorFrameConfigurationController extends Controller
 {
@@ -82,10 +86,8 @@ class DoorFrameConfigurationController extends Controller
                 'businessJob',
                 'doors',
                 'openingSpecs',
-                'frameConfig.frameSystemProduct',
+                'frameConfig.frameSeries.frameSystem',
                 'frameConfig.parts.product',
-                'doorConfigs.doorSystemProduct',
-                'doorConfigs.stileProduct',
                 'doorConfigs.parts.product',
                 'createdBy',
             ])->findOrFail($id);
@@ -272,9 +274,10 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'frame_system_product_id' => 'required|exists:products,id',
+                'frame_series_id' => 'required|exists:configurator_frame_series,id',
                 'glazing' => 'required|in:0.25,0.5,1.0',
                 'has_transom' => 'required|boolean',
+                'has_threshold' => 'required|boolean',
                 'transom_glazing' => 'required_if:has_transom,true|in:0.25,0.5,1.0',
                 'total_frame_height' => 'required_if:has_transom,true|numeric|min:0',
             ]);
@@ -291,9 +294,10 @@ class DoorFrameConfigurationController extends Controller
             $frameConfig = DoorFrameFrameConfig::updateOrCreate(
                 ['configuration_id' => $config->id],
                 [
-                    'frame_system_product_id' => $request->frame_system_product_id,
+                    'frame_series_id' => $request->frame_series_id,
                     'glazing' => $request->glazing,
                     'has_transom' => $request->has_transom,
+                    'has_threshold' => $request->has_threshold,
                     'transom_glazing' => $request->has_transom ? $request->transom_glazing : null,
                     'total_frame_height' => $request->has_transom ? $request->total_frame_height : null,
                 ]
@@ -301,7 +305,7 @@ class DoorFrameConfigurationController extends Controller
 
             DB::commit();
 
-            $frameConfig->load('frameSystemProduct');
+            $frameConfig->load('frameSeries.frameSystem');
 
             return response()->json([
                 'message' => 'Frame configuration saved successfully',
@@ -348,6 +352,9 @@ class DoorFrameConfigurationController extends Controller
                 'parts' => 'required|array',
                 'parts.*.part_label' => 'required|string',
                 'parts.*.product_id' => 'required|exists:products,id',
+                'parts.*.calculated_length' => 'nullable|numeric',
+                'parts.*.quantity' => 'nullable|numeric|min:0',
+                'parts.*.unit_type' => 'nullable|in:length,qty',
                 'parts.*.sort_order' => 'nullable|integer',
             ]);
 
@@ -360,21 +367,23 @@ class DoorFrameConfigurationController extends Controller
 
             DB::beginTransaction();
 
-            // Delete existing parts
-            DoorFrameFramePart::where('frame_config_id', $config->frameConfig->id)->delete();
+            // Delete existing manually-entered parts; auto-generated ones are managed via /generate-parts
+            DoorFrameFramePart::where('frame_config_id', $config->frameConfig->id)
+                ->where('is_auto_generated', false)
+                ->delete();
 
-            // Create new parts
             foreach ($request->parts as $index => $partData) {
-                $part = DoorFrameFramePart::create([
+                DoorFrameFramePart::create([
                     'frame_config_id' => $config->frameConfig->id,
                     'part_label' => $partData['part_label'],
                     'product_id' => $partData['product_id'],
+                    'calculated_length' => $partData['calculated_length'] ?? null,
+                    'quantity' => $partData['quantity'] ?? 1,
+                    'unit_type' => $partData['unit_type'] ?? 'length',
+                    'source_type' => 'manual',
+                    'is_auto_generated' => false,
                     'sort_order' => $partData['sort_order'] ?? $index,
                 ]);
-
-                // Calculate length
-                $part->calculated_length = $part->calculateLength();
-                $part->save();
             }
 
             DB::commit();
@@ -401,6 +410,136 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Auto-generate frame parts (extrusions, components, fasteners) from the
+     * selected catalog frame series. Replaces previously auto-generated rows;
+     * manually-added rows are left untouched.
+     */
+    public function generateFrameParts($id, FrameBomGenerator $generator)
+    {
+        $config = DoorFrameConfiguration::with(['frameConfig', 'openingSpecs'])->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        try {
+            $rows = $generator->generate($config);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'error' => 'Cannot generate parts',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            DoorFrameFramePart::where('frame_config_id', $config->frameConfig->id)
+                ->where('is_auto_generated', true)
+                ->delete();
+
+            foreach ($rows as $row) {
+                $row['frame_config_id'] = $config->frameConfig->id;
+                DoorFrameFramePart::create($row);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to generate frame parts', [
+                'config_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to generate frame parts',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
+        $config->frameConfig->load('parts.product');
+
+        return response()->json([
+            'message' => 'Frame parts generated successfully',
+            'parts' => $config->frameConfig->parts->map(fn ($p) => $this->formatPart($p)),
+        ]);
+    }
+
+    /**
+     * Override a single generated (or manual) part's product / length / quantity.
+     */
+    public function updateFramePart(Request $request, $id, $partId)
+    {
+        $config = DoorFrameConfiguration::with('frameConfig')->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $part = DoorFrameFramePart::where('frame_config_id', $config->frameConfig?->id)
+            ->findOrFail($partId);
+
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'sometimes|exists:products,id',
+            'calculated_length' => 'sometimes|nullable|numeric',
+            'quantity' => 'sometimes|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $part->fill($validator->validated());
+        $part->save();
+        $part->load('product');
+
+        return response()->json([
+            'message' => 'Part updated successfully',
+            'part' => $this->formatPart($part),
+        ]);
+    }
+
+    /**
+     * Remove a single part (manual rows only — auto-generated rows should be
+     * removed by adjusting the catalog and re-running generateFrameParts).
+     */
+    public function destroyFramePart($id, $partId)
+    {
+        $config = DoorFrameConfiguration::with('frameConfig')->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $part = DoorFrameFramePart::where('frame_config_id', $config->frameConfig?->id)
+            ->findOrFail($partId);
+
+        if ($part->is_auto_generated) {
+            return response()->json([
+                'error' => 'Cannot delete part',
+                'message' => 'Auto-generated parts can only be removed by adjusting the catalog and regenerating.',
+            ], 422);
+        }
+
+        $part->delete();
+
+        return response()->json(['message' => 'Part removed successfully']);
+    }
+
+    /**
      * Update door configuration (Step 3)
      */
     public function updateDoorConfig(Request $request, $id)
@@ -423,12 +562,19 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'door_configs' => 'required|array|min:1',
-                'door_configs.*.door_system_product_id' => 'required|exists:products,id',
-                'door_configs.*.leaf_type' => 'required|in:single,active,inactive',
-                'door_configs.*.stile_product_id' => 'nullable|exists:products,id',
-                'door_configs.*.glazing' => 'required|in:0.25,0.5,1.0',
-                'door_configs.*.preset' => 'nullable|in:standard,ws_continuous,ws_butt',
+                'door_series' => 'required|in:STANDARD,THERMAL,MONUMENTAL',
+                'stile_width' => 'required|string|exists:configurator_door_types,stile_name',
+                'handing' => 'required|in:LH (INSWING),RH (INSWING),LHR,RHR,CP SINGLE,PAIR-RHRA,PAIR-LHRA,CP PAIR',
+                'hinge_type' => 'required|in:BUTT HINGES,OFFSET PIVOTS,CONTINUOUS HINGE,CENTER PIVOTS',
+                'opening_angle' => 'nullable|integer|min:1|max:180',
+                'bottom_gap' => 'nullable|numeric|min:0',
+                'top_rail_label' => 'required|string',
+                'bot_rail_label' => 'required|string',
+                'mid_rail_label' => 'nullable|string',
+                'mid_qty' => 'nullable|integer|min:0|max:2',
+                'mid_loc1' => 'required_if:mid_qty,1,2|nullable|numeric',
+                'mid_loc2' => 'required_if:mid_qty,2|nullable|numeric',
+                'glazing' => 'nullable|string|exists:configurator_glass_specs,thickness',
             ]);
 
             if ($validator->fails()) {
@@ -440,28 +586,32 @@ class DoorFrameConfigurationController extends Controller
 
             DB::beginTransaction();
 
-            // Delete existing door configs
+            // One door config per configuration — replaces any previous one.
             DoorFrameDoorConfig::where('configuration_id', $config->id)->delete();
 
-            // Create new door configs
-            foreach ($request->door_configs as $doorData) {
-                DoorFrameDoorConfig::create([
-                    'configuration_id' => $config->id,
-                    'door_system_product_id' => $doorData['door_system_product_id'],
-                    'leaf_type' => $doorData['leaf_type'],
-                    'stile_product_id' => $doorData['stile_product_id'] ?? null,
-                    'glazing' => $doorData['glazing'],
-                    'preset' => $doorData['preset'] ?? null,
-                ]);
-            }
+            $doorConfig = DoorFrameDoorConfig::create([
+                'configuration_id' => $config->id,
+                'door_series' => $request->door_series,
+                'stile_width' => $request->stile_width,
+                'leaf_type' => 'single',
+                'handing' => $request->handing,
+                'hinge_type' => $request->hinge_type,
+                'opening_angle' => $request->opening_angle ?? 90,
+                'bottom_gap' => $request->bottom_gap ?? 0.6875,
+                'top_rail_label' => $request->top_rail_label,
+                'bot_rail_label' => $request->bot_rail_label,
+                'mid_rail_label' => $request->mid_rail_label,
+                'mid_qty' => $request->mid_qty ?? 0,
+                'mid_loc1' => $request->mid_loc1,
+                'mid_loc2' => $request->mid_loc2,
+                'glazing' => $request->glazing,
+            ]);
 
             DB::commit();
 
-            $config->load('doorConfigs.doorSystemProduct', 'doorConfigs.stileProduct');
-
             return response()->json([
-                'message' => 'Door configurations saved successfully',
-                'door_configs' => $config->doorConfigs->map(fn ($d) => $this->formatDoorConfig($d)),
+                'message' => 'Door configuration saved successfully',
+                'door_config' => $this->formatDoorConfig($doorConfig),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -476,6 +626,143 @@ class DoorFrameConfigurationController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Auto-generate door parts (extrusions + hardware) from the catalog.
+     * Replaces previously auto-generated rows; manually-added rows are untouched.
+     */
+    public function generateDoorParts($id, DoorBomGenerator $generator)
+    {
+        $config = DoorFrameConfiguration::with(['doorConfigs', 'openingSpecs'])->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $doorConfig = $config->doorConfigs->first();
+        if (! $doorConfig) {
+            return response()->json([
+                'error' => 'Cannot generate parts',
+                'message' => 'Door configuration not found. Please configure door settings first.',
+            ], 422);
+        }
+
+        try {
+            $result = $generator->generate($config);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'error' => 'Cannot generate parts',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            DoorFrameDoorPart::where('door_config_id', $doorConfig->id)
+                ->where('is_auto_generated', true)
+                ->delete();
+
+            foreach ($result['rows'] as $row) {
+                $row['door_config_id'] = $doorConfig->id;
+                DoorFrameDoorPart::create($row);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to generate door parts', [
+                'config_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to generate door parts',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
+        $doorConfig->load('parts.product');
+
+        return response()->json([
+            'message' => 'Door parts generated successfully',
+            'parts' => $doorConfig->parts->map(fn ($p) => $this->formatPart($p)),
+            'warnings' => $result['warnings'],
+        ]);
+    }
+
+    /**
+     * Override a single generated (or manual) door part's product / length / quantity.
+     */
+    public function updateDoorPart(Request $request, $id, $partId)
+    {
+        $config = DoorFrameConfiguration::with('doorConfigs')->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $doorConfigIds = $config->doorConfigs->pluck('id');
+        $part = DoorFrameDoorPart::whereIn('door_config_id', $doorConfigIds)->findOrFail($partId);
+
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'sometimes|exists:products,id',
+            'calculated_length' => 'sometimes|nullable|numeric',
+            'quantity' => 'sometimes|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $part->fill($validator->validated());
+        $part->save();
+        $part->load('product');
+
+        return response()->json([
+            'message' => 'Part updated successfully',
+            'part' => $this->formatPart($part),
+        ]);
+    }
+
+    /**
+     * Remove a single manual door part row.
+     */
+    public function destroyDoorPart($id, $partId)
+    {
+        $config = DoorFrameConfiguration::with('doorConfigs')->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $doorConfigIds = $config->doorConfigs->pluck('id');
+        $part = DoorFrameDoorPart::whereIn('door_config_id', $doorConfigIds)->findOrFail($partId);
+
+        if ($part->is_auto_generated) {
+            return response()->json([
+                'error' => 'Cannot delete part',
+                'message' => 'Auto-generated parts can only be removed by adjusting the catalog and regenerating.',
+            ], 422);
+        }
+
+        $part->delete();
+
+        return response()->json(['message' => 'Part removed successfully']);
     }
 
     /**
@@ -593,14 +880,19 @@ class DoorFrameConfigurationController extends Controller
     private function formatFrameConfig($frameConfig)
     {
         return [
-            'frame_system_product' => [
-                'id' => $frameConfig->frameSystemProduct->id,
-                'part_number' => $frameConfig->frameSystemProduct->part_number,
-                'description' => $frameConfig->frameSystemProduct->description,
-            ],
+            'frame_series' => $frameConfig->frameSeries ? [
+                'id' => $frameConfig->frameSeries->id,
+                'name' => $frameConfig->frameSeries->name,
+                'code' => $frameConfig->frameSeries->code,
+                'frame_system' => [
+                    'id' => $frameConfig->frameSeries->frameSystem->id,
+                    'name' => $frameConfig->frameSeries->frameSystem->name,
+                ],
+            ] : null,
             'glazing' => $frameConfig->glazing,
             'glazing_label' => $frameConfig->glazing_label,
             'has_transom' => $frameConfig->has_transom,
+            'has_threshold' => $frameConfig->has_threshold,
             'transom_glazing' => $frameConfig->transom_glazing,
             'transom_glazing_label' => $frameConfig->transom_glazing_label,
             'total_frame_height' => $frameConfig->total_frame_height,
@@ -615,22 +907,22 @@ class DoorFrameConfigurationController extends Controller
     {
         return [
             'id' => $doorConfig->id,
-            'door_system_product' => [
-                'id' => $doorConfig->doorSystemProduct->id,
-                'part_number' => $doorConfig->doorSystemProduct->part_number,
-                'description' => $doorConfig->doorSystemProduct->description,
-            ],
-            'leaf_type' => $doorConfig->leaf_type,
-            'leaf_type_label' => $doorConfig->leaf_type_label,
-            'stile_product' => $doorConfig->stileProduct ? [
-                'id' => $doorConfig->stileProduct->id,
-                'part_number' => $doorConfig->stileProduct->part_number,
-                'description' => $doorConfig->stileProduct->description,
-            ] : null,
+            'door_series' => $doorConfig->door_series,
+            'stile_width' => $doorConfig->stile_width,
+            'handing' => $doorConfig->handing,
+            'handing_label' => DoorFrameDoorConfig::$handingOptions[$doorConfig->handing] ?? $doorConfig->handing,
+            'hinge_type' => $doorConfig->hinge_type,
+            'hinge_type_label' => DoorFrameDoorConfig::$hingeTypeOptions[$doorConfig->hinge_type] ?? $doorConfig->hinge_type,
+            'opening_angle' => $doorConfig->opening_angle,
+            'bottom_gap' => $doorConfig->bottom_gap,
+            'top_rail_label' => $doorConfig->top_rail_label,
+            'bot_rail_label' => $doorConfig->bot_rail_label,
+            'mid_rail_label' => $doorConfig->mid_rail_label,
+            'mid_qty' => $doorConfig->mid_qty,
+            'mid_loc1' => $doorConfig->mid_loc1,
+            'mid_loc2' => $doorConfig->mid_loc2,
             'glazing' => $doorConfig->glazing,
-            'glazing_label' => $doorConfig->glazing_label,
-            'preset' => $doorConfig->preset,
-            'preset_label' => $doorConfig->preset_label,
+            'is_pair' => $doorConfig->isPair(),
             'parts' => $doorConfig->parts->map(fn ($p) => $this->formatPart($p)),
         ];
     }
@@ -651,7 +943,10 @@ class DoorFrameConfigurationController extends Controller
                 'description' => $part->product->description,
             ],
             'calculated_length' => $part->calculated_length,
-            'is_auto_generated' => $part->is_auto_generated ?? false,
+            'quantity' => $part->quantity,
+            'unit_type' => $part->unit_type,
+            'source_type' => $part->source_type,
+            'is_auto_generated' => $part->is_auto_generated,
             'sort_order' => $part->sort_order,
         ];
     }

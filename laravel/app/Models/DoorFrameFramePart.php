@@ -14,11 +14,17 @@ class DoorFrameFramePart extends Model
         'part_label',
         'product_id',
         'calculated_length',
+        'quantity',
+        'unit_type',
+        'source_type',
+        'is_auto_generated',
         'sort_order',
     ];
 
     protected $casts = [
         'calculated_length' => 'decimal:2',
+        'quantity' => 'decimal:3',
+        'is_auto_generated' => 'boolean',
         'sort_order' => 'integer',
     ];
 
@@ -46,31 +52,4 @@ class DoorFrameFramePart extends Model
         return ucwords(str_replace('_', ' ', $this->part_label));
     }
 
-    /**
-     * Calculate length based on opening specs and formula
-     * This is a placeholder - implement actual calculation logic
-     */
-    public function calculateLength()
-    {
-        $config = $this->frameConfig;
-        $openingSpecs = $config->configuration->openingSpecs;
-
-        if (! $openingSpecs) {
-            return null;
-        }
-
-        // Placeholder calculation - implement actual formulas based on part type
-        // This would typically use formulas stored in product.tool_specifications
-        switch ($this->part_label) {
-            case 'hinge_jamb':
-            case 'lock_jamb':
-                return $openingSpecs->door_opening_height + 1.5;
-
-            case 'door_head':
-                return $openingSpecs->door_opening_width + 2.0;
-
-            default:
-                return null;
-        }
-    }
 }

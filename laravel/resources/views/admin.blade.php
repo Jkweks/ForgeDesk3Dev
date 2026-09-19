@@ -100,6 +100,18 @@
                         <i class="ti ti-hard-hat me-2"></i>Fab Users
                       </a>
                     </li>
+                    <li class="nav-item" role="presentation" data-permission="configurator.catalog.manage">
+                      <a href="#tab-configurator-catalog" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
+                         onclick="cfgLoadTree()">
+                        <i class="ti ti-door me-2"></i>Frame Catalog
+                      </a>
+                    </li>
+                    <li class="nav-item" role="presentation" data-permission="configurator.catalog.manage">
+                      <a href="#tab-door-catalog" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
+                         onclick="dcLoadAll()">
+                        <i class="ti ti-door-enter me-2"></i>Door Catalog
+                      </a>
+                    </li>
                   </ul>
                 </div>
 
@@ -689,6 +701,244 @@
                       </div>
                     </div><!-- /tab-fab-users -->
 
+                    <div class="tab-pane" id="tab-configurator-catalog" role="tabpanel">
+                      <div class="mb-3">
+                        <h3 class="mb-1">Frame Catalog</h3>
+                        <p class="text-muted mb-0">Frame systems, series, extrusion profiles, and components used to auto-generate a frame BOM in the <a href="/configurator">Configurator</a>.</p>
+                      </div>
+
+                      <div class="row row-cards">
+                        <!-- Frame Systems -->
+                        <div class="col-12 col-lg-6">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Frame Systems</h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="cfgOpenSystemModal()" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add System</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Name</th><th>Code</th><th class="w-1"></th></tr></thead>
+                                <tbody id="cfg-systems-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Frame Series -->
+                        <div class="col-12 col-lg-6">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Series <span id="cfg-series-scope" class="text-muted ms-1"></span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" id="cfg-add-series-btn" onclick="cfgOpenSeriesModal()" disabled data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Series</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Name</th><th>Code</th><th class="w-1"></th></tr></thead>
+                                <tbody id="cfg-series-tbody"></tbody>
+                              </table>
+                              <div class="text-muted p-3" id="cfg-series-empty">Select a frame system to see its series.</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Profiles -->
+                        <div class="col-12">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Extrusion Profiles <span id="cfg-profiles-scope" class="text-muted ms-1"></span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" id="cfg-add-profile-btn" onclick="cfgOpenProfileModal()" disabled data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Profile</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Role Label</th><th>Product</th><th>Formula</th><th>Conditions</th><th class="w-1"></th></tr></thead>
+                                <tbody id="cfg-profiles-tbody"></tbody>
+                              </table>
+                              <div class="text-muted p-3" id="cfg-profiles-empty">Select a series to see its profiles.</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Components -->
+                        <div class="col-12 col-lg-7">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Components <span id="cfg-components-scope" class="text-muted ms-1"></span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" id="cfg-add-component-btn" onclick="cfgOpenComponentModal()" disabled data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Component</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Label</th><th>Product</th><th>Qty</th><th class="w-1"></th></tr></thead>
+                                <tbody id="cfg-components-tbody"></tbody>
+                              </table>
+                              <div class="text-muted p-3" id="cfg-components-empty">Select a profile to see its components.</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Fasteners -->
+                        <div class="col-12 col-lg-5">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Fasteners <span id="cfg-fasteners-scope" class="text-muted ms-1"></span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" id="cfg-add-fastener-btn" onclick="cfgOpenFastenerModal()" disabled data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Fastener</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Label</th><th>Product</th><th>Qty/ea</th><th class="w-1"></th></tr></thead>
+                                <tbody id="cfg-fasteners-tbody"></tbody>
+                              </table>
+                              <div class="text-muted p-3" id="cfg-fasteners-empty">Select a component to see its fasteners.</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div><!-- /tab-configurator-catalog -->
+
+                    <div class="tab-pane" id="tab-door-catalog" role="tabpanel">
+                      <div class="mb-3">
+                        <h3 class="mb-1">Door Catalog</h3>
+                        <p class="text-muted mb-0">Door types, rails, lugs, glass specs, setting block kits, and tie rods used to auto-generate a door BOM in the <a href="/configurator">Configurator</a>.</p>
+                      </div>
+
+                      <div class="row row-cards">
+                        <!-- Door Types -->
+                        <div class="col-12">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Door Types <span class="text-muted ms-1">(stile height + hinge-type PN variants)</span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('doorType')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Series</th><th>Stile</th><th>Height</th><th>Bevel PN</th><th>Rabbet PN</th><th>Center Pivot PN</th><th>Astragal PN</th><th>Inactive PN</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-doorType-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Rails -->
+                        <div class="col-12">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Rails <span class="text-muted ms-1">(top / bottom / mid, per series)</span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('rail')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Type</th><th>Label</th><th>Value</th><th>Std PN</th><th>Thermal PN</th><th>Mon PN</th><th>Stacked PNs</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-rail-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Rail Lugs -->
+                        <div class="col-12 col-lg-6">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Rail Lugs</h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('railLug')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Rail PN</th><th>Lug PN</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-railLug-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Mid Lugs -->
+                        <div class="col-12 col-lg-6">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Mid / Stacked Rail Lugs</h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('midLug')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Rail PN</th><th>Lug PN</th><th>Fastener #1</th><th>Fastener #2</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-midLug-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Glass Specs -->
+                        <div class="col-12 col-lg-7">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Glass Specs</h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('glassSpec')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Thickness</th><th>Stop PN</th><th>Gasket PN</th><th>Gasket #2 PN</th><th>Qty Factor</th><th>Stop Height</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-glassSpec-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Setting Block Kits -->
+                        <div class="col-12 col-lg-5">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Setting Block Kits</h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('sbk')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Series</th><th>Glass</th><th>Kit 1</th><th>Kit 2</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-sbk-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tie Rods -->
+                        <div class="col-12">
+                          <div class="card">
+                            <div class="card-header">
+                              <h3 class="card-title">Tie Rods <span class="text-muted ms-1">(by door-width range)</span></h3>
+                              <div class="card-actions">
+                                <button class="btn btn-sm btn-primary" onclick="dcOpenModal('tieRod')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                              </div>
+                            </div>
+                            <div class="table-responsive">
+                              <table class="table table-vcenter card-table">
+                                <thead><tr><th>Series</th><th>PN</th><th>Min Len</th><th>Max Len</th><th class="w-1"></th></tr></thead>
+                                <tbody id="dc-tieRod-tbody"></tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div><!-- /tab-door-catalog -->
+
                   </div>
                 </div>
               </div>
@@ -1020,6 +1270,360 @@
             <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn btn-primary" onclick="saveEditRole()">Save Changes</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configurator: Frame System Modal -->
+    <div class="modal modal-blur fade" id="cfg-system-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="cfg-system-form">
+            <div class="modal-header"><h5 class="modal-title">Frame System</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="cfg-system-id">
+              <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="cfg-system-name" required></div>
+              <div class="mb-3"><label class="form-label">Code</label><input type="text" class="form-control" id="cfg-system-code" required></div>
+              <div class="mb-3"><label class="form-label">Sort Order</label><input type="number" class="form-control" id="cfg-system-sort" value="0"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configurator: Frame Series Modal -->
+    <div class="modal modal-blur fade" id="cfg-series-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="cfg-series-form">
+            <div class="modal-header"><h5 class="modal-title">Frame Series</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="cfg-series-id">
+              <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="cfg-series-name" required></div>
+              <div class="mb-3"><label class="form-label">Code</label><input type="text" class="form-control" id="cfg-series-code" required></div>
+              <div class="mb-3"><label class="form-label">Sort Order</label><input type="number" class="form-control" id="cfg-series-sort" value="0"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configurator: Extrusion Profile Modal -->
+    <div class="modal modal-blur fade" id="cfg-profile-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <form id="cfg-profile-form">
+            <div class="modal-header"><h5 class="modal-title">Extrusion Profile</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="cfg-profile-id">
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">Role Label</label><input type="text" class="form-control" id="cfg-profile-label" placeholder="e.g. LH Jamb" required></div>
+                <div class="col-md-6 mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-profile-product" required></select></div>
+              </div>
+              <div class="row">
+                <div class="col-md-4 mb-3">
+                  <label class="form-label">Condition</label>
+                  <select class="form-select" id="cfg-profile-condition">
+                    <option value="">Always</option>
+                    <option value="single">Single only</option>
+                    <option value="pair">Pair only</option>
+                    <option value="transom">Transom only</option>
+                    <option value="threshold">Threshold only</option>
+                    <option value="transom_pair">Transom + Pair only</option>
+                  </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <label class="form-label">Transom glazing (in, comma-separated)</label>
+                  <input type="text" class="form-control" id="cfg-profile-glassthicknesses" placeholder="e.g. 0.25, 0.375, 0.5">
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-4 mb-3">
+                  <label class="form-label">Section height (in)</label>
+                  <input type="number" step="0.0001" class="form-control" id="cfg-profile-sectionheight" value="0">
+                  <div class="form-hint">Fixed cross-section dimension (e.g. jamb depth) — referenced by other profiles' "Section" / "If Threshold" formula terms and by TH when there's no transom.</div>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <label class="form-label">Qty per opening</label>
+                  <input type="number" step="1" min="1" class="form-control" id="cfg-profile-qtyperopening" value="1">
+                </div>
+              </div>
+              <div class="mb-2 d-flex justify-content-between align-items-center">
+                <label class="form-label mb-0">Cut Length Formula</label>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cfgAddFormulaTerm()"><i class="ti ti-plus"></i> Term</button>
+              </div>
+              <div id="cfg-formula-terms"></div>
+              <div class="form-hint">Length = sum of signed terms. "Section" references another profile's section height by role label (e.g. Door Head). "If Threshold" adds the series' Threshold profile's section height only when the opening has a threshold.</div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configurator: Component Modal -->
+    <div class="modal modal-blur fade" id="cfg-component-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="cfg-component-form">
+            <div class="modal-header"><h5 class="modal-title">Component</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="cfg-component-id">
+              <div class="mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="cfg-component-label" required></div>
+              <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-component-product" required></select></div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Qty Type</label>
+                  <select class="form-select" id="cfg-component-qtytype">
+                    <option value="per_opening">Per Opening</option>
+                    <option value="per_door">Per Door</option>
+                    <option value="per_length">Per Length (ft of cut length)</option>
+                  </select>
+                </div>
+                <div class="col-md-6 mb-3"><label class="form-label">Qty per</label><input type="number" step="0.001" class="form-control" id="cfg-component-qtyper" value="1" required></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configurator: Fastener Modal -->
+    <div class="modal modal-blur fade" id="cfg-fastener-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="cfg-fastener-form">
+            <div class="modal-header"><h5 class="modal-title">Fastener</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="cfg-fastener-id">
+              <div class="mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="cfg-fastener-label" required></div>
+              <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-fastener-product" required></select></div>
+              <div class="mb-3"><label class="form-label">Qty per component</label><input type="number" step="0.001" class="form-control" id="cfg-fastener-qtyper" value="1" required></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Door Type Modal -->
+    <div class="modal modal-blur fade" id="dc-doorType-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <form id="dc-doorType-form">
+            <div class="modal-header"><h5 class="modal-title">Door Type</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-doorType-id">
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Series</label>
+                  <select class="form-select" id="dc-doorType-series" required>
+                    <option value="STANDARD">Standard</option><option value="THERMAL">Thermal</option><option value="MONUMENTAL">Monumental</option>
+                  </select>
+                </div>
+                <div class="col-md-4 mb-3"><label class="form-label">Stile Name</label><input type="text" class="form-control" id="dc-doorType-stileName" placeholder="e.g. NARROW STILE" required></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Stile Height (in)</label><input type="number" step="0.0001" class="form-control" id="dc-doorType-stileHeight" required></div>
+              </div>
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Bevel PN</label><input type="text" class="form-control" id="dc-doorType-bevPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Rabbet PN <span class="text-muted">(continuous hinge)</span></label><input type="text" class="form-control" id="dc-doorType-rabPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Center Pivot PN</label><input type="text" class="form-control" id="dc-doorType-cpPn"></div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">Astragal Stile PN</label><input type="text" class="form-control" id="dc-doorType-astPn"></div>
+                <div class="col-md-6 mb-3"><label class="form-label">Inactive Meeting Stile PN</label><input type="text" class="form-control" id="dc-doorType-inactPn"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Rail Modal -->
+    <div class="modal modal-blur fade" id="dc-rail-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <form id="dc-rail-form">
+            <div class="modal-header"><h5 class="modal-title">Rail</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-rail-id">
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Rail Type</label>
+                  <select class="form-select" id="dc-rail-railType" required>
+                    <option value="top">Top</option><option value="bot">Bottom</option><option value="mid">Mid</option>
+                  </select>
+                </div>
+                <div class="col-md-4 mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="dc-rail-label" placeholder='e.g. 2 1/8"' required></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Value (in)</label><input type="number" step="0.00001" class="form-control" id="dc-rail-valueIn" required></div>
+              </div>
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Standard PN</label><input type="text" class="form-control" id="dc-rail-stdPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Thermal PN</label><input type="text" class="form-control" id="dc-rail-thermalPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Monumental PN</label><input type="text" class="form-control" id="dc-rail-monPn"></div>
+              </div>
+              <div class="form-hint mb-2">Stacked variants (bottom rails only — label should include "stacked", e.g. 12" (stacked))</div>
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Stacked Standard PN</label><input type="text" class="form-control" id="dc-rail-stackedStdPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Stacked Thermal PN</label><input type="text" class="form-control" id="dc-rail-stackedThermalPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Stacked Monumental PN</label><input type="text" class="form-control" id="dc-rail-stackedMonPn"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Rail Lug Modal -->
+    <div class="modal modal-blur fade" id="dc-railLug-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="dc-railLug-form">
+            <div class="modal-header"><h5 class="modal-title">Rail Lug</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-railLug-id">
+              <div class="mb-3"><label class="form-label">Rail PN</label><input type="text" class="form-control" id="dc-railLug-railPn" required></div>
+              <div class="mb-3"><label class="form-label">Lug PN</label><input type="text" class="form-control" id="dc-railLug-lugPn" required></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Mid Lug Modal -->
+    <div class="modal modal-blur fade" id="dc-midLug-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <form id="dc-midLug-form">
+            <div class="modal-header"><h5 class="modal-title">Mid / Stacked Rail Lug</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-midLug-id">
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">Rail PN</label><input type="text" class="form-control" id="dc-midLug-railPn" required></div>
+                <div class="col-md-6 mb-3"><label class="form-label">Lug PN</label><input type="text" class="form-control" id="dc-midLug-lugPn" required></div>
+              </div>
+              <div class="row">
+                <div class="col-md-3 mb-3"><label class="form-label">Fastener #1 PN</label><input type="text" class="form-control" id="dc-midLug-f1Pn"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Fastener #1 Qty</label><input type="number" step="0.01" class="form-control" id="dc-midLug-f1Qty" value="0"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Fastener #2 PN</label><input type="text" class="form-control" id="dc-midLug-f2Pn"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Fastener #2 Qty</label><input type="number" step="0.01" class="form-control" id="dc-midLug-f2Qty" value="0"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Glass Spec Modal -->
+    <div class="modal modal-blur fade" id="dc-glassSpec-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <form id="dc-glassSpec-form">
+            <div class="modal-header"><h5 class="modal-title">Glass Spec</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-glassSpec-id">
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Thickness</label><input type="text" class="form-control" id="dc-glassSpec-thickness" placeholder='e.g. 1/4"' required></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Qty Factor</label><input type="number" step="0.01" class="form-control" id="dc-glassSpec-qtyFactor"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Stop Height (in)</label><input type="number" step="0.01" class="form-control" id="dc-glassSpec-stopHeight"></div>
+              </div>
+              <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Stop PN</label><input type="text" class="form-control" id="dc-glassSpec-stopPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Gasket PN</label><input type="text" class="form-control" id="dc-glassSpec-gasketPn"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Gasket #2 PN</label><input type="text" class="form-control" id="dc-glassSpec-gasket2Pn"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Setting Block Kit Modal -->
+    <div class="modal modal-blur fade" id="dc-sbk-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="dc-sbk-form">
+            <div class="modal-header"><h5 class="modal-title">Setting Block Kit</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-sbk-id">
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">Series</label>
+                  <select class="form-select" id="dc-sbk-series" required>
+                    <option value="STANDARD">Standard</option><option value="THERMAL">Thermal</option><option value="MONUMENTAL">Monumental</option>
+                  </select>
+                </div>
+                <div class="col-md-6 mb-3"><label class="form-label">Glass Thickness</label><input type="text" class="form-control" id="dc-sbk-glassThickness" placeholder='e.g. 1/4"' required></div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">Kit 1 PN</label><input type="text" class="form-control" id="dc-sbk-kit1Pn"></div>
+                <div class="col-md-6 mb-3"><label class="form-label">Kit 2 PN <span class="text-muted">(used when there's a midrail)</span></label><input type="text" class="form-control" id="dc-sbk-kit2Pn"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Catalog: Tie Rod Modal -->
+    <div class="modal modal-blur fade" id="dc-tieRod-modal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form id="dc-tieRod-form">
+            <div class="modal-header"><h5 class="modal-title">Tie Rod</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <input type="hidden" id="dc-tieRod-id">
+              <div class="mb-3"><label class="form-label">Series <span class="text-muted">(stile-width label, e.g. "NARROW STILE" or "THERMAL NARROW STILE")</span></label><input type="text" class="form-control" id="dc-tieRod-series" required></div>
+              <div class="mb-3"><label class="form-label">PN</label><input type="text" class="form-control" id="dc-tieRod-pn" required></div>
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">Min Length (exclusive)</label><input type="number" step="0.0001" class="form-control" id="dc-tieRod-minLen"></div>
+                <div class="col-md-6 mb-3"><label class="form-label">Max Length (inclusive)</label><input type="number" step="0.0001" class="form-control" id="dc-tieRod-maxLen"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -3121,6 +3725,551 @@
           loadCompanyLocations();
           loadCompanySettings();
         }, { once: false });
+
+        // Deep link support, e.g. /admin#tab-configurator-catalog
+        if (location.hash && document.querySelector(`a[href="${location.hash}"]`)) {
+          try {
+            new bootstrap.Tab(document.querySelector(`a[href="${location.hash}"]`)).show();
+          } catch (e) { /* bootstrap not ready yet — tab still reachable by click */ }
+        }
+      });
+
+      // ==================== Configurator: Frame Catalog ====================
+      let cfgTree = [];
+      let cfgProducts = [];
+      let cfgSelectedSystemId = null;
+      let cfgSelectedSeriesId = null;
+      let cfgSelectedProfileId = null;
+      let cfgSelectedComponentId = null;
+
+      function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+      async function cfgLoadProducts() {
+        if (cfgProducts.length) return cfgProducts;
+        try {
+          const data = await authenticatedFetch('/products?per_page=1000');
+          cfgProducts = data.data || data.products || data || [];
+        } catch (e) { cfgProducts = []; }
+        return cfgProducts;
+      }
+
+      function cfgProductOptions(selectedId) {
+        return cfgProducts.map(p =>
+          `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${esc(p.part_number || p.sku)} — ${esc(p.description || '')}</option>`
+        ).join('');
+      }
+
+      async function cfgLoadTree() {
+        const data = await authenticatedFetch('/configurator/catalog/tree');
+        cfgTree = data.frame_systems || [];
+        cfgRenderSystems();
+        cfgRenderSeries();
+        cfgRenderProfiles();
+        cfgRenderComponents();
+        cfgRenderFasteners();
+      }
+
+      function cfgFindSystem(id) { return cfgTree.find(s => s.id == id); }
+      function cfgFindSeries(id) {
+        for (const sys of cfgTree) { const s = (sys.series || []).find(x => x.id == id); if (s) return s; }
+        return null;
+      }
+      function cfgFindProfile(id) {
+        for (const sys of cfgTree) for (const ser of (sys.series || [])) {
+          const p = (ser.profiles || []).find(x => x.id == id); if (p) return p;
+        }
+        return null;
+      }
+      function cfgFindComponent(id) {
+        for (const sys of cfgTree) for (const ser of (sys.series || [])) for (const p of (ser.profiles || [])) {
+          const c = (p.components || []).find(x => x.id == id); if (c) return c;
+        }
+        return null;
+      }
+
+      function cfgRenderSystems() {
+        const tbody = document.getElementById('cfg-systems-tbody');
+        tbody.innerHTML = cfgTree.map(s => `
+          <tr class="${s.id == cfgSelectedSystemId ? 'table-active' : ''}" style="cursor:pointer" onclick="cfgSelectSystem(${s.id})">
+            <td>${esc(s.name)}</td><td><span class="badge bg-blue-lt">${esc(s.code)}</span></td>
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-icon" onclick="event.stopPropagation(); cfgOpenSystemModal(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn btn-sm btn-icon text-danger" onclick="event.stopPropagation(); cfgDeleteSystem(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('') || '<tr><td colspan="3" class="text-muted">No frame systems yet.</td></tr>';
+        applyActionPermissions();
+      }
+
+      function cfgSelectSystem(id) {
+        cfgSelectedSystemId = id; cfgSelectedSeriesId = null; cfgSelectedProfileId = null; cfgSelectedComponentId = null;
+        cfgRenderSystems(); cfgRenderSeries(); cfgRenderProfiles(); cfgRenderComponents(); cfgRenderFasteners();
+        document.getElementById('cfg-add-series-btn').disabled = false;
+      }
+
+      function cfgRenderSeries() {
+        const tbody = document.getElementById('cfg-series-tbody');
+        const empty = document.getElementById('cfg-series-empty');
+        const scope = document.getElementById('cfg-series-scope');
+        const sys = cfgFindSystem(cfgSelectedSystemId);
+        scope.textContent = sys ? `— ${sys.name}` : '';
+        const series = sys ? (sys.series || []) : [];
+        empty.style.display = series.length ? 'none' : (sys ? 'block' : 'block');
+        empty.textContent = sys ? 'No series yet for this system.' : 'Select a frame system to see its series.';
+        tbody.innerHTML = series.map(s => `
+          <tr class="${s.id == cfgSelectedSeriesId ? 'table-active' : ''}" style="cursor:pointer" onclick="cfgSelectSeries(${s.id})">
+            <td>${esc(s.name)}</td><td><span class="badge bg-azure-lt">${esc(s.code)}</span></td>
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-icon" onclick="event.stopPropagation(); cfgOpenSeriesModal(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn btn-sm btn-icon text-danger" onclick="event.stopPropagation(); cfgDeleteSeries(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('');
+        applyActionPermissions();
+      }
+
+      function cfgSelectSeries(id) {
+        cfgSelectedSeriesId = id; cfgSelectedProfileId = null; cfgSelectedComponentId = null;
+        cfgRenderSeries(); cfgRenderProfiles(); cfgRenderComponents(); cfgRenderFasteners();
+        document.getElementById('cfg-add-profile-btn').disabled = false;
+      }
+
+      function cfgFormulaSummary(formula) {
+        if (!Array.isArray(formula) || !formula.length) return '<span class="text-muted">—</span>';
+        return formula.map(t => {
+          const sign = t.sign < 0 ? '−' : '+';
+          const label = (t.var || '').startsWith('section:') ? `[${esc(t.var.slice(8))}]` : t.var === 'fixed' ? (t.value ?? 0) : esc(t.var || '');
+          return `${sign}${label}`;
+        }).join(' ');
+      }
+
+      function cfgConditionBadges(p) {
+        const colors = { single: 'bg-green-lt', pair: 'bg-green-lt', transom: 'bg-purple-lt', threshold: 'bg-orange-lt', transom_pair: 'bg-purple-lt' };
+        if (!p.condition) return '<span class="badge bg-secondary-lt">Always</span>';
+        return `<span class="badge ${colors[p.condition] || 'bg-secondary-lt'}">${esc(p.condition.replace('_', ' + '))}</span>`;
+      }
+
+      function cfgRenderProfiles() {
+        const tbody = document.getElementById('cfg-profiles-tbody');
+        const empty = document.getElementById('cfg-profiles-empty');
+        const scope = document.getElementById('cfg-profiles-scope');
+        const series = cfgFindSeries(cfgSelectedSeriesId);
+        scope.textContent = series ? `— ${series.name}` : '';
+        const profiles = series ? (series.profiles || []) : [];
+        empty.style.display = profiles.length ? 'none' : 'block';
+        empty.textContent = series ? 'No profiles yet for this series.' : 'Select a series to see its profiles.';
+        tbody.innerHTML = profiles.map(p => `
+          <tr class="${p.id == cfgSelectedProfileId ? 'table-active' : ''}" style="cursor:pointer" onclick="cfgSelectProfile(${p.id})">
+            <td>${esc(p.role_label)}</td>
+            <td>${esc(p.product?.part_number || '')}</td>
+            <td class="text-muted small">${cfgFormulaSummary(p.formula)}</td>
+            <td>${cfgConditionBadges(p)}</td>
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-icon" onclick="event.stopPropagation(); cfgOpenProfileModal(${p.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn btn-sm btn-icon text-danger" onclick="event.stopPropagation(); cfgDeleteProfile(${p.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('');
+        applyActionPermissions();
+      }
+
+      function cfgSelectProfile(id) {
+        cfgSelectedProfileId = id; cfgSelectedComponentId = null;
+        cfgRenderProfiles(); cfgRenderComponents(); cfgRenderFasteners();
+        document.getElementById('cfg-add-component-btn').disabled = false;
+      }
+
+      function cfgRenderComponents() {
+        const tbody = document.getElementById('cfg-components-tbody');
+        const empty = document.getElementById('cfg-components-empty');
+        const scope = document.getElementById('cfg-components-scope');
+        const profile = cfgFindProfile(cfgSelectedProfileId);
+        scope.textContent = profile ? `— ${profile.role_label}` : '';
+        const components = profile ? (profile.components || []) : [];
+        empty.style.display = components.length ? 'none' : 'block';
+        empty.textContent = profile ? 'No components yet for this profile.' : 'Select a profile to see its components.';
+        tbody.innerHTML = components.map(c => `
+          <tr class="${c.id == cfgSelectedComponentId ? 'table-active' : ''}" style="cursor:pointer" onclick="cfgSelectComponent(${c.id})">
+            <td>${esc(c.label)}</td>
+            <td>${esc(c.product?.part_number || '')}</td>
+            <td>${c.qty_per} <span class="text-muted small">${esc((c.qty_type || '').replace('_',' '))}</span></td>
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-icon" onclick="event.stopPropagation(); cfgOpenComponentModal(${c.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn btn-sm btn-icon text-danger" onclick="event.stopPropagation(); cfgDeleteComponent(${c.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('');
+        applyActionPermissions();
+      }
+
+      function cfgSelectComponent(id) {
+        cfgSelectedComponentId = id;
+        cfgRenderComponents(); cfgRenderFasteners();
+        document.getElementById('cfg-add-fastener-btn').disabled = false;
+      }
+
+      function cfgRenderFasteners() {
+        const tbody = document.getElementById('cfg-fasteners-tbody');
+        const empty = document.getElementById('cfg-fasteners-empty');
+        const scope = document.getElementById('cfg-fasteners-scope');
+        const component = cfgFindComponent(cfgSelectedComponentId);
+        scope.textContent = component ? `— ${component.label}` : '';
+        const fasteners = component ? (component.fasteners || []) : [];
+        empty.style.display = fasteners.length ? 'none' : 'block';
+        empty.textContent = component ? 'No fasteners yet for this component.' : 'Select a component to see its fasteners.';
+        tbody.innerHTML = fasteners.map(f => `
+          <tr>
+            <td>${esc(f.label)}</td>
+            <td>${esc(f.product?.part_number || '')}</td>
+            <td>${f.qty_per}</td>
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-icon" onclick="cfgOpenFastenerModal(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn btn-sm btn-icon text-danger" onclick="cfgDeleteFastener(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('');
+        applyActionPermissions();
+      }
+
+      // ---- Frame System CRUD ----
+      function cfgOpenSystemModal(id) {
+        const s = id ? cfgFindSystem(id) : null;
+        document.getElementById('cfg-system-id').value = id || '';
+        document.getElementById('cfg-system-name').value = s?.name || '';
+        document.getElementById('cfg-system-code').value = s?.code || '';
+        document.getElementById('cfg-system-sort').value = s?.sort_order ?? 0;
+        showModal(document.getElementById('cfg-system-modal'));
+      }
+      document.getElementById('cfg-system-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('cfg-system-id').value;
+        const payload = {
+          name: document.getElementById('cfg-system-name').value,
+          code: document.getElementById('cfg-system-code').value,
+          sort_order: parseInt(document.getElementById('cfg-system-sort').value || 0, 10),
+        };
+        try {
+          await authenticatedFetch(id ? `/configurator/frame-systems/${id}` : '/configurator/frame-systems', {
+            method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+          });
+          hideModal(document.getElementById('cfg-system-modal'));
+          await cfgLoadTree();
+        } catch (err) { showNotification(err.message, 'danger'); }
+      });
+      async function cfgDeleteSystem(id) {
+        if (!confirm('Delete this frame system and everything under it?')) return;
+        try { await authenticatedFetch(`/configurator/frame-systems/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+        catch (err) { showNotification(err.message, 'danger'); }
+      }
+
+      // ---- Frame Series CRUD ----
+      function cfgOpenSeriesModal(id) {
+        const s = id ? cfgFindSeries(id) : null;
+        document.getElementById('cfg-series-id').value = id || '';
+        document.getElementById('cfg-series-name').value = s?.name || '';
+        document.getElementById('cfg-series-code').value = s?.code || '';
+        document.getElementById('cfg-series-sort').value = s?.sort_order ?? 0;
+        showModal(document.getElementById('cfg-series-modal'));
+      }
+      document.getElementById('cfg-series-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('cfg-series-id').value;
+        const payload = {
+          frame_system_id: cfgSelectedSystemId,
+          name: document.getElementById('cfg-series-name').value,
+          code: document.getElementById('cfg-series-code').value,
+          sort_order: parseInt(document.getElementById('cfg-series-sort').value || 0, 10),
+        };
+        try {
+          await authenticatedFetch(id ? `/configurator/frame-series/${id}` : '/configurator/frame-series', {
+            method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+          });
+          hideModal(document.getElementById('cfg-series-modal'));
+          await cfgLoadTree();
+        } catch (err) { showNotification(err.message, 'danger'); }
+      });
+      async function cfgDeleteSeries(id) {
+        if (!confirm('Delete this frame series and everything under it?')) return;
+        try { await authenticatedFetch(`/configurator/frame-series/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+        catch (err) { showNotification(err.message, 'danger'); }
+      }
+
+      // ---- Frame Profile CRUD ----
+      function cfgAddFormulaTerm(term) {
+        const wrap = document.getElementById('cfg-formula-terms');
+        const row = document.createElement('div');
+        row.className = 'row g-2 align-items-center mb-2 cfg-formula-row';
+        const isSection = (term?.var || '').startsWith('section:');
+        const sectionRef = isSection ? term.var.slice(8) : '';
+        const otherProfiles = (cfgFindSeries(cfgSelectedSeriesId)?.profiles || [])
+          .filter(p => p.id != cfgSelectedProfileId)
+          .map(p => `<option value="${esc(p.role_label)}" ${sectionRef === p.role_label ? 'selected' : ''}>${esc(p.role_label)}</option>`).join('');
+        const currentVar = term && !isSection ? term.var : (term ? 'section' : 'fixed');
+        row.innerHTML = `
+          <div class="col-2">
+            <select class="form-select form-select-sm cfg-term-sign">
+              <option value="1" ${!term || term.sign >= 0 ? 'selected' : ''}>+</option>
+              <option value="-1" ${term && term.sign < 0 ? 'selected' : ''}>−</option>
+            </select>
+          </div>
+          <div class="col-3">
+            <select class="form-select form-select-sm cfg-term-var" onchange="cfgToggleTermInputs(this)">
+              <option value="W" ${currentVar === 'W' ? 'selected' : ''}>Width</option>
+              <option value="H" ${currentVar === 'H' ? 'selected' : ''}>Height</option>
+              <option value="TH" ${currentVar === 'TH' ? 'selected' : ''}>Total Frame Height</option>
+              <option value="fixed" ${currentVar === 'fixed' ? 'selected' : ''}>Fixed</option>
+              <option value="if_threshold" ${currentVar === 'if_threshold' ? 'selected' : ''}>If Threshold</option>
+              <option value="section" ${currentVar === 'section' ? 'selected' : ''}>Section</option>
+            </select>
+          </div>
+          <div class="col-4">
+            <input type="number" step="0.0001" class="form-control form-control-sm cfg-term-value" placeholder="value" value="${term?.value ?? ''}" style="${currentVar === 'fixed' ? '' : 'display:none'}">
+            <select class="form-select form-select-sm cfg-term-ref" style="${currentVar === 'section' ? '' : 'display:none'}"><option value="">— role —</option>${otherProfiles}</select>
+          </div>
+          <div class="col-2">
+            <button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.cfg-formula-row').remove()"><i class="ti ti-x"></i></button>
+          </div>`;
+        wrap.appendChild(row);
+      }
+      function cfgToggleTermInputs(sel) {
+        const row = sel.closest('.cfg-formula-row');
+        row.querySelector('.cfg-term-value').style.display = sel.value === 'fixed' ? '' : 'none';
+        row.querySelector('.cfg-term-ref').style.display = sel.value === 'section' ? '' : 'none';
+      }
+      function cfgCollectFormula() {
+        return Array.from(document.querySelectorAll('.cfg-formula-row')).map(row => {
+          const varType = row.querySelector('.cfg-term-var').value;
+          const term = { sign: parseInt(row.querySelector('.cfg-term-sign').value, 10) };
+          if (varType === 'section') term.var = 'section:' + row.querySelector('.cfg-term-ref').value;
+          else term.var = varType;
+          if (varType === 'fixed') term.value = parseFloat(row.querySelector('.cfg-term-value').value || 0);
+          return term;
+        });
+      }
+
+      async function cfgOpenProfileModal(id) {
+        await cfgLoadProducts();
+        const p = id ? cfgFindProfile(id) : null;
+        document.getElementById('cfg-profile-id').value = id || '';
+        document.getElementById('cfg-profile-label').value = p?.role_label || '';
+        document.getElementById('cfg-profile-product').innerHTML = cfgProductOptions(p?.product_id);
+        document.getElementById('cfg-profile-condition').value = p?.condition || '';
+        document.getElementById('cfg-profile-glassthicknesses').value = (p?.glass_thicknesses || []).join(', ');
+        document.getElementById('cfg-profile-sectionheight').value = p?.section_height ?? 0;
+        document.getElementById('cfg-profile-qtyperopening').value = p?.qty_per_opening ?? 1;
+        document.getElementById('cfg-formula-terms').innerHTML = '';
+        (p?.formula || []).forEach(t => cfgAddFormulaTerm(t));
+        showModal(document.getElementById('cfg-profile-modal'));
+      }
+      document.getElementById('cfg-profile-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('cfg-profile-id').value;
+        const glassRaw = document.getElementById('cfg-profile-glassthicknesses').value.trim();
+        const payload = {
+          frame_series_id: cfgSelectedSeriesId,
+          role_label: document.getElementById('cfg-profile-label').value,
+          product_id: document.getElementById('cfg-profile-product').value,
+          formula: cfgCollectFormula(),
+          condition: document.getElementById('cfg-profile-condition').value || null,
+          glass_thicknesses: glassRaw ? glassRaw.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n)) : null,
+          section_height: parseFloat(document.getElementById('cfg-profile-sectionheight').value || 0),
+          qty_per_opening: parseInt(document.getElementById('cfg-profile-qtyperopening').value || 1, 10),
+        };
+        try {
+          await authenticatedFetch(id ? `/configurator/frame-profiles/${id}` : '/configurator/frame-profiles', {
+            method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+          });
+          hideModal(document.getElementById('cfg-profile-modal'));
+          await cfgLoadTree();
+        } catch (err) { showNotification(err.message, 'danger'); }
+      });
+      async function cfgDeleteProfile(id) {
+        if (!confirm('Delete this profile and its components/fasteners?')) return;
+        try { await authenticatedFetch(`/configurator/frame-profiles/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+        catch (err) { showNotification(err.message, 'danger'); }
+      }
+
+      // ---- Component CRUD ----
+      async function cfgOpenComponentModal(id) {
+        await cfgLoadProducts();
+        const c = id ? cfgFindComponent(id) : null;
+        document.getElementById('cfg-component-id').value = id || '';
+        document.getElementById('cfg-component-label').value = c?.label || '';
+        document.getElementById('cfg-component-product').innerHTML = cfgProductOptions(c?.product_id);
+        document.getElementById('cfg-component-qtytype').value = c?.qty_type || 'per_opening';
+        document.getElementById('cfg-component-qtyper').value = c?.qty_per ?? 1;
+        showModal(document.getElementById('cfg-component-modal'));
+      }
+      document.getElementById('cfg-component-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('cfg-component-id').value;
+        const payload = {
+          frame_profile_id: cfgSelectedProfileId,
+          label: document.getElementById('cfg-component-label').value,
+          product_id: document.getElementById('cfg-component-product').value,
+          qty_type: document.getElementById('cfg-component-qtytype').value,
+          qty_per: parseFloat(document.getElementById('cfg-component-qtyper').value || 1),
+        };
+        try {
+          await authenticatedFetch(id ? `/configurator/frame-components/${id}` : '/configurator/frame-components', {
+            method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+          });
+          hideModal(document.getElementById('cfg-component-modal'));
+          await cfgLoadTree();
+        } catch (err) { showNotification(err.message, 'danger'); }
+      });
+      async function cfgDeleteComponent(id) {
+        if (!confirm('Delete this component and its fasteners?')) return;
+        try { await authenticatedFetch(`/configurator/frame-components/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+        catch (err) { showNotification(err.message, 'danger'); }
+      }
+
+      // ---- Fastener CRUD ----
+      async function cfgOpenFastenerModal(id) {
+        await cfgLoadProducts();
+        let f = null;
+        const component = cfgFindComponent(cfgSelectedComponentId);
+        if (id) f = (component?.fasteners || []).find(x => x.id == id);
+        document.getElementById('cfg-fastener-id').value = id || '';
+        document.getElementById('cfg-fastener-label').value = f?.label || '';
+        document.getElementById('cfg-fastener-product').innerHTML = cfgProductOptions(f?.product_id);
+        document.getElementById('cfg-fastener-qtyper').value = f?.qty_per ?? 1;
+        showModal(document.getElementById('cfg-fastener-modal'));
+      }
+      document.getElementById('cfg-fastener-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('cfg-fastener-id').value;
+        const payload = {
+          frame_component_id: cfgSelectedComponentId,
+          label: document.getElementById('cfg-fastener-label').value,
+          product_id: document.getElementById('cfg-fastener-product').value,
+          qty_per: parseFloat(document.getElementById('cfg-fastener-qtyper').value || 1),
+        };
+        try {
+          await authenticatedFetch(id ? `/configurator/frame-fasteners/${id}` : '/configurator/frame-fasteners', {
+            method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+          });
+          hideModal(document.getElementById('cfg-fastener-modal'));
+          await cfgLoadTree();
+        } catch (err) { showNotification(err.message, 'danger'); }
+      });
+      async function cfgDeleteFastener(id) {
+        if (!confirm('Delete this fastener?')) return;
+        try { await authenticatedFetch(`/configurator/frame-fasteners/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+        catch (err) { showNotification(err.message, 'danger'); }
+      }
+
+      // ==================== Configurator: Door Catalog ====================
+      // Flat lookup tables (not a hierarchy) — one generic CRUD driver per entity type.
+      let dcData = { door_types: [], rails: [], rail_lugs: [], mid_lugs: [], glass_specs: [], setting_block_kits: [], tie_rods: [] };
+
+      // field: [domSuffix, jsonKey, 'text'|'number']
+      const DC_ENTITIES = {
+        doorType: {
+          api: 'door-types', dataKey: 'door_type', listKey: 'door_types',
+          fields: [['series', 'series', 'text'], ['stileName', 'stile_name', 'text'], ['stileHeight', 'stile_height', 'number'],
+                   ['bevPn', 'bev_pn', 'text'], ['rabPn', 'rab_pn', 'text'], ['cpPn', 'cp_pn', 'text'], ['astPn', 'ast_pn', 'text'], ['inactPn', 'inact_pn', 'text']],
+        },
+        rail: {
+          api: 'rails', dataKey: 'rail', listKey: 'rails',
+          fields: [['railType', 'rail_type', 'text'], ['label', 'label', 'text'], ['valueIn', 'value_in', 'number'],
+                   ['stdPn', 'std_pn', 'text'], ['thermalPn', 'thermal_pn', 'text'], ['monPn', 'mon_pn', 'text'],
+                   ['stackedStdPn', 'stacked_std_pn', 'text'], ['stackedThermalPn', 'stacked_thermal_pn', 'text'], ['stackedMonPn', 'stacked_mon_pn', 'text']],
+        },
+        railLug: {
+          api: 'rail-lugs', dataKey: 'rail_lug', listKey: 'rail_lugs',
+          fields: [['railPn', 'rail_pn', 'text'], ['lugPn', 'lug_pn', 'text']],
+        },
+        midLug: {
+          api: 'mid-lugs', dataKey: 'mid_lug', listKey: 'mid_lugs',
+          fields: [['railPn', 'rail_pn', 'text'], ['lugPn', 'lug_pn', 'text'], ['f1Pn', 'f1_pn', 'text'], ['f1Qty', 'f1_qty', 'number'], ['f2Pn', 'f2_pn', 'text'], ['f2Qty', 'f2_qty', 'number']],
+        },
+        glassSpec: {
+          api: 'glass-specs', dataKey: 'glass_spec', listKey: 'glass_specs',
+          fields: [['thickness', 'thickness', 'text'], ['stopPn', 'stop_pn', 'text'], ['gasketPn', 'gasket_pn', 'text'], ['gasket2Pn', 'gasket2_pn', 'text'], ['qtyFactor', 'gasket_qty_factor', 'number'], ['stopHeight', 'stop_height', 'number']],
+        },
+        sbk: {
+          api: 'setting-block-kits', dataKey: 'setting_block_kit', listKey: 'setting_block_kits',
+          fields: [['series', 'series', 'text'], ['glassThickness', 'glass_thickness', 'text'], ['kit1Pn', 'kit1_pn', 'text'], ['kit2Pn', 'kit2_pn', 'text']],
+        },
+        tieRod: {
+          api: 'tie-rods', dataKey: 'tie_rod', listKey: 'tie_rods',
+          fields: [['series', 'series', 'text'], ['pn', 'pn', 'text'], ['minLen', 'min_len', 'number'], ['maxLen', 'max_len', 'number']],
+        },
+      };
+
+      async function dcLoadAll() {
+        const data = await authenticatedFetch('/configurator/door-catalog');
+        dcData = data;
+        Object.keys(DC_ENTITIES).forEach(dcRenderTable);
+      }
+
+      function dcFind(type, id) {
+        const list = dcData[DC_ENTITIES[type].listKey] || [];
+        return list.find(r => r.id == id) || null;
+      }
+
+      function dcRenderTable(type) {
+        const list = dcData[DC_ENTITIES[type].listKey] || [];
+        const tbody = document.getElementById(`dc-${type}-tbody`);
+        if (!tbody) return;
+        const renderers = {
+          doorType: r => `<td>${esc(r.series)}</td><td>${esc(r.stile_name)}</td><td>${r.stile_height}</td><td>${esc(r.bev_pn||'')}</td><td>${esc(r.rab_pn||'')}</td><td>${esc(r.cp_pn||'')}</td><td>${esc(r.ast_pn||'')}</td><td>${esc(r.inact_pn||'')}</td>`,
+          rail: r => `<td><span class="badge bg-blue-lt">${esc(r.rail_type)}</span></td><td>${esc(r.label)}</td><td>${r.value_in}"</td><td>${esc(r.std_pn||'')}</td><td>${esc(r.thermal_pn||'')}</td><td>${esc(r.mon_pn||'')}</td><td class="small text-muted">${[r.stacked_std_pn,r.stacked_thermal_pn,r.stacked_mon_pn].filter(Boolean).join(', ')}</td>`,
+          railLug: r => `<td>${esc(r.rail_pn)}</td><td>${esc(r.lug_pn)}</td>`,
+          midLug: r => `<td>${esc(r.rail_pn)}</td><td>${esc(r.lug_pn)}</td><td>${esc(r.f1_pn||'')} ${r.f1_pn?`(${r.f1_qty})`:''}</td><td>${esc(r.f2_pn||'')} ${r.f2_pn?`(${r.f2_qty})`:''}</td>`,
+          glassSpec: r => `<td>${esc(r.thickness)}</td><td>${esc(r.stop_pn||'')}</td><td>${esc(r.gasket_pn||'')}</td><td>${esc(r.gasket2_pn||'')}</td><td>${r.gasket_qty_factor ?? ''}</td><td>${r.stop_height ?? ''}</td>`,
+          sbk: r => `<td>${esc(r.series)}</td><td>${esc(r.glass_thickness)}</td><td>${esc(r.kit1_pn||'')}</td><td>${esc(r.kit2_pn||'')}</td>`,
+          tieRod: r => `<td>${esc(r.series||'')}</td><td>${esc(r.pn)}</td><td>${r.min_len ?? ''}</td><td>${r.max_len ?? ''}</td>`,
+        };
+        tbody.innerHTML = list.map(r => `
+          <tr>
+            ${renderers[type](r)}
+            <td class="text-end">
+              <button type="button" class="btn btn-sm btn-icon" onclick="dcOpenModal('${type}', ${r.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn btn-sm btn-icon text-danger" onclick="dcDelete('${type}', ${r.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('') || `<tr><td colspan="9" class="text-muted">None yet.</td></tr>`;
+        applyActionPermissions();
+      }
+
+      function dcOpenModal(type, id) {
+        const entity = DC_ENTITIES[type];
+        const row = id ? dcFind(type, id) : null;
+        document.getElementById(`dc-${type}-id`).value = id || '';
+        entity.fields.forEach(([dom, key, kind]) => {
+          const el = document.getElementById(`dc-${type}-${dom}`);
+          if (!el) return;
+          el.value = row ? (row[key] ?? '') : (kind === 'number' ? (dom.endsWith('Qty') ? 0 : '') : (el.tagName === 'SELECT' ? el.value : ''));
+        });
+        showModal(document.getElementById(`dc-${type}-modal`));
+      }
+
+      async function dcDelete(type, id) {
+        if (!confirm('Delete this entry?')) return;
+        try {
+          await authenticatedFetch(`/configurator/${DC_ENTITIES[type].api}/${id}`, { method: 'DELETE' });
+          await dcLoadAll();
+        } catch (err) { showNotification(err.message, 'danger'); }
+      }
+
+      Object.keys(DC_ENTITIES).forEach(type => {
+        const form = document.getElementById(`dc-${type}-form`);
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const entity = DC_ENTITIES[type];
+          const id = document.getElementById(`dc-${type}-id`).value;
+          const payload = {};
+          entity.fields.forEach(([dom, key, kind]) => {
+            const el = document.getElementById(`dc-${type}-${dom}`);
+            if (!el) return;
+            const raw = el.value;
+            payload[key] = kind === 'number' ? (raw === '' ? null : parseFloat(raw)) : (raw || null);
+          });
+          try {
+            await authenticatedFetch(id ? `/configurator/${entity.api}/${id}` : `/configurator/${entity.api}`, {
+              method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+            });
+            hideModal(document.getElementById(`dc-${type}-modal`));
+            await dcLoadAll();
+          } catch (err) { showNotification(err.message, 'danger'); }
+        });
       });
 
     </script>

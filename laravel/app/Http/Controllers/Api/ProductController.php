@@ -304,6 +304,35 @@ class ProductController extends Controller
         return response()->json($product);
     }
 
+    /**
+     * Update physical properties used by the configurator (stock length,
+     * weight per inch). These don't vary by finish, so the values are
+     * propagated to every product sharing this part_number, not just the
+     * row being edited from.
+     */
+    public function updateConfiguratorSpecs(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'configurator_length' => 'nullable|numeric|min:0',
+            'configurator_weight_per_inch' => 'nullable|numeric|min:0',
+        ]);
+
+        if (! $product->part_number) {
+            $product->update($validated);
+
+            return response()->json(['product' => $product->fresh(), 'linked_products' => []]);
+        }
+
+        Product::where('part_number', $product->part_number)->update($validated);
+
+        $linked = Product::where('part_number', $product->part_number)->get(['id', 'sku', 'part_number', 'finish', 'description']);
+
+        return response()->json([
+            'product' => $product->fresh(),
+            'linked_products' => $linked,
+        ]);
+    }
+
     public function destroy(Product $product)
     {
         $product->delete();

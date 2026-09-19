@@ -12,14 +12,17 @@ class DoorFrameFrameConfig extends Model
     protected $fillable = [
         'configuration_id',
         'frame_system_product_id',
+        'frame_series_id',
         'glazing',
         'has_transom',
+        'has_threshold',
         'transom_glazing',
         'total_frame_height',
     ];
 
     protected $casts = [
         'has_transom' => 'boolean',
+        'has_threshold' => 'boolean',
         'total_frame_height' => 'decimal:2',
     ];
 
@@ -49,6 +52,14 @@ class DoorFrameFrameConfig extends Model
     public function frameSystemProduct()
     {
         return $this->belongsTo(Product::class, 'frame_system_product_id');
+    }
+
+    /**
+     * Get the selected catalog frame series
+     */
+    public function frameSeries()
+    {
+        return $this->belongsTo(ConfiguratorFrameSeries::class, 'frame_series_id');
     }
 
     /**
