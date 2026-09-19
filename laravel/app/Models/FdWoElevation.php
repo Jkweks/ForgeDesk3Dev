@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\Configurator\ElevationConfigurationMatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Log;
 
 class FdWoElevation extends Model
 {
@@ -20,6 +22,29 @@ class FdWoElevation extends Model
         'date_completed' => 'date',
         'joint_qty' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        // Every Door/Frame elevation should have a matching configurator
+        // record going forward. Best-effort: a failure here (e.g. the
+        // elevation type isn't Door/Frame, or the matcher errors) must never
+        // block creating the elevation itself, which is the primary,
+        // load-bearing action.
+        static::created(function (FdWoElevation $elevation) {
+            if (! in_array($elevation->elevationType?->name, ['Door', 'Frame'], true)) {
+                return;
+            }
+
+            try {
+                app(ElevationConfigurationMatcher::class)->syncWorkOrder($elevation->workOrder);
+            } catch (\Throwable $e) {
+                Log::error('Failed to auto-match configurator configuration for elevation', [
+                    'elevation_id' => $elevation->id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
 
     /**
      * The line's effective "minutes per joint": the sum of the per-step rates
