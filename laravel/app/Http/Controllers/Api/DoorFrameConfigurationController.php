@@ -92,6 +92,7 @@ class DoorFrameConfigurationController extends Controller
             $config = DoorFrameConfiguration::with([
                 'businessJob',
                 'workOrder',
+                'jobReservation',
                 'doors',
                 'openingSpecs',
                 'frameConfig.frameSeries.frameSystem',
@@ -778,8 +779,11 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Release configuration to production
      */
-    public function release($id, \App\Services\Configurator\ElevationConfigurationMatcher $matcher)
-    {
+    public function release(
+        $id,
+        \App\Services\Configurator\ElevationConfigurationMatcher $matcher,
+        \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge
+    ) {
         try {
             $config = DoorFrameConfiguration::with([
                 'openingSpecs',
@@ -821,10 +825,26 @@ class DoorFrameConfigurationController extends Controller
                 ]);
             }
 
+            // Commit the generated BOM against real inventory the same way
+            // every other fulfillment path does. Best-effort: a config with
+            // no parts generated yet (frame/door config saved but "Generate"
+            // never clicked) shouldn't be blocked from releasing — it just
+            // won't have a reservation until parts exist and this is re-run.
+            $reservation = null;
+            try {
+                $reservation = $reservationBridge->createReservation($config, auth()->user());
+            } catch (\Throwable $e) {
+                Log::warning('Failed to auto-create job reservation on release', [
+                    'config_id' => $id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+
             Log::info('Configuration released', [
                 'config_id' => $id,
                 'released_by' => auth()->id(),
                 'work_order_id' => $workOrder?->id,
+                'job_reservation_id' => $reservation?->id,
             ]);
 
             return response()->json([
@@ -835,6 +855,8 @@ class DoorFrameConfigurationController extends Controller
                     'status_label' => $config->status_label,
                     'work_order_id' => $config->work_order_id,
                     'work_order_release_token' => $workOrder?->release_token,
+                    'job_reservation_id' => $reservation?->id,
+                    'job_reservation_number' => $reservation?->reservation_id,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -848,6 +870,65 @@ class DoorFrameConfigurationController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Manually (re)trigger reservation creation — for a configuration that
+     * was released before its BOM was generated. No-op (returns the existing
+     * reservation) if one already exists.
+     */
+    public function createReservation($id, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if ($config->status !== 'released') {
+            return response()->json([
+                'error' => 'Cannot reserve',
+                'message' => 'Only a released configuration can be committed against inventory.',
+            ], 422);
+        }
+
+        try {
+            $reservation = $reservationBridge->createReservation($config, auth()->user());
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'error' => 'Cannot reserve',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Reservation created successfully',
+            'job_reservation_id' => $reservation->id,
+            'job_reservation_number' => $reservation->reservation_id,
+        ]);
+    }
+
+    /**
+     * Export a combined cut-sheet PDF (frame + door + hardware BOM).
+     */
+    public function exportPdf($id)
+    {
+        $config = DoorFrameConfiguration::with([
+            'businessJob',
+            'workOrder',
+            'doors',
+            'openingSpecs',
+            'frameConfig.frameSeries.frameSystem',
+            'frameConfig.parts.product',
+            'doorConfigs.parts.product',
+            'hardwareParts.product',
+        ])->findOrFail($id);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.configurator-cut-sheet', [
+            'config' => $config,
+        ]);
+        $pdf->setPaper('letter', 'portrait');
+
+        $tags = $config->doors->pluck('door_tag')->implode('-') ?: $config->id;
+        $filename = 'CutSheet_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $config->businessJob->job_number.'_'.$tags).'.pdf';
+
+        return $pdf->download($filename);
     }
 
     /**
@@ -866,6 +947,11 @@ class DoorFrameConfigurationController extends Controller
                 'id' => $config->workOrder->id,
                 'release_token' => $config->workOrder->release_token,
                 'status' => $config->workOrder->status,
+            ] : null,
+            'job_reservation' => $config->jobReservation ? [
+                'id' => $config->jobReservation->id,
+                'reservation_id' => $config->jobReservation->reservation_id,
+                'status' => $config->jobReservation->status,
             ] : null,
             'configuration_name' => $config->configuration_name,
             'job_scope' => $config->job_scope,

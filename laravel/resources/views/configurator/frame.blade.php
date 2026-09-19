@@ -53,6 +53,8 @@
               </div>
               <div class="card-actions">
                 <span class="badge" id="fb-status-badge"></span>
+                <button class="btn btn-outline-secondary ms-2" id="fb-reserve-btn" onclick="fbCreateReservation()" style="display:none" data-permission="configurator.release"><i class="ti ti-package me-1"></i>Create Reservation</button>
+                <button class="btn btn-outline-primary ms-2" onclick="fbExportPdf()" data-permission="configurator.view"><i class="ti ti-file-download me-1"></i>Export PDF</button>
                 <button class="btn btn-success ms-2" id="fb-release-btn" onclick="fbRelease()" data-permission="configurator.release"><i class="ti ti-lock me-1"></i>Release</button>
               </div>
             </div>
@@ -671,11 +673,13 @@ function fbRenderDetail() {
   const c = fbSelectedDetail;
   document.getElementById('fb-detail-title').textContent = `${c.business_job.job_number} — ${c.configuration_name || c.scope_label}`;
   const woLabel = c.work_order ? ` · WO ${c.work_order.release_token}` : ' · No work order yet';
-  document.getElementById('fb-detail-subtitle').textContent = `${c.business_job.job_name} · Qty ${c.quantity} · ${c.door_tags.join(', ')}${woLabel}`;
+  const resLabel = c.job_reservation ? ` · Reservation ${c.job_reservation.reservation_id}` : '';
+  document.getElementById('fb-detail-subtitle').textContent = `${c.business_job.job_name} · Qty ${c.quantity} · ${c.door_tags.join(', ')}${woLabel}${resLabel}`;
   const badge = document.getElementById('fb-status-badge');
   badge.textContent = c.status_label;
   badge.className = 'badge ' + (c.status === 'released' ? 'bg-green-lt' : 'bg-yellow-lt');
   document.getElementById('fb-release-btn').style.display = (c.status === 'draft' && c.is_complete) ? '' : 'none';
+  document.getElementById('fb-reserve-btn').style.display = (c.status === 'released' && !c.job_reservation) ? '' : 'none';
 
   const errBox = document.getElementById('fb-validation-errors');
   errBox.innerHTML = (c.validation_errors && c.validation_errors.length)
@@ -982,6 +986,41 @@ async function fbRelease() {
     await fbLoadList();
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+async function fbCreateReservation() {
+  try {
+    const data = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/create-reservation`, { method: 'POST' });
+    showNotification(`Reservation ${data.job_reservation_number || data.job_reservation_id} created`, 'success');
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+async function fbExportPdf() {
+  try {
+    showNotification('Generating cut sheet PDF...', 'info');
+    const response = await apiCall(`/door-frame-configurations/${fbSelectedId}/export-pdf`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      showNotification(err.message || 'PDF export failed', 'danger');
+      return;
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = match ? match[1].replace(/['"]/g, '') : `CutSheet_${fbSelectedId}.pdf`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Cut sheet PDF export error:', err);
+    showNotification('Failed to export cut sheet PDF', 'danger');
+  }
 }
 
 window.sessionReady?.then(() => { fbLoadJobFilterOptions(); fbLoadList(); });

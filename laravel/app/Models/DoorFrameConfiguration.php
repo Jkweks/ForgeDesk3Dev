@@ -13,6 +13,7 @@ class DoorFrameConfiguration extends Model
     protected $fillable = [
         'business_job_id',
         'work_order_id',
+        'job_reservation_id',
         'configuration_name',
         'job_scope',
         'quantity',
@@ -62,6 +63,16 @@ class DoorFrameConfiguration extends Model
     public function workOrder()
     {
         return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
+    }
+
+    /**
+     * The reservation that commits this configuration's generated BOM
+     * (frame + door + hardware parts) against real inventory. Set on
+     * release — see ConfigurationReservationBridge.
+     */
+    public function jobReservation()
+    {
+        return $this->belongsTo(JobReservation::class, 'job_reservation_id');
     }
 
     /**
