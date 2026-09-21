@@ -1000,6 +1000,20 @@
                                         <span class="badge bg-secondary-lt text-secondary ms-1" id="job-doc-badge-${job.id}">0</span>
                                     </button>
                                 </li>
+                                <li class="nav-item" role="presentation" data-permission="configurator.view">
+                                    <button class="nav-link" id="job-tab-doorcfg-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'doorcfg')" type="button">
+                                        <i class="ti ti-door me-1"></i>Door Configs
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-doorcfg-badge-${job.id}">0</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation" data-permission="configurator.view">
+                                    <button class="nav-link" id="job-tab-hwsets-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'hwsets')" type="button">
+                                        <i class="ti ti-tools me-1"></i>Hardware Sets
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-hwsets-badge-${job.id}">0</span>
+                                    </button>
+                                </li>
                             </ul>
                             <!-- Tab panes -->
                             <div class="px-3 py-2">
@@ -1096,6 +1110,64 @@
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Door Configs pane -->
+                                <div id="job-pane-doorcfg-${job.id}" style="display:none;">
+                                    <div id="detail-doorcfg-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-doorcfg-content-${job.id}" style="display:none;"></div>
+                                </div>
+                                <!-- Hardware Sets pane -->
+                                <div id="job-pane-hwsets-${job.id}" style="display:none;">
+                                    <div id="detail-hwsets-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-hwsets-content-${job.id}" style="display:none;">
+                                        <div class="d-flex justify-content-end mb-2">
+                                            <button class="btn btn-sm btn-outline-primary" data-permission="configurator.catalog.manage" onclick="showJobHwSetForm(${job.id})"><i class="ti ti-plus me-1"></i>New Set</button>
+                                        </div>
+                                        <div id="job-hwsets-list-${job.id}"></div>
+
+                                        <!-- Inline new/edit set form -->
+                                        <div id="job-hwset-form-${job.id}" style="display:none;" class="mt-2 p-3 rounded job-tx-form-wrap">
+                                            <input type="hidden" id="job-hwset-id-${job.id}">
+                                            <h6 class="mb-2" id="job-hwset-form-title-${job.id}">New Hardware Set</h6>
+                                            <div class="row g-2">
+                                                <div class="col-md-8">
+                                                    <label class="form-label form-label-sm mb-1">Name</label>
+                                                    <input type="text" class="form-control form-control-sm" id="job-hwset-name-${job.id}">
+                                                </div>
+                                                <div class="col-md-4 d-flex align-items-end">
+                                                    <label class="form-check"><input class="form-check-input" type="checkbox" id="job-hwset-ispair-${job.id}"><span class="form-check-label">Pair</span></label>
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-label form-label-sm mb-1">Notes</label>
+                                                    <input type="text" class="form-control form-control-sm" id="job-hwset-notes-${job.id}" placeholder="Optional">
+                                                </div>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
+                                                <label class="form-label form-label-sm mb-0">Items</label>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="jobHwSetAddItemRow(${job.id})"><i class="ti ti-plus"></i> Item</button>
+                                            </div>
+                                            <div id="job-hwset-items-${job.id}"></div>
+                                            <div class="d-flex gap-2 mt-2">
+                                                <button class="btn btn-primary btn-sm" onclick="submitJobHwSet(${job.id})">Save Set</button>
+                                                <button class="btn btn-link btn-sm text-secondary p-0" onclick="hideJobHwSetForm(${job.id})">Cancel</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Apply-to-opening modal target (rendered inline, one per job row) -->
+                                        <div id="job-hwset-apply-${job.id}" style="display:none;" class="mt-2 p-3 rounded job-tx-form-wrap">
+                                            <input type="hidden" id="job-hwset-apply-setid-${job.id}">
+                                            <h6 class="mb-2">Apply to Opening(s)</h6>
+                                            <div id="job-hwset-apply-configs-${job.id}"></div>
+                                            <div class="d-flex gap-2 mt-2">
+                                                <button class="btn btn-primary btn-sm" onclick="submitJobHwSetApply(${job.id})">Apply</button>
+                                                <button class="btn btn-link btn-sm text-secondary p-0" onclick="hideJobHwSetApplyForm(${job.id})">Cancel</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </td>
@@ -1129,7 +1201,7 @@
 
         function switchJobTab(jobId, tab) {
             // Update button active states
-            ['wo', 'res', 'tx', 'doc'].forEach(t => {
+            ['wo', 'res', 'tx', 'doc', 'doorcfg', 'hwsets'].forEach(t => {
                 const btn = document.getElementById(`job-tab-${t}-btn-${jobId}`);
                 const pane = document.getElementById(`job-pane-${t}-${jobId}`);
                 if (btn) btn.classList.toggle('active', t === tab);
@@ -1145,6 +1217,8 @@
                 else if (tab === 'res') loadJobReservationsInline(jobId);
                 else if (tab === 'tx') loadJobTransactions(jobId);
                 else if (tab === 'doc') loadJobDocuments(jobId);
+                else if (tab === 'doorcfg') loadJobDoorConfigs(jobId);
+                else if (tab === 'hwsets') loadJobHwSets(jobId);
             }
         }
 
@@ -1376,6 +1450,287 @@
             };
 
             contentEl.innerHTML = Object.keys(JOB_DOC_TYPES).map(section).join('');
+        }
+
+        async function loadJobDoorConfigs(jobId) {
+            const loadingEl = document.getElementById(`detail-doorcfg-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-doorcfg-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            try {
+                const r = await jobsAPI(`/api/v1/door-frame-configurations?business_job_id=${jobId}`);
+                if (!r.ok) {
+                    if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">You don’t have access to this job’s door configurations.</div>';
+                } else {
+                    const data = await r.json();
+                    renderJobDoorConfigs(jobId, data.configurations || []);
+                }
+            } catch (e) {
+                console.error(e);
+                if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">Failed to load door configurations.</div>';
+            } finally {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (contentEl) contentEl.style.display = 'block';
+            }
+        }
+
+        function doorConfigStatusBadgeClass(status) {
+            if (status === 'reserved') return 'bg-blue-lt';
+            if (status === 'released' || status === 'in_progress' || status === 'completed') return 'bg-green-lt';
+            return 'bg-yellow-lt';
+        }
+
+        function renderJobDoorConfigs(jobId, configs) {
+            const contentEl = document.getElementById(`detail-doorcfg-content-${jobId}`);
+            if (!contentEl) return;
+            const badge = document.getElementById(`job-doorcfg-badge-${jobId}`);
+            if (badge) badge.textContent = configs.length;
+
+            if (!configs.length) {
+                contentEl.innerHTML = '<div class="job-detail-empty">No door/frame configurations for this job yet.</div>';
+                return;
+            }
+
+            const rows = configs.map(c => `
+                <tr>
+                    <td>${escapeHtml(c.door_tags || '—')}</td>
+                    <td>${escapeHtml(c.scope_label)}</td>
+                    <td><span class="badge ${doorConfigStatusBadgeClass(c.status)}">${escapeHtml(c.status_label)}</span></td>
+                    <td>${c.quantity}</td>
+                    <td>${c.work_order_release_token ? `<span class="badge bg-blue-lt">${escapeHtml(c.work_order_release_token)}</span>` : '<span class="text-secondary">—</span>'}</td>
+                    <td class="text-end">
+                        <a href="/configurator?job=${jobId}&config=${c.id}" class="btn btn-sm btn-outline-primary">Open</a>
+                    </td>
+                </tr>`).join('');
+
+            contentEl.innerHTML = `
+                <table class="table table-sm job-detail-table">
+                    <thead><tr><th>Configuration</th><th>Scope</th><th>Status</th><th>Qty</th><th>WO</th><th></th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        // ===== HARDWARE SETS =====
+
+        let jobHwSets = {};
+        let jobHwConfigsCache = {};
+        let hwlibItemsCache = null;
+
+        async function hwlibLoadItemsForPicker() {
+            if (hwlibItemsCache) return hwlibItemsCache;
+            const r = await jobsAPI('/api/v1/configurator/hwlib-admin');
+            const data = r.ok ? await r.json() : { items: [] };
+            hwlibItemsCache = data.items || [];
+            return hwlibItemsCache;
+        }
+
+        async function loadJobHwSets(jobId) {
+            const loadingEl = document.getElementById(`detail-hwsets-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-hwsets-content-${jobId}`);
+            if (loadingEl) loadingEl.style.display = 'block';
+            try {
+                const [setsRes, configsRes] = await Promise.all([
+                    jobsAPI(`/api/v1/configurator/hwlib-sets?business_job_id=${jobId}`),
+                    jobsAPI(`/api/v1/door-frame-configurations?business_job_id=${jobId}`),
+                ]);
+                if (!setsRes.ok) {
+                    if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">You don’t have access to this job’s hardware sets.</div>';
+                } else {
+                    const setsData = await setsRes.json();
+                    const configsData = configsRes.ok ? await configsRes.json() : { configurations: [] };
+                    jobHwSets[jobId] = setsData.sets || [];
+                    jobHwConfigsCache[jobId] = configsData.configurations || [];
+                    await hwlibLoadItemsForPicker();
+                    renderJobHwSets(jobId);
+                }
+            } catch (e) {
+                console.error(e);
+                if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">Failed to load hardware sets.</div>';
+            } finally {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (contentEl) contentEl.style.display = 'block';
+            }
+        }
+
+        function renderJobHwSets(jobId) {
+            const listEl = document.getElementById(`job-hwsets-list-${jobId}`);
+            if (!listEl) return;
+            const sets = jobHwSets[jobId] || [];
+            const badge = document.getElementById(`job-hwsets-badge-${jobId}`);
+            if (badge) badge.textContent = sets.length;
+
+            if (!sets.length) {
+                listEl.innerHTML = '<div class="job-detail-empty">No hardware sets for this job yet.</div>';
+                return;
+            }
+
+            const appliedLabel = (c) => (c.doors || []).map(d => d.door_tag).filter(Boolean).join(', ') || `#${c.id}`;
+
+            listEl.innerHTML = `
+                <table class="table table-sm job-detail-table">
+                    <thead><tr><th>Name</th><th>Items</th><th>Pair</th><th>Applied To</th><th></th></tr></thead>
+                    <tbody>
+                        ${sets.map(s => `
+                            <tr>
+                                <td>${escapeHtml(s.name)}</td>
+                                <td>${(s.set_items || []).length}</td>
+                                <td>${s.is_pair ? 'Yes' : 'No'}</td>
+                                <td>${(s.applied_configurations || []).length
+                                    ? s.applied_configurations.map(c => `<span class="badge bg-blue-lt">${escapeHtml(appliedLabel(c))}</span>`).join(' ')
+                                    : '<span class="text-secondary">None</span>'}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary" data-permission="configurator.edit" onclick="showJobHwSetApplyForm(${jobId}, ${s.id})">Apply</button>
+                                    <button class="btn btn-sm btn-icon" data-permission="configurator.catalog.manage" onclick="editJobHwSet(${jobId}, ${s.id})"><i class="ti ti-pencil"></i></button>
+                                    <button class="btn btn-sm btn-icon text-danger" data-permission="configurator.catalog.manage" onclick="deleteJobHwSet(${jobId}, ${s.id})"><i class="ti ti-trash"></i></button>
+                                </td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>`;
+            applyActionPermissions();
+        }
+
+        function jobHwSetItemRowHtml(row) {
+            const items = hwlibItemsCache || [];
+            const opts = items.map(i => `<option value="${i.id}" ${row?.item_id == i.id ? 'selected' : ''}>${escapeHtml(i.name)}</option>`).join('');
+            return `
+                <div class="row g-2 align-items-center mb-2 job-hwset-item-row">
+                    <div class="col-md-4"><select class="form-select form-select-sm job-hwsi-item"><option value="">— select item —</option>${opts}</select></div>
+                    <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm job-hwsi-qty" placeholder="qty" value="${row?.quantity ?? 1}"></div>
+                    <div class="col-md-2"><select class="form-select form-select-sm job-hwsi-series">
+                        <option value="Standard" ${!row || row?.series === 'Standard' ? 'selected' : ''}>Standard</option>
+                        <option value="Thermal" ${row?.series === 'Thermal' ? 'selected' : ''}>Thermal</option>
+                        <option value="Monumental" ${row?.series === 'Monumental' ? 'selected' : ''}>Monumental</option>
+                    </select></div>
+                    <div class="col-md-2"><select class="form-select form-select-sm job-hwsi-leaf">
+                        <option value="both" ${!row || row?.leaf === 'both' ? 'selected' : ''}>Both</option>
+                        <option value="active" ${row?.leaf === 'active' ? 'selected' : ''}>Active</option>
+                        <option value="inactive" ${row?.leaf === 'inactive' ? 'selected' : ''}>Inactive</option>
+                    </select></div>
+                    <div class="col-md-1"><input type="text" class="form-control form-control-sm job-hwsi-notes" placeholder="notes" value="${escapeHtml(row?.notes || '')}"></div>
+                    <div class="col-md-1"><button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.job-hwset-item-row').remove()"><i class="ti ti-x"></i></button></div>
+                </div>`;
+        }
+
+        function jobHwSetAddItemRow(jobId, row) {
+            document.getElementById(`job-hwset-items-${jobId}`).insertAdjacentHTML('beforeend', jobHwSetItemRowHtml(row));
+        }
+
+        function jobHwSetCollectItems(jobId) {
+            return Array.from(document.querySelectorAll(`#job-hwset-items-${jobId} .job-hwset-item-row`)).map(row => ({
+                item_id: row.querySelector('.job-hwsi-item').value,
+                quantity: parseInt(row.querySelector('.job-hwsi-qty').value || 1, 10),
+                series: row.querySelector('.job-hwsi-series').value,
+                leaf: row.querySelector('.job-hwsi-leaf').value,
+                notes: row.querySelector('.job-hwsi-notes').value || null,
+            })).filter(r => r.item_id);
+        }
+
+        function showJobHwSetForm(jobId) {
+            document.getElementById(`job-hwset-form-${jobId}`).style.display = 'block';
+            document.getElementById(`job-hwset-form-title-${jobId}`).textContent = 'New Hardware Set';
+            document.getElementById(`job-hwset-id-${jobId}`).value = '';
+            document.getElementById(`job-hwset-name-${jobId}`).value = '';
+            document.getElementById(`job-hwset-notes-${jobId}`).value = '';
+            document.getElementById(`job-hwset-ispair-${jobId}`).checked = false;
+            document.getElementById(`job-hwset-items-${jobId}`).innerHTML = '';
+        }
+
+        function hideJobHwSetForm(jobId) {
+            document.getElementById(`job-hwset-form-${jobId}`).style.display = 'none';
+        }
+
+        function editJobHwSet(jobId, setId) {
+            const s = (jobHwSets[jobId] || []).find(x => x.id === setId);
+            if (!s) return;
+            showJobHwSetForm(jobId);
+            document.getElementById(`job-hwset-form-title-${jobId}`).textContent = 'Edit Hardware Set';
+            document.getElementById(`job-hwset-id-${jobId}`).value = s.id;
+            document.getElementById(`job-hwset-name-${jobId}`).value = s.name;
+            document.getElementById(`job-hwset-notes-${jobId}`).value = s.notes || '';
+            document.getElementById(`job-hwset-ispair-${jobId}`).checked = !!s.is_pair;
+            document.getElementById(`job-hwset-items-${jobId}`).innerHTML = '';
+            (s.set_items || []).forEach(row => jobHwSetAddItemRow(jobId, row));
+        }
+
+        async function submitJobHwSet(jobId) {
+            const id = document.getElementById(`job-hwset-id-${jobId}`).value;
+            const payload = {
+                business_job_id: jobId,
+                name: document.getElementById(`job-hwset-name-${jobId}`).value,
+                notes: document.getElementById(`job-hwset-notes-${jobId}`).value || null,
+                is_pair: document.getElementById(`job-hwset-ispair-${jobId}`).checked,
+            };
+            if (!payload.name) { showNotification('Set name is required', 'warning'); return; }
+            try {
+                const res = await jobsAPI(id ? `/api/v1/configurator/hwlib-sets/${id}` : '/api/v1/configurator/hwlib-sets', {
+                    method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+                });
+                if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to save set', 'danger'); return; }
+                const data = await res.json();
+                const setId = id || data.set.id;
+                const itemsRes = await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}/items`, {
+                    method: 'PUT', body: JSON.stringify({ items: jobHwSetCollectItems(jobId) }),
+                });
+                if (!itemsRes.ok) { const err = await itemsRes.json().catch(() => ({})); showNotification(err.message || 'Failed to save set items', 'danger'); return; }
+                const itemsData = await itemsRes.json();
+                if ((itemsData.skipped_released || []).length) {
+                    showNotification(`Set saved. ${itemsData.skipped_released.length} released opening(s) were not updated.`, 'warning');
+                } else {
+                    showNotification('Hardware set saved', 'success');
+                }
+                hideJobHwSetForm(jobId);
+                await loadJobHwSets(jobId);
+            } catch (err) { console.error(err); showNotification('Failed to save hardware set', 'danger'); }
+        }
+
+        async function deleteJobHwSet(jobId, setId) {
+            if (!confirm('Delete this hardware set? Openings using it keep their current hardware but lose the link to this set.')) return;
+            try {
+                const res = await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}`, { method: 'DELETE' });
+                if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to delete set', 'danger'); return; }
+                await loadJobHwSets(jobId);
+            } catch (err) { console.error(err); showNotification('Failed to delete hardware set', 'danger'); }
+        }
+
+        function showJobHwSetApplyForm(jobId, setId) {
+            document.getElementById(`job-hwset-apply-setid-${jobId}`).value = setId;
+            const set = (jobHwSets[jobId] || []).find(x => x.id === setId);
+            const appliedIds = new Set((set?.applied_configurations || []).map(c => c.id));
+            const configs = jobHwConfigsCache[jobId] || [];
+            const wrap = document.getElementById(`job-hwset-apply-configs-${jobId}`);
+            wrap.innerHTML = configs.length ? configs.map(c => `
+                <label class="form-check">
+                    <input class="form-check-input job-hwset-apply-cb" type="checkbox" value="${c.id}" ${appliedIds.has(c.id) ? 'checked' : ''} ${!c.can_edit ? 'disabled' : ''}>
+                    <span class="form-check-label">${escapeHtml(c.door_tags || ('#' + c.id))} — ${escapeHtml(c.scope_label || '')} ${!c.can_edit ? '<span class="text-secondary small">(released, locked)</span>' : ''}</span>
+                </label>`).join('') : '<div class="text-secondary small">No openings on this job yet.</div>';
+            document.getElementById(`job-hwset-apply-${jobId}`).style.display = 'block';
+        }
+
+        function hideJobHwSetApplyForm(jobId) {
+            document.getElementById(`job-hwset-apply-${jobId}`).style.display = 'none';
+        }
+
+        async function submitJobHwSetApply(jobId) {
+            const setId = document.getElementById(`job-hwset-apply-setid-${jobId}`).value;
+            const checked = Array.from(document.querySelectorAll(`#job-hwset-apply-configs-${jobId} .job-hwset-apply-cb:checked`)).map(cb => parseInt(cb.value, 10));
+            const set = (jobHwSets[jobId] || []).find(x => x.id == setId);
+            const previouslyApplied = new Set((set?.applied_configurations || []).map(c => c.id));
+            const toApply = checked.filter(id => !previouslyApplied.has(id));
+            const toRemove = [...previouslyApplied].filter(id => !checked.includes(id));
+
+            try {
+                if (toApply.length) {
+                    const res = await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}/apply`, {
+                        method: 'POST', body: JSON.stringify({ configuration_ids: toApply }),
+                    });
+                    if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to apply set', 'danger'); return; }
+                }
+                for (const configId of toRemove) {
+                    await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}/apply/${configId}`, { method: 'DELETE' });
+                }
+                showNotification('Hardware set applied', 'success');
+                hideJobHwSetApplyForm(jobId);
+                await loadJobHwSets(jobId);
+            } catch (err) { console.error(err); showNotification('Failed to apply hardware set', 'danger'); }
         }
 
         function showJobDocForm(jobId) {
@@ -1692,7 +2047,7 @@
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // ===== INLINE JOB EXPAND =====

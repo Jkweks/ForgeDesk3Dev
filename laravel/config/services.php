@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'cutflow' => [
+        // Reachable from inside this app's container via the Docker bridge
+        // gateway IP, since CutFlow runs as a separate compose project on
+        // this same host with its app published on 8090 — no shared Docker
+        // network needed. Override if CutFlow ever moves to another host.
+        'base_url' => env('CUTFLOW_BASE_URL', 'http://172.25.0.1:8090'),
+        'import_token' => env('CUTFLOW_IMPORT_TOKEN'),
+    ],
+
 ];

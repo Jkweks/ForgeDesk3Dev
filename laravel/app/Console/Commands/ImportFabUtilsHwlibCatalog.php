@@ -270,6 +270,7 @@ class ImportFabUtilsHwlibCatalog extends Command
                 'quantity_committed' => 0,
                 'supplier_id' => self::PLACEHOLDER_SUPPLIER_ID,
                 'is_special_order' => true,
+                'nonsof' => true,
             ]);
             $this->createdCount++;
         }

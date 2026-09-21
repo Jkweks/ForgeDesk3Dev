@@ -24,7 +24,7 @@ class WorkQueueController extends Controller
 
         $query = FdWoStage::query()
             ->actionable()
-            ->with(['elevation.stages', 'elevation.workOrder.businessJob', 'assignedTo', 'assignees']);
+            ->with(['elevation.stages', 'elevation.workOrder.businessJob', 'elevation.doorFrameConfiguration', 'assignedTo', 'assignees']);
 
         // Filter the board to one work order, or one job's work orders.
         if ($request->filled('work_order_id')) {
@@ -46,8 +46,9 @@ class WorkQueueController extends Controller
         $gate = app(StageGateService::class);
         $stages->each(function (FdWoStage $s) use ($gate) {
             $blocker = $gate->blockingStageForLoaded($s, $s->elevation->stages);
-            $s->setAttribute('is_gated', $blocker !== null);
-            $s->setAttribute('blocking_stage_name', $blocker?->name);
+            $configReason = $gate->blockingConfigurationReasonFor($s);
+            $s->setAttribute('is_gated', $blocker !== null || $configReason !== null);
+            $s->setAttribute('blocking_stage_name', $blocker?->name ?? $configReason);
         });
 
         $rows = $stages;

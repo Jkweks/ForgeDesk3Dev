@@ -460,6 +460,10 @@
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorWeightPerInch">
                   </div>
                   <div class="col-md-3">
+                    <label class="form-label">Min. Drop Length (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorMinDropLength" placeholder="e.g. 24">
+                  </div>
+                  <div class="col-md-3">
                     <label class="form-label"><strong>Dimensions</strong></label>
                     <div id="configuratorDimensions" class="text-muted">-</div>
                   </div>
@@ -467,6 +471,12 @@
                     <button type="button" class="btn btn-primary" onclick="saveConfiguratorSpecs()" data-permission="inventory.edit">
                       <i class="ti ti-device-floppy me-1"></i>Save
                     </button>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-check">
+                      <input class="form-check-input" type="checkbox" id="configuratorIsLengthBased">
+                      <span class="form-check-label">Length-based (sold/stocked in fixed-length sticks) — when reserved from a cut length, rounds up to the next 1/10th of the Stock Length above.</span>
+                    </label>
                   </div>
                 </div>
                 <div class="mt-2 small text-muted" id="configuratorLinkedVariants"></div>
@@ -1009,6 +1019,8 @@
         document.getElementById('configuratorDimensions').textContent = dimensions.length > 0 ? dimensions.join(', ') : '-';
         document.getElementById('configuratorLength').value = product.configurator_length ?? '';
         document.getElementById('configuratorWeightPerInch').value = product.configurator_weight_per_inch ?? '';
+        document.getElementById('configuratorMinDropLength').value = product.minimum_drop_length ?? '';
+        document.getElementById('configuratorIsLengthBased').checked = !!product.is_length_based;
         document.getElementById('configuratorLinkedVariants').textContent = '';
         if (product.part_number) {
           loadConfiguratorLinkedVariants(product.part_number, product.id);
@@ -1528,6 +1540,7 @@
       try {
         const length = document.getElementById('configuratorLength').value;
         const weightPerInch = document.getElementById('configuratorWeightPerInch').value;
+        const minDropLength = document.getElementById('configuratorMinDropLength').value;
 
         const response = await apiCall(`/products/${currentProductId}/configurator-specs`, {
           method: 'PUT',
@@ -1535,6 +1548,8 @@
           body: JSON.stringify({
             configurator_length: length === '' ? null : length,
             configurator_weight_per_inch: weightPerInch === '' ? null : weightPerInch,
+            minimum_drop_length: minDropLength === '' ? null : minDropLength,
+            is_length_based: document.getElementById('configuratorIsLengthBased').checked,
           }),
         });
 

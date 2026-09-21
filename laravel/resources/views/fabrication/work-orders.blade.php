@@ -196,6 +196,9 @@
               <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
                 <i class="ti ti-door me-1"></i>Door Schedule
               </button>
+              <button class="btn btn-ghost-secondary" onclick="openCutlistUpload()" title="Send a cut list not sourced from the configurator (e.g. curtainwall) to CutFlow">
+                <i class="ti ti-cut me-1"></i>Upload Cutlist
+              </button>
               <button class="btn btn-ghost-primary" onclick="openBulkElev()">
                 <i class="ti ti-plus me-1"></i>Add Elevation
               </button>
@@ -679,6 +682,18 @@
         <button type="button" class="btn-close" onclick="hideModal(document.getElementById('doorScheduleModal'))"></button>
       </div>
       <div class="modal-body">
+        <div id="door-schedule-configs-wrap" class="mb-4 d-none">
+          <h6 class="mb-1">Existing Configurator Openings</h6>
+          <p class="text-muted small mb-2">
+            Draft openings already built in the Configurator for this job. Attach one to
+            create its elevations here — no need to re-enter the tag.
+          </p>
+          <div id="door-schedule-configs-body" class="mb-2"></div>
+          <button class="btn btn-sm btn-outline-primary" onclick="attachSelectedConfigurations()" id="door-schedule-attach-btn">
+            <i class="ti ti-link me-1"></i>Attach Selected
+          </button>
+          <hr class="my-3">
+        </div>
         <p class="text-muted small mb-3">
           Each row creates Door and/or Frame elevations with
           <strong>Programmed → CNC → Assembled</strong> stages.
@@ -706,6 +721,35 @@
         <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('doorScheduleModal'))">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveDoorSchedule()" id="door-schedule-save">
           Create Elevations
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="cutlistUploadModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload Cutlist</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('cutlistUploadModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          For lineal cut-list lines not sourced from the door/frame configurator
+          (e.g. curtainwall/storefront). Merges into this work order's CutFlow job
+          alongside anything already released from the configurator.
+        </p>
+        <div class="mb-3">
+          <label class="form-label">CSV File</label>
+          <input type="file" class="form-control" id="cutlist-upload-file" accept=".csv,.txt">
+          <div class="form-hint">Columns: part_id (or name), finish, dimension_in, qty, and optionally phase, description, row, column, leftcutangle, rightcutangle.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('cutlistUploadModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveCutlistUpload()" id="cutlist-upload-save">
+          Send to CutFlow
         </button>
       </div>
     </div>
@@ -4171,6 +4215,70 @@ function openDoorSchedule() {
     doorRowId = 0;
     addDoorRow();   // start with one empty row
     showModal(document.getElementById('doorScheduleModal'));
+    loadAvailableConfigurations();
+}
+
+async function loadAvailableConfigurations() {
+    const wrap = document.getElementById('door-schedule-configs-wrap');
+    const body = document.getElementById('door-schedule-configs-body');
+    wrap.classList.add('d-none');
+    body.innerHTML = '';
+    if (!currentWO) return;
+
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/available-configurations`);
+        const data = await r.json();
+        const configs = data.configurations || [];
+        if (!configs.length) return;
+
+        body.innerHTML = configs.map(c => `
+            <label class="d-flex align-items-start gap-2 py-1 border-bottom">
+                <input type="checkbox" class="form-check-input mt-1 door-schedule-config-pick" value="${c.id}">
+                <span>
+                    <strong>${esc(c.door_tags.join(', ') || ('Opening #' + c.id))}</strong>
+                    <span class="text-muted small ms-1">${esc(c.job_scope)} · ${esc(c.status_label)} · qty ${c.quantity}</span>
+                </span>
+            </label>`).join('');
+        wrap.classList.remove('d-none');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function attachSelectedConfigurations() {
+    if (!currentWO) return;
+    const ids = Array.from(document.querySelectorAll('.door-schedule-config-pick:checked')).map(el => el.value);
+    if (!ids.length) return;
+
+    const btn = document.getElementById('door-schedule-attach-btn');
+    btn.disabled = true;
+    btn.textContent = 'Attaching…';
+
+    let failures = 0;
+    for (const id of ids) {
+        try {
+            await API(`/work-orders/${currentWO.id}/attach-configuration/${id}`, { method: 'POST' });
+        } catch (e) {
+            console.error(e);
+            failures++;
+        }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-link me-1"></i>Attach Selected';
+
+    if (failures) {
+        fabToast(`Attached ${ids.length - failures} of ${ids.length} openings; ${failures} failed.`, 'error');
+    } else {
+        fabToast(`Attached ${ids.length} opening${ids.length > 1 ? 's' : ''}.`, 'success');
+    }
+
+    const r = await API(`/work-orders/${currentWO.id}`);
+    const wo = await r.json();
+    currentWO = wo;
+    renderElevations(wo.elevations || []);
+    loadWorkOrders();
+    loadAvailableConfigurations();
 }
 
 function addDoorRow() {
@@ -4267,6 +4375,40 @@ async function saveDoorSchedule() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Create Elevations';
+    }
+}
+
+function openCutlistUpload() {
+    if (!currentWO) return;
+    document.getElementById('cutlist-upload-file').value = '';
+    showModal(document.getElementById('cutlistUploadModal'));
+}
+
+async function saveCutlistUpload() {
+    if (!currentWO) return;
+    const fileInput = document.getElementById('cutlist-upload-file');
+    const file = fileInput.files[0];
+    if (!file) { fabToast('Choose a CSV file first.', 'warning'); return; }
+
+    const btn = document.getElementById('cutlist-upload-save');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    const fd = new FormData();
+    fd.append('csv', file);
+
+    try {
+        const r = await authenticatedUpload(`/work-orders/${currentWO.id}/cutlist-upload`, fd);
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.message || body.error || `HTTP ${r.status}`);
+        hideModal(document.getElementById('cutlistUploadModal'));
+        fabToast(body.message || 'Sent to CutFlow.', 'success');
+    } catch (e) {
+        console.error(e);
+        fabToast(`Failed to send cutlist: ${e.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send to CutFlow';
     }
 }
 

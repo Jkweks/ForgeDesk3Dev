@@ -399,6 +399,45 @@ class WorkOrderController extends Controller
         }
     }
 
+    /**
+     * Uploads a cut-list CSV for this work order that didn't come out of the
+     * configurator (e.g. a curtainwall/storefront list from an outside
+     * estimating tool) and merges it into the same CutFlow job the
+     * configurator's own released-opening export uses.
+     */
+    public function uploadCutlist(Request $request, int $id, \App\Services\Configurator\CutFlowExportService $cutFlow)
+    {
+        $request->validate([
+            'csv' => 'required|file|mimes:csv,txt',
+        ]);
+
+        try {
+            $wo = FdWorkOrder::with('businessJob')->findOrFail($id);
+
+            $rows = $cutFlow->parseCsv($request->file('csv'));
+            if (empty($rows)) {
+                return response()->json([
+                    'error' => 'No usable rows found in that file',
+                    'message' => 'Expected columns: part_id (or name), finish, dimension_in, qty, and optionally phase/description/row/column/leftcutangle/rightcutangle.',
+                ], 422);
+            }
+
+            $result = $cutFlow->sendRows($wo, $rows);
+
+            return response()->json([
+                'message' => "Sent {$result['line_count']} cut-list line(s) to CutFlow.",
+                'cutflow' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('WorkOrderController@uploadCutlist failed', ['id' => $id, 'message' => $e->getMessage()]);
+
+            return response()->json([
+                'error' => 'Failed to send cut list to CutFlow',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function updateAssignments(Request $request, int $id)
     {
         try {

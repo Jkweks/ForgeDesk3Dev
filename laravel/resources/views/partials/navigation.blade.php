@@ -71,7 +71,7 @@
                   <div class="dropdown-menu">
                     <a class="dropdown-item {{ Request::is('configurator') ? 'active' : '' }}" href="/configurator" data-permission="configurator.view">Frame Builder</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="/admin#tab-configurator-catalog" data-permission="configurator.catalog.manage">Catalog Admin</a>
+                    <a class="dropdown-item {{ Request::is('configurator/admin') ? 'active' : '' }}" href="/configurator/admin" data-permission="configurator.catalog.manage">Configurator Admin</a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">

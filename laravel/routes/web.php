@@ -99,6 +99,10 @@ Route::get('/configurator', function () {
     return view('configurator.frame');
 });
 
+Route::get('/configurator/admin', function () {
+    return view('configurator.admin');
+});
+
 // System Status
 Route::get('/status', function () {
     return view('status');

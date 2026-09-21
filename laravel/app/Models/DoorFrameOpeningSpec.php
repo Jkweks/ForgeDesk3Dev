@@ -18,6 +18,7 @@ class DoorFrameOpeningSpec extends Model
         'door_opening_height',
         'hinging',
         'finish',
+        'glazing',
     ];
 
     protected $casts = [
@@ -107,6 +108,46 @@ class DoorFrameOpeningSpec extends Model
         }
 
         return null;
+    }
+
+    /**
+     * The door config's `handing` value (LH (INSWING)/RH (INSWING)/LHR/RHR/
+     * CP SINGLE/PAIR-RHRA/PAIR-LHRA/CP PAIR), derived from opening type +
+     * hand + hinging so it never needs entering a second time on the Door
+     * tab. Center-pivot hinging takes priority over hand, matching the old
+     * per-door "CP SINGLE"/"CP PAIR" handing values, which carried no
+     * separate hand information of their own.
+     */
+    public function deriveDoorHanding(): string
+    {
+        $isPair = $this->opening_type === 'pair';
+        if ($this->hinging === 'pivot_center') {
+            return $isPair ? 'CP PAIR' : 'CP SINGLE';
+        }
+        if ($isPair) {
+            return $this->hand_pair === 'lhra_active' ? 'PAIR-LHRA' : 'PAIR-RHRA';
+        }
+
+        return match ($this->hand_single) {
+            'rh_inswing' => 'RH (INSWING)',
+            'lhr' => 'LHR',
+            'rhr' => 'RHR',
+            default => 'LH (INSWING)',
+        };
+    }
+
+    /**
+     * The door config's `hinge_type` value, derived from opening hinging so
+     * it never needs entering a second time on the Door tab.
+     */
+    public function deriveHingeType(): string
+    {
+        return match ($this->hinging) {
+            'butt' => 'BUTT HINGES',
+            'pivot_offset' => 'OFFSET PIVOTS',
+            'pivot_center' => 'CENTER PIVOTS',
+            default => 'CONTINUOUS HINGE',
+        };
     }
 
     /**

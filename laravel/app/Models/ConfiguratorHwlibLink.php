@@ -13,7 +13,7 @@ class ConfiguratorHwlibLink extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['configuration_id', 'item_id', 'quantity', 'notes', 'series', 'leaf'];
+    protected $fillable = ['configuration_id', 'item_id', 'source_set_id', 'quantity', 'notes', 'series', 'leaf'];
 
     protected $casts = ['quantity' => 'integer'];
 
@@ -25,6 +25,11 @@ class ConfiguratorHwlibLink extends Model
     public function item()
     {
         return $this->belongsTo(ConfiguratorHwlibItem::class, 'item_id');
+    }
+
+    public function sourceSet()
+    {
+        return $this->belongsTo(ConfiguratorHwlibSet::class, 'source_set_id');
     }
 
     public function values()

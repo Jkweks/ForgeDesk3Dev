@@ -14,9 +14,9 @@ class DoorFrameConfiguration extends Model
         'business_job_id',
         'work_order_id',
         'job_reservation_id',
-        'configuration_name',
         'job_scope',
         'quantity',
+        'duplicate_group_id',
         'status',
         'notes',
         'created_by_id',
@@ -41,6 +41,7 @@ class DoorFrameConfiguration extends Model
     // Status configuration
     public static $statuses = [
         'draft' => 'Draft',
+        'reserved' => 'Reserved',
         'released' => 'Released',
         'in_progress' => 'In Progress',
         'completed' => 'Completed',
@@ -63,6 +64,16 @@ class DoorFrameConfiguration extends Model
     public function workOrder()
     {
         return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
+    }
+
+    /**
+     * The production elevation row(s) this configuration specs — 1-3 rows
+     * per opening (e.g. a pair = 2 Door elevations + 1 Frame elevation).
+     * See ElevationConfigurationMatcher for how the link gets stamped.
+     */
+    public function elevations()
+    {
+        return $this->hasMany(FdWoElevation::class, 'door_frame_configuration_id');
     }
 
     /**
@@ -89,6 +100,18 @@ class DoorFrameConfiguration extends Model
     public function doors()
     {
         return $this->hasMany(DoorFrameConfigurationDoor::class, 'configuration_id');
+    }
+
+    /**
+     * Other configurations created alongside this one via bulk duplication
+     * that are still linked to it (share duplicate_group_id). Empty when
+     * this configuration was never duplicated, or has since been unlinked.
+     */
+    public function linkedSiblings()
+    {
+        return self::where('duplicate_group_id', $this->duplicate_group_id)
+            ->where('id', '!=', $this->id)
+            ->when(! $this->duplicate_group_id, fn ($q) => $q->whereRaw('1 = 0'));
     }
 
     /**
@@ -121,6 +144,12 @@ class DoorFrameConfiguration extends Model
     public function hardwareLinks()
     {
         return $this->hasMany(ConfiguratorHwlibLink::class, 'configuration_id');
+    }
+
+    public function appliedHardwareSets()
+    {
+        return $this->belongsToMany(ConfiguratorHwlibSet::class, 'door_frame_configuration_hwlib_sets', 'configuration_id', 'set_id')
+            ->withPivot('applied_at');
     }
 
     /**
@@ -168,7 +197,7 @@ class DoorFrameConfiguration extends Model
      */
     public function canEdit()
     {
-        return in_array($this->status, ['draft', 'on_hold']);
+        return in_array($this->status, ['draft', 'reserved', 'on_hold']);
     }
 
     /**

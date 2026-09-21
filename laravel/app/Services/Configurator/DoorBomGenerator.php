@@ -7,6 +7,7 @@ use App\Models\ConfiguratorGlassSpec;
 use App\Models\ConfiguratorMidLug;
 use App\Models\ConfiguratorRail;
 use App\Models\ConfiguratorRailLug;
+use App\Models\ConfiguratorSetting;
 use App\Models\ConfiguratorSettingBlockKit;
 use App\Models\ConfiguratorTieRod;
 use App\Models\DoorFrameConfiguration;
@@ -50,10 +51,14 @@ class DoorBomGenerator
         $stile = $doorConfig->stile_width;
         $width = (float) $openingSpecs->door_opening_width;
         $height = (float) $openingSpecs->door_opening_height;
-        $handing = $doorConfig->handing;
-        $hingeType = $doorConfig->hinge_type;
-        $glassThk = $doorConfig->glazing;
-        $botGap = (float) $doorConfig->bottom_gap;
+        // Handing, hinge type, and glazing are driven by the Opening tab now
+        // (consolidated there instead of re-entered per door/frame), and
+        // bottom gap defaults from the configurator-wide setting — see
+        // DoorFrameOpeningSpec::deriveDoorHanding()/deriveHingeType().
+        $handing = $openingSpecs->deriveDoorHanding();
+        $hingeType = $openingSpecs->deriveHingeType();
+        $glassThk = $openingSpecs->glazing;
+        $botGap = (float) ConfiguratorSetting::current()->bottom_gap;
         $finish = strtoupper($openingSpecs->finish ?? '');
         $midQty = (int) $doorConfig->mid_qty;
         $midLoc1 = (float) ($doorConfig->mid_loc1 ?? 0);

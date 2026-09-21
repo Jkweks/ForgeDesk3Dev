@@ -5,11 +5,12 @@ use App\Http\Controllers\Api\BusinessJobController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyLocationController;
 use App\Http\Controllers\Api\CompanySettingController;
-use App\Http\Controllers\Api\CycleCountController;
-use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ConfiguratorCatalogController;
 use App\Http\Controllers\Api\ConfiguratorDoorCatalogController;
+use App\Http\Controllers\Api\ConfiguratorHwlibAdminController;
 use App\Http\Controllers\Api\ConfiguratorHwlibCatalogController;
+use App\Http\Controllers\Api\CycleCountController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DoorFrameConfigurationController;
 use App\Http\Controllers\Api\FabricationDocumentController;
 use App\Http\Controllers\Api\ImportExportController;
@@ -510,6 +511,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.create');
         Route::get('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'show'])->middleware('permission:configurator.view');
+        Route::post('/door-frame-configurations/{id}/duplicate', [DoorFrameConfigurationController::class, 'duplicate'])->middleware('permission:configurator.create');
+        Route::post('/door-frame-configurations/{id}/unlink', [DoorFrameConfigurationController::class, 'unlink'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/opening-specs', [DoorFrameConfigurationController::class, 'updateOpeningSpecs'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/frame-config', [DoorFrameConfigurationController::class, 'updateFrameConfig'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/frame-parts', [DoorFrameConfigurationController::class, 'updateFrameParts'])->middleware('permission:configurator.edit');
@@ -529,9 +532,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/door-frame-configurations/{id}/hardware-parts/generate', [DoorFrameConfigurationController::class, 'generateHardwareParts'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'updateHardwarePart'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyHardwarePart'])->middleware('permission:configurator.edit');
+        Route::post('/door-frame-configurations/{id}/reserve', [DoorFrameConfigurationController::class, 'reserveConfiguration'])->middleware('permission:configurator.release');
+        Route::post('/door-frame-configurations/{id}/unreserve', [DoorFrameConfigurationController::class, 'unreserveConfiguration'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/create-reservation', [DoorFrameConfigurationController::class, 'createReservation'])->middleware('permission:configurator.release');
         Route::get('/door-frame-configurations/{id}/export-pdf', [DoorFrameConfigurationController::class, 'exportPdf'])->middleware('permission:configurator.view');
+        Route::get('/door-frame-configurations/{id}/export-csv', [DoorFrameConfigurationController::class, 'exportCsv'])->middleware('permission:configurator.view');
 
         // Configurator Catalog (frame systems / series / profiles / components / fasteners)
         Route::get('/configurator/catalog/tree', [ConfiguratorCatalogController::class, 'tree'])->middleware('permission:configurator.view');
@@ -590,6 +596,44 @@ Route::middleware('auth:sanctum')->group(function () {
         // Hardware Library Catalog (read-only browse for the hardware step)
         Route::get('/configurator/hwlib-catalog', [ConfiguratorHwlibCatalogController::class, 'index'])->middleware('permission:configurator.view');
 
+        // Hardware Library Admin (categories/variables/items/backers/fasteners/sets)
+        Route::get('/configurator/hwlib-admin', [ConfiguratorHwlibAdminController::class, 'adminIndex'])->middleware('permission:configurator.view');
+        Route::get('/configurator/settings', [ConfiguratorHwlibAdminController::class, 'settings'])->middleware('permission:configurator.view');
+        Route::put('/configurator/settings', [ConfiguratorHwlibAdminController::class, 'updateSettings'])->middleware('permission:configurator.catalog.manage');
+
+        Route::post('/configurator/hwlib-categories', [ConfiguratorHwlibAdminController::class, 'storeCategory'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-categories/{id}', [ConfiguratorHwlibAdminController::class, 'updateCategory'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-categories/{id}', [ConfiguratorHwlibAdminController::class, 'destroyCategory'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-categories/{id}/variables', [ConfiguratorHwlibAdminController::class, 'setCategoryVariables'])->middleware('permission:configurator.catalog.manage');
+
+        Route::get('/configurator/hwlib-variables', [ConfiguratorHwlibAdminController::class, 'indexVariables'])->middleware('permission:configurator.view');
+        Route::post('/configurator/hwlib-variables', [ConfiguratorHwlibAdminController::class, 'storeVariable'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-variables/{id}', [ConfiguratorHwlibAdminController::class, 'updateVariable'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-variables/{id}', [ConfiguratorHwlibAdminController::class, 'destroyVariable'])->middleware('permission:configurator.catalog.manage');
+
+        Route::post('/configurator/hwlib-items', [ConfiguratorHwlibAdminController::class, 'storeItem'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-items/{id}', [ConfiguratorHwlibAdminController::class, 'updateItem'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-items/{id}', [ConfiguratorHwlibAdminController::class, 'destroyItem'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-items/{id}/values', [ConfiguratorHwlibAdminController::class, 'setItemValues'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-items/{id}/backers', [ConfiguratorHwlibAdminController::class, 'setItemBackers'])->middleware('permission:configurator.catalog.manage');
+
+        Route::post('/configurator/hwlib-backers', [ConfiguratorHwlibAdminController::class, 'storeBacker'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-backers/{id}', [ConfiguratorHwlibAdminController::class, 'updateBacker'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-backers/{id}', [ConfiguratorHwlibAdminController::class, 'destroyBacker'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-backers/{id}/fasteners', [ConfiguratorHwlibAdminController::class, 'setBackerFasteners'])->middleware('permission:configurator.catalog.manage');
+
+        Route::post('/configurator/hwlib-fasteners', [ConfiguratorHwlibAdminController::class, 'storeFastener'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-fasteners/{id}', [ConfiguratorHwlibAdminController::class, 'updateFastener'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-fasteners/{id}', [ConfiguratorHwlibAdminController::class, 'destroyFastener'])->middleware('permission:configurator.catalog.manage');
+
+        Route::get('/configurator/hwlib-sets', [ConfiguratorHwlibAdminController::class, 'indexSets'])->middleware('permission:configurator.view');
+        Route::post('/configurator/hwlib-sets', [ConfiguratorHwlibAdminController::class, 'storeSet'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-sets/{id}', [ConfiguratorHwlibAdminController::class, 'updateSet'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-sets/{id}', [ConfiguratorHwlibAdminController::class, 'destroySet'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-sets/{id}/items', [ConfiguratorHwlibAdminController::class, 'setSetItems'])->middleware('permission:configurator.catalog.manage');
+        Route::post('/configurator/hwlib-sets/{id}/apply', [ConfiguratorHwlibAdminController::class, 'applySet'])->middleware('permission:configurator.edit');
+        Route::delete('/configurator/hwlib-sets/{id}/apply/{configurationId}', [ConfiguratorHwlibAdminController::class, 'unapplySet'])->middleware('permission:configurator.edit');
+
         // Fabrication Work Orders and everything scoped under them (drawings,
         // elevations, stages, steps, fab-user list, elevation-type config).
         // Read requires fabrication.work-orders.view; mutations layer on
@@ -609,6 +653,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/work-orders/{id}/assignments', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateAssignments'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/work-orders/{id}/status', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateStatus'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-orders/{id}/completion-email', [\App\Http\Controllers\Api\WorkOrderController::class, 'sendCompletionEmail'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/work-orders/{id}/cutlist-upload', [\App\Http\Controllers\Api\WorkOrderController::class, 'uploadCutlist'])->middleware('permission:fabrication.work-orders.edit');
 
             // Work Order Drawings (shop drawings file uploads)
             Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);
@@ -622,6 +667,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/elevations/{id}/complete-all-stages', [\App\Http\Controllers\Api\ElevationController::class, 'completeAllStages'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/elevations/{id}', [\App\Http\Controllers\Api\ElevationController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+
+            // Configurator openings available to pull into this work order's Door Schedule
+            Route::get('/work-orders/{id}/available-configurations', [\App\Http\Controllers\Api\ElevationController::class, 'availableConfigurations']);
+            Route::post('/work-orders/{id}/attach-configuration/{configId}', [\App\Http\Controllers\Api\ElevationController::class, 'attachConfiguration'])->middleware('permission:fabrication.work-orders.edit');
 
             // Elevation Stage cycling (reuse existing stage controller)
             Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);

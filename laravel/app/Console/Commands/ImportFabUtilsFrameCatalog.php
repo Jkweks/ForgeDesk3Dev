@@ -158,12 +158,17 @@ class ImportFabUtilsFrameCatalog extends Command
         return self::SUCCESS;
     }
 
+    // Frame extrusion placeholders are (virtually) all Tubelite parts —
+    // matches the fixed supplier_id 1 the Door/Hwlib catalog importers use.
+    private const PLACEHOLDER_SUPPLIER_ID = 1;
+
     private ?int $fallbackSupplierId = null;
 
     private function fallbackSupplierId(): ?int
     {
         if ($this->fallbackSupplierId === null) {
-            $this->fallbackSupplierId = Supplier::where('name', 'No Supplier')->value('id')
+            $this->fallbackSupplierId = Supplier::whereKey(self::PLACEHOLDER_SUPPLIER_ID)->value('id')
+                ?? Supplier::where('name', 'Tubelite')->value('id')
                 ?? Supplier::query()->value('id');
         }
 
@@ -209,6 +214,7 @@ class ImportFabUtilsFrameCatalog extends Command
                 'quantity_committed' => 0,
                 'supplier_id' => $this->fallbackSupplierId(),
                 'is_special_order' => true,
+                'nonsof' => true,
             ]);
             $map[$pn] = $new->id;
             $created++;

@@ -315,6 +315,8 @@ class ProductController extends Controller
         $validated = $request->validate([
             'configurator_length' => 'nullable|numeric|min:0',
             'configurator_weight_per_inch' => 'nullable|numeric|min:0',
+            'is_length_based' => 'nullable|boolean',
+            'minimum_drop_length' => 'nullable|numeric|min:0',
         ]);
 
         if (! $product->part_number) {

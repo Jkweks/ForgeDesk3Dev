@@ -13,7 +13,7 @@ class FdWoElevation extends Model
     protected $table = 'fd_wo_elevations';
 
     protected $fillable = [
-        'work_order_id', 'elevation_type_id', 'template_set_id', 'elevation_tag',
+        'work_order_id', 'elevation_type_id', 'template_set_id', 'door_frame_configuration_id', 'elevation_tag',
         'quantity', 'joint_qty', 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
     ];
 
@@ -127,6 +127,11 @@ class FdWoElevation extends Model
     public function elevationType(): BelongsTo
     {
         return $this->belongsTo(FdElevationType::class, 'elevation_type_id');
+    }
+
+    public function doorFrameConfiguration(): BelongsTo
+    {
+        return $this->belongsTo(DoorFrameConfiguration::class, 'door_frame_configuration_id');
     }
 
     public function templateSet(): BelongsTo

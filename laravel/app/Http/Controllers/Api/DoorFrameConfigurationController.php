@@ -53,7 +53,6 @@ class DoorFrameConfigurationController extends Controller
                         'business_job_id' => $config->business_job_id,
                         'job_number' => $config->businessJob->job_number,
                         'job_name' => $config->businessJob->job_name,
-                        'configuration_name' => $config->configuration_name,
                         'job_scope' => $config->job_scope,
                         'scope_label' => $config->scope_label,
                         'quantity' => $config->quantity,
@@ -127,9 +126,7 @@ class DoorFrameConfigurationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'business_job_id' => 'required|exists:business_jobs,id',
-                'configuration_name' => 'nullable|string|max:255',
                 'job_scope' => 'required|in:door_and_frame,frame_only,door_only',
-                'quantity' => 'required|integer|min:1',
                 'door_tags' => 'required|array|min:1',
                 'door_tags.*' => 'required|string|max:50',
             ]);
@@ -143,12 +140,13 @@ class DoorFrameConfigurationController extends Controller
 
             DB::beginTransaction();
 
-            // Create configuration
+            // Door tags are this configuration's identity — quantity is
+            // always just how many of them there are (one set of parts per
+            // physical opening), never entered independently.
             $config = DoorFrameConfiguration::create([
                 'business_job_id' => $request->business_job_id,
-                'configuration_name' => $request->configuration_name,
                 'job_scope' => $request->job_scope,
-                'quantity' => $request->quantity,
+                'quantity' => count($request->door_tags),
                 'status' => 'draft',
                 'notes' => $request->notes,
                 'created_by_id' => auth()->id(),
@@ -193,9 +191,235 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Bulk-duplicate a configuration: each entry in `duplicates` becomes a new
+     * configuration cloning this one's opening/frame/door/hardware data (with
+     * that entry's own door tags and any field overrides — e.g. flipped hand),
+     * then has its BOM generated immediately from the cloned data. Optionally
+     * links the source and every new copy as a group (`link: true`) so the
+     * UI can warn before an edit is allowed to quietly diverge one of them.
+     */
+    public function duplicate(
+        Request $request,
+        $id,
+        FrameBomGenerator $frameGen,
+        DoorBomGenerator $doorGen,
+        HwlibBomGenerator $hwGen,
+        \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge
+    ) {
+        $source = DoorFrameConfiguration::with(['openingSpecs', 'frameConfig', 'doorConfigs', 'hardwareLinks.values'])
+            ->findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'duplicates' => 'required|array|min:1|max:50',
+            'duplicates.*.door_tags' => 'required|array|min:1',
+            'duplicates.*.door_tags.*' => 'required|string|max:50',
+            'duplicates.*.overrides' => 'nullable|array',
+            'duplicates.*.overrides.opening_specs' => 'nullable|array',
+            'duplicates.*.overrides.frame_config' => 'nullable|array',
+            'duplicates.*.overrides.door_config' => 'nullable|array',
+            'link' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $groupId = null;
+        if ($request->boolean('link')) {
+            $groupId = $source->duplicate_group_id ?: (string) \Illuminate\Support\Str::uuid();
+        }
+
+        $created = [];
+
+        DB::beginTransaction();
+
+        try {
+            if ($groupId && ! $source->duplicate_group_id) {
+                $source->duplicate_group_id = $groupId;
+                $source->save();
+            }
+
+            foreach ($request->duplicates as $entry) {
+                $overrides = $entry['overrides'] ?? [];
+
+                $new = DoorFrameConfiguration::create([
+                    'business_job_id' => $source->business_job_id,
+                    'job_scope' => $source->job_scope,
+                    'quantity' => count($entry['door_tags']),
+                    'duplicate_group_id' => $groupId,
+                    'status' => 'draft',
+                    'notes' => $source->notes,
+                    'created_by_id' => auth()->id(),
+                ]);
+
+                foreach ($entry['door_tags'] as $tag) {
+                    DoorFrameConfigurationDoor::create(['configuration_id' => $new->id, 'door_tag' => $tag]);
+                }
+
+                if ($source->openingSpecs) {
+                    DoorFrameOpeningSpec::create(array_merge(
+                        $source->openingSpecs->only([
+                            'opening_type', 'hand_single', 'hand_pair',
+                            'door_opening_width', 'door_opening_height', 'hinging', 'finish',
+                        ]),
+                        $overrides['opening_specs'] ?? [],
+                        ['configuration_id' => $new->id]
+                    ));
+                }
+
+                if ($source->includesFrame() && $source->frameConfig) {
+                    DoorFrameFrameConfig::create(array_merge(
+                        $source->frameConfig->only([
+                            'frame_system_product_id', 'frame_series_id', 'glazing',
+                            'has_transom', 'has_threshold', 'transom_glazing', 'total_frame_height',
+                        ]),
+                        $overrides['frame_config'] ?? [],
+                        ['configuration_id' => $new->id]
+                    ));
+                }
+
+                if ($source->includesDoor()) {
+                    foreach ($source->doorConfigs as $dc) {
+                        DoorFrameDoorConfig::create(array_merge(
+                            $dc->only([
+                                'door_series', 'stile_width', 'leaf_type', 'handing', 'hinge_type',
+                                'opening_angle', 'bottom_gap', 'top_rail_label', 'bot_rail_label',
+                                'mid_rail_label', 'mid_qty', 'mid_loc1', 'mid_loc2', 'glazing', 'preset',
+                            ]),
+                            $overrides['door_config'] ?? [],
+                            ['configuration_id' => $new->id]
+                        ));
+                    }
+                }
+
+                foreach ($source->hardwareLinks as $link) {
+                    $newLink = ConfiguratorHwlibLink::create([
+                        'configuration_id' => $new->id,
+                        'item_id' => $link->item_id,
+                        'source_set_id' => $link->source_set_id,
+                        'quantity' => $link->quantity,
+                        'notes' => $link->notes,
+                        'series' => $link->series,
+                        'leaf' => $link->leaf,
+                    ]);
+                    foreach ($link->values as $v) {
+                        ConfiguratorHwlibLinkValue::create([
+                            'link_id' => $newLink->id,
+                            'variable_id' => $v->variable_id,
+                            'value_text' => $v->value_text,
+                        ]);
+                    }
+                }
+
+                $created[] = $new;
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to duplicate configuration', [
+                'source_id' => $id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to duplicate configuration',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
+        // Generate BOM immediately for each copy, same as the "always generate
+        // on first run through" behavior — best-effort per config/section so
+        // one missing piece (e.g. no hardware yet) never blocks the others.
+        foreach ($created as $new) {
+            $fresh = $new->fresh(['frameConfig', 'doorConfigs', 'openingSpecs', 'hardwareLinks']);
+
+            $silent = new Request();
+
+            try {
+                if ($fresh->includesFrame() && $fresh->frameConfig) {
+                    $this->generateFrameParts($silent, $fresh->id, $frameGen, $reservationBridge);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Duplicate: failed to generate frame parts', ['config_id' => $fresh->id, 'message' => $e->getMessage()]);
+            }
+
+            try {
+                if ($fresh->includesDoor() && $fresh->doorConfigs->isNotEmpty()) {
+                    $this->generateDoorParts($silent, $fresh->id, $doorGen, $reservationBridge);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Duplicate: failed to generate door parts', ['config_id' => $fresh->id, 'message' => $e->getMessage()]);
+            }
+
+            try {
+                if ($fresh->hardwareLinks->isNotEmpty()) {
+                    $this->generateHardwareParts($silent, $fresh->id, $hwGen, $reservationBridge);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Duplicate: failed to generate hardware parts', ['config_id' => $fresh->id, 'message' => $e->getMessage()]);
+            }
+        }
+
+        Log::info('Configuration bulk-duplicated', [
+            'source_id' => $id,
+            'created_ids' => collect($created)->pluck('id'),
+            'linked' => (bool) $groupId,
+        ]);
+
+        return response()->json([
+            'message' => count($created).' configuration(s) duplicated',
+            'configurations' => collect($created)->map(fn ($c) => [
+                'id' => $c->id,
+                'door_tags' => $c->fresh('doors')->doors->pluck('door_tag')->values(),
+            ]),
+        ], 201);
+    }
+
+    /**
+     * Break the duplicate-group link — either just this configuration
+     * (`scope: single`) or the whole group at once (`scope: all`). Used
+     * right before saving an edit to a linked configuration, so a change
+     * meant for just one copy never silently drifts unnoticed from siblings
+     * that are still supposed to be identical.
+     */
+    public function unlink(Request $request, $id)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'scope' => 'required|in:single,all',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        if (! $config->duplicate_group_id) {
+            return response()->json(['message' => 'Configuration is not linked to any group.']);
+        }
+
+        if ($request->scope === 'all') {
+            DoorFrameConfiguration::where('duplicate_group_id', $config->duplicate_group_id)
+                ->update(['duplicate_group_id' => null]);
+        } else {
+            $config->update(['duplicate_group_id' => null]);
+        }
+
+        return response()->json(['message' => 'Configuration unlinked successfully']);
+    }
+
+    /**
      * Update opening specifications (Step 1)
      */
-    public function updateOpeningSpecs(Request $request, $id)
+    public function updateOpeningSpecs(Request $request, $id, \App\Services\Configurator\ElevationConfigurationMatcher $matcher)
     {
         try {
             $config = DoorFrameConfiguration::findOrFail($id);
@@ -208,13 +432,15 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
+                'job_scope' => 'nullable|in:door_and_frame,frame_only,door_only',
                 'opening_type' => 'required|in:single,pair',
-                'hand_single' => 'required_if:opening_type,single|in:lh_inswing,rh_inswing,lhr,rhr',
-                'hand_pair' => 'required_if:opening_type,pair|in:rhr_active,lhra_active',
+                'hand_single' => 'nullable|required_if:opening_type,single|in:lh_inswing,rh_inswing,lhr,rhr',
+                'hand_pair' => 'nullable|required_if:opening_type,pair|in:rhr_active,lhra_active',
                 'door_opening_width' => 'required|numeric|min:0|max:999.99',
                 'door_opening_height' => 'required|numeric|min:0|max:999.99',
                 'hinging' => 'required|in:continuous,butt,pivot_offset,pivot_center',
                 'finish' => 'required|in:c2,db,bl',
+                'glazing' => 'nullable|string|exists:configurator_glass_specs,thickness',
             ]);
 
             if ($validator->fails()) {
@@ -236,16 +462,43 @@ class DoorFrameConfigurationController extends Controller
                     'door_opening_height' => $request->door_opening_height,
                     'hinging' => $request->hinging,
                     'finish' => $request->finish,
+                    'glazing' => $request->glazing,
                 ]
             );
+
+            $scopeChanged = $request->filled('job_scope') && $request->job_scope !== $config->job_scope;
+            if ($scopeChanged) {
+                $config->job_scope = $request->job_scope;
+                $config->save();
+            }
 
             DB::commit();
 
             $config->load('openingSpecs');
 
+            // Scope/pair-vs-single may have changed which elevations this opening
+            // needs. Best-effort, mirroring the pattern used on release(): a config
+            // not yet tied to a work order is a no-op inside syncElevationsForConfiguration(),
+            // and elevations that no longer fit are never deleted — only warned about.
+            $warnings = [];
+            if ($scopeChanged) {
+                try {
+                    $sync = $matcher->syncElevationsForConfiguration($config);
+                    foreach ($sync['orphaned'] as $orphan) {
+                        $warnings[] = "Elevation \"{$orphan->elevation_tag}\" no longer matches this opening's scope — review it on the work order.";
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to sync elevations after opening spec change', [
+                        'config_id' => $id,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             return response()->json([
                 'message' => 'Opening specifications saved successfully',
                 'opening_specs' => $this->formatOpeningSpecs($config->openingSpecs),
+                'warnings' => $warnings,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -286,11 +539,10 @@ class DoorFrameConfigurationController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'frame_series_id' => 'required|exists:configurator_frame_series,id',
-                'glazing' => 'required|in:0.25,0.5,1.0',
                 'has_transom' => 'required|boolean',
                 'has_threshold' => 'required|boolean',
-                'transom_glazing' => 'required_if:has_transom,true|in:0.25,0.5,1.0',
-                'total_frame_height' => 'required_if:has_transom,true|numeric|min:0',
+                'transom_glazing' => 'nullable|required_if:has_transom,true|in:0.25,0.5,1.0',
+                'total_frame_height' => 'nullable|required_if:has_transom,true|numeric|min:0',
             ]);
 
             if ($validator->fails()) {
@@ -306,7 +558,6 @@ class DoorFrameConfigurationController extends Controller
                 ['configuration_id' => $config->id],
                 [
                     'frame_series_id' => $request->frame_series_id,
-                    'glazing' => $request->glazing,
                     'has_transom' => $request->has_transom,
                     'has_threshold' => $request->has_threshold,
                     'transom_glazing' => $request->has_transom ? $request->transom_glazing : null,
@@ -425,7 +676,7 @@ class DoorFrameConfigurationController extends Controller
      * selected catalog frame series. Replaces previously auto-generated rows;
      * manually-added rows are left untouched.
      */
-    public function generateFrameParts($id, FrameBomGenerator $generator)
+    public function generateFrameParts(Request $request, $id, FrameBomGenerator $generator, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with(['frameConfig', 'openingSpecs'])->findOrFail($id);
 
@@ -443,6 +694,15 @@ class DoorFrameConfigurationController extends Controller
                 'error' => 'Cannot generate parts',
                 'message' => $e->getMessage(),
             ], 422);
+        }
+
+        // A dry run for the "save and continue" flow to diff against what's
+        // currently saved before silently overwriting a manually-tweaked BOM.
+        if ($request->boolean('preview')) {
+            return response()->json([
+                'preview' => true,
+                'parts' => collect($rows)->map(fn ($r) => $this->formatPreviewRow($r)),
+            ]);
         }
 
         DB::beginTransaction();
@@ -473,6 +733,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $config->frameConfig->load('parts.product');
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Frame parts generated successfully',
@@ -483,7 +744,7 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Override a single generated (or manual) part's product / length / quantity.
      */
-    public function updateFramePart(Request $request, $id, $partId)
+    public function updateFramePart(Request $request, $id, $partId, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with('frameConfig')->findOrFail($id);
 
@@ -513,6 +774,7 @@ class DoorFrameConfigurationController extends Controller
         $part->fill($validator->validated());
         $part->save();
         $part->load('product');
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Part updated successfully',
@@ -524,7 +786,7 @@ class DoorFrameConfigurationController extends Controller
      * Remove a single part (manual rows only — auto-generated rows should be
      * removed by adjusting the catalog and re-running generateFrameParts).
      */
-    public function destroyFramePart($id, $partId)
+    public function destroyFramePart($id, $partId, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with('frameConfig')->findOrFail($id);
 
@@ -546,6 +808,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $part->delete();
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json(['message' => 'Part removed successfully']);
     }
@@ -575,17 +838,13 @@ class DoorFrameConfigurationController extends Controller
             $validator = Validator::make($request->all(), [
                 'door_series' => 'required|in:STANDARD,THERMAL,MONUMENTAL',
                 'stile_width' => 'required|string|exists:configurator_door_types,stile_name',
-                'handing' => 'required|in:LH (INSWING),RH (INSWING),LHR,RHR,CP SINGLE,PAIR-RHRA,PAIR-LHRA,CP PAIR',
-                'hinge_type' => 'required|in:BUTT HINGES,OFFSET PIVOTS,CONTINUOUS HINGE,CENTER PIVOTS',
                 'opening_angle' => 'nullable|integer|min:1|max:180',
-                'bottom_gap' => 'nullable|numeric|min:0',
                 'top_rail_label' => 'required|string',
                 'bot_rail_label' => 'required|string',
                 'mid_rail_label' => 'nullable|string',
                 'mid_qty' => 'nullable|integer|min:0|max:2',
                 'mid_loc1' => 'required_if:mid_qty,1,2|nullable|numeric',
                 'mid_loc2' => 'required_if:mid_qty,2|nullable|numeric',
-                'glazing' => 'nullable|string|exists:configurator_glass_specs,thickness',
             ]);
 
             if ($validator->fails()) {
@@ -600,22 +859,26 @@ class DoorFrameConfigurationController extends Controller
             // One door config per configuration — replaces any previous one.
             DoorFrameDoorConfig::where('configuration_id', $config->id)->delete();
 
+            // Handing/hinge type/glazing/bottom gap are driven by the Opening
+            // tab (and the global gap settings) now, not re-entered here —
+            // still mirrored onto the door config row so existing reads of
+            // it (formatDoorConfig(), duplication) keep working unchanged.
             $doorConfig = DoorFrameDoorConfig::create([
                 'configuration_id' => $config->id,
                 'door_series' => $request->door_series,
                 'stile_width' => $request->stile_width,
                 'leaf_type' => 'single',
-                'handing' => $request->handing,
-                'hinge_type' => $request->hinge_type,
+                'handing' => $config->openingSpecs?->deriveDoorHanding(),
+                'hinge_type' => $config->openingSpecs?->deriveHingeType(),
                 'opening_angle' => $request->opening_angle ?? 90,
-                'bottom_gap' => $request->bottom_gap ?? 0.6875,
+                'bottom_gap' => \App\Models\ConfiguratorSetting::current()->bottom_gap,
                 'top_rail_label' => $request->top_rail_label,
                 'bot_rail_label' => $request->bot_rail_label,
                 'mid_rail_label' => $request->mid_rail_label,
                 'mid_qty' => $request->mid_qty ?? 0,
                 'mid_loc1' => $request->mid_loc1,
                 'mid_loc2' => $request->mid_loc2,
-                'glazing' => $request->glazing,
+                'glazing' => $config->openingSpecs?->glazing,
             ]);
 
             DB::commit();
@@ -643,7 +906,7 @@ class DoorFrameConfigurationController extends Controller
      * Auto-generate door parts (extrusions + hardware) from the catalog.
      * Replaces previously auto-generated rows; manually-added rows are untouched.
      */
-    public function generateDoorParts($id, DoorBomGenerator $generator)
+    public function generateDoorParts(Request $request, $id, DoorBomGenerator $generator, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with(['doorConfigs', 'openingSpecs'])->findOrFail($id);
 
@@ -669,6 +932,14 @@ class DoorFrameConfigurationController extends Controller
                 'error' => 'Cannot generate parts',
                 'message' => $e->getMessage(),
             ], 422);
+        }
+
+        if ($request->boolean('preview')) {
+            return response()->json([
+                'preview' => true,
+                'parts' => collect($result['rows'])->map(fn ($r) => $this->formatPreviewRow($r)),
+                'warnings' => $result['warnings'],
+            ]);
         }
 
         DB::beginTransaction();
@@ -699,6 +970,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $doorConfig->load('parts.product');
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Door parts generated successfully',
@@ -710,7 +982,7 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Override a single generated (or manual) door part's product / length / quantity.
      */
-    public function updateDoorPart(Request $request, $id, $partId)
+    public function updateDoorPart(Request $request, $id, $partId, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with('doorConfigs')->findOrFail($id);
 
@@ -740,6 +1012,7 @@ class DoorFrameConfigurationController extends Controller
         $part->fill($validator->validated());
         $part->save();
         $part->load('product');
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Part updated successfully',
@@ -750,7 +1023,7 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Remove a single manual door part row.
      */
-    public function destroyDoorPart($id, $partId)
+    public function destroyDoorPart($id, $partId, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with('doorConfigs')->findOrFail($id);
 
@@ -772,6 +1045,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $part->delete();
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json(['message' => 'Part removed successfully']);
     }
@@ -792,10 +1066,10 @@ class DoorFrameConfigurationController extends Controller
                 'doors',
             ])->findOrFail($id);
 
-            if ($config->status !== 'draft') {
+            if (! in_array($config->status, ['draft', 'reserved'])) {
                 return response()->json([
                     'error' => 'Invalid status',
-                    'message' => 'Only draft configurations can be released',
+                    'message' => 'Only draft or reserved configurations can be released',
                 ], 422);
             }
 
@@ -808,13 +1082,12 @@ class DoorFrameConfigurationController extends Controller
                 ], 422);
             }
 
-            $config->status = 'released';
-            $config->save();
-
             // A configuration built ahead of production scheduling may not have
             // a work order yet — try to pick one up now, in case one has since
             // been created (going-forward matching normally handles this from
-            // the elevation side, but this covers the reverse timing too).
+            // the elevation side, but this covers the reverse timing too). Do
+            // this before the work-order gate below, since a successful match
+            // here is what lets release proceed.
             $workOrder = null;
             try {
                 $workOrder = $matcher->linkConfigurationToWorkOrder($config);
@@ -825,17 +1098,45 @@ class DoorFrameConfigurationController extends Controller
                 ]);
             }
 
+            if (! $config->work_order_id) {
+                return response()->json([
+                    'error' => 'No work order',
+                    'message' => 'Configuration must be tied to a work order before it can be released.',
+                ], 422);
+            }
+
+            $config->status = 'released';
+            $config->save();
+
             // Commit the generated BOM against real inventory the same way
             // every other fulfillment path does. Best-effort: a config with
             // no parts generated yet (frame/door config saved but "Generate"
             // never clicked) shouldn't be blocked from releasing — it just
             // won't have a reservation until parts exist and this is re-run.
+            // If the configuration was already "reserved", this syncs its
+            // existing reservation rather than creating a second one.
             $reservation = null;
             try {
-                $reservation = $reservationBridge->createReservation($config, auth()->user());
+                $reservation = $reservationBridge->reserve($config, auth()->user())['reservation'];
             } catch (\Throwable $e) {
                 Log::warning('Failed to auto-create job reservation on release', [
                     'config_id' => $id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+
+            // Push the work order's full released cut-list to CutFlow —
+            // best-effort, same pattern as the reservation above. Exports the
+            // *whole* work order (every released opening on it), not just
+            // this configuration, since CutFlow's ingest merges/updates one
+            // CutJob per work order rather than one per opening.
+            $cutFlowResult = null;
+            try {
+                $cutFlowResult = app(\App\Services\Configurator\CutFlowExportService::class)->exportWorkOrder($workOrder);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to export cut list to CutFlow on release', [
+                    'config_id' => $id,
+                    'work_order_id' => $workOrder?->id,
                     'message' => $e->getMessage(),
                 ]);
             }
@@ -845,6 +1146,7 @@ class DoorFrameConfigurationController extends Controller
                 'released_by' => auth()->id(),
                 'work_order_id' => $workOrder?->id,
                 'job_reservation_id' => $reservation?->id,
+                'cutflow_sent' => $cutFlowResult['sent'] ?? false,
             ]);
 
             return response()->json([
@@ -857,6 +1159,7 @@ class DoorFrameConfigurationController extends Controller
                     'work_order_release_token' => $workOrder?->release_token,
                     'job_reservation_id' => $reservation?->id,
                     'job_reservation_number' => $reservation?->reservation_id,
+                    'cutflow_sent' => $cutFlowResult['sent'] ?? false,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -870,6 +1173,88 @@ class DoorFrameConfigurationController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Reserve a draft configuration's current BOM against real inventory —
+     * unlike release(), this leaves the configuration editable ("reserved"),
+     * and further edits/regenerated parts keep syncing into the same
+     * reservation (see syncReservationIfReserved()). Also usable to manually
+     * re-trigger a sync while already reserved.
+     */
+    public function reserveConfiguration($id, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if (! in_array($config->status, ['draft', 'reserved'])) {
+            return response()->json([
+                'error' => 'Cannot reserve',
+                'message' => 'Only a draft or already-reserved configuration can be reserved.',
+            ], 422);
+        }
+
+        // Never blocks on incomplete/ungenerated sections — reserve() only
+        // returns warnings for those; a config with nothing generated at all
+        // anywhere still transitions to "reserved" with no reservation yet
+        // (one gets created automatically by the sync below once parts exist).
+        $result = $reservationBridge->reserve($config, auth()->user());
+
+        if ($config->status === 'draft') {
+            $config->status = 'reserved';
+            $config->save();
+        }
+
+        return response()->json([
+            'message' => 'Configuration reserved',
+            'warnings' => $result['warnings'],
+            'configuration' => [
+                'id' => $config->id,
+                'status' => $config->status,
+                'status_label' => $config->status_label,
+                'job_reservation_id' => $result['reservation']?->id,
+                'job_reservation_number' => $result['reservation']?->reservation_id,
+            ],
+        ]);
+    }
+
+    /**
+     * Back out of "reserved" to "draft" — cancels the linked reservation
+     * (releasing its committed inventory the same way any other cancelled
+     * reservation does, via JobReservation's own status-change hooks) rather
+     * than leaving inventory committed under a config that no longer claims
+     * to be reserved.
+     */
+    public function unreserveConfiguration($id)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        if ($config->status !== 'reserved') {
+            return response()->json([
+                'error' => 'Cannot unreserve',
+                'message' => 'Only a reserved configuration can be moved back to draft.',
+            ], 422);
+        }
+
+        if ($config->job_reservation_id) {
+            $reservation = $config->jobReservation;
+            if ($reservation && ! in_array($reservation->status, ['fulfilled', 'cancelled'])) {
+                $reservation->status = 'cancelled';
+                $reservation->save();
+            }
+        }
+
+        $config->status = 'draft';
+        $config->job_reservation_id = null;
+        $config->save();
+
+        return response()->json([
+            'message' => 'Configuration moved back to draft',
+            'configuration' => [
+                'id' => $config->id,
+                'status' => $config->status,
+                'status_label' => $config->status_label,
+            ],
+        ]);
     }
 
     /**
@@ -888,12 +1273,12 @@ class DoorFrameConfigurationController extends Controller
             ], 422);
         }
 
-        try {
-            $reservation = $reservationBridge->createReservation($config, auth()->user());
-        } catch (RuntimeException $e) {
+        $reservation = $reservationBridge->reserve($config, auth()->user())['reservation'];
+
+        if (! $reservation) {
             return response()->json([
-                'error' => 'Cannot reserve',
-                'message' => $e->getMessage(),
+                'error' => 'Nothing to reserve',
+                'message' => 'No parts have been generated yet — generate the frame/door/hardware parts first.',
             ], 422);
         }
 
@@ -902,6 +1287,31 @@ class DoorFrameConfigurationController extends Controller
             'job_reservation_id' => $reservation->id,
             'job_reservation_number' => $reservation->reservation_id,
         ]);
+    }
+
+    /**
+     * If this configuration is "reserved" (editable, possibly already
+     * committed against inventory), push its current BOM into the linked
+     * reservation — creating one now if this is the first time any parts
+     * exist to reserve. Called after any endpoint that changes generated
+     * parts. No-op if the configuration isn't reserved.
+     */
+    private function syncReservationIfReserved(
+        DoorFrameConfiguration $config,
+        \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge
+    ): void {
+        if ($config->status !== 'reserved') {
+            return;
+        }
+
+        try {
+            $reservationBridge->reserve($config, auth()->user());
+        } catch (\Throwable $e) {
+            Log::warning('Failed to sync reservation after configuration edit', [
+                'config_id' => $config->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -932,6 +1342,66 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Export the same cut-sheet data (frame + door + hardware BOM) as a flat
+     * CSV — Job / Work Order / Elevation / Length / Quantity / Part Number /
+     * Color per row, for import into other tools.
+     */
+    public function exportCsv($id)
+    {
+        $config = DoorFrameConfiguration::with([
+            'businessJob',
+            'workOrder',
+            'doors',
+            'frameConfig.parts.product',
+            'doorConfigs.parts.product',
+        ])->findOrFail($id);
+
+        $job = $config->businessJob->job_number;
+        $workOrder = $config->workOrder->release_token ?? '';
+        $elevation = $config->doors->pluck('door_tag')->implode(', ');
+
+        // Cut list only — the actual lineal stock to cut, not the qty-based
+        // components/fasteners riding along with it or the hardware BOM.
+        $rows = collect()
+            ->concat($config->frameConfig?->parts ?? [])
+            ->concat($config->doorConfigs->flatMap(fn ($dc) => $dc->parts))
+            ->reject(fn ($part) => $part->source_type === 'component')
+            ->map(function ($part) use ($job, $workOrder, $elevation) {
+                $product = $part->product;
+                $partNumber = $product
+                    ? $product->part_number.($product->finish ? '-'.$product->finish : '')
+                    : '';
+
+                return [
+                    $job,
+                    $workOrder,
+                    $elevation,
+                    $part->unit_type === 'length' ? number_format($part->calculated_length, 3) : '',
+                    $part->quantity,
+                    $partNumber,
+                    $product?->finish_name ?? '',
+                ];
+            });
+
+        $tags = $config->doors->pluck('door_tag')->implode('-') ?: $config->id;
+        $filename = 'CutList_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $config->businessJob->job_number.'_'.$tags).'.csv';
+
+        $callback = function () use ($rows) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, ['Job', 'Work Order', 'Elevation', 'Length', 'Quantity', 'Part Number', 'Color']);
+            foreach ($rows as $row) {
+                fputcsv($file, $row);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    /**
      * Helper: Format configuration detail
      */
     private function formatConfigurationDetail($config)
@@ -953,13 +1423,19 @@ class DoorFrameConfigurationController extends Controller
                 'reservation_id' => $config->jobReservation->reservation_id,
                 'status' => $config->jobReservation->status,
             ] : null,
-            'configuration_name' => $config->configuration_name,
             'job_scope' => $config->job_scope,
             'scope_label' => $config->scope_label,
             'quantity' => $config->quantity,
             'status' => $config->status,
             'status_label' => $config->status_label,
             'notes' => $config->notes,
+            'duplicate_group_id' => $config->duplicate_group_id,
+            'linked_siblings' => $config->duplicate_group_id
+                ? $config->linkedSiblings()->with('doors')->get()->map(fn ($s) => [
+                    'id' => $s->id,
+                    'door_tags' => $s->doors->pluck('door_tag')->values(),
+                ])->values()
+                : [],
             'door_tags' => $config->doors->map(fn ($d) => $d->door_tag),
             'opening_specs' => $config->openingSpecs ? $this->formatOpeningSpecs($config->openingSpecs) : null,
             'frame_config' => $config->frameConfig ? $this->formatFrameConfig($config->frameConfig) : null,
@@ -991,6 +1467,7 @@ class DoorFrameConfigurationController extends Controller
             'hinging_label' => $specs->hinging_label,
             'finish' => $specs->finish,
             'finish_label' => $specs->finish_label,
+            'glazing' => $specs->glazing,
             'warnings' => $specs->hasWarnings(),
         ];
     }
@@ -1069,6 +1546,29 @@ class DoorFrameConfigurationController extends Controller
             'source_type' => $part->source_type,
             'is_auto_generated' => $part->is_auto_generated,
             'sort_order' => $part->sort_order,
+        ];
+    }
+
+    /**
+     * Helper: Format a not-yet-persisted generator row (part_label/product_id/
+     * calculated_length/quantity/unit_type) the same shape as formatPart(),
+     * for the "save and continue" preview diff — never touches the DB.
+     */
+    private function formatPreviewRow(array $row)
+    {
+        $product = \App\Models\Product::find($row['product_id'] ?? null);
+
+        return [
+            'part_label' => $row['part_label'] ?? null,
+            'product' => $product ? [
+                'id' => $product->id,
+                'part_number' => $product->part_number,
+                'finish' => $product->finish,
+                'description' => $product->description,
+            ] : null,
+            'calculated_length' => $row['calculated_length'] ?? null,
+            'quantity' => $row['quantity'] ?? null,
+            'unit_type' => $row['unit_type'] ?? null,
         ];
     }
 
@@ -1282,7 +1782,7 @@ class DoorFrameConfigurationController extends Controller
      * linked hardware item. Replaces previously auto-generated rows; manual
      * rows are untouched.
      */
-    public function generateHardwareParts($id, HwlibBomGenerator $generator)
+    public function generateHardwareParts(Request $request, $id, HwlibBomGenerator $generator, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::with(['hardwareLinks.item', 'openingSpecs'])->findOrFail($id);
 
@@ -1300,6 +1800,14 @@ class DoorFrameConfigurationController extends Controller
                 'error' => 'Cannot generate parts',
                 'message' => $e->getMessage(),
             ], 422);
+        }
+
+        if ($request->boolean('preview')) {
+            return response()->json([
+                'preview' => true,
+                'parts' => collect($result['rows'])->map(fn ($r) => $this->formatPreviewRow($r)),
+                'warnings' => $result['warnings'],
+            ]);
         }
 
         DB::beginTransaction();
@@ -1330,6 +1838,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $config->load('hardwareParts.product');
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Hardware parts generated successfully',
@@ -1341,7 +1850,7 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Override a single generated (or manual) hardware part's product/quantity.
      */
-    public function updateHardwarePart(Request $request, $id, $partId)
+    public function updateHardwarePart(Request $request, $id, $partId, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
@@ -1369,6 +1878,7 @@ class DoorFrameConfigurationController extends Controller
         $part->fill($validator->validated());
         $part->save();
         $part->load('product');
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Part updated successfully',
@@ -1379,7 +1889,7 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Remove a single manual hardware part row.
      */
-    public function destroyHardwarePart($id, $partId)
+    public function destroyHardwarePart($id, $partId, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
@@ -1400,6 +1910,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $part->delete();
+        $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json(['message' => 'Part removed successfully']);
     }
