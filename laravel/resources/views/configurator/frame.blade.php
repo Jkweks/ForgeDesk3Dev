@@ -14,7 +14,7 @@
         </div>
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
-            <a href="/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
+            <a href="/configurator/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
             <button class="btn btn-primary" onclick="fbOpenNewModal()" data-permission="configurator.create"><i class="ti ti-plus me-1"></i>New Configuration</button>
           </div>
         </div>

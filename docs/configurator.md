@@ -166,6 +166,7 @@ while since the note was written.
   the catalog and haven't been specifically audited for casing.
 - [x] Top rail uses the recommended value; bottom rail defaults to 10"
   (existing behavior, unchanged this pass).
+- [ ] Set default top and bottom rails for doors, all bottom rails default to 10", narrow to 2 1/8 top, medium to 3.5, medium 4" to 4", wide to 5"
 
 ## Layout — Hardware
 
