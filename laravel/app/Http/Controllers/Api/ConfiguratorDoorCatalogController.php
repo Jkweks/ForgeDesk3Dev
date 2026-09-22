@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ConfiguratorDoorType;
 use App\Models\ConfiguratorGlassSpec;
+use App\Models\ConfiguratorHingeSpacingStandard;
 use App\Models\ConfiguratorMidLug;
 use App\Models\ConfiguratorRail;
 use App\Models\ConfiguratorRailLug;
@@ -30,6 +31,7 @@ class ConfiguratorDoorCatalogController extends Controller
             'glass_specs' => ConfiguratorGlassSpec::orderBy('thickness')->get(),
             'setting_block_kits' => ConfiguratorSettingBlockKit::orderBy('series')->orderBy('glass_thickness')->get(),
             'tie_rods' => ConfiguratorTieRod::orderBy('series')->orderBy('min_len')->get(),
+            'hinge_spacing_standards' => ConfiguratorHingeSpacingStandard::orderBy('name')->get(),
         ]);
     }
 
@@ -319,6 +321,44 @@ class ConfiguratorDoorCatalogController extends Controller
             'max_len' => 'nullable|numeric|min:0',
             'series' => 'nullable|string|max:50',
             'mid_val' => 'nullable|numeric',
+        ];
+    }
+
+    // ---- Hinge Spacing Standards ----
+
+    public function storeHingeSpacingStandard(Request $request)
+    {
+        $data = $this->validateOrFail($request, $this->hingeSpacingStandardRules());
+
+        return response()->json(['hinge_spacing_standard' => ConfiguratorHingeSpacingStandard::create($data)], 201);
+    }
+
+    public function updateHingeSpacingStandard(Request $request, $id)
+    {
+        $row = ConfiguratorHingeSpacingStandard::findOrFail($id);
+        $data = $this->validateOrFail($request, $this->hingeSpacingStandardRules());
+        $row->update($data);
+
+        return response()->json(['hinge_spacing_standard' => $row]);
+    }
+
+    public function destroyHingeSpacingStandard($id)
+    {
+        ConfiguratorHingeSpacingStandard::findOrFail($id)->delete();
+
+        return response()->json(['message' => 'Hinge spacing standard deleted']);
+    }
+
+    private function hingeSpacingStandardRules(): array
+    {
+        return [
+            'name' => 'required|string|max:100',
+            'top_distance' => 'required|numeric|min:0',
+            'top_label' => 'required|string|max:50',
+            'bottom_distance' => 'required|numeric|min:0',
+            'bottom_reference' => 'required|in:door_bottom,floor',
+            'bottom_label' => 'required|string|max:50',
+            'notes' => 'nullable|string',
         ];
     }
 

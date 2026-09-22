@@ -17,6 +17,8 @@ class DoorFrameOpeningSpec extends Model
         'door_opening_width',
         'door_opening_height',
         'hinging',
+        'butt_hinge_count',
+        'hinge_spacing_standard_id',
         'finish',
         'glazing',
     ];
@@ -70,6 +72,33 @@ class DoorFrameOpeningSpec extends Model
     public function configuration()
     {
         return $this->belongsTo(DoorFrameConfiguration::class, 'configuration_id');
+    }
+
+    public function hingeSpacingStandard()
+    {
+        return $this->belongsTo(ConfiguratorHingeSpacingStandard::class, 'hinge_spacing_standard_id');
+    }
+
+    /**
+     * Computed hinge prep locations for the Opening tab preview and cut-sheet
+     * PDF — only meaningful for butt hinges with a count + standard set.
+     *
+     * @return array<int, array{index: int, distance_from_top: float, label: string}>
+     */
+    public function hingeLocations(): array
+    {
+        if ($this->hinging !== 'butt' || ! $this->butt_hinge_count || ! $this->hinge_spacing_standard_id) {
+            return [];
+        }
+
+        $standard = $this->hingeSpacingStandard ?? $this->hingeSpacingStandard()->first();
+        if (! $standard) {
+            return [];
+        }
+
+        $bottomGap = (float) ConfiguratorSetting::current()->bottom_gap;
+
+        return $standard->locations((float) $this->door_opening_height, (int) $this->butt_hinge_count, $bottomGap);
     }
 
     /**

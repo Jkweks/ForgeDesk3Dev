@@ -14,6 +14,14 @@
           <label class="form-label">Variables</label>
           <div class="form-hint mb-2">Variables assigned here are the ones shown when editing an item in this category.</div>
           <div id="hwlib-cat-variables" class="border rounded p-2" style="max-height:320px; overflow-y:auto;"></div>
+
+          <label class="form-label mt-3">Subcategories <span class="text-muted">(optional — items shown in hardware lists as "Category - Subcategory")</span></label>
+          <div id="hwlib-cat-subcats" class="mb-2"></div>
+          <div id="hwlib-cat-subcat-add-wrap" class="input-group input-group-sm" style="max-width:320px">
+            <input type="text" class="form-control" id="hwlib-cat-subcat-new" placeholder="New subcategory name">
+            <button type="button" class="btn btn-outline-primary" onclick="hwSubcatAdd()">Add</button>
+          </div>
+          <div class="form-hint" id="hwlib-cat-subcat-hint" style="display:none">Save the category first to add subcategories.</div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
@@ -95,11 +103,15 @@
         <div class="modal-body">
           <input type="hidden" id="hwlib-item-id">
           <div class="row">
-            <div class="col-md-4 mb-3"><label class="form-label">Category</label>
-              <select class="form-select" id="hwlib-item-category" onchange="hwItemRenderValueInputs()" required></select>
+            <div class="col-md-3 mb-3"><label class="form-label">Category</label>
+              <select class="form-select" id="hwlib-item-category" onchange="hwItemOnCategoryChange()" required></select>
             </div>
-            <div class="col-md-4 mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="hwlib-item-name" required></div>
-            <div class="col-md-4 mb-3"><label class="form-label">PN</label><input type="text" class="form-control" id="hwlib-item-pn"></div>
+            <div class="col-md-3 mb-3" id="hwlib-item-subcategory-wrap" style="display:none">
+              <label class="form-label">Subcategory</label>
+              <select class="form-select" id="hwlib-item-subcategory"><option value="">— none —</option></select>
+            </div>
+            <div class="col-md-3 mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="hwlib-item-name" required></div>
+            <div class="col-md-3 mb-3"><label class="form-label">PN</label><input type="text" class="form-control" id="hwlib-item-pn"></div>
           </div>
           <div class="row">
             <div class="col-md-4 mb-3"><label class="form-label">Manufacturer</label><input type="text" class="form-control" id="hwlib-item-manufacturer"></div>

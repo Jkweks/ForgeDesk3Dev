@@ -106,11 +106,11 @@
                     <span class="nav-link-title">Fabrication</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">Documents</a>
                     <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders</a>
                     <a class="dropdown-item {{ Request::is('fabrication/work-queue') ? 'active' : '' }}" href="/fabrication/work-queue" data-permission="fabrication.work-orders.view">Work Queue</a>
                     <a class="dropdown-item {{ Request::is('fabrication/quality') ? 'active' : '' }}" href="/fabrication/quality" data-permission="quality.view">Quality Reports</a>
                     <a class="dropdown-item" href="/shop" target="_blank" rel="noopener">Shop Floor Display <i class="ti ti-external-link ms-1" style="font-size:.75rem;vertical-align:middle"></i></a>
+                    <a class="dropdown-item" href="/cut-station" target="_blank" rel="noopener">Cut Station <i class="ti ti-external-link ms-1" style="font-size:.75rem;vertical-align:middle"></i></a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">

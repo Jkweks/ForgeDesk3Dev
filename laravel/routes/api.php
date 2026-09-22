@@ -593,6 +593,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/configurator/tie-rods/{id}', [ConfiguratorDoorCatalogController::class, 'updateTieRod'])->middleware('permission:configurator.catalog.manage');
         Route::delete('/configurator/tie-rods/{id}', [ConfiguratorDoorCatalogController::class, 'destroyTieRod'])->middleware('permission:configurator.catalog.manage');
 
+        Route::post('/configurator/hinge-spacing-standards', [ConfiguratorDoorCatalogController::class, 'storeHingeSpacingStandard'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hinge-spacing-standards/{id}', [ConfiguratorDoorCatalogController::class, 'updateHingeSpacingStandard'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hinge-spacing-standards/{id}', [ConfiguratorDoorCatalogController::class, 'destroyHingeSpacingStandard'])->middleware('permission:configurator.catalog.manage');
+
         // Hardware Library Catalog (read-only browse for the hardware step)
         Route::get('/configurator/hwlib-catalog', [ConfiguratorHwlibCatalogController::class, 'index'])->middleware('permission:configurator.view');
 
@@ -605,6 +609,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/configurator/hwlib-categories/{id}', [ConfiguratorHwlibAdminController::class, 'updateCategory'])->middleware('permission:configurator.catalog.manage');
         Route::delete('/configurator/hwlib-categories/{id}', [ConfiguratorHwlibAdminController::class, 'destroyCategory'])->middleware('permission:configurator.catalog.manage');
         Route::put('/configurator/hwlib-categories/{id}/variables', [ConfiguratorHwlibAdminController::class, 'setCategoryVariables'])->middleware('permission:configurator.catalog.manage');
+
+        Route::post('/configurator/hwlib-subcategories', [ConfiguratorHwlibAdminController::class, 'storeSubcategory'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/configurator/hwlib-subcategories/{id}', [ConfiguratorHwlibAdminController::class, 'updateSubcategory'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/configurator/hwlib-subcategories/{id}', [ConfiguratorHwlibAdminController::class, 'destroySubcategory'])->middleware('permission:configurator.catalog.manage');
 
         Route::get('/configurator/hwlib-variables', [ConfiguratorHwlibAdminController::class, 'indexVariables'])->middleware('permission:configurator.view');
         Route::post('/configurator/hwlib-variables', [ConfiguratorHwlibAdminController::class, 'storeVariable'])->middleware('permission:configurator.catalog.manage');

@@ -15,6 +15,7 @@ use App\Models\ConfiguratorHwlibLinkValue;
 use App\Models\ConfiguratorHwlibSet;
 use App\Models\ConfiguratorHwlibSetItem;
 use App\Models\ConfiguratorHwlibSetItemValue;
+use App\Models\ConfiguratorHwlibSubcategory;
 use App\Models\ConfiguratorHwlibVariable;
 use App\Models\ConfiguratorSetting;
 use App\Models\DoorFrameConfiguration;
@@ -97,6 +98,47 @@ class ConfiguratorHwlibAdminController extends Controller
         return [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'sort_order' => 'nullable|integer',
+        ];
+    }
+
+    // ---- Subcategories ----
+
+    public function storeSubcategory(Request $request)
+    {
+        $data = $this->validateOrFail($request, $this->subcategoryRules());
+
+        return response()->json(['subcategory' => ConfiguratorHwlibSubcategory::create($data)], 201);
+    }
+
+    public function updateSubcategory(Request $request, $id)
+    {
+        $subcategory = ConfiguratorHwlibSubcategory::findOrFail($id);
+        $data = $this->validateOrFail($request, [
+            'category_id' => 'sometimes|exists:configurator_hwlib_categories,id',
+            'name' => 'required|string|max:255',
+            'sort_order' => 'nullable|integer',
+        ]);
+        $subcategory->update($data);
+
+        return response()->json(['subcategory' => $subcategory]);
+    }
+
+    public function destroySubcategory($id)
+    {
+        // Items keep their category — only the subcategory link is cleared
+        // (subcategory_id ->nullOnDelete() at the DB level already does
+        // this; findOrFail+delete() here goes through the same path).
+        ConfiguratorHwlibSubcategory::findOrFail($id)->delete();
+
+        return response()->json(['message' => 'Subcategory deleted']);
+    }
+
+    private function subcategoryRules(): array
+    {
+        return [
+            'category_id' => 'required|exists:configurator_hwlib_categories,id',
+            'name' => 'required|string|max:255',
             'sort_order' => 'nullable|integer',
         ];
     }
@@ -214,6 +256,18 @@ class ConfiguratorHwlibAdminController extends Controller
     {
         return [
             'category_id' => 'required|exists:configurator_hwlib_categories,id',
+            'subcategory_id' => [
+                'nullable', 'integer', 'exists:configurator_hwlib_subcategories,id',
+                function ($attribute, $value, $fail) {
+                    if (! $value) {
+                        return;
+                    }
+                    $categoryId = request('category_id');
+                    if (! ConfiguratorHwlibSubcategory::where('id', $value)->where('category_id', $categoryId)->exists()) {
+                        $fail('Subcategory does not belong to the selected category.');
+                    }
+                },
+            ],
             'name' => 'required|string|max:255',
             'manufacturer' => 'nullable|string|max:255',
             'model_number' => 'nullable|string|max:255',

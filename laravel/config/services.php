@@ -35,13 +35,16 @@ return [
         ],
     ],
 
-    'cutflow' => [
-        // Reachable from inside this app's container via the Docker bridge
-        // gateway IP, since CutFlow runs as a separate compose project on
-        // this same host with its app published on 8090 — no shared Docker
-        // network needed. Override if CutFlow ever moves to another host.
-        'base_url' => env('CUTFLOW_BASE_URL', 'http://172.25.0.1:8090'),
-        'import_token' => env('CUTFLOW_IMPORT_TOKEN'),
+    'tiger_bridge' => [
+        // The small Node service (separate repo, not part of this app) that
+        // owns the TigerStop's serial port and the Zebra printer's socket —
+        // runs on the shop tablet itself.
+        'url' => env('TIGER_BRIDGE_URL', 'http://127.0.0.1:9111'),
+
+        // No tiger-bridge reachable from here (e.g. local dev away from the
+        // shop). When true, App\Services\CutFlow\TigerBridgeClient simulates
+        // every response instead of making an HTTP call.
+        'fake' => env('TIGER_BRIDGE_FAKE', false),
     ],
 
 ];

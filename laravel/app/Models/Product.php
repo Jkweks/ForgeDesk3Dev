@@ -326,8 +326,22 @@ class Product extends Model
         return $this->machineTooling()->whereIn('status', ['active', 'warning', 'needs_replacement']);
     }
 
+    /**
+     * `quantity_available` isn't a real column — it's computed here from a
+     * per-product reservation query (JobReservationItem::binAwareCommitted()),
+     * which makes it expensive across a list of products. Callers that
+     * already know the answer more cheaply (e.g. DashboardController's
+     * single aggregate query across the whole page) assign it directly via
+     * `$product->quantity_available = ...`; without this check, Eloquent
+     * would still call this accessor on every read/serialization and
+     * silently discard that value, re-running the expensive query anyway.
+     */
     public function getQuantityAvailableAttribute()
     {
+        if (array_key_exists('quantity_available', $this->attributes)) {
+            return (int) $this->attributes['quantity_available'];
+        }
+
         return (int) floor($this->quantity_on_hand - $this->committed_from_reservations);
     }
 
@@ -645,6 +659,10 @@ class Product extends Model
      */
     public function getQuantityAvailablePacksAttribute()
     {
+        if (array_key_exists('quantity_available_packs', $this->attributes)) {
+            return (int) $this->attributes['quantity_available_packs'];
+        }
+
         $onHandPacks = $this->quantity_on_hand_packs;
         $committedPacks = $this->committed_packs_from_reservations;
 

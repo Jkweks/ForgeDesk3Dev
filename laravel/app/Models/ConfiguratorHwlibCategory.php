@@ -28,4 +28,9 @@ class ConfiguratorHwlibCategory extends Model
     {
         return $this->hasMany(ConfiguratorHwlibItem::class, 'category_id')->orderBy('name');
     }
+
+    public function subcategories()
+    {
+        return $this->hasMany(ConfiguratorHwlibSubcategory::class, 'category_id')->orderBy('sort_order')->orderBy('name');
+    }
 }

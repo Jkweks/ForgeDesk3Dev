@@ -25,6 +25,24 @@ class ConfiguratorCatalogController extends Controller
             'series.profiles.components.fasteners.product',
         ])->orderBy('sort_order')->get();
 
+        // Nested products here only need identity fields for BOM matching —
+        // hide Product's $appends (quantity_available et al) so this tree,
+        // which is re-fetched a lot (frame-series picker), doesn't pay for a
+        // per-product reservation query on every product in the whole catalog.
+        $systems->each(function ($system) {
+            $system->series->each(function ($series) {
+                $series->profiles->each(function ($profile) {
+                    $profile->product?->makeHidden($profile->product->getAppends());
+                    $profile->components->each(function ($component) {
+                        $component->product?->makeHidden($component->product->getAppends());
+                        $component->fasteners->each(function ($fastener) {
+                            $fastener->product?->makeHidden($fastener->product->getAppends());
+                        });
+                    });
+                });
+            });
+        });
+
         return response()->json(['frame_systems' => $systems]);
     }
 

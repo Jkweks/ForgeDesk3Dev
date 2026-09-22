@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ConfiguratorHwlibItem;
 use App\Models\ConfiguratorHwlibLink;
 use App\Models\ConfiguratorHwlibLinkValue;
 use App\Models\DoorFrameConfiguration;
@@ -93,11 +94,11 @@ class DoorFrameConfigurationController extends Controller
                 'workOrder',
                 'jobReservation',
                 'doors',
-                'openingSpecs',
+                'openingSpecs.hingeSpacingStandard',
                 'frameConfig.frameSeries.frameSystem',
                 'frameConfig.parts.product',
                 'doorConfigs.parts.product',
-                'hardwareLinks.item.category',
+                'hardwareLinks.item.category', 'hardwareLinks.item.subcategory',
                 'hardwareParts.product',
                 'createdBy',
             ])->findOrFail($id);
@@ -439,6 +440,8 @@ class DoorFrameConfigurationController extends Controller
                 'door_opening_width' => 'required|numeric|min:0|max:999.99',
                 'door_opening_height' => 'required|numeric|min:0|max:999.99',
                 'hinging' => 'required|in:continuous,butt,pivot_offset,pivot_center',
+                'butt_hinge_count' => 'nullable|required_if:hinging,butt|integer|min:2|max:20',
+                'hinge_spacing_standard_id' => 'nullable|required_if:hinging,butt|exists:configurator_hinge_spacing_standards,id',
                 'finish' => 'required|in:c2,db,bl',
                 'glazing' => 'nullable|string|exists:configurator_glass_specs,thickness',
             ]);
@@ -461,6 +464,8 @@ class DoorFrameConfigurationController extends Controller
                     'door_opening_width' => $request->door_opening_width,
                     'door_opening_height' => $request->door_opening_height,
                     'hinging' => $request->hinging,
+                    'butt_hinge_count' => $request->hinging === 'butt' ? $request->butt_hinge_count : null,
+                    'hinge_spacing_standard_id' => $request->hinging === 'butt' ? $request->hinge_spacing_standard_id : null,
                     'finish' => $request->finish,
                     'glazing' => $request->glazing,
                 ]
@@ -474,7 +479,7 @@ class DoorFrameConfigurationController extends Controller
 
             DB::commit();
 
-            $config->load('openingSpecs');
+            $config->load('openingSpecs.hingeSpacingStandard');
 
             // Scope/pair-vs-single may have changed which elevations this opening
             // needs. Best-effort, mirroring the pattern used on release(): a config
@@ -1291,10 +1296,17 @@ class DoorFrameConfigurationController extends Controller
 
     /**
      * If this configuration is "reserved" (editable, possibly already
-     * committed against inventory), push its current BOM into the linked
-     * reservation — creating one now if this is the first time any parts
-     * exist to reserve. Called after any endpoint that changes generated
-     * parts. No-op if the configuration isn't reserved.
+     * committed against inventory), queue a sync of its current BOM into the
+     * linked reservation — creating one now if this is the first time any
+     * parts exist to reserve. Called after any endpoint that changes
+     * generated parts. No-op if the configuration isn't reserved.
+     *
+     * Queued rather than run inline: ConfigurationReservationBridge::reserve()
+     * reloads the whole BOM tree and mutates reservation items one at a time,
+     * each cascading into a Product save + committed-quantity recalculation —
+     * expensive enough on every single part edit to be the main source of the
+     * configurator's "laggy while editing" complaints. See
+     * SyncConfigurationReservationJob.
      */
     private function syncReservationIfReserved(
         DoorFrameConfiguration $config,
@@ -1304,14 +1316,7 @@ class DoorFrameConfigurationController extends Controller
             return;
         }
 
-        try {
-            $reservationBridge->reserve($config, auth()->user());
-        } catch (\Throwable $e) {
-            Log::warning('Failed to sync reservation after configuration edit', [
-                'config_id' => $config->id,
-                'message' => $e->getMessage(),
-            ]);
-        }
+        \App\Jobs\SyncConfigurationReservationJob::dispatch($config->id, auth()->id());
     }
 
     /**
@@ -1323,7 +1328,7 @@ class DoorFrameConfigurationController extends Controller
             'businessJob',
             'workOrder',
             'doors',
-            'openingSpecs',
+            'openingSpecs.hingeSpacingStandard',
             'frameConfig.frameSeries.frameSystem',
             'frameConfig.parts.product',
             'doorConfigs.parts.product',
@@ -1465,6 +1470,10 @@ class DoorFrameConfigurationController extends Controller
             'door_opening_height' => $specs->door_opening_height,
             'hinging' => $specs->hinging,
             'hinging_label' => $specs->hinging_label,
+            'butt_hinge_count' => $specs->butt_hinge_count,
+            'hinge_spacing_standard_id' => $specs->hinge_spacing_standard_id,
+            'hinge_spacing_standard' => $specs->hingeSpacingStandard,
+            'hinge_locations' => $specs->hingeLocations(),
             'finish' => $specs->finish,
             'finish_label' => $specs->finish_label,
             'glazing' => $specs->glazing,
@@ -1631,10 +1640,23 @@ class DoorFrameConfigurationController extends Controller
             ], 422);
         }
 
+        $quantity = $request->quantity ?? 1;
+
+        // Butt hinge quantity is driven by the Opening tab's hinge count, not
+        // hand-entered per hardware link — force it server-side too, since the
+        // frontend field is read-only but the API itself isn't.
+        $item = ConfiguratorHwlibItem::with('category')->find($request->item_id);
+        if ($item && preg_match('/butt hinge/i', $item->category->name ?? '')) {
+            $buttHingeCount = $config->openingSpecs?->butt_hinge_count;
+            if ($buttHingeCount) {
+                $quantity = $buttHingeCount;
+            }
+        }
+
         $link = ConfiguratorHwlibLink::create([
             'configuration_id' => $config->id,
             'item_id' => $request->item_id,
-            'quantity' => $request->quantity ?? 1,
+            'quantity' => $quantity,
             'series' => $request->series ?? 'Standard',
             'leaf' => $request->leaf ?? 'both',
             'notes' => $request->notes,
@@ -1651,7 +1673,7 @@ class DoorFrameConfigurationController extends Controller
             ]);
         }
 
-        $link->load('item.category');
+        $link->load('item.category', 'item.subcategory');
 
         return response()->json([
             'message' => 'Hardware item added successfully',
@@ -1708,7 +1730,7 @@ class DoorFrameConfigurationController extends Controller
             }
         }
 
-        $link->load('item.category');
+        $link->load('item.category', 'item.subcategory');
 
         return response()->json([
             'message' => 'Hardware item updated successfully',
@@ -1742,7 +1764,7 @@ class DoorFrameConfigurationController extends Controller
      */
     public function resolvedHardwareValues($id)
     {
-        $config = DoorFrameConfiguration::with(['hardwareLinks.item.category', 'openingSpecs', 'doorConfigs', 'frameConfig'])
+        $config = DoorFrameConfiguration::with(['hardwareLinks.item.category', 'hardwareLinks.item.subcategory', 'openingSpecs', 'doorConfigs', 'frameConfig'])
             ->findOrFail($id);
 
         $resolver = new HwlibResolver($config);

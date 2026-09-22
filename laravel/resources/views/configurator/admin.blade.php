@@ -284,6 +284,24 @@
                         </div>
                       </div>
                     </div>
+
+                    <!-- Hinge Spacing Standards -->
+                    <div class="col-12">
+                      <div class="card">
+                        <div class="card-header">
+                          <h3 class="card-title">Hinge Spacing Standards <span class="text-muted ms-1">(butt hinges)</span></h3>
+                          <div class="card-actions">
+                            <button class="btn btn-sm btn-primary" onclick="dcOpenModal('hingeSpacingStandard')" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add</button>
+                          </div>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-vcenter card-table">
+                            <thead><tr><th>Name</th><th>From Door Top</th><th>From Door Bottom / Floor</th><th class="w-1"></th></tr></thead>
+                            <tbody id="dc-hingeSpacingStandard-tbody"></tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div><!-- /tab-door-catalog -->
 
@@ -644,6 +662,42 @@
             <div class="col-md-6 mb-3"><label class="form-label">Min Length (exclusive)</label><input type="number" step="0.0001" class="form-control" id="dc-tieRod-minLen"></div>
             <div class="col-md-6 mb-3"><label class="form-label">Max Length (inclusive)</label><input type="number" step="0.0001" class="form-control" id="dc-tieRod-maxLen"></div>
           </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Door Catalog: Hinge Spacing Standard Modal -->
+<div class="modal modal-blur fade" id="dc-hingeSpacingStandard-modal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="dc-hingeSpacingStandard-form">
+        <div class="modal-header"><h5 class="modal-title">Hinge Spacing Standard</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="dc-hingeSpacingStandard-id">
+          <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="dc-hingeSpacingStandard-name" required></div>
+          <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Distance from Door Top</label><input type="number" step="0.0001" class="form-control" id="dc-hingeSpacingStandard-topDistance" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Top Reference Point</label><input type="text" class="form-control" id="dc-hingeSpacingStandard-topLabel" placeholder="e.g. top of prep, center of prep" required></div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3"><label class="form-label">Distance from Bottom Reference</label><input type="number" step="0.0001" class="form-control" id="dc-hingeSpacingStandard-bottomDistance" required></div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Bottom Reference</label>
+              <select class="form-select" id="dc-hingeSpacingStandard-bottomReference" required>
+                <option value="door_bottom">Bottom of Door</option>
+                <option value="floor">Finished Floor</option>
+              </select>
+            </div>
+            <div class="col-md-4 mb-3"><label class="form-label">Bottom Reference Point</label><input type="text" class="form-control" id="dc-hingeSpacingStandard-bottomLabel" placeholder="e.g. bottom of prep, center of prep" required></div>
+          </div>
+          <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="dc-hingeSpacingStandard-notes" rows="2"></textarea></div>
+          <div class="text-muted small">Additional hinges beyond the top/bottom pair are spaced evenly between them.</div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
@@ -1132,7 +1186,7 @@
 
   // ==================== Configurator: Door Catalog ====================
   // Flat lookup tables (not a hierarchy) — one generic CRUD driver per entity type.
-  let dcData = { door_types: [], rails: [], rail_lugs: [], mid_lugs: [], glass_specs: [], setting_block_kits: [], tie_rods: [] };
+  let dcData = { door_types: [], rails: [], rail_lugs: [], mid_lugs: [], glass_specs: [], setting_block_kits: [], tie_rods: [], hinge_spacing_standards: [] };
 
   // field: [domSuffix, jsonKey, 'text'|'number']
   const DC_ENTITIES = {
@@ -1167,6 +1221,12 @@
       api: 'tie-rods', dataKey: 'tie_rod', listKey: 'tie_rods',
       fields: [['series', 'series', 'text'], ['pn', 'pn', 'text'], ['minLen', 'min_len', 'number'], ['maxLen', 'max_len', 'number']],
     },
+    hingeSpacingStandard: {
+      api: 'hinge-spacing-standards', dataKey: 'hinge_spacing_standard', listKey: 'hinge_spacing_standards',
+      fields: [['name', 'name', 'text'], ['topDistance', 'top_distance', 'number'], ['topLabel', 'top_label', 'text'],
+               ['bottomDistance', 'bottom_distance', 'number'], ['bottomReference', 'bottom_reference', 'text'], ['bottomLabel', 'bottom_label', 'text'],
+               ['notes', 'notes', 'text']],
+    },
   };
 
   async function dcLoadAll() {
@@ -1192,6 +1252,7 @@
       glassSpec: r => `<td>${esc(r.thickness)}</td><td>${esc(r.stop_pn||'')}</td><td>${esc(r.gasket_pn||'')}</td><td>${esc(r.gasket2_pn||'')}</td><td>${r.gasket_qty_factor ?? ''}</td><td>${r.stop_height ?? ''}</td>`,
       sbk: r => `<td>${esc(r.series)}</td><td>${esc(r.glass_thickness)}</td><td>${esc(r.kit1_pn||'')}</td><td>${esc(r.kit2_pn||'')}</td>`,
       tieRod: r => `<td>${esc(r.series||'')}</td><td>${esc(r.pn)}</td><td>${r.min_len ?? ''}</td><td>${r.max_len ?? ''}</td>`,
+      hingeSpacingStandard: r => `<td>${esc(r.name)}</td><td>${r.top_distance}" to ${esc(r.top_label)}</td><td>${r.bottom_distance}" to ${esc(r.bottom_label)} from ${r.bottom_reference === 'floor' ? 'finished floor' : 'bottom of door'}</td>`,
     };
     tbody.innerHTML = list.map(r => `
       <tr>
@@ -1283,6 +1344,13 @@
   }
 
   function hwFindCategory(id) { return hwCategories.find(c => c.id == id); }
+  function hwFindSubcategory(id) {
+    for (const c of hwCategories) {
+      const s = (c.subcategories || []).find(s => s.id == id);
+      if (s) return s;
+    }
+    return null;
+  }
   function hwFindVariable(id) { return hwVariables.find(v => v.id == id); }
   function hwFindItem(id) { return hwItems.find(i => i.id == id); }
   function hwFindBacker(id) { return hwBackers.find(b => b.id == id); }
@@ -1294,7 +1362,7 @@
     const tbody = document.getElementById('hwlib-cat-tbody');
     tbody.innerHTML = hwCategories.map(c => `
       <tr>
-        <td>${esc(c.name)}</td>
+        <td>${esc(c.name)}${(c.subcategories || []).length ? `<div class="text-muted small">${(c.subcategories || []).map(s => esc(s.name)).join(', ')}</div>` : ''}</td>
         <td class="text-muted small">${esc(c.description || '')}</td>
         <td>${(c.variables || []).length}</td>
         <td>${(c.items || []).length}</td>
@@ -1327,7 +1395,61 @@
           </label>`).join('')}
       </div>`).join('');
 
+    hwSubcatRenderList(c);
+    document.getElementById('hwlib-cat-subcat-add-wrap').style.display = id ? '' : 'none';
+    document.getElementById('hwlib-cat-subcat-hint').style.display = id ? 'none' : '';
+    document.getElementById('hwlib-cat-subcat-new').value = '';
+
     showModal(document.getElementById('hwlib-cat-modal'));
+  }
+
+  function hwSubcatRenderList(category) {
+    const wrap = document.getElementById('hwlib-cat-subcats');
+    const subs = (category?.subcategories || []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
+    wrap.innerHTML = subs.map(s => `
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <input type="text" class="form-control form-control-sm" style="max-width:240px" value="${esc(s.name)}" onchange="hwSubcatRename(${s.id}, this.value)">
+        <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwSubcatDelete(${s.id})"><i class="ti ti-trash"></i></button>
+      </div>`).join('') || '<div class="text-muted small mb-2">None yet.</div>';
+  }
+
+  async function hwSubcatRefreshAndRender() {
+    const categoryId = document.getElementById('hwlib-cat-id').value;
+    const data = await authenticatedFetch('/configurator/hwlib-catalog');
+    hwCategories = data.categories || [];
+    hwSubcatRenderList(hwFindCategory(categoryId));
+    hwCatRender();
+  }
+
+  async function hwSubcatAdd() {
+    const categoryId = document.getElementById('hwlib-cat-id').value;
+    const nameInput = document.getElementById('hwlib-cat-subcat-new');
+    const name = nameInput.value.trim();
+    if (!categoryId || !name) return;
+    try {
+      await authenticatedFetch('/configurator/hwlib-subcategories', {
+        method: 'POST', body: JSON.stringify({ category_id: categoryId, name }),
+      });
+      nameInput.value = '';
+      await hwSubcatRefreshAndRender();
+    } catch (err) { showNotification(err.message, 'danger'); }
+  }
+
+  async function hwSubcatRename(id, name) {
+    name = (name || '').trim();
+    if (!name) return;
+    try {
+      await authenticatedFetch(`/configurator/hwlib-subcategories/${id}`, { method: 'PUT', body: JSON.stringify({ name }) });
+      await hwSubcatRefreshAndRender();
+    } catch (err) { showNotification(err.message, 'danger'); }
+  }
+
+  async function hwSubcatDelete(id) {
+    if (!confirm('Delete this subcategory? Items using it stay in the parent category, just uncategorized within it.')) return;
+    try {
+      await authenticatedFetch(`/configurator/hwlib-subcategories/${id}`, { method: 'DELETE' });
+      await hwSubcatRefreshAndRender();
+    } catch (err) { showNotification(err.message, 'danger'); }
   }
 
   document.getElementById('hwlib-cat-form').addEventListener('submit', async (e) => {
@@ -1459,21 +1581,37 @@
   }
 
   // ---- Items ----
+  // One option per subcategory ("Category - Subcategory") for a category
+  // that has any, plus a bare "Category" option for its unassigned items;
+  // a category with no subcategories keeps a single plain option.
+  function hwCategoryFlatOptions() {
+    const options = [];
+    hwCategories.forEach(c => {
+      const subs = c.subcategories || [];
+      if (!subs.length) { options.push({ value: `c${c.id}`, label: c.name }); return; }
+      subs.forEach(s => options.push({ value: `s${s.id}`, label: `${c.name} - ${s.name}` }));
+      options.push({ value: `c${c.id}`, label: `${c.name} (uncategorized)` });
+    });
+    return options;
+  }
+
   function hwItemPopulateCategoryFilter() {
     const sel = document.getElementById('hwlib-item-catfilter');
     const current = sel.value;
-    sel.innerHTML = '<option value="">All Categories</option>' + hwCategories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    sel.innerHTML = '<option value="">All Categories</option>' + hwCategoryFlatOptions().map(o => `<option value="${o.value}">${esc(o.label)}</option>`).join('');
     sel.value = current;
   }
 
   function hwItemRender() {
     const catFilter = document.getElementById('hwlib-item-catfilter').value;
     const tbody = document.getElementById('hwlib-item-tbody');
-    const list = catFilter ? hwItems.filter(i => i.category_id == catFilter) : hwItems;
+    let list = hwItems;
+    if (catFilter.startsWith('s')) list = hwItems.filter(i => i.subcategory_id == catFilter.slice(1));
+    else if (catFilter.startsWith('c')) list = hwItems.filter(i => i.category_id == catFilter.slice(1) && !i.subcategory_id);
     tbody.innerHTML = list.map(i => `
       <tr>
         <td>${esc(i.name)}</td>
-        <td>${esc(hwFindCategory(i.category_id)?.name || '')}</td>
+        <td>${esc(hwFindCategory(i.category_id)?.name || '')}${i.subcategory_id ? ' - ' + esc(hwFindSubcategory(i.subcategory_id)?.name || '') : ''}</td>
         <td>${esc(i.manufacturer || '')}</td>
         <td>${esc(i.pn || '')}</td>
         <td>${i.active ? '<span class="badge bg-green-lt">active</span>' : '<span class="badge bg-secondary-lt">inactive</span>'}</td>
@@ -1506,6 +1644,19 @@
       return `<input type="number" step="any" class="form-control form-control-sm" id="${name}" value="${esc(currentValue ?? '')}">`;
     }
     return `<input type="text" class="form-control form-control-sm" id="${name}" value="${esc(currentValue ?? '')}">`;
+  }
+
+  function hwItemPopulateSubcategorySelect(categoryId, selectedId) {
+    const category = hwFindCategory(categoryId);
+    const subs = (category?.subcategories || []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
+    const sel = document.getElementById('hwlib-item-subcategory');
+    sel.innerHTML = '<option value="">— none —</option>' + subs.map(s => `<option value="${s.id}" ${s.id == selectedId ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+    document.getElementById('hwlib-item-subcategory-wrap').style.display = subs.length ? '' : 'none';
+  }
+
+  function hwItemOnCategoryChange() {
+    hwItemPopulateSubcategorySelect(document.getElementById('hwlib-item-category').value, null);
+    hwItemRenderValueInputs();
   }
 
   function hwItemRenderValueInputs() {
@@ -1572,6 +1723,7 @@
     const i = id ? hwFindItem(id) : null;
     document.getElementById('hwlib-item-id').value = id || '';
     document.getElementById('hwlib-item-category').innerHTML = hwCategories.map(c => `<option value="${c.id}" ${i?.category_id == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    hwItemPopulateSubcategorySelect(i?.category_id, i?.subcategory_id);
     document.getElementById('hwlib-item-name').value = i?.name || '';
     document.getElementById('hwlib-item-pn').value = i?.pn || '';
     document.getElementById('hwlib-item-manufacturer').value = i?.manufacturer || '';
@@ -1605,6 +1757,7 @@
     const id = document.getElementById('hwlib-item-id').value;
     const payload = {
       category_id: document.getElementById('hwlib-item-category').value,
+      subcategory_id: document.getElementById('hwlib-item-subcategory').value || null,
       name: document.getElementById('hwlib-item-name').value,
       pn: document.getElementById('hwlib-item-pn').value || null,
       manufacturer: document.getElementById('hwlib-item-manufacturer').value || null,

@@ -1,9 +1,10 @@
 <?php
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,7 +14,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->trustProxies(at: '*');
+        // Trust X-Forwarded-For/Port/Proto (needed for correct client IP and
+        // https:// scheme detection behind the reverse proxy) but NOT
+        // X-Forwarded-Host: the upstream proxy doesn't reliably send that
+        // header, and when it's present-but-empty Symfony trusts it as an
+        // empty string, which makes every url()/asset() call resolve to a
+        // hostless "https:/path" (no double slash, no host) — the actual
+        // Host header nginx passes through from the real request is already
+        // correct and doesn't need overriding here.
+        $middleware->trustProxies(
+            at: '*',
+            headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO,
+        );
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);

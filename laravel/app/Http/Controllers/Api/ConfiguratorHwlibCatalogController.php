@@ -16,6 +16,7 @@ class ConfiguratorHwlibCatalogController extends Controller
     {
         $categories = ConfiguratorHwlibCategory::with([
             'variables',
+            'subcategories',
             'items' => fn ($q) => $q->where('active', true)->orderBy('name'),
             'items.values.variable',
             'items.backers',

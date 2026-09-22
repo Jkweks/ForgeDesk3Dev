@@ -122,6 +122,15 @@ Route::get('/shop', function () {
     return view('shop-floor');
 });
 
+// CutFlow — cut-station kiosk, no ForgeDesk auth required (same as /shop
+// above). Operator identity is a fab_pin sign-in against FdUser inside the
+// Livewire component itself, not a route-level guard.
+Route::get('/cut-station', \App\Livewire\CutFlow\Dashboard::class)->name('cutflow.dashboard');
+Route::get('/cut-station/import', [\App\Http\Controllers\CutFlow\ImportController::class, 'show'])->name('cutflow.import.show');
+Route::post('/cut-station/import', [\App\Http\Controllers\CutFlow\ImportController::class, 'store'])->name('cutflow.import.store');
+Route::get('/cut-station/settings', \App\Livewire\CutFlow\Settings::class)->name('cutflow.settings');
+Route::get('/cut-station/cuts/{cutLogEntry:uuid}', [\App\Http\Controllers\CutFlow\CutController::class, 'show'])->name('cutflow.cuts.show');
+
 // Design-time preview of the maintenance page, so it can be checked without
 // actually toggling maintenance mode. Excluded entirely outside non-production
 // so the route doesn't exist at all in a prod build, even if this file ships

@@ -152,12 +152,23 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Hinging</label>
-                      <select class="form-select" id="fb-op-hinging">
+                      <select class="form-select" id="fb-op-hinging" onchange="fbToggleButtHingeFields()">
                         <option value="continuous">Continuous</option>
                         <option value="butt">Butt</option>
                         <option value="pivot_offset">Pivot Offset</option>
                         <option value="pivot_center">Pivot Center</option>
                       </select>
+                    </div>
+                    <div class="col-md-4" id="fb-op-butt-hinge-count-wrap" style="display:none">
+                      <label class="form-label">Number of Hinges</label>
+                      <input type="number" step="1" min="2" max="20" class="form-control" id="fb-op-butt-hinge-count">
+                    </div>
+                    <div class="col-md-4" id="fb-op-hinge-standard-wrap" style="display:none">
+                      <label class="form-label">Hinge Spacing Standard</label>
+                      <select class="form-select" id="fb-op-hinge-standard"></select>
+                    </div>
+                    <div class="col-12" id="fb-op-hinge-locations-wrap" style="display:none">
+                      <div class="text-muted small" id="fb-op-hinge-locations"></div>
                     </div>
 
                     <div class="col-12"><hr class="my-2"></div>
@@ -563,10 +574,12 @@ async function fbLoadJobsInto(select) {
 }
 
 async function fbLoadCatalogTree() {
+  if (fbCatalogTree.length) return fbCatalogTree;
   const data = await authenticatedFetch('/configurator/catalog/tree');
   fbCatalogTree = data.frame_systems || [];
   const systemSelect = document.getElementById('fb-frame-system');
   systemSelect.innerHTML = '<option value="">All Systems</option>' + fbCatalogTree.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  return fbCatalogTree;
 }
 
 async function fbLoadDoorCatalog() {
@@ -606,6 +619,28 @@ function fbPopulateGlazingSelect() {
     '<option value="">— select —</option>' + glassSpecs.map(g => `<option value="${esc(g.thickness)}" ${g.thickness === current ? 'selected' : ''}>${esc(g.thickness)}</option>`).join('');
 }
 
+function fbPopulateHingeStandardSelect() {
+  const standards = fbDoorCatalog?.hinge_spacing_standards || [];
+  const current = fbSelectedDetail?.opening_specs?.hinge_spacing_standard_id;
+  document.getElementById('fb-op-hinge-standard').innerHTML =
+    '<option value="">— select —</option>' + standards.map(s => `<option value="${s.id}" ${s.id == current ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+}
+
+function fbToggleButtHingeFields() {
+  const isButt = document.getElementById('fb-op-hinging').value === 'butt';
+  document.getElementById('fb-op-butt-hinge-count-wrap').style.display = isButt ? '' : 'none';
+  document.getElementById('fb-op-hinge-standard-wrap').style.display = isButt ? '' : 'none';
+  document.getElementById('fb-op-hinge-locations-wrap').style.display = isButt ? '' : 'none';
+}
+
+function fbRenderHingeLocations() {
+  const locations = fbSelectedDetail?.opening_specs?.hinge_locations || [];
+  const wrap = document.getElementById('fb-op-hinge-locations');
+  if (!locations.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '<strong>Hinge prep locations (from door top):</strong><br>' +
+    locations.map(l => `${esc(l.label)}: ${l.distance_from_top.toFixed(3)}"`).join(' &nbsp;|&nbsp; ');
+}
+
 function fbToggleMidRail() {
   const midQty = parseInt(document.getElementById('fb-door-midqty').value || 0, 10);
   document.getElementById('fb-door-midrail-wrap').style.display = midQty > 0 ? '' : 'none';
@@ -617,9 +652,11 @@ function fbToggleMidRail() {
 let fbHwCategories = [];
 
 async function fbLoadHwCatalog() {
+  if (fbHwCategories.length) { fbRenderHwCategorySelect(); return fbHwCategories; }
   const data = await authenticatedFetch('/configurator/hwlib-catalog');
   fbHwCategories = (data.categories || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   fbRenderHwCategorySelect();
+  return fbHwCategories;
 }
 
 // A "Butt Hinge"/"Continuous Hinge" category only shows when the door's
@@ -636,27 +673,72 @@ function fbHwCategoryAllowedForHinging(categoryName) {
   return true;
 }
 
+// Categories with subcategories (e.g. Cylinders -> Rim/Mortise/Cores/Rings)
+// flatten into one option per subcategory, labeled "Category - Subcategory";
+// a category with no subcategories (or with items that aren't assigned one)
+// keeps/gets a plain "Category" option. Option values are "c<id>" (category,
+// no subcategory filter) or "s<id>" (a specific subcategory).
+function fbBuildHwCategoryOptions() {
+  const scope = document.getElementById('fb-hw-scope').value;
+  const matchesScope = i => scope !== 'standard' || i.vos_standard;
+  const options = [];
+  fbHwCategories.forEach(c => {
+    if (!fbHwCategoryAllowedForHinging(c.name)) return;
+    const items = c.items || [];
+    const subs = c.subcategories || [];
+    subs.forEach(s => {
+      const subItems = items.filter(i => i.subcategory_id == s.id);
+      if (subItems.some(matchesScope)) options.push({ value: `s${s.id}`, label: `${c.name} - ${s.name}`, categoryId: c.id, subcategoryId: s.id });
+    });
+    const uncategorized = items.filter(i => !i.subcategory_id);
+    if (uncategorized.some(matchesScope)) options.push({ value: `c${c.id}`, label: c.name, categoryId: c.id, subcategoryId: null });
+  });
+  return options;
+}
+
 function fbRenderHwCategorySelect() {
   const catSelect = document.getElementById('fb-hw-category');
-  const scope = document.getElementById('fb-hw-scope').value;
   const current = catSelect.value;
-  const visible = fbHwCategories.filter(c =>
-    fbHwCategoryAllowedForHinging(c.name) && (c.items || []).some(i => scope !== 'standard' || i.vos_standard)
-  );
-  catSelect.innerHTML = visible.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  if (visible.some(c => c.id == current)) catSelect.value = current;
+  const options = fbBuildHwCategoryOptions();
+  catSelect.innerHTML = options.map(o => `<option value="${o.value}">${esc(o.label)}</option>`).join('');
+  if (options.some(o => o.value === current)) catSelect.value = current;
   fbFilterHwItems();
 }
 
 function fbFilterHwItems() {
-  const catId = document.getElementById('fb-hw-category').value;
-  const cat = fbHwCategories.find(c => c.id == catId);
+  const value = document.getElementById('fb-hw-category').value;
+  const selected = fbBuildHwCategoryOptions().find(o => o.value === value);
+  const cat = selected ? fbHwCategories.find(c => c.id == selected.categoryId) : null;
   const scope = document.getElementById('fb-hw-scope').value;
-  const items = (cat?.items || []).filter(i => scope !== 'standard' || i.vos_standard);
+  let items = (cat?.items || []).filter(i => scope !== 'standard' || i.vos_standard);
+  if (selected) {
+    items = selected.subcategoryId
+      ? items.filter(i => i.subcategory_id == selected.subcategoryId)
+      : items.filter(i => !i.subcategory_id);
+  }
   const itemSelect = document.getElementById('fb-hw-item');
   itemSelect.innerHTML = items.map(i =>
     `<option value="${i.id}">${esc(i.name)}${i.pn ? ' — ' + esc(i.pn) : ''}</option>`
   ).join('');
+
+  // Butt-hinge hardware quantity always matches the hinge count set on the
+  // Opening tab — it's read-only here; change it on Opening instead.
+  const qtyInput = document.getElementById('fb-hw-qty');
+  const isButtHinge = /butt hinge/i.test(cat?.name || '');
+  qtyInput.readOnly = isButtHinge;
+  if (isButtHinge) {
+    const buttHingeCount = fbSelectedDetail?.opening_specs?.butt_hinge_count;
+    if (buttHingeCount) qtyInput.value = buttHingeCount;
+  }
+}
+
+function fbSelectButtHingeCategory() {
+  const match = fbHwCategories.find(c => /butt hinge/i.test(c.name));
+  if (!match) return;
+  const opt = fbBuildHwCategoryOptions().find(o => o.categoryId == match.id);
+  if (!opt) return;
+  document.getElementById('fb-hw-category').value = opt.value;
+  fbFilterHwItems();
 }
 
 function fbRenderHwLinks(links) {
@@ -665,7 +747,7 @@ function fbRenderHwLinks(links) {
   tbody.innerHTML = links.map(l => `
     <tr>
       <td>${esc(l.item.name)}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}</td>
-      <td>${esc(l.item.category.name)}</td>
+      <td>${esc(l.item.category.name)}${l.item.subcategory ? ' - ' + esc(l.item.subcategory.name) : ''}</td>
       <td>${esc(l.series)}</td>
       <td>${esc(l.leaf)}</td>
       <td>${l.quantity}</td>
@@ -877,6 +959,10 @@ function fbRenderDetail() {
   document.getElementById('fb-op-hand-single').value = os?.hand_single || 'lh_inswing';
   document.getElementById('fb-op-hand-pair').value = os?.hand_pair || 'rhr_active';
   document.getElementById('fb-op-hinging').value = os?.hinging || 'continuous';
+  document.getElementById('fb-op-butt-hinge-count').value = os?.butt_hinge_count ?? 2;
+  fbPopulateHingeStandardSelect();
+  fbToggleButtHingeFields();
+  fbRenderHingeLocations();
   document.getElementById('fb-op-width').value = os
     ? (os.door_opening_width ?? '')
     : ((os?.opening_type || 'single') === 'pair' ? 72 : 36);
@@ -1198,6 +1284,7 @@ document.getElementById('fb-new-form').addEventListener('submit', async (e) => {
 document.getElementById('fb-opening-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const isPair = document.getElementById('fb-op-type').value === 'pair';
+  const isButt = document.getElementById('fb-op-hinging').value === 'butt';
   const payload = {
     job_scope: document.getElementById('fb-op-scope').value,
     opening_type: document.getElementById('fb-op-type').value,
@@ -1206,9 +1293,12 @@ document.getElementById('fb-opening-form').addEventListener('submit', async (e) 
     door_opening_width: parseFloat(document.getElementById('fb-op-width').value),
     door_opening_height: parseFloat(document.getElementById('fb-op-height').value),
     hinging: document.getElementById('fb-op-hinging').value,
+    butt_hinge_count: isButt ? parseInt(document.getElementById('fb-op-butt-hinge-count').value || 2, 10) : null,
+    hinge_spacing_standard_id: isButt ? (document.getElementById('fb-op-hinge-standard').value || null) : null,
     finish: document.getElementById('fb-op-finish').value,
     glazing: document.getElementById('fb-op-glazing').value || null,
   };
+  if (isButt && !payload.hinge_spacing_standard_id) { showNotification('Select a hinge spacing standard', 'warning'); return; }
   if (payload.door_opening_width < 30 && !confirm(`${payload.door_opening_width}" is narrower than the usual 30" minimum. Please verify this is correct before continuing.`)) return;
   if (payload.door_opening_height < 70 && !confirm(`${payload.door_opening_height}" is shorter than the usual 70" minimum. Please verify this is correct before continuing.`)) return;
   try {
@@ -1218,7 +1308,15 @@ document.getElementById('fb-opening-form').addEventListener('submit', async (e) 
       res.warnings.forEach(w => showNotification(w, 'warning'));
     }
     await fbLoadDetail();
-    fbAdvanceTab('opening');
+
+    const hasButtHingeHw = (fbSelectedDetail?.hardware_links || []).some(l => /butt hinge/i.test(l.item?.category?.name || ''));
+    if (payload.butt_hinge_count && !hasButtHingeHw && confirm(`Number of hinges set to ${payload.butt_hinge_count}. Select butt hinge hardware now?`)) {
+      const hwTabLink = document.querySelector('a[href="#fb-tab-hardware"]');
+      if (hwTabLink && window.bootstrap?.Tab) new bootstrap.Tab(hwTabLink).show();
+      fbSelectButtHingeCategory();
+    } else {
+      fbAdvanceTab('opening');
+    }
   } catch (err) { showNotification(err.message, 'danger'); }
 });
 

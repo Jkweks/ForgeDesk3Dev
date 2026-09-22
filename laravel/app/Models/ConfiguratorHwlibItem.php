@@ -10,7 +10,7 @@ class ConfiguratorHwlibItem extends Model
     use HasFactory;
 
     protected $fillable = [
-        'category_id', 'name', 'manufacturer', 'model_number', 'pn', 'notes',
+        'category_id', 'subcategory_id', 'name', 'manufacturer', 'model_number', 'pn', 'notes',
         'active', 'vos_standard', 'finishes', 'min_width', 'max_width',
         'min_height', 'max_height', 'field_install', 'handed',
         'default_strike_item_id', 'default_cover_item_id',
@@ -31,6 +31,11 @@ class ConfiguratorHwlibItem extends Model
     public function category()
     {
         return $this->belongsTo(ConfiguratorHwlibCategory::class, 'category_id');
+    }
+
+    public function subcategory()
+    {
+        return $this->belongsTo(ConfiguratorHwlibSubcategory::class, 'subcategory_id');
     }
 
     public function values()

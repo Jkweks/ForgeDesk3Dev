@@ -7,6 +7,15 @@ while since the note was written.
 
 ## Workflow
 
+- [x] **Configurator sub-categories.** Hardware library categories can have an
+  optional second level (e.g. Cylinders → Rim/Mortise/Cores/Rings, Panics →
+  Rim/CVR/Mortise), managed from the Category modal in Configurator admin →
+  Hardware Library. Category pickers (Hardware tab item-add form, admin
+  Items filter) flatten a category with subcategories into one
+  "Category - Subcategory" option per subcategory, plus a bare "Category"
+  entry for any items left without one — a category with no subcategories
+  is unaffected. `configurator_hwlib_subcategories` table,
+  `ConfiguratorHwlibItem::subcategory_id`, `fbBuildHwCategoryOptions()`.
 - [x] **Work order / elevation integration.** Configs can be pulled into a work
   order's Door Schedule (existing drafts listed + attachable), production steps
   gate on release via `StageGateService::blockingConfigurationReasonFor()`, and
@@ -16,8 +25,37 @@ while since the note was written.
 - [x] **Length-driven components.** Products can be flagged `is_length_based`;
   reservation quantity rounds up to the next 1/10 of stock length instead of
   going to the cut list. `Product::is_length_based`, `ConfigurationReservationBridge::quantityContribution()`.
-- [ ] **Investigate laggyness** loading configs / editing parts within a config.
-  Not investigated yet.
+- [x] **Investigate laggyness** loading configs / editing parts within a config —
+  root causes found and fixed:
+  - Every part edit/generate call on a **reserved** config ran
+    `ConfigurationReservationBridge::reserve()` synchronously — reloading the
+    whole BOM tree and saving each touched `Product` one at a time (each
+    triggering a committed-quantity recalculation). Moved off the request
+    path onto the existing Redis queue worker.
+    `SyncConfigurationReservationJob`, `DoorFrameConfigurationController::syncReservationIfReserved()`.
+  - `Product::quantity_available`/`quantity_available_packs` are `$appends`
+    accessors that **always** recomputed from a per-product reservation
+    query, silently discarding any value a caller had already computed more
+    cheaply (e.g. `DashboardController`'s single aggregate query) — Eloquent
+    calls the accessor on every read/serialization regardless of a manually
+    set raw attribute. This caused the "quantities not loading in job
+    dashboard until headings clicked" symptom (both the initial load and the
+    sort-click hit the same slow N+1-laden request) and made
+    `/configurator/catalog/tree` expensive (every nested product in the
+    frame catalog re-ran the query). Fixed the accessors to respect an
+    already-set raw attribute; `ConfiguratorCatalogController::tree()` now
+    also hides the appends on its nested products entirely, since that tree
+    never displays them. `Product::getQuantityAvailableAttribute()`/`getQuantityAvailablePacksAttribute()`.
+  - The Frame Builder re-fetched the entire frame catalog tree and hardware
+    catalog on **every** config click instead of caching them for the page
+    session (unlike the door catalog, which already cached correctly) —
+    added the same cache guard. `fbLoadCatalogTree()`, `fbLoadHwCatalog()`.
+  - **Not yet fixed / follow-up:** the frontend still does a full
+    `GET .../{id}` reload (`fbLoadDetail()`) after every single part
+    edit/save/generate/delete instead of patching local state from the
+    mutation's own response — compounds whatever cost remains on each save.
+    Deferred as a separate, larger frontend refactor (~10 handlers in
+    `frame.blade.php`).
 - [ ] **Tie rod calculation** — select tie rod length from the bottom rail's
   *calculated* length (checked against stile width), not a fixed table. E.g. a
   Medium stile door with a 28.8125" bottom rail should pick the tie rod that
@@ -72,13 +110,25 @@ while since the note was written.
   (`door_frame_opening_specs.glazing`, the real 11-value
   `configurator_glass_specs.thickness` domain) — removed from both Frame and
   Door tabs. `DoorBomGenerator` now reads it from `openingSpecs->glazing`
-  instead of the door config; the frame tab's old `glazing` column was never
+  instead of the door config; the frame tab's old `glazing` column was neverin
   actually read by `FrameBomGenerator` (only `transom_glazing` is), so
   nothing there lost any real behavior.
 - [x] Hand: LHRA relabeled to "LHR Active"; selecting it prompts
   ("non-standard configuration, please verify") since RHR Active is the
   standard, no-warning option. `fbCheckNonStandardPairHand()`.
-- [ ] "Hinge spacing standard" field/remake — not present.
+- [x] **Hinge spacing standard.** "Number of Hinges" + "Hinge Spacing
+  Standard" fields show on the Opening tab when Hinging = Butt; a computed
+  "hinge prep locations from door top" preview renders after saving, and the
+  same locations appear on the cut-sheet PDF. Standards (top/bottom distance +
+  reference point, e.g. Standard: 2-15/16" top / 3" from door bottom;
+  Curries: 7-1/4" top / 12-1/4" from finished floor, both center-of-prep) are
+  admin-managed (Configurator admin → Door Catalog → Hinge Spacing
+  Standards) rather than hardcoded, so new ones don't need a deploy;
+  additional hinges beyond the top/bottom pair space evenly between them.
+  Selecting a Butt Hinge hardware item auto-fills (read-only) its quantity
+  from the hinge count — enforced server-side too, not just in the UI.
+  `ConfiguratorHingeSpacingStandard::locations()`, `DoorFrameOpeningSpec::hingeLocations()`,
+  `ConfiguratorDoorCatalogController::storeHingeSpacingStandard()` et al.
 - [x] Opening Width/Height: default 36 single / 72 pair, height defaults to 84
   regardless; soft-limit prompts at <30" wide / <70" tall (confirmed
   thresholds); labels read "Door Opening Width" / "Door Opening Height".
@@ -145,7 +195,7 @@ explicitly — the examples below are illustrative, not exhaustive):
   value instead.
 - `P3101-0R` EPT prep location depends on system: frame-side prep with a
   14000 or 4500 system, door-side prep with a 14000 I/O system.
-
+  
 ## Notes on this file
 
 Originally `configurator.txt` (plain notes). Converted to Markdown so progress

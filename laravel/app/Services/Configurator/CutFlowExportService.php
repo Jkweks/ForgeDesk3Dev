@@ -4,24 +4,24 @@ namespace App\Services\Configurator;
 
 use App\Models\DoorFrameConfiguration;
 use App\Models\FdWorkOrder;
-use Illuminate\Support\Facades\Http;
-use RuntimeException;
+use App\Services\CutFlow\CutlistIngestService;
 
 /**
  * Pushes a work order's lineal cut-list (every released opening's frame +
- * door extrusions) directly into CutFlow over HTTP — no manual CSV
- * export/re-upload. See CutFlow's ImportController::apiImport() for the
- * receiving side.
+ * door extrusions) directly into CutFlow's ingest — an in-process call
+ * (CutFlow is absorbed into this app, on its own 'cutflow' DB connection),
+ * no HTTP round trip or manual CSV export/re-upload needed.
  *
- * One CutFlow CutJob per ForgeDesk work order (`forgedesk_job_id` =
- * "wo-{id}"), not per configuration — a release re-exports the *whole*
- * work order's current released cut-list every time, and CutFlow's ingest
- * is designed to merge/update that job in place (matched on
- * forgedesk_job_id) rather than create a duplicate, preserving any cut
- * progress already recorded there.
+ * One CutFlow CutJob per ForgeDesk work order (`cut_jobs.work_order_id`),
+ * not per configuration — a release re-exports the *whole* work order's
+ * current released cut-list every time, and the ingest is designed to
+ * merge/update that job in place (matched on work_order_id) rather than
+ * create a duplicate, preserving any cut progress already recorded there.
  */
 class CutFlowExportService
 {
+    public function __construct(private CutlistIngestService $ingest) {}
+
     /**
      * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int}
      */
@@ -38,10 +38,10 @@ class CutFlowExportService
     /**
      * Sends a caller-supplied row set (e.g. a manually-uploaded "other"
      * cutlist not sourced from the configurator) into the same CutFlow
-     * CutJob this work order's configurator-driven export uses. CutFlow's
-     * ingest only ever adds/updates the lines given in one call — it never
-     * drops lines from a *previous* call — so this always merges with
-     * whatever's already there rather than replacing it.
+     * CutJob this work order's configurator-driven export uses. The ingest
+     * only ever adds/updates the lines given in one call — it never drops
+     * lines from a *previous* call — so this always merges with whatever's
+     * already there rather than replacing it.
      *
      * @param  array<int, array>  $rows
      * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int}
@@ -52,29 +52,17 @@ class CutFlowExportService
             return ['sent' => false, 'reason' => 'No cut-list rows to send.'];
         }
 
-        $baseUrl = config('services.cutflow.base_url');
-        if (! $baseUrl) {
-            throw new RuntimeException('CutFlow base URL is not configured (CUTFLOW_BASE_URL).');
-        }
-
         $job = $workOrder->businessJob;
         $jobName = trim(($job?->job_number ?? 'Job').'-'.$workOrder->release_token);
 
-        $response = Http::timeout(10)
-            ->withHeaders(array_filter([
-                'X-ForgeDesk-Token' => config('services.cutflow.import_token'),
-            ]))
-            ->post(rtrim($baseUrl, '/').'/api/forgedesk/cutlist', [
-                'forgedesk_job_id' => 'wo-'.$workOrder->id,
-                'job_name' => $jobName,
-                'rows' => $rows,
-            ]);
+        $result = $this->ingest->ingest($rows, $jobName, $workOrder->id);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('CutFlow rejected the export ('.$response->status().'): '.$response->body());
-        }
-
-        return ['sent' => true] + $response->json();
+        return [
+            'sent' => true,
+            'cut_job_id' => $result['job']->id,
+            'cut_job_name' => $result['job']->name,
+            'line_count' => $result['line_count'],
+        ];
     }
 
     /**

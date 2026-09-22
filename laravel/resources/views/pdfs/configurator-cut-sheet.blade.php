@@ -126,6 +126,23 @@
     </table>
 @endif
 
+@if ($config->includesDoor() && $config->openingSpecs && count($config->openingSpecs->hingeLocations()))
+    <div class="section-title">Hinge Prep Locations — {{ $config->openingSpecs->hingeSpacingStandard->name }} Standard</div>
+    <table class="items">
+        <thead>
+            <tr><th>Hinge</th><th class="num">Distance from Door Top</th></tr>
+        </thead>
+        <tbody>
+            @foreach ($config->openingSpecs->hingeLocations() as $loc)
+                <tr>
+                    <td>{{ $loc['label'] }}</td>
+                    <td class="num">{{ number_format($loc['distance_from_top'], 3) }}"</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
 @if ($config->includesDoor())
     <div class="section-title">Door Parts</div>
     <table class="items">
