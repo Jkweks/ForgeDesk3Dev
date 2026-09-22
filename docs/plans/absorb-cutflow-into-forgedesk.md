@@ -227,3 +227,43 @@ CutFlow does, so no new build tooling), plus `@livewireStyles`/
   accidentally moving the real TigerStop during development, then flip once
   verified (calling this out explicitly since the fake flag controls whether
   a bug in early testing could move real shop equipment).
+
+## Addendum (2026-09-22): tiger-bridge source absorbed too
+
+The original plan left tiger-bridge as-is, reached over HTTP wherever
+`TIGER_BRIDGE_URL` points — correct for *runtime* (it still has to run on
+whatever PC the TigerStop's serial cable is plugged into, which is not
+ForgeDesk's host), but it meant tiger-bridge's source stayed behind in the
+standalone `/mnt/homeNAS/Container/cutflow` tree, unversioned relative to
+the app that now depends on it. Brought the source in:
+
+- `tiger-bridge/` (root of this repo, alongside `laravel/`) — verbatim copy
+  of `/mnt/homeNAS/Container/cutflow/tiger-bridge`'s `Dockerfile`,
+  `.dockerignore`, `.env.example`, `package.json`, `server.js`, `README.md`.
+  No code changes; README got one added paragraph clarifying it's absorbed
+  but still deployed separately.
+- `docker-compose.yml`: added an opt-in `bridge` service (profile
+  `local-bridge`, matching CutFlow's own compose pattern) for the rare case
+  dev/testing happens on a host with the serial device attached. Not started
+  by default — `docker compose --profile local-bridge up -d`. **Not** added
+  to `docker-compose.prod.yml`: prod runs on a remote VPS
+  (`ghcr.io/jkweks/forgedesk3dev`) with no path to the shop's serial
+  hardware, so a bridge service there could never work.
+- `.gitignore`: added `tiger-bridge/node_modules`.
+- No behavior change: `TIGER_BRIDGE_URL` still points at the shop tablet's
+  LAN IP (`http://192.168.1.115:9111`) where tiger-bridge keeps running
+  natively (`npm start`), same as before. To actually move that running
+  instance onto the version now tracked here, copy this repo's `tiger-bridge/`
+  directory over to the shop tablet (replacing the one still under
+  `/mnt/homeNAS/Container/cutflow/tiger-bridge`) and restart it there — a
+  manual cutover step, same pattern as the rest of this absorption, not done
+  as part of this addendum.
+- Found in passing, unrelated to this change: this repo's root
+  `.env.example` currently has an **uncommitted** working-tree change that
+  replaced its generic template contents with what look like real prod
+  values (`DB_PASSWORD`, `APP_KEY`, `MAIL_PASSWORD`, etc.) — likely an
+  accidental copy from a real `.env`. It already contains the
+  `SERIAL_PORT`/`BAUD_RATE`/`PRINTER_HOST`/`PRINTER_PORT` bridge vars this
+  addendum's compose service reads defaults from, so it's consistent with
+  the change here, but it should not be committed as-is — it needs to go
+  back to a scrubbed template before anyone commits it.

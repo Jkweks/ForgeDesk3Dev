@@ -100,6 +100,30 @@ services:
     networks:
       - forgedesk_network
 
+  # tiger-bridge (owns the TigerStop serial port + Zebra printer socket).
+  # Normally this runs natively on the shop-floor PC the TigerStop is wired
+  # into (COM3/etc.) — see tiger-bridge/README.md — NOT in this compose
+  # stack, since the NAS running this stack has no serial device. This
+  # service only exists for the rare case dev/testing happens on a host that
+  # does have the device attached; it is not started by default. Bring it up
+  # explicitly with `docker compose --profile local-bridge up -d`, and point
+  # TIGER_BRIDGE_URL at the shop PC's LAN IP otherwise (the normal case).
+  bridge:
+    profiles: ["local-bridge"]
+    build:
+      context: ./tiger-bridge
+    ports:
+      - "9111:9111"
+    environment:
+      BRIDGE_PORT: 9111
+      SERIAL_PORT: ${SERIAL_PORT:-/dev/ttyUSB0}
+      BAUD_RATE: ${BAUD_RATE:-57600}
+      PRINTER_HOST: ${PRINTER_HOST:-192.168.1.50}
+      PRINTER_PORT: ${PRINTER_PORT:-9100}
+    devices:
+      - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
+    restart: unless-stopped
+
 networks:
   forgedesk_network:
     driver: bridge

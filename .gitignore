@@ -11,3 +11,6 @@ nginx/.nfs0000000004b00910000000c6
 # Captured traffic / debugging artifacts
 *.har
 docs/Quality Defects Database.xlsx
+
+# tiger-bridge (Node service)
+tiger-bridge/node_modules
