@@ -42,6 +42,7 @@ class HwlibBomGenerator
                     'product_id' => $itemProductId,
                     'quantity' => $link->quantity,
                     'source_type' => 'item',
+                    'hwlib_link_id' => $link->id,
                     'is_auto_generated' => true,
                     'sort_order' => $sortOrder++,
                 ];

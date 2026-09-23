@@ -95,11 +95,11 @@ Route::get('/fabrication/quality', function () {
 });
 
 // Configurator
-Route::get('/configurator', function () {
+Route::get('/config', function () {
     return view('configurator.frame');
 });
 
-Route::get('/configurator/admin', function () {
+Route::get('/config/admin', function () {
     return view('configurator.admin');
 });
 

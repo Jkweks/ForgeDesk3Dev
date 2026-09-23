@@ -28,7 +28,21 @@
             </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+            {{-- TigerStop connection + last-known position. The amp has no
+                 "read current position" query (see tiger-bridge's README),
+                 so this is the last inches value we successfully commanded
+                 it to — refreshed on load, after every move, and on a slow
+                 poll so a dropped connection shows up without a move
+                 happening first. --}}
+            <div wire:poll.10s="refreshTigerBridgeStatus"
+                 style="display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--border);">
+                <span style="width:8px;height:8px;border-radius:50%;background: {{ $tigerConnected ? 'var(--success)' : 'var(--danger)' }};"></span>
+                <span style="font-size:11px;color:var(--muted);">TigerStop</span>
+                <span class="mono" style="font-size:12.5px;font-weight:700;">
+                    {{ $tigerPosition !== null ? number_format($tigerPosition, 3).'"' : '—' }}
+                </span>
+            </div>
             <a href="{{ route('cutflow.import.show') }}">Import List</a>
             <a href="{{ route('cutflow.settings') }}">Settings</a>
         </div>
@@ -243,9 +257,17 @@
                         <div class="now-cutting"
                              @if ($tigerStatus === 'waiting_for_sensor') wire:poll.1s="checkSensor" @endif>
                             <div style="display:flex;align-items:center;justify-content:space-between;">
-                                <div>
-                                    <div class="label" style="color:var(--accent);">NOW CUTTING</div>
-                                    <div class="display" style="font-size:20px;font-weight:700;">{{ $currentItem->part->name }}</div>
+                                <div style="display:flex;align-items:center;gap:14px;">
+                                    @if ($currentItem->part->photo_url)
+                                        <img src="{{ $currentItem->part->photo_url }}" alt=""
+                                             style="width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;">
+                                    @else
+                                        <span style="width:64px;height:64px;border-radius:10px;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--faint);">&#128247;</span>
+                                    @endif
+                                    <div>
+                                        <div class="label" style="color:var(--accent);">NOW CUTTING</div>
+                                        <div class="display" style="font-size:20px;font-weight:700;">{{ $currentItem->part->name }}</div>
+                                    </div>
                                 </div>
                                 @php
                                     $statusMap = [

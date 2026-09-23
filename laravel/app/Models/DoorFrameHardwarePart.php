@@ -11,7 +11,7 @@ class DoorFrameHardwarePart extends Model
 
     protected $fillable = [
         'configuration_id', 'part_label', 'product_id', 'quantity',
-        'source_type', 'is_auto_generated', 'sort_order',
+        'source_type', 'hwlib_link_id', 'is_auto_generated', 'sort_order',
     ];
 
     protected $casts = [
@@ -28,6 +28,11 @@ class DoorFrameHardwarePart extends Model
     public function product()
     {
         return $this->belongsTo(Product::class, 'product_id');
+    }
+
+    public function hwlibLink()
+    {
+        return $this->belongsTo(ConfiguratorHwlibLink::class, 'hwlib_link_id');
     }
 
     public function getFormattedLabelAttribute()

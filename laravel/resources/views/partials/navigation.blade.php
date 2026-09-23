@@ -61,7 +61,7 @@
                     <a class="dropdown-item" href="http://fab.vosglassintra.net/configurator" target="_blank" rel="noopener">Door Configurator <span class="badge bg-yellow-lt text-yellow ms-auto">Beta</span></a>
                   </div>
                 </li>
-                <li class="nav-item dropdown {{ Request::is('configurator*') ? 'active' : '' }}" data-nav-permission="nav.configurator">
+                <li class="nav-item dropdown {{ Request::is('config*') ? 'active' : '' }}" data-nav-permission="nav.configurator">
                   <a class="nav-link dropdown-toggle" href="#navbar-configurator" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
                     <span class="nav-link-icon d-md-none d-lg-inline-block">
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" /><path d="M4 12l16 0" /><path d="M12 4l0 16" /></svg>
@@ -69,9 +69,9 @@
                     <span class="nav-link-title">Configurator</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item {{ Request::is('configurator') ? 'active' : '' }}" href="/configurator" data-permission="configurator.view">Frame Builder</a>
+                    <a class="dropdown-item {{ Request::is('config') ? 'active' : '' }}" href="/config" data-permission="configurator.view">Frame Builder</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item {{ Request::is('configurator/admin') ? 'active' : '' }}" href="/configurator/admin" data-permission="configurator.catalog.manage">Configurator Admin</a>
+                    <a class="dropdown-item {{ Request::is('config/admin') ? 'active' : '' }}" href="/config/admin" data-permission="configurator.catalog.manage">Configurator Admin</a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">

@@ -94,6 +94,39 @@
   </div>
 </div>
 
+<!-- Hardware Library: Function Modal -->
+<div class="modal modal-blur fade" id="hwlib-func-modal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="hwlib-func-form">
+        <div class="modal-header"><h5 class="modal-title">Function</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="hwlib-func-id">
+          <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Code</label><input type="text" class="form-control text-uppercase" id="hwlib-func-code" placeholder="e.g. EO" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="hwlib-func-label" placeholder="e.g. Exit Only" required></div>
+          </div>
+          <div class="mb-3"><label class="form-label">Group <span class="text-muted">(optional — functions sharing a group are mutually exclusive when selected, e.g. EO/NL/DT)</span></label>
+            <input type="text" class="form-control" id="hwlib-func-group" list="hwlib-func-group-list" placeholder="e.g. Function">
+            <datalist id="hwlib-func-group-list"></datalist>
+          </div>
+          <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="hwlib-func-notes" rows="2"></textarea></div>
+          <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Sort Order</label><input type="number" class="form-control" id="hwlib-func-sort" value="0"></div>
+            <div class="col-md-6 mb-3 d-flex align-items-end">
+              <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-func-active" checked><span class="form-check-label">Active</span></label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Hardware Library: Item Modal -->
 <div class="modal modal-blur fade" id="hwlib-item-modal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-xl">
@@ -144,6 +177,10 @@
           <hr>
           <label class="form-label">Prep Values <span class="text-muted">(fields from the item's category)</span></label>
           <div id="hwlib-item-values" class="row g-2 mb-3"></div>
+
+          <hr>
+          <label class="form-label">Functions <span class="text-muted">(options/modes this item can be built with, e.g. EO/NL/DT, QEL, CD)</span></label>
+          <div id="hwlib-item-functions" class="border rounded p-2 mb-3" style="max-height:220px; overflow-y:auto;"></div>
 
           <hr>
           <div class="d-flex justify-content-between align-items-center mb-2">

@@ -69,7 +69,13 @@ class TigerBridgeClient
     public function status(): array
     {
         if ($this->fake) {
-            return ['ok' => true, 'data' => ['status' => 'idle', 'fake' => true]];
+            return ['ok' => true, 'data' => [
+                'status' => 'idle',
+                'serialConnected' => true,
+                'lastPosition' => null,
+                'lastPositionAt' => null,
+                'fake' => true,
+            ]];
         }
 
         try {

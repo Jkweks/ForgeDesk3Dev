@@ -50,6 +50,16 @@ class Dashboard extends Component
     // idle | positioning | ready | waiting_for_sensor
     public string $tigerStatus = 'idle';
 
+    // Last known TigerStop connection/position, from tiger-bridge's GET
+    // /status — see refreshTigerBridgeStatus(). The amp has no "read
+    // current position" query, so lastPosition is the last inches value
+    // tiger-bridge successfully moved it to (see TigerBridgeClient).
+    public bool $tigerConnected = false;
+
+    public ?float $tigerPosition = null;
+
+    public ?string $tigerPositionAt = null;
+
     public string $lastError = '';
 
     public string $loginError = '';
@@ -71,8 +81,10 @@ class Dashboard extends Component
 
     public ?string $activeCrewKey = null;
 
-    public function mount(Request $request, CutPlanner $planner): void
+    public function mount(Request $request, CutPlanner $planner, TigerBridgeClient $bridge): void
     {
+        $this->refreshTigerBridgeStatus($bridge);
+
         $this->crew = session('cutflow_crew', []);
         $this->activeCrewKey = session('cutflow_active_crew_key');
 
@@ -558,9 +570,14 @@ class Dashboard extends Component
         if (! $result['ok']) {
             $this->tigerStatus = 'idle';
             $this->lastError = $result['error'] ?? 'Move failed';
+            $this->refreshTigerBridgeStatus($bridge);
 
             return;
         }
+
+        $this->tigerPosition = (float) $item->dimension_inches;
+        $this->tigerPositionAt = now()->toIso8601String();
+        $this->tigerConnected = true;
 
         $part = $item->part;
 
@@ -580,6 +597,23 @@ class Dashboard extends Component
 
         $this->tigerStatus = 'ready';
         $this->recordCut($bridge);
+    }
+
+    /**
+     * Refreshes the TigerStop connection badge + last-known position shown
+     * in the topbar. Polled continuously (low frequency — this is a
+     * convenience display, not something a cut waits on) plus called
+     * directly after every move for an instant update rather than waiting
+     * on the next poll tick.
+     */
+    public function refreshTigerBridgeStatus(TigerBridgeClient $bridge): void
+    {
+        $status = $bridge->status();
+        $data = $status['data'] ?? [];
+
+        $this->tigerConnected = $status['ok'] && ($data['serialConnected'] ?? false);
+        $this->tigerPosition = isset($data['lastPosition']) ? (float) $data['lastPosition'] : null;
+        $this->tigerPositionAt = $data['lastPositionAt'] ?? null;
     }
 
     /**

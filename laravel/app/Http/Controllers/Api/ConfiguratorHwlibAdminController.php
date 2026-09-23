@@ -7,6 +7,7 @@ use App\Models\ConfiguratorHwlibBacker;
 use App\Models\ConfiguratorHwlibBackerFastener;
 use App\Models\ConfiguratorHwlibCategory;
 use App\Models\ConfiguratorHwlibFastener;
+use App\Models\ConfiguratorHwlibFunction;
 use App\Models\ConfiguratorHwlibItem;
 use App\Models\ConfiguratorHwlibItemBacker;
 use App\Models\ConfiguratorHwlibItemValue;
@@ -61,7 +62,7 @@ class ConfiguratorHwlibAdminController extends Controller
     public function adminIndex()
     {
         return response()->json([
-            'items' => ConfiguratorHwlibItem::with('values.variable', 'backers.backer')->orderBy('name')->get(),
+            'items' => ConfiguratorHwlibItem::with('values.variable', 'backers.backer', 'functions')->orderBy('name')->get(),
             'backers' => ConfiguratorHwlibBacker::with('fasteners.fastener')->orderBy('pn')->get(),
             'fasteners' => ConfiguratorHwlibFastener::orderBy('pn')->get(),
             'sets' => ConfiguratorHwlibSet::with('businessJob', 'setItems.item', 'setItems.values.variable')->orderBy('name')->get(),
@@ -224,13 +225,55 @@ class ConfiguratorHwlibAdminController extends Controller
         ];
     }
 
+    // ---- Functions ----
+
+    public function indexFunctions()
+    {
+        return response()->json(['functions' => ConfiguratorHwlibFunction::orderBy('group_name')->orderBy('sort_order')->orderBy('label')->get()]);
+    }
+
+    public function storeFunction(Request $request)
+    {
+        $data = $this->validateOrFail($request, $this->functionRules());
+
+        return response()->json(['function' => ConfiguratorHwlibFunction::create($data)], 201);
+    }
+
+    public function updateFunction(Request $request, $id)
+    {
+        $function = ConfiguratorHwlibFunction::findOrFail($id);
+        $data = $this->validateOrFail($request, $this->functionRules($id));
+        $function->update($data);
+
+        return response()->json(['function' => $function]);
+    }
+
+    public function destroyFunction($id)
+    {
+        ConfiguratorHwlibFunction::findOrFail($id)->delete();
+
+        return response()->json(['message' => 'Function deleted']);
+    }
+
+    private function functionRules($ignoreId = null): array
+    {
+        return [
+            'code' => 'required|string|max:50|unique:configurator_hwlib_functions,code,'.($ignoreId ?? 'NULL'),
+            'label' => 'required|string|max:255',
+            'group_name' => 'nullable|string|max:255',
+            'notes' => 'nullable|string',
+            'sort_order' => 'nullable|integer',
+            'active' => 'boolean',
+        ];
+    }
+
     // ---- Items ----
 
     public function storeItem(Request $request)
     {
         $data = $this->validateOrFail($request, $this->itemRules());
         $item = ConfiguratorHwlibItem::create($data);
-        $item->load('category', 'values.variable', 'backers.backer');
+        $item->load('category', 'values.variable', 'backers.backer', 'functions');
 
         return response()->json(['item' => $item], 201);
     }
@@ -240,7 +283,7 @@ class ConfiguratorHwlibAdminController extends Controller
         $item = ConfiguratorHwlibItem::findOrFail($id);
         $data = $this->validateOrFail($request, $this->itemRules($id));
         $item->update($data);
-        $item->load('category', 'values.variable', 'backers.backer');
+        $item->load('category', 'values.variable', 'backers.backer', 'functions');
 
         return response()->json(['item' => $item]);
     }
@@ -328,6 +371,23 @@ class ConfiguratorHwlibAdminController extends Controller
         });
 
         return response()->json(['message' => 'Item values updated']);
+    }
+
+    /**
+     * Full-replace an item's allowed functions (its picklist when linking
+     * this item to a configuration).
+     */
+    public function setItemFunctions(Request $request, $id)
+    {
+        $item = ConfiguratorHwlibItem::findOrFail($id);
+        $data = $this->validateOrFail($request, [
+            'function_ids' => 'present|array',
+            'function_ids.*' => 'integer|exists:configurator_hwlib_functions,id',
+        ]);
+
+        $item->functions()->sync($data['function_ids']);
+
+        return response()->json(['message' => 'Item functions updated']);
     }
 
     /**

@@ -43,6 +43,17 @@ class ConfiguratorHwlibItem extends Model
         return $this->hasMany(ConfiguratorHwlibItemValue::class, 'item_id');
     }
 
+    /** Functions this item can be ordered with (its allowed picklist). */
+    public function functions()
+    {
+        return $this->belongsToMany(
+            ConfiguratorHwlibFunction::class,
+            'configurator_hwlib_item_functions',
+            'item_id',
+            'function_id'
+        )->orderBy('configurator_hwlib_functions.sort_order')->orderBy('configurator_hwlib_functions.label');
+    }
+
     public function backers()
     {
         return $this->hasMany(ConfiguratorHwlibItemBacker::class, 'item_id')->orderBy('sort_order');

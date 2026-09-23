@@ -172,8 +172,11 @@
     </thead>
     <tbody>
         @forelse ($hardwareParts as $part)
+            @php
+                $functions = $part->hwlibLink?->functions ?? collect();
+            @endphp
             <tr>
-                <td>{{ $part->formatted_label }}</td>
+                <td>{{ $part->formatted_label }}@if($functions->isNotEmpty()) <span class="badge">{{ $functions->pluck('code')->implode(', ') }}</span>@endif</td>
                 <td class="pn">{{ $part->product->part_number }}@if($part->product->finish)-{{ $part->product->finish }}@endif</td>
                 <td class="muted">{{ $part->product->description }}</td>
                 <td class="num">{{ $part->quantity }}</td>

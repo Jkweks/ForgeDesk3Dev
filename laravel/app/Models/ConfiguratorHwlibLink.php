@@ -36,4 +36,15 @@ class ConfiguratorHwlibLink extends Model
     {
         return $this->hasMany(ConfiguratorHwlibLinkValue::class, 'link_id');
     }
+
+    /** Functions actually selected for this hardware item on this configuration. */
+    public function functions()
+    {
+        return $this->belongsToMany(
+            ConfiguratorHwlibFunction::class,
+            'configurator_hwlib_link_functions',
+            'link_id',
+            'function_id'
+        )->orderBy('configurator_hwlib_functions.sort_order')->orderBy('configurator_hwlib_functions.label');
+    }
 }

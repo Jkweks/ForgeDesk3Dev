@@ -1498,7 +1498,7 @@
                     <td>${c.quantity}</td>
                     <td>${c.work_order_release_token ? `<span class="badge bg-blue-lt">${escapeHtml(c.work_order_release_token)}</span>` : '<span class="text-secondary">—</span>'}</td>
                     <td class="text-end">
-                        <a href="/configurator?job=${jobId}&config=${c.id}" class="btn btn-sm btn-outline-primary">Open</a>
+                        <a href="/config?job=${jobId}&config=${c.id}" class="btn btn-sm btn-outline-primary">Open</a>
                     </td>
                 </tr>`).join('');
 
@@ -1517,7 +1517,7 @@
 
         async function hwlibLoadItemsForPicker() {
             if (hwlibItemsCache) return hwlibItemsCache;
-            const r = await jobsAPI('/api/v1/configurator/hwlib-admin');
+            const r = await jobsAPI('/api/v1/config/hwlib-admin');
             const data = r.ok ? await r.json() : { items: [] };
             hwlibItemsCache = data.items || [];
             return hwlibItemsCache;
@@ -1529,7 +1529,7 @@
             if (loadingEl) loadingEl.style.display = 'block';
             try {
                 const [setsRes, configsRes] = await Promise.all([
-                    jobsAPI(`/api/v1/configurator/hwlib-sets?business_job_id=${jobId}`),
+                    jobsAPI(`/api/v1/config/hwlib-sets?business_job_id=${jobId}`),
                     jobsAPI(`/api/v1/door-frame-configurations?business_job_id=${jobId}`),
                 ]);
                 if (!setsRes.ok) {
@@ -1661,13 +1661,13 @@
             };
             if (!payload.name) { showNotification('Set name is required', 'warning'); return; }
             try {
-                const res = await jobsAPI(id ? `/api/v1/configurator/hwlib-sets/${id}` : '/api/v1/configurator/hwlib-sets', {
+                const res = await jobsAPI(id ? `/api/v1/config/hwlib-sets/${id}` : '/api/v1/config/hwlib-sets', {
                     method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
                 });
                 if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to save set', 'danger'); return; }
                 const data = await res.json();
                 const setId = id || data.set.id;
-                const itemsRes = await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}/items`, {
+                const itemsRes = await jobsAPI(`/api/v1/config/hwlib-sets/${setId}/items`, {
                     method: 'PUT', body: JSON.stringify({ items: jobHwSetCollectItems(jobId) }),
                 });
                 if (!itemsRes.ok) { const err = await itemsRes.json().catch(() => ({})); showNotification(err.message || 'Failed to save set items', 'danger'); return; }
@@ -1685,7 +1685,7 @@
         async function deleteJobHwSet(jobId, setId) {
             if (!confirm('Delete this hardware set? Openings using it keep their current hardware but lose the link to this set.')) return;
             try {
-                const res = await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}`, { method: 'DELETE' });
+                const res = await jobsAPI(`/api/v1/config/hwlib-sets/${setId}`, { method: 'DELETE' });
                 if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to delete set', 'danger'); return; }
                 await loadJobHwSets(jobId);
             } catch (err) { console.error(err); showNotification('Failed to delete hardware set', 'danger'); }
@@ -1719,13 +1719,13 @@
 
             try {
                 if (toApply.length) {
-                    const res = await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}/apply`, {
+                    const res = await jobsAPI(`/api/v1/config/hwlib-sets/${setId}/apply`, {
                         method: 'POST', body: JSON.stringify({ configuration_ids: toApply }),
                     });
                     if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to apply set', 'danger'); return; }
                 }
                 for (const configId of toRemove) {
-                    await jobsAPI(`/api/v1/configurator/hwlib-sets/${setId}/apply/${configId}`, { method: 'DELETE' });
+                    await jobsAPI(`/api/v1/config/hwlib-sets/${setId}/apply/${configId}`, { method: 'DELETE' });
                 }
                 showNotification('Hardware set applied', 'success');
                 hideJobHwSetApplyForm(jobId);

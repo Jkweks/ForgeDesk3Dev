@@ -482,6 +482,13 @@
                 <div class="mt-2 small text-muted" id="configuratorLinkedVariants"></div>
               </div>
 
+              <!-- Door/Frame Catalog usage (reverse lookup by part_number) -->
+              <div class="mb-4">
+                <h4 class="mb-1"><i class="ti ti-door me-2"></i>Used in Door/Frame Catalog</h4>
+                <p class="text-muted mb-2">Configurator catalog rows referencing this part number.</p>
+                <div id="doorCatalogUsage" class="small text-muted">-</div>
+              </div>
+
               <hr>
 
               <!-- BOM (Required Parts) -->
@@ -1025,6 +1032,7 @@
         if (product.part_number) {
           loadConfiguratorLinkedVariants(product.part_number, product.id);
         }
+        loadDoorCatalogUsage(product.part_number);
 
         // Show modal
         showModal(document.getElementById('viewProductModal'));
@@ -1514,6 +1522,36 @@
       } catch (error) {
         console.error('Error saving product:', error);
         showNotification('Failed to save changes: ' + error.message, 'danger');
+      }
+    }
+
+    // Shows door/frame catalog rows (rails, lugs, glass specs, etc.) whose
+    // plain PN string matches this product's part_number — those tables have
+    // no product_id FK, so this is a live lookup, not a stored link.
+    async function loadDoorCatalogUsage(partNumber) {
+      const el = document.getElementById('doorCatalogUsage');
+      if (!partNumber) {
+        el.textContent = 'This product has no part number.';
+        return;
+      }
+      el.textContent = 'Checking…';
+      try {
+        const response = await apiCall(`/config/part-number-usage?part_number=${encodeURIComponent(partNumber)}`);
+        if (!response.ok) {
+          el.textContent = '';
+          return;
+        }
+        const data = await response.json();
+        const usages = data.usages || [];
+        if (usages.length === 0) {
+          el.textContent = 'Not referenced by any door/frame catalog row.';
+          return;
+        }
+        el.innerHTML = usages.map(u =>
+          `<span class="badge text-bg-secondary me-1 mb-1">${u.entity}: ${u.label} (${u.field})</span>`
+        ).join('');
+      } catch (error) {
+        el.textContent = '';
       }
     }
 

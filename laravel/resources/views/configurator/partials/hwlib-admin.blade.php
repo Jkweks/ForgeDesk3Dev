@@ -1,6 +1,6 @@
 <div class="mb-3">
   <h3 class="mb-1">Hardware Library</h3>
-  <p class="text-muted mb-0">Categories, variables, items, backers, and fasteners used to resolve prep values and generate a hardware BOM in the <a href="/configurator">Configurator</a>.</p>
+  <p class="text-muted mb-0">Categories, variables, items, backers, and fasteners used to resolve prep values and generate a hardware BOM in the <a href="/config">Configurator</a>.</p>
 </div>
 
 <ul class="nav nav-pills mb-3" role="tablist">
@@ -9,6 +9,9 @@
   </li>
   <li class="nav-item" role="presentation">
     <a href="#hwlib-tab-variables" class="nav-link" data-bs-toggle="tab" role="tab">Variables</a>
+  </li>
+  <li class="nav-item" role="presentation">
+    <a href="#hwlib-tab-functions" class="nav-link" data-bs-toggle="tab" role="tab">Functions</a>
   </li>
   <li class="nav-item" role="presentation">
     <a href="#hwlib-tab-items" class="nav-link" data-bs-toggle="tab" role="tab">Items</a>
@@ -55,6 +58,25 @@
         <table class="table table-vcenter card-table">
           <thead><tr><th>Code</th><th>Label</th><th>Group</th><th>Type</th><th>Flags</th><th class="w-1"></th></tr></thead>
           <tbody id="hwlib-var-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Functions -->
+  <div class="tab-pane" id="hwlib-tab-functions" role="tabpanel">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Functions</h3>
+        <div class="card-actions">
+          <p class="text-muted mb-0 me-3">Hardware options/modes (e.g. EO, NL, DT, QEL, CD) that items can be tagged as supporting, then selected per hardware link on a configuration. Functions sharing a Group are mutually exclusive when selected.</p>
+          <button class="btn btn-sm btn-primary" onclick="hwFuncOpenModal()" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Function</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+          <thead><tr><th>Code</th><th>Label</th><th>Group</th><th>Active</th><th class="w-1"></th></tr></thead>
+          <tbody id="hwlib-func-tbody"></tbody>
         </table>
       </div>
     </div>

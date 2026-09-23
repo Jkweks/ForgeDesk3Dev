@@ -14,7 +14,7 @@
         </div>
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
-            <a href="/configurator/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
+            <a href="/config/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
             <button class="btn btn-primary" onclick="fbOpenNewModal()" data-permission="configurator.create"><i class="ti ti-plus me-1"></i>New Configuration</button>
           </div>
         </div>
@@ -334,7 +334,7 @@
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Item</label>
-                      <select class="form-select" id="fb-hw-item" required></select>
+                      <select class="form-select" id="fb-hw-item" required onchange="fbRenderHwFunctionPicker()"></select>
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">Series</label>
@@ -358,6 +358,10 @@
                     </div>
                     <div class="col-md-1">
                       <button type="submit" class="btn btn-primary w-100" data-permission="configurator.edit"><i class="ti ti-plus"></i></button>
+                    </div>
+                    <div class="col-12" id="fb-hw-functions-wrap" style="display:none">
+                      <label class="form-label mb-1">Functions</label>
+                      <div id="fb-hw-functions" class="d-flex flex-wrap gap-3"></div>
                     </div>
                   </form>
 
@@ -575,7 +579,7 @@ async function fbLoadJobsInto(select) {
 
 async function fbLoadCatalogTree() {
   if (fbCatalogTree.length) return fbCatalogTree;
-  const data = await authenticatedFetch('/configurator/catalog/tree');
+  const data = await authenticatedFetch('/config/catalog/tree');
   fbCatalogTree = data.frame_systems || [];
   const systemSelect = document.getElementById('fb-frame-system');
   systemSelect.innerHTML = '<option value="">All Systems</option>' + fbCatalogTree.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
@@ -584,7 +588,7 @@ async function fbLoadCatalogTree() {
 
 async function fbLoadDoorCatalog() {
   if (fbDoorCatalog) return fbDoorCatalog;
-  fbDoorCatalog = await authenticatedFetch('/configurator/door-catalog');
+  fbDoorCatalog = await authenticatedFetch('/config/door-catalog');
   return fbDoorCatalog;
 }
 
@@ -653,7 +657,7 @@ let fbHwCategories = [];
 
 async function fbLoadHwCatalog() {
   if (fbHwCategories.length) { fbRenderHwCategorySelect(); return fbHwCategories; }
-  const data = await authenticatedFetch('/configurator/hwlib-catalog');
+  const data = await authenticatedFetch('/config/hwlib-catalog');
   fbHwCategories = (data.categories || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   fbRenderHwCategorySelect();
   return fbHwCategories;
@@ -730,6 +734,59 @@ function fbFilterHwItems() {
     const buttHingeCount = fbSelectedDetail?.opening_specs?.butt_hinge_count;
     if (buttHingeCount) qtyInput.value = buttHingeCount;
   }
+  fbRenderHwFunctionPicker();
+}
+
+function fbFindHwItem(id) {
+  for (const c of fbHwCategories) {
+    const item = (c.items || []).find(i => i.id == id);
+    if (item) return item;
+  }
+  return null;
+}
+
+// Functions sharing a group_name (e.g. EO/NL/DT) render as a radio group
+// (mutually exclusive, "None" allowed); ungrouped functions (e.g. QEL, CD)
+// render as independent checkboxes that can stack freely.
+function fbRenderHwFunctionPicker() {
+  const itemId = document.getElementById('fb-hw-item').value;
+  const item = itemId ? fbFindHwItem(itemId) : null;
+  const functions = item?.functions || [];
+  const wrap = document.getElementById('fb-hw-functions-wrap');
+  const container = document.getElementById('fb-hw-functions');
+  if (!functions.length) {
+    wrap.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  const byGroup = {};
+  functions.forEach(f => { (byGroup[f.group_name || ''] ||= []).push(f); });
+  container.innerHTML = Object.keys(byGroup).sort().map(group => {
+    const groupFns = byGroup[group];
+    if (group) {
+      const name = `fb-hw-func-group-${group.replace(/[^a-z0-9]/gi, '_')}`;
+      return `<div>
+        <div class="text-muted small mb-1">${esc(group)}</div>
+        <div class="d-flex flex-wrap gap-2">
+          <label class="form-check form-check-inline"><input class="form-check-input fb-hw-func-radio" type="radio" name="${name}" value="" checked><span class="form-check-label text-muted">None</span></label>
+          ${groupFns.map(f => `<label class="form-check form-check-inline"><input class="form-check-input fb-hw-func-radio" type="radio" name="${name}" value="${f.id}"><span class="form-check-label">${esc(f.label)} <span class="text-muted small">(${esc(f.code)})</span></span></label>`).join('')}
+        </div>
+      </div>`;
+    }
+    return `<div>
+      <div class="text-muted small mb-1">Options</div>
+      <div class="d-flex flex-wrap gap-2">
+        ${groupFns.map(f => `<label class="form-check form-check-inline"><input class="form-check-input fb-hw-func-cb" type="checkbox" value="${f.id}"><span class="form-check-label">${esc(f.label)} <span class="text-muted small">(${esc(f.code)})</span></span></label>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  wrap.style.display = '';
+}
+
+function fbCollectHwFunctionIds() {
+  const radios = Array.from(document.querySelectorAll('.fb-hw-func-radio:checked')).map(r => r.value).filter(Boolean);
+  const checks = Array.from(document.querySelectorAll('.fb-hw-func-cb:checked')).map(c => c.value);
+  return [...radios, ...checks].map(v => parseInt(v, 10));
 }
 
 function fbSelectButtHingeCategory() {
@@ -746,7 +803,7 @@ function fbRenderHwLinks(links) {
   document.getElementById('fb-hw-links-empty').style.display = links.length ? 'none' : 'block';
   tbody.innerHTML = links.map(l => `
     <tr>
-      <td>${esc(l.item.name)}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}</td>
+      <td>${esc(l.item.name)}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
       <td>${esc(l.item.category.name)}${l.item.subcategory ? ' - ' + esc(l.item.subcategory.name) : ''}</td>
       <td>${esc(l.series)}</td>
       <td>${esc(l.leaf)}</td>
@@ -765,6 +822,7 @@ document.getElementById('fb-hardware-add-form').addEventListener('submit', async
     series: document.getElementById('fb-hw-series').value,
     leaf: document.getElementById('fb-hw-leaf').value,
     quantity: parseInt(document.getElementById('fb-hw-qty').value || 1, 10),
+    function_ids: fbCollectHwFunctionIds(),
   };
   if (!payload.item_id) { showNotification('Select an item first', 'warning'); return; }
   try {
@@ -1234,7 +1292,7 @@ document.getElementById('fb-duplicate-form').addEventListener('submit', async (e
 // ---- Global settings ----
 async function fbOpenGlobalSettings() {
   try {
-    const data = await authenticatedFetch('/configurator/settings');
+    const data = await authenticatedFetch('/config/settings');
     const s = data.settings || {};
     document.getElementById('fb-settings-top-gap').value = s.top_gap ?? 0.125;
     document.getElementById('fb-settings-bottom-gap').value = s.bottom_gap ?? 0.6875;
@@ -1253,7 +1311,7 @@ document.getElementById('fb-settings-form').addEventListener('submit', async (e)
     lock_gap: parseFloat(document.getElementById('fb-settings-lock-gap').value),
   };
   try {
-    await authenticatedFetch('/configurator/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    await authenticatedFetch('/config/settings', { method: 'PUT', body: JSON.stringify(payload) });
     hideModal(document.getElementById('fb-settings-modal'));
     showNotification('Global settings saved', 'success');
   } catch (err) { showNotification(err.message, 'danger'); }

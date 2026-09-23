@@ -98,7 +98,7 @@ class DoorFrameConfigurationController extends Controller
                 'frameConfig.frameSeries.frameSystem',
                 'frameConfig.parts.product',
                 'doorConfigs.parts.product',
-                'hardwareLinks.item.category', 'hardwareLinks.item.subcategory',
+                'hardwareLinks.item.category', 'hardwareLinks.item.subcategory', 'hardwareLinks.functions',
                 'hardwareParts.product',
                 'createdBy',
             ])->findOrFail($id);
@@ -1333,6 +1333,7 @@ class DoorFrameConfigurationController extends Controller
             'frameConfig.parts.product',
             'doorConfigs.parts.product',
             'hardwareParts.product',
+            'hardwareParts.hwlibLink.functions',
         ])->findOrFail($id);
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.configurator-cut-sheet', [
@@ -1605,6 +1606,12 @@ class DoorFrameConfigurationController extends Controller
             'series' => $link->series,
             'leaf' => $link->leaf,
             'notes' => $link->notes,
+            'functions' => $link->functions->map(fn ($f) => [
+                'id' => $f->id,
+                'code' => $f->code,
+                'label' => $f->label,
+                'group_name' => $f->group_name,
+            ]),
         ];
     }
 
@@ -1631,6 +1638,8 @@ class DoorFrameConfigurationController extends Controller
             'values' => 'nullable|array',
             'values.*.variable_id' => 'required_with:values|exists:configurator_hwlib_variables,id',
             'values.*.value_text' => 'nullable|string',
+            'function_ids' => 'nullable|array',
+            'function_ids.*' => 'integer|exists:configurator_hwlib_functions,id',
         ]);
 
         if ($validator->fails()) {
@@ -1673,7 +1682,11 @@ class DoorFrameConfigurationController extends Controller
             ]);
         }
 
-        $link->load('item.category', 'item.subcategory');
+        if ($request->filled('function_ids')) {
+            $link->functions()->sync($request->input('function_ids'));
+        }
+
+        $link->load('item.category', 'item.subcategory', 'functions');
 
         return response()->json([
             'message' => 'Hardware item added successfully',
@@ -1705,6 +1718,8 @@ class DoorFrameConfigurationController extends Controller
             'values' => 'nullable|array',
             'values.*.variable_id' => 'required_with:values|exists:configurator_hwlib_variables,id',
             'values.*.value_text' => 'nullable|string',
+            'function_ids' => 'nullable|array',
+            'function_ids.*' => 'integer|exists:configurator_hwlib_functions,id',
         ]);
 
         if ($validator->fails()) {
@@ -1730,7 +1745,11 @@ class DoorFrameConfigurationController extends Controller
             }
         }
 
-        $link->load('item.category', 'item.subcategory');
+        if ($request->has('function_ids')) {
+            $link->functions()->sync($request->input('function_ids', []));
+        }
+
+        $link->load('item.category', 'item.subcategory', 'functions');
 
         return response()->json([
             'message' => 'Hardware item updated successfully',

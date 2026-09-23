@@ -11,6 +11,7 @@ use App\Models\ConfiguratorRail;
 use App\Models\ConfiguratorRailLug;
 use App\Models\ConfiguratorSettingBlockKit;
 use App\Models\ConfiguratorTieRod;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -33,6 +34,114 @@ class ConfiguratorDoorCatalogController extends Controller
             'tie_rods' => ConfiguratorTieRod::orderBy('series')->orderBy('min_len')->get(),
             'hinge_spacing_standards' => ConfiguratorHingeSpacingStandard::orderBy('name')->get(),
         ]);
+    }
+
+    /**
+     * Autocomplete/validation source for the door catalog's PN fields —
+     * matches against Product.part_number only (never sku), since a PN typed
+     * here (e.g. "E4544") identifies a part, not a specific finish/SKU row.
+     */
+    public function searchProductsByPartNumber(Request $request)
+    {
+        $term = trim((string) $request->get('q', ''));
+
+        if (strlen($term) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $like = '%'.strtolower($term).'%';
+
+        $products = Product::whereNotNull('part_number')
+            ->whereRaw('LOWER(part_number) LIKE ?', [$like])
+            ->orderBy('part_number')
+            ->limit(20)
+            ->get(['id', 'part_number', 'description', 'finish']);
+
+        return response()->json(['data' => $products]);
+    }
+
+    /**
+     * Reverse lookup: every door catalog row that references a given part
+     * number, so the inventory side can show "used in configurator" for a
+     * Product without the catalog tables holding a product_id FK.
+     */
+    public function partNumberUsage(Request $request)
+    {
+        $partNumber = trim((string) $request->query('part_number', ''));
+
+        if ($partNumber === '') {
+            return response()->json(['usages' => []]);
+        }
+
+        $manifest = [
+            [
+                'entity' => 'Door Type',
+                'model' => ConfiguratorDoorType::class,
+                'fields' => ['bev_pn', 'rab_pn', 'cp_pn', 'ast_pn', 'inact_pn'],
+                'label' => fn ($r) => trim("{$r->series} {$r->stile_name}"),
+            ],
+            [
+                'entity' => 'Rail',
+                'model' => ConfiguratorRail::class,
+                'fields' => ['std_pn', 'thermal_pn', 'mon_pn', 'stacked_std_pn', 'stacked_thermal_pn', 'stacked_mon_pn'],
+                'label' => fn ($r) => trim("{$r->rail_type} {$r->label}"),
+            ],
+            [
+                'entity' => 'Rail Lug',
+                'model' => ConfiguratorRailLug::class,
+                'fields' => ['rail_pn', 'lug_pn'],
+                'label' => fn ($r) => $r->rail_pn,
+            ],
+            [
+                'entity' => 'Mid Lug',
+                'model' => ConfiguratorMidLug::class,
+                'fields' => ['rail_pn', 'lug_pn', 'f1_pn', 'f2_pn'],
+                'label' => fn ($r) => $r->rail_pn,
+            ],
+            [
+                'entity' => 'Glass Spec',
+                'model' => ConfiguratorGlassSpec::class,
+                'fields' => ['stop_pn', 'gasket_pn', 'gasket2_pn'],
+                'label' => fn ($r) => "{$r->thickness}\" glass",
+            ],
+            [
+                'entity' => 'Setting Block Kit',
+                'model' => ConfiguratorSettingBlockKit::class,
+                'fields' => ['kit1_pn', 'kit2_pn'],
+                'label' => fn ($r) => trim("{$r->series} {$r->glass_thickness}"),
+            ],
+            [
+                'entity' => 'Tie Rod',
+                'model' => ConfiguratorTieRod::class,
+                'fields' => ['pn'],
+                'label' => fn ($r) => $r->series ? "{$r->series} tie rod" : 'Tie rod',
+            ],
+        ];
+
+        $usages = [];
+
+        foreach ($manifest as $entry) {
+            $rows = $entry['model']::where(function ($q) use ($entry, $partNumber) {
+                foreach ($entry['fields'] as $field) {
+                    $q->orWhere($field, $partNumber);
+                }
+            })->get();
+
+            foreach ($rows as $row) {
+                foreach ($entry['fields'] as $field) {
+                    if ($row->{$field} === $partNumber) {
+                        $usages[] = [
+                            'entity' => $entry['entity'],
+                            'id' => $row->id,
+                            'label' => ($entry['label'])($row),
+                            'field' => $field,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return response()->json(['usages' => $usages]);
     }
 
     // ---- Door Types ----

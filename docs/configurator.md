@@ -177,6 +177,20 @@ while since the note was written.
 - [ ] Series input still exists as a manual field — not yet auto-derived from
   the door/frame selection to generate the correct backer parts per side/type
   (e.g. thermal door → `PEPTTD1-0R`/`PEPTTD2-0R`, frame → 2× `PEPT-0R`).
+- [x] **Hardware functions** (e.g. a Von Duprin 98 panic built as EO/NL/DT,
+  independently QEL/CD). A shared library of function codes
+  (`configurator_hwlib_functions`, Configurator admin → Hardware Library →
+  Functions) is tagged onto whichever hwlib items support it
+  (`ConfiguratorHwlibItem::functions()`, edited from the item modal's
+  Functions section) — that per-item picklist is what shows when linking the
+  item to a real door in Frame Builder's Hardware tab. A function's optional
+  Group makes it mutually exclusive with its group-mates in that picker
+  (radio-style — e.g. EO/NL/DT share a group); ungrouped functions stack
+  freely as checkboxes (e.g. QEL, CD). Selections are per hardware link
+  (`configurator_hwlib_link_functions`, `ConfiguratorHwlibLink::functions()`)
+  and print as code badges next to that hardware row on the cut sheet PDF
+  (`DoorFrameHardwarePart::hwlib_link_id` traces a generated BOM row back to
+  its link — set in `HwlibBomGenerator::generate()`).
 
 ### Hardware advanced rules controller — not started
 
@@ -196,7 +210,15 @@ explicitly — the examples below are illustrative, not exhaustive):
   value instead.
 - `P3101-0R` EPT prep location depends on system: frame-side prep with a
   14000 or 4500 system, door-side prep with a 14000 I/O system.
-  
+- [ ] **Handed hwlib item → product resolution not built** (found 2026-09-22).
+  `DoorBomGenerator`/`HwlibResolver` have no logic to resolve a `handed`
+  hwlib item down to its `L`/`R` product variant. `P1421` (Adams Rite 4510
+  Deadlatch) was marked `handed = true` with `pn` cleared as a stopgap —
+  `P1421L`/`P1421R` already exist as real `products` rows, but nothing
+  currently picks between them. Needs a resolution path alongside
+  `resolveExtrusionProduct`/`resolveHardwareProduct` before handed hardware
+  flows through to a BOM/reservation correctly.
+
 ## Notes on this file
 
 Originally `configurator.txt` (plain notes). Converted to Markdown so progress

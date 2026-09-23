@@ -10,7 +10,7 @@
         <div class="col">
           <div class="page-pretitle">Configurator</div>
           <h1 class="page-title">Configurator Admin</h1>
-          <p class="text-muted">Catalog data used to auto-generate frame, door, and hardware BOMs in the <a href="/configurator">Frame Builder</a>.</p>
+          <p class="text-muted">Catalog data used to auto-generate frame, door, and hardware BOMs in the <a href="/config">Frame Builder</a>.</p>
         </div>
       </div>
     </div>
@@ -47,7 +47,7 @@
                 <div class="tab-pane active show" id="tab-configurator-catalog" role="tabpanel">
                   <div class="mb-3">
                     <h3 class="mb-1">Frame Catalog</h3>
-                    <p class="text-muted mb-0">Frame systems, series, extrusion profiles, and components used to auto-generate a frame BOM in the <a href="/configurator">Configurator</a>.</p>
+                    <p class="text-muted mb-0">Frame systems, series, extrusion profiles, and components used to auto-generate a frame BOM in the <a href="/config">Configurator</a>.</p>
                   </div>
 
                   <div class="row row-cards">
@@ -155,7 +155,7 @@
                 <div class="tab-pane" id="tab-door-catalog" role="tabpanel">
                   <div class="mb-3">
                     <h3 class="mb-1">Door Catalog</h3>
-                    <p class="text-muted mb-0">Door types, rails, lugs, glass specs, setting block kits, and tie rods used to auto-generate a door BOM in the <a href="/configurator">Configurator</a>.</p>
+                    <p class="text-muted mb-0">Door types, rails, lugs, glass specs, setting block kits, and tie rods used to auto-generate a door BOM in the <a href="/config">Configurator</a>.</p>
                   </div>
 
                   <div class="row row-cards">
@@ -741,7 +741,7 @@
   }
 
   async function cfgLoadTree() {
-    const data = await authenticatedFetch('/configurator/catalog/tree');
+    const data = await authenticatedFetch('/config/catalog/tree');
     cfgTree = data.frame_systems || [];
     cfgRenderSystems();
     cfgRenderSeries();
@@ -974,7 +974,7 @@
       sort_order: parseInt(document.getElementById('cfg-system-sort').value || 0, 10),
     };
     try {
-      await authenticatedFetch(id ? `/configurator/frame-systems/${id}` : '/configurator/frame-systems', {
+      await authenticatedFetch(id ? `/config/frame-systems/${id}` : '/config/frame-systems', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('cfg-system-modal'));
@@ -983,7 +983,7 @@
   });
   async function cfgDeleteSystem(id) {
     if (!confirm('Delete this frame system and everything under it?')) return;
-    try { await authenticatedFetch(`/configurator/frame-systems/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+    try { await authenticatedFetch(`/config/frame-systems/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1006,7 +1006,7 @@
       sort_order: parseInt(document.getElementById('cfg-series-sort').value || 0, 10),
     };
     try {
-      await authenticatedFetch(id ? `/configurator/frame-series/${id}` : '/configurator/frame-series', {
+      await authenticatedFetch(id ? `/config/frame-series/${id}` : '/config/frame-series', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('cfg-series-modal'));
@@ -1015,7 +1015,7 @@
   });
   async function cfgDeleteSeries(id) {
     if (!confirm('Delete this frame series and everything under it?')) return;
-    try { await authenticatedFetch(`/configurator/frame-series/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+    try { await authenticatedFetch(`/config/frame-series/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1101,7 +1101,7 @@
       qty_per_opening: parseInt(document.getElementById('cfg-profile-qtyperopening').value || 1, 10),
     };
     try {
-      await authenticatedFetch(id ? `/configurator/frame-profiles/${id}` : '/configurator/frame-profiles', {
+      await authenticatedFetch(id ? `/config/frame-profiles/${id}` : '/config/frame-profiles', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('cfg-profile-modal'));
@@ -1110,7 +1110,7 @@
   });
   async function cfgDeleteProfile(id) {
     if (!confirm('Delete this profile and its components/fasteners?')) return;
-    try { await authenticatedFetch(`/configurator/frame-profiles/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+    try { await authenticatedFetch(`/config/frame-profiles/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1136,7 +1136,7 @@
       qty_per: parseFloat(document.getElementById('cfg-component-qtyper').value || 1),
     };
     try {
-      await authenticatedFetch(id ? `/configurator/frame-components/${id}` : '/configurator/frame-components', {
+      await authenticatedFetch(id ? `/config/frame-components/${id}` : '/config/frame-components', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('cfg-component-modal'));
@@ -1145,7 +1145,7 @@
   });
   async function cfgDeleteComponent(id) {
     if (!confirm('Delete this component and its fasteners?')) return;
-    try { await authenticatedFetch(`/configurator/frame-components/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+    try { await authenticatedFetch(`/config/frame-components/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1171,7 +1171,7 @@
       qty_per: parseFloat(document.getElementById('cfg-fastener-qtyper').value || 1),
     };
     try {
-      await authenticatedFetch(id ? `/configurator/frame-fasteners/${id}` : '/configurator/frame-fasteners', {
+      await authenticatedFetch(id ? `/config/frame-fasteners/${id}` : '/config/frame-fasteners', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('cfg-fastener-modal'));
@@ -1180,7 +1180,7 @@
   });
   async function cfgDeleteFastener(id) {
     if (!confirm('Delete this fastener?')) return;
-    try { await authenticatedFetch(`/configurator/frame-fasteners/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
+    try { await authenticatedFetch(`/config/frame-fasteners/${id}`, { method: 'DELETE' }); await cfgLoadTree(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1230,7 +1230,7 @@
   };
 
   async function dcLoadAll() {
-    const data = await authenticatedFetch('/configurator/door-catalog');
+    const data = await authenticatedFetch('/config/door-catalog');
     dcData = data;
     Object.keys(DC_ENTITIES).forEach(dcRenderTable);
   }
@@ -1280,7 +1280,7 @@
   async function dcDelete(type, id) {
     if (!confirm('Delete this entry?')) return;
     try {
-      await authenticatedFetch(`/configurator/${DC_ENTITIES[type].api}/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/config/${DC_ENTITIES[type].api}/${id}`, { method: 'DELETE' });
       await dcLoadAll();
     } catch (err) { showNotification(err.message, 'danger'); }
   }
@@ -1300,7 +1300,7 @@
         payload[key] = kind === 'number' ? (raw === '' ? null : parseFloat(raw)) : (raw || null);
       });
       try {
-        await authenticatedFetch(id ? `/configurator/${entity.api}/${id}` : `/configurator/${entity.api}`, {
+        await authenticatedFetch(id ? `/config/${entity.api}/${id}` : `/config/${entity.api}`, {
           method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
         });
         hideModal(document.getElementById(`dc-${type}-modal`));
@@ -1312,6 +1312,7 @@
   // ==================== Hardware Library Admin ====================
   let hwCategories = [];
   let hwVariables = [];
+  let hwFunctions = [];
   let hwItems = [];
   let hwBackers = [];
   let hwFasteners = [];
@@ -1320,8 +1321,8 @@
 
   async function hwlibAdminInit() {
     const [catalog, admin, jobsData] = await Promise.all([
-      authenticatedFetch('/configurator/hwlib-catalog'),
-      authenticatedFetch('/configurator/hwlib-admin'),
+      authenticatedFetch('/config/hwlib-catalog'),
+      authenticatedFetch('/config/hwlib-admin'),
       authenticatedFetch('/business-jobs'),
     ]);
     hwCategories = catalog.categories || [];
@@ -1331,11 +1332,15 @@
     hwSets = admin.sets || [];
     hwJobs = jobsData.jobs || [];
 
-    const varsData = await authenticatedFetch('/configurator/hwlib-variables');
+    const varsData = await authenticatedFetch('/config/hwlib-variables');
     hwVariables = varsData.variables || [];
+
+    const funcsData = await authenticatedFetch('/config/hwlib-functions');
+    hwFunctions = funcsData.functions || [];
 
     hwCatRender();
     hwVarRender();
+    hwFuncRender();
     hwItemPopulateCategoryFilter();
     hwItemRender();
     hwBackerRender();
@@ -1352,6 +1357,7 @@
     return null;
   }
   function hwFindVariable(id) { return hwVariables.find(v => v.id == id); }
+  function hwFindFunction(id) { return hwFunctions.find(f => f.id == id); }
   function hwFindItem(id) { return hwItems.find(i => i.id == id); }
   function hwFindBacker(id) { return hwBackers.find(b => b.id == id); }
   function hwFindFastener(id) { return hwFasteners.find(f => f.id == id); }
@@ -1415,7 +1421,7 @@
 
   async function hwSubcatRefreshAndRender() {
     const categoryId = document.getElementById('hwlib-cat-id').value;
-    const data = await authenticatedFetch('/configurator/hwlib-catalog');
+    const data = await authenticatedFetch('/config/hwlib-catalog');
     hwCategories = data.categories || [];
     hwSubcatRenderList(hwFindCategory(categoryId));
     hwCatRender();
@@ -1427,7 +1433,7 @@
     const name = nameInput.value.trim();
     if (!categoryId || !name) return;
     try {
-      await authenticatedFetch('/configurator/hwlib-subcategories', {
+      await authenticatedFetch('/config/hwlib-subcategories', {
         method: 'POST', body: JSON.stringify({ category_id: categoryId, name }),
       });
       nameInput.value = '';
@@ -1439,7 +1445,7 @@
     name = (name || '').trim();
     if (!name) return;
     try {
-      await authenticatedFetch(`/configurator/hwlib-subcategories/${id}`, { method: 'PUT', body: JSON.stringify({ name }) });
+      await authenticatedFetch(`/config/hwlib-subcategories/${id}`, { method: 'PUT', body: JSON.stringify({ name }) });
       await hwSubcatRefreshAndRender();
     } catch (err) { showNotification(err.message, 'danger'); }
   }
@@ -1447,7 +1453,7 @@
   async function hwSubcatDelete(id) {
     if (!confirm('Delete this subcategory? Items using it stay in the parent category, just uncategorized within it.')) return;
     try {
-      await authenticatedFetch(`/configurator/hwlib-subcategories/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/config/hwlib-subcategories/${id}`, { method: 'DELETE' });
       await hwSubcatRefreshAndRender();
     } catch (err) { showNotification(err.message, 'danger'); }
   }
@@ -1462,11 +1468,11 @@
     };
     const variableIds = Array.from(document.querySelectorAll('.hwlib-cat-var-cb:checked')).map(cb => parseInt(cb.value, 10));
     try {
-      const res = await authenticatedFetch(id ? `/configurator/hwlib-categories/${id}` : '/configurator/hwlib-categories', {
+      const res = await authenticatedFetch(id ? `/config/hwlib-categories/${id}` : '/config/hwlib-categories', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       const categoryId = id || res.category.id;
-      await authenticatedFetch(`/configurator/hwlib-categories/${categoryId}/variables`, {
+      await authenticatedFetch(`/config/hwlib-categories/${categoryId}/variables`, {
         method: 'PUT', body: JSON.stringify({ variable_ids: variableIds }),
       });
       hideModal(document.getElementById('hwlib-cat-modal'));
@@ -1476,7 +1482,7 @@
 
   async function hwCatDelete(id) {
     if (!confirm('Delete this category? Items assigned to it will need to be recategorized.')) return;
-    try { await authenticatedFetch(`/configurator/hwlib-categories/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    try { await authenticatedFetch(`/config/hwlib-categories/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1566,7 +1572,7 @@
       is_inspection: document.getElementById('hwlib-var-inspection').checked,
     };
     try {
-      await authenticatedFetch(id ? `/configurator/hwlib-variables/${id}` : '/configurator/hwlib-variables', {
+      await authenticatedFetch(id ? `/config/hwlib-variables/${id}` : '/config/hwlib-variables', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('hwlib-var-modal'));
@@ -1576,7 +1582,66 @@
 
   async function hwVarDelete(id) {
     if (!confirm('Delete this variable?')) return;
-    try { await authenticatedFetch(`/configurator/hwlib-variables/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    try { await authenticatedFetch(`/config/hwlib-variables/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    catch (err) { showNotification(err.message, 'danger'); }
+  }
+
+  // ---- Functions ----
+  function hwFuncRender() {
+    const tbody = document.getElementById('hwlib-func-tbody');
+    tbody.innerHTML = hwFunctions.map(f => `
+      <tr>
+        <td><code>${esc(f.code)}</code></td>
+        <td>${esc(f.label)}</td>
+        <td>${f.group_name ? esc(f.group_name) : '<span class="text-muted">—</span>'}</td>
+        <td>${f.active ? '<span class="badge bg-green-lt">active</span>' : '<span class="badge bg-secondary-lt">inactive</span>'}</td>
+        <td class="text-end">
+          <button type="button" class="btn btn-sm btn-icon" onclick="hwFuncOpenModal(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+          <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwFuncDelete(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No functions yet.</td></tr>';
+    applyActionPermissions();
+  }
+
+  function hwFuncOpenModal(id) {
+    const f = id ? hwFindFunction(id) : null;
+    document.getElementById('hwlib-func-id').value = id || '';
+    document.getElementById('hwlib-func-code').value = f?.code || '';
+    document.getElementById('hwlib-func-label').value = f?.label || '';
+    document.getElementById('hwlib-func-group').value = f?.group_name || '';
+    document.getElementById('hwlib-func-notes').value = f?.notes || '';
+    document.getElementById('hwlib-func-sort').value = f?.sort_order ?? 0;
+    document.getElementById('hwlib-func-active').checked = f ? !!f.active : true;
+
+    document.getElementById('hwlib-func-group-list').innerHTML =
+      [...new Set(hwFunctions.map(x => x.group_name).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('');
+
+    showModal(document.getElementById('hwlib-func-modal'));
+  }
+
+  document.getElementById('hwlib-func-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('hwlib-func-id').value;
+    const payload = {
+      code: document.getElementById('hwlib-func-code').value.trim().toUpperCase(),
+      label: document.getElementById('hwlib-func-label').value,
+      group_name: document.getElementById('hwlib-func-group').value || null,
+      notes: document.getElementById('hwlib-func-notes').value || null,
+      sort_order: parseInt(document.getElementById('hwlib-func-sort').value || 0, 10),
+      active: document.getElementById('hwlib-func-active').checked,
+    };
+    try {
+      await authenticatedFetch(id ? `/config/hwlib-functions/${id}` : '/config/hwlib-functions', {
+        method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+      });
+      hideModal(document.getElementById('hwlib-func-modal'));
+      await hwlibAdminInit();
+    } catch (err) { showNotification(err.message, 'danger'); }
+  });
+
+  async function hwFuncDelete(id) {
+    if (!confirm('Delete this function? Items/links currently using it must stop referencing it first.')) return;
+    try { await authenticatedFetch(`/config/hwlib-functions/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1681,6 +1746,26 @@
     `).join('') || '<div class="col-12 text-muted small">Select a category to see its prep fields.</div>';
   }
 
+  function hwItemRenderFunctionInputs(item) {
+    const assignedIds = new Set((item?.functions || []).map(f => f.id));
+    const byGroup = {};
+    hwFunctions.forEach(f => { (byGroup[f.group_name || ''] ||= []).push(f); });
+    const wrap = document.getElementById('hwlib-item-functions');
+    wrap.innerHTML = Object.keys(byGroup).sort().map(group => `
+      <div class="mb-2">
+        <div class="fw-bold small text-muted mb-1">${group ? esc(group) : 'Ungrouped'}</div>
+        ${byGroup[group].map(f => `
+          <label class="form-check">
+            <input class="form-check-input hwlib-item-func-cb" type="checkbox" value="${f.id}" ${assignedIds.has(f.id) ? 'checked' : ''}>
+            <span class="form-check-label">${esc(f.label)} <span class="text-muted small">(${esc(f.code)})</span></span>
+          </label>`).join('')}
+      </div>`).join('') || '<div class="text-muted small">No functions defined yet — add some on the Functions tab.</div>';
+  }
+
+  function hwItemCollectFunctions() {
+    return Array.from(document.querySelectorAll('.hwlib-item-func-cb:checked')).map(cb => parseInt(cb.value, 10));
+  }
+
   function hwItemCollectValues() {
     const categoryId = document.getElementById('hwlib-item-category').value;
     const category = hwFindCategory(categoryId);
@@ -1745,6 +1830,7 @@
     document.getElementById('hwlib-item-cover').value = i?.default_cover_item_id || '';
 
     hwItemRenderValueInputs();
+    hwItemRenderFunctionInputs(i);
 
     document.getElementById('hwlib-item-backers').innerHTML = '';
     (i?.backers || []).forEach(row => hwItemAddBackerRow(row));
@@ -1776,14 +1862,17 @@
       finishes: [],
     };
     try {
-      const res = await authenticatedFetch(id ? `/configurator/hwlib-items/${id}` : '/configurator/hwlib-items', {
+      const res = await authenticatedFetch(id ? `/config/hwlib-items/${id}` : '/config/hwlib-items', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       const itemId = id || res.item.id;
-      await authenticatedFetch(`/configurator/hwlib-items/${itemId}/values`, {
+      await authenticatedFetch(`/config/hwlib-items/${itemId}/values`, {
         method: 'PUT', body: JSON.stringify({ values: hwItemCollectValues() }),
       });
-      await authenticatedFetch(`/configurator/hwlib-items/${itemId}/backers`, {
+      await authenticatedFetch(`/config/hwlib-items/${itemId}/functions`, {
+        method: 'PUT', body: JSON.stringify({ function_ids: hwItemCollectFunctions() }),
+      });
+      await authenticatedFetch(`/config/hwlib-items/${itemId}/backers`, {
         method: 'PUT', body: JSON.stringify({ backers: hwItemCollectBackers() }),
       });
       hideModal(document.getElementById('hwlib-item-modal'));
@@ -1793,7 +1882,7 @@
 
   async function hwItemDelete(id) {
     if (!confirm('Delete this item?')) return;
-    try { await authenticatedFetch(`/configurator/hwlib-items/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    try { await authenticatedFetch(`/config/hwlib-items/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1863,11 +1952,11 @@
       active: document.getElementById('hwlib-backer-active').checked,
     };
     try {
-      const res = await authenticatedFetch(id ? `/configurator/hwlib-backers/${id}` : '/configurator/hwlib-backers', {
+      const res = await authenticatedFetch(id ? `/config/hwlib-backers/${id}` : '/config/hwlib-backers', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       const backerId = id || res.backer.id;
-      await authenticatedFetch(`/configurator/hwlib-backers/${backerId}/fasteners`, {
+      await authenticatedFetch(`/config/hwlib-backers/${backerId}/fasteners`, {
         method: 'PUT', body: JSON.stringify({ fasteners: hwBackerCollectFasteners() }),
       });
       hideModal(document.getElementById('hwlib-backer-modal'));
@@ -1877,7 +1966,7 @@
 
   async function hwBackerDelete(id) {
     if (!confirm('Delete this backer?')) return;
-    try { await authenticatedFetch(`/configurator/hwlib-backers/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    try { await authenticatedFetch(`/config/hwlib-backers/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -1917,7 +2006,7 @@
       active: document.getElementById('hwlib-fastener-active').checked,
     };
     try {
-      await authenticatedFetch(id ? `/configurator/hwlib-fasteners/${id}` : '/configurator/hwlib-fasteners', {
+      await authenticatedFetch(id ? `/config/hwlib-fasteners/${id}` : '/config/hwlib-fasteners', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       hideModal(document.getElementById('hwlib-fastener-modal'));
@@ -1927,7 +2016,7 @@
 
   async function hwFastenerDelete(id) {
     if (!confirm('Delete this fastener?')) return;
-    try { await authenticatedFetch(`/configurator/hwlib-fasteners/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    try { await authenticatedFetch(`/config/hwlib-fasteners/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
     catch (err) { showNotification(err.message, 'danger'); }
   }
 
@@ -2002,11 +2091,11 @@
       is_pair: document.getElementById('hwlib-set-ispair').checked,
     };
     try {
-      const res = await authenticatedFetch(id ? `/configurator/hwlib-sets/${id}` : '/configurator/hwlib-sets', {
+      const res = await authenticatedFetch(id ? `/config/hwlib-sets/${id}` : '/config/hwlib-sets', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });
       const setId = id || res.set.id;
-      await authenticatedFetch(`/configurator/hwlib-sets/${setId}/items`, {
+      await authenticatedFetch(`/config/hwlib-sets/${setId}/items`, {
         method: 'PUT', body: JSON.stringify({ items: hwSetCollectItems() }),
       });
       hideModal(document.getElementById('hwlib-set-modal'));
@@ -2016,8 +2105,67 @@
 
   async function hwSetDelete(id) {
     if (!confirm('Delete this set?')) return;
-    try { await authenticatedFetch(`/configurator/hwlib-sets/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
+    try { await authenticatedFetch(`/config/hwlib-sets/${id}`, { method: 'DELETE' }); await hwlibAdminInit(); }
     catch (err) { showNotification(err.message, 'danger'); }
+  }
+
+  // Door Catalog PN fields (dc-*-...Pn) autocomplete/validate against
+  // Product.part_number — never sku, since a PN here (e.g. "E4544")
+  // identifies a part, not one finish's SKU row. Non-blocking: catalog rows
+  // are allowed to reference a PN that isn't in inventory yet, same as
+  // DoorBomGenerator's own warn-don't-fail resolution at BOM time.
+  const PN_MODAL_IDS = [
+    'dc-doorType-modal', 'dc-rail-modal', 'dc-railLug-modal', 'dc-midLug-modal',
+    'dc-glassSpec-modal', 'dc-sbk-modal', 'dc-tieRod-modal',
+  ];
+
+  function initPartNumberHints() {
+    PN_MODAL_IDS.forEach(modalId => {
+      const modal = document.getElementById(modalId);
+      if (!modal) return;
+
+      modal.querySelectorAll('input[id^="dc-"][id$="Pn"]').forEach(input => {
+        if (input.dataset.pnHintWired) return;
+        input.dataset.pnHintWired = '1';
+
+        const hint = document.createElement('div');
+        hint.className = 'form-hint pn-match-hint';
+        input.insertAdjacentElement('afterend', hint);
+
+        let timer = null;
+        input.addEventListener('input', () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => checkPartNumberHint(input, hint), 350);
+        });
+      });
+
+      modal.addEventListener('shown.bs.modal', () => {
+        modal.querySelectorAll('input[id^="dc-"][id$="Pn"]').forEach(input => {
+          const hint = input.nextElementSibling;
+          if (hint && hint.classList.contains('pn-match-hint')) checkPartNumberHint(input, hint);
+        });
+      });
+    });
+  }
+
+  async function checkPartNumberHint(input, hint) {
+    const value = input.value.trim();
+    if (!value) { hint.textContent = ''; hint.className = 'form-hint pn-match-hint'; return; }
+    try {
+      const data = await authenticatedFetch(`/config/products/search-by-part-number?q=${encodeURIComponent(value)}`);
+      const matches = data.data || [];
+      const exact = matches.find(p => (p.part_number || '').toLowerCase() === value.toLowerCase());
+      if (exact) {
+        hint.textContent = `Matches inventory part ${exact.part_number}${exact.description ? ' — '+exact.description : ''}`;
+        hint.className = 'form-hint pn-match-hint text-success';
+      } else if (matches.length) {
+        hint.textContent = `No exact match. Close matches: ${matches.slice(0, 3).map(p => p.part_number).join(', ')}`;
+        hint.className = 'form-hint pn-match-hint text-warning';
+      } else {
+        hint.textContent = 'No matching part number in inventory yet.';
+        hint.className = 'form-hint pn-match-hint text-warning';
+      }
+    } catch (err) { /* non-blocking — leave hint as-is */ }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -2025,6 +2173,7 @@
       cfgLoadTree();
       dcLoadAll();
       hwlibAdminInit();
+      initPartNumberHints();
     });
   });
 </script>
