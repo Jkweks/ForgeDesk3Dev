@@ -566,22 +566,32 @@ class UserController extends Controller
     }
 
     /**
-     * Persist which columns the signed-in user has hidden on the Work Orders
-     * table, so it follows them to any device on next login.
+     * Persist the signed-in user's column order + visibility on the Work
+     * Orders table, so it follows them to any device on next login.
+     *
+     * Older clients only ever sent `hidden` (no ordering existed yet), so
+     * `wo_column_prefs` may still hold a bare hidden-column array from
+     * before this was extended — the frontend treats that as hidden-only
+     * with the default order.
      */
     public function updateWoColumnPrefs(Request $request)
     {
         $validated = $request->validate([
+            'order' => 'sometimes|array',
+            'order.*' => 'string|max:64',
             'hidden' => 'sometimes|array',
             'hidden.*' => 'string|max:64',
         ]);
 
         $user = auth()->user();
+        $order = array_values(array_unique($validated['order'] ?? []));
         $hidden = array_values(array_unique($validated['hidden'] ?? []));
 
-        // The client always sends the full current set of hidden columns, so
+        // The client always sends its full current order + hidden set, so
         // this is a straight replace, not a merge.
-        $user->update(['wo_column_prefs' => $hidden ?: null]);
+        $user->update([
+            'wo_column_prefs' => ($order || $hidden) ? ['order' => $order, 'hidden' => $hidden] : null,
+        ]);
 
         return response()->json([
             'wo_column_prefs' => $user->wo_column_prefs,

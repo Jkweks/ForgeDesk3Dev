@@ -965,11 +965,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================================
-// Column visibility — persisted to the signed-in user's account
+// Column order + visibility — persisted to the signed-in user's account
 // ============================================================
 const WO_COLUMNS = [
     { key: 'priority',        label: '#' },
     { key: 'job_name',        label: 'Job Name' },
+    { key: 'release',         label: 'Release' },
     { key: 'pm',               label: 'PM' },
     { key: 'due',              label: 'Due' },
     { key: 'est_start',        label: 'Est. Start' },
@@ -981,7 +982,9 @@ const WO_COLUMNS = [
     { key: 'material',         label: 'Material' },
     { key: 'elevations',       label: 'Elevations' },
 ];
+let woColumnOrder = WO_COLUMNS.map(c => c.key);
 let woHiddenColumns = new Set();
+let _woColDragKey = null;
 
 // Uses locally-cached prefs immediately (avoids a flash of every column),
 // then reconciles against the server's copy once the session refresh
@@ -995,25 +998,65 @@ function initWoColumnPrefs() {
         window.sessionReady.then(() => {
             applyStoredWoColumnPrefs(currentUser?.wo_column_prefs);
             renderWoColumnsMenu();
-            applyWoColumnVisibility();
+            applyWoColumnOrder();
         });
     }
 }
 
-function applyStoredWoColumnPrefs(hidden) {
-    woHiddenColumns = new Set(Array.isArray(hidden) ? hidden : []);
+// Accepts either the current { order, hidden } shape or a legacy bare
+// hidden-column array from before ordering existed.
+function applyStoredWoColumnPrefs(prefs) {
+    const validKeys = WO_COLUMNS.map(c => c.key);
+    const isLegacyArray = Array.isArray(prefs);
+    const storedOrder = !isLegacyArray && Array.isArray(prefs?.order) ? prefs.order.filter(k => validKeys.includes(k)) : [];
+    validKeys.forEach(k => { if (!storedOrder.includes(k)) storedOrder.push(k); });
+    woColumnOrder = storedOrder;
+    woHiddenColumns = new Set(isLegacyArray ? prefs : (Array.isArray(prefs?.hidden) ? prefs.hidden : []));
 }
 
 function renderWoColumnsMenu() {
     const menu = document.getElementById('wo-columns-menu');
     if (!menu) return;
-    menu.innerHTML = WO_COLUMNS.map(c => `
-        <label class="form-check">
-            <input class="form-check-input" type="checkbox" ${woHiddenColumns.has(c.key) ? '' : 'checked'}
-                onchange="toggleWoColumn('${c.key}', this.checked)">
-            <span class="form-check-label">${esc(c.label)}</span>
-        </label>
+    const cols = woColumnOrder.map(key => WO_COLUMNS.find(c => c.key === key)).filter(Boolean);
+    menu.innerHTML = cols.map(c => `
+        <div class="d-flex align-items-center gap-2 py-1 wo-col-row" draggable="true" data-col-key="${c.key}"
+            ondragstart="woColDragStart(event)" ondragover="woColDragOver(event)" ondrop="woColDrop(event)" ondragend="woColDragEnd(event)">
+            <i class="ti ti-grip-vertical text-muted" style="cursor:grab"></i>
+            <label class="form-check mb-0 flex-fill">
+                <input class="form-check-input" type="checkbox" ${woHiddenColumns.has(c.key) ? '' : 'checked'}
+                    onchange="toggleWoColumn('${c.key}', this.checked)">
+                <span class="form-check-label">${esc(c.label)}</span>
+            </label>
+        </div>
     `).join('');
+}
+
+function woColDragStart(e) {
+    _woColDragKey = e.currentTarget.dataset.colKey;
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function woColDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function woColDrop(e) {
+    e.preventDefault();
+    const targetKey = e.currentTarget.dataset.colKey;
+    if (!_woColDragKey || _woColDragKey === targetKey) return;
+    const from = woColumnOrder.indexOf(_woColDragKey);
+    const to = woColumnOrder.indexOf(targetKey);
+    if (from === -1 || to === -1) return;
+    woColumnOrder.splice(from, 1);
+    woColumnOrder.splice(to, 0, _woColDragKey);
+    renderWoColumnsMenu();
+    applyWoColumnOrder();
+    saveWoColumnPrefs();
+}
+
+function woColDragEnd() {
+    _woColDragKey = null;
 }
 
 function toggleWoColumn(key, visible) {
@@ -1032,12 +1075,35 @@ function applyWoColumnVisibility() {
     });
 }
 
+// Reorders a row's <td>/<th> children to match woColumnOrder. Cells with no
+// data-col (the trailing chevron/actions column) are left exactly where
+// they are.
+function reorderWoRowCells(row) {
+    const cells = Array.from(row.children);
+    const colIndices = [];
+    cells.forEach((cell, idx) => { if (cell.dataset.col) colIndices.push(idx); });
+    if (!colIndices.length) return;
+
+    const sorted = colIndices
+        .map(idx => cells[idx])
+        .sort((a, b) => woColumnOrder.indexOf(a.dataset.col) - woColumnOrder.indexOf(b.dataset.col));
+    colIndices.forEach((idx, i) => { cells[idx] = sorted[i]; });
+    cells.forEach(cell => row.appendChild(cell));
+}
+
+function applyWoColumnOrder() {
+    const headRow = document.querySelector('#wo-thead tr');
+    if (headRow) reorderWoRowCells(headRow);
+    document.querySelectorAll('#wo-tbody > tr').forEach(reorderWoRowCells);
+    applyWoColumnVisibility();
+}
+
 let _woColumnSaveTimeout = null;
 function saveWoColumnPrefs() {
     // currentUser stays in sync locally so a re-render (e.g. reopening the
     // dropdown) reflects the latest choice even before the save resolves.
     if (currentUser) {
-        currentUser.wo_column_prefs = [...woHiddenColumns];
+        currentUser.wo_column_prefs = { order: [...woColumnOrder], hidden: [...woHiddenColumns] };
         try { localStorage.setItem('userData', JSON.stringify(currentUser)); } catch (e) { /* best-effort */ }
     }
     clearTimeout(_woColumnSaveTimeout);
@@ -1046,7 +1112,7 @@ function saveWoColumnPrefs() {
             await API('/user/wo-column-prefs', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hidden: [...woHiddenColumns] }),
+                body: JSON.stringify({ order: [...woColumnOrder], hidden: [...woHiddenColumns] }),
             });
         } catch (e) { console.error('Failed to save column preferences:', e); }
     }, 400);
@@ -1119,7 +1185,7 @@ function renderWOTableHead() {
     if (!thead) return;
     thead.innerHTML = `<tr>
         ${woSortTh('#', 'priority', 'priority', 'width:4.5rem')}
-        ${woSortTh('Release', 'release')}
+        ${woSortTh('Release', 'release', 'release')}
         ${woSortTh('Job Name', 'job_name', 'job_name')}
         ${woSortTh('PM', 'pm', 'pm')}
         ${woSortTh('Due', 'due', 'due')}
@@ -1133,7 +1199,7 @@ function renderWOTableHead() {
         ${woSortTh('Elevations', 'elevations', 'elevations')}
         <th class="w-1"></th>
     </tr>`;
-    applyWoColumnVisibility();
+    applyWoColumnOrder();
 }
 
 function sortWOColumn(col) {
@@ -1248,7 +1314,7 @@ function renderWOList(wos) {
                 : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
             <td data-col="priority"><span class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</span></td>
-            <td><strong>${esc(releaseNumberOnly(wo))}</strong>${statusBadge}</td>
+            <td data-col="release"><strong>${esc(releaseNumberOnly(wo))}</strong>${statusBadge}</td>
             <td data-col="job_name">${esc(wo.job?.job_name || '—')}</td>
             <td data-col="pm">${pmPill(wo.job?.project_manager)}</td>
             <td data-col="due">${dueCell}</td>
@@ -1271,7 +1337,7 @@ function renderWOList(wos) {
             </td>
         </tr>`;
     }).join('');
-    applyWoColumnVisibility();
+    applyWoColumnOrder();
 }
 
 // ============================================================

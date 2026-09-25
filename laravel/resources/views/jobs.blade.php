@@ -48,10 +48,10 @@
 .job-expand-wrap .job-detail-empty { color: var(--tblr-secondary); font-size: .875rem; padding: .75rem .25rem; }
 .job-tx-form-wrap .tx-results { max-height: 240px; overflow-y: auto; }
 
-.jobs-toolbar { gap: .5rem; }
+.jobs-toolbar { gap: .5rem; flex-wrap: nowrap; }
 .jobs-toolbar .search-wrap { min-width: 200px; }
 @media (max-width: 575.98px) {
-    .jobs-toolbar { width: 100%; }
+    .jobs-toolbar { width: 100%; flex-wrap: wrap; }
     .jobs-toolbar .search-wrap { flex: 1 1 auto; }
 }
 @endsection
@@ -121,7 +121,7 @@
               <div class="card">
                 <div class="card-header d-flex flex-wrap align-items-center gap-2">
                   <h3 class="card-title mb-0">Jobs</h3>
-                  <div class="jobs-toolbar d-flex flex-wrap align-items-center ms-sm-auto">
+                  <div class="jobs-toolbar d-flex align-items-center ms-sm-auto">
                     <select class="form-select form-select-sm w-auto" id="filterStatus">
                       <option value="">All statuses</option>
                       <option value="active">Active</option>
