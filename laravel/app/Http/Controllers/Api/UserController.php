@@ -589,6 +589,34 @@ class UserController extends Controller
     }
 
     /**
+     * Persist the signed-in user's column order + visibility on the Jobs
+     * table, so it follows them to any device on next login.
+     */
+    public function updateJobsColumnPrefs(Request $request)
+    {
+        $validated = $request->validate([
+            'order' => 'sometimes|array',
+            'order.*' => 'string|max:64',
+            'hidden' => 'sometimes|array',
+            'hidden.*' => 'string|max:64',
+        ]);
+
+        $user = auth()->user();
+        $order = array_values(array_unique($validated['order'] ?? []));
+        $hidden = array_values(array_unique($validated['hidden'] ?? []));
+
+        // The client always sends its full current order + hidden set, so
+        // this is a straight replace, not a merge.
+        $user->update([
+            'jobs_column_prefs' => ($order || $hidden) ? ['order' => $order, 'hidden' => $hidden] : null,
+        ]);
+
+        return response()->json([
+            'jobs_column_prefs' => $user->jobs_column_prefs,
+        ]);
+    }
+
+    /**
      * Persist the signed-in user's Quality Reports dashboard settings — which
      * date drives the incident-rate-by-month line, and whether its month-to-
      * date projection is shown — so it follows them to any device on next

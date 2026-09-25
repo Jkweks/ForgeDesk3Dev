@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  */
 class ResequenceWorkOrderPriorities extends Command
 {
-    private const ARCHIVE_AFTER_DAYS = 3;
+    private const ARCHIVE_AFTER_DAYS = 7;
 
     protected $signature = 'fd:resequence-priorities {--clear-locks : Also unpin every hand-locked work order first}';
 

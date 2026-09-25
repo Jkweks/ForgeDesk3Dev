@@ -39,4 +39,19 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     php artisan migrate --force
 fi
 
+# Laravel's scheduler (routes/console.php Schedule::command(...) entries,
+# e.g. the nightly work-order priority resequence + auto-archive sweep) only
+# fires when something calls `artisan schedule:run` on a minute cadence.
+# Nothing in this stack provides an OS cron/supervisor for that, so run a
+# lightweight loop here instead. Only the `app` container (default CMD
+# php-fpm) does this — the `queue` container overrides CMD to `queue:work`
+# and must not also run this loop, or every scheduled job would fire twice.
+if [ "$1" = "php-fpm" ]; then
+    echo "Starting scheduler loop (php artisan schedule:run every 60s)..."
+    ( while true; do
+        php artisan schedule:run >> /dev/stdout 2>&1 || true
+        sleep 60
+    done ) &
+fi
+
 exec "$@"

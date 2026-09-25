@@ -53,7 +53,6 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-forgedesk_secure_password}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS}
     depends_on:
       postgres:
         condition: service_healthy

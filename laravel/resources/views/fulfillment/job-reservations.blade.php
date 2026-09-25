@@ -111,8 +111,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     <thead>
                       <tr>
                         <th class="sortable" onclick="sortBy('job_number')">Job # <i class="ti ti-selector sort-icon" id="sortIcon-job_number"></i></th>
-                        <th class="sortable" onclick="sortBy('release_number')">Release <i class="ti ti-selector sort-icon" id="sortIcon-release_number"></i></th>
                         <th class="sortable" onclick="sortBy('job_name')">Job Name <i class="ti ti-selector sort-icon" id="sortIcon-job_name"></i></th>
+                        <th class="sortable" onclick="sortBy('release_number')">Release <i class="ti ti-selector sort-icon" id="sortIcon-release_number"></i></th>
                         <th class="sortable" onclick="sortBy('status')">Status <i class="ti ti-selector sort-icon" id="sortIcon-status"></i></th>
                         <th class="sortable" onclick="sortBy('requested_by')">Requested By <i class="ti ti-selector sort-icon" id="sortIcon-requested_by"></i></th>
                         <th class="sortable" onclick="sortBy('needed_by')">Needed By <i class="ti ti-selector sort-icon" id="sortIcon-needed_by"></i></th>
@@ -702,8 +702,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                 return `
                     <tr class="${rowClass}">
                         <td><strong>${res.job_number}</strong></td>
-                        <td>${res.release_number}</td>
                         <td>${res.job_name}</td>
+                        <td>${res.release_number}</td>
                         <td>${statusBadge}</td>
                         <td>${res.requested_by}</td>
                         <td>${res.needed_by || '-'}</td>
@@ -1359,7 +1359,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             }
         }
 
-        function showEditModal() {
+        async function showEditModal() {
             const res = editingReservation;
 
             // Populate form fields

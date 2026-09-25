@@ -198,6 +198,7 @@ Route::middleware('auth:sanctum')->group(function () {
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
                 'theme_preferences' => $user->theme_preferences,
                 'wo_column_prefs' => $user->wo_column_prefs,
+                'jobs_column_prefs' => $user->jobs_column_prefs,
                 'quality_report_prefs' => $user->quality_report_prefs,
             ];
         });
@@ -223,6 +224,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/user/profile', [\App\Http\Controllers\Api\UserController::class, 'updateProfile']);
         Route::put('/user/theme-preferences', [\App\Http\Controllers\Api\UserController::class, 'updateThemePreferences']);
         Route::put('/user/wo-column-prefs', [\App\Http\Controllers\Api\UserController::class, 'updateWoColumnPrefs']);
+        Route::put('/user/jobs-column-prefs', [\App\Http\Controllers\Api\UserController::class, 'updateJobsColumnPrefs']);
         Route::put('/user/quality-report-prefs', [\App\Http\Controllers\Api\UserController::class, 'updateQualityReportPrefs']);
 
         // Role & Permission Management

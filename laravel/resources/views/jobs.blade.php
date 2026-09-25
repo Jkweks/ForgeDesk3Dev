@@ -135,6 +135,13 @@
                       </span>
                       <input type="text" class="form-control" placeholder="Search job #, name, customer…" id="searchInput">
                     </div>
+                    <div class="dropdown">
+                      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="jobs-columns-btn"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <i class="ti ti-columns me-1"></i>Columns
+                      </button>
+                      <div class="dropdown-menu dropdown-menu-end p-2" id="jobs-columns-menu" style="min-width:14rem;max-height:24rem;overflow:auto"></div>
+                    </div>
                   </div>
                 </div>
                 <div class="card-body">
@@ -144,18 +151,18 @@
 
                   <div id="jobsTable" style="display: none;">
                     <div class="table-responsive">
-                      <table class="table table-vcenter card-table table-hover">
+                      <table class="table table-vcenter card-table table-hover" id="jobsTableEl">
                         <thead>
                           <tr>
-                            <th>Job&nbsp;#</th>
-                            <th>Name</th>
-                            <th>Customer</th>
-                            <th>Status</th>
-                            <th class="text-center">Res.</th>
-                            <th class="text-center">WOs</th>
-                            <th>Start</th>
-                            <th>Target</th>
-                            <th class="text-end">Days&nbsp;left</th>
+                            <th data-col="job_number">Job&nbsp;#</th>
+                            <th data-col="name">Name</th>
+                            <th data-col="customer">Customer</th>
+                            <th data-col="status">Status</th>
+                            <th class="text-center" data-col="reservations">Res.</th>
+                            <th class="text-center" data-col="work_orders">WOs</th>
+                            <th data-col="start">Start</th>
+                            <th data-col="target">Target</th>
+                            <th class="text-end" data-col="days_left">Days&nbsp;left</th>
                             <th class="w-1"></th>
                           </tr>
                         </thead>
@@ -354,7 +361,7 @@
 
     <!-- Hardware Set Modal (shared across all job rows) -->
     <div class="modal fade" id="jobHwSetModal" tabindex="-1">
-      <div class="modal-dialog modal-lg">
+      <div class="modal-dialog modal-xl">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="job-hwset-modal-title">New Hardware Set</h5>
@@ -368,7 +375,7 @@
                 <input type="text" class="form-control form-control-sm" id="job-hwset-name">
               </div>
               <div class="col-md-4 d-flex align-items-end">
-                <label class="form-check"><input class="form-check-input" type="checkbox" id="job-hwset-ispair"><span class="form-check-label">Pair</span></label>
+                <label class="form-check"><input class="form-check-input" type="checkbox" id="job-hwset-ispair" onchange="toggleJobHwSetLeafVisibility()"><span class="form-check-label">Pair</span></label>
               </div>
               <div class="col-12">
                 <label class="form-label form-label-sm mb-1">Notes</label>
@@ -939,6 +946,7 @@
         let currentJob = null;
 
         document.addEventListener('DOMContentLoaded', function() {
+            initJobsColumnPrefs();
             loadJobs();
 
             // Search and filter
@@ -1011,18 +1019,18 @@
                     ? `<span class="badge ${cls} job-count">${n}</span>`
                     : `<span class="text-secondary job-count">–</span>`;
                 tr.innerHTML = `
-                    <td class="text-nowrap">
+                    <td class="text-nowrap" data-col="job_number">
                         <i id="chevron-${job.id}" class="ti ti-chevron-right me-1 chevron"></i>
                         <strong>${escapeHtml(job.job_number)}</strong>
                     </td>
-                    <td>${escapeHtml(job.job_name)}</td>
-                    <td class="col-meta">${escapeHtml(job.customer_name || '–')}</td>
-                    <td><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
-                    <td class="text-center">${countCell(resCount, 'bg-blue-lt text-blue')}</td>
-                    <td class="text-center">${countCell(woCount, 'bg-purple-lt text-purple')}</td>
-                    <td class="col-meta">${jobDate(job.start_date)}</td>
-                    <td class="col-meta">${jobDate(job.target_completion_date)}</td>
-                    <td class="text-end">${getDaysRemaining(job.days_until_completion)}</td>
+                    <td data-col="name">${escapeHtml(job.job_name)}</td>
+                    <td class="col-meta" data-col="customer">${escapeHtml(job.customer_name || '–')}</td>
+                    <td data-col="status"><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
+                    <td class="text-center" data-col="reservations">${countCell(resCount, 'bg-blue-lt text-blue')}</td>
+                    <td class="text-center" data-col="work_orders">${countCell(woCount, 'bg-purple-lt text-purple')}</td>
+                    <td class="col-meta" data-col="start">${jobDate(job.start_date)}</td>
+                    <td class="col-meta" data-col="target">${jobDate(job.target_completion_date)}</td>
+                    <td class="text-end" data-col="days_left">${getDaysRemaining(job.days_until_completion)}</td>
                     <td class="action-buttons text-end">
                         <div class="btn-list flex-nowrap justify-content-end">
                             <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editJob(${job.id})" title="Edit" data-permission="jobs.edit">
@@ -1235,6 +1243,8 @@
                 `;
                 tbody.appendChild(detailTr);
             });
+
+            applyJobsColumnOrder();
         }
 
         function filterJobs() {
@@ -1655,14 +1665,163 @@
 
         let jobHwSets = {};
         let jobHwConfigsCache = {};
-        let hwlibItemsCache = null;
+        let hwlibCategoriesCache = null;
 
         async function hwlibLoadItemsForPicker() {
-            if (hwlibItemsCache) return hwlibItemsCache;
-            const r = await jobsAPI('/api/v1/config/hwlib-admin');
-            const data = r.ok ? await r.json() : { items: [] };
-            hwlibItemsCache = data.items || [];
-            return hwlibItemsCache;
+            if (hwlibCategoriesCache) return hwlibCategoriesCache;
+            const r = await jobsAPI('/api/v1/config/hwlib-catalog');
+            const data = r.ok ? await r.json() : { categories: [] };
+            hwlibCategoriesCache = (data.categories || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+            return hwlibCategoriesCache;
+        }
+
+        function hwlibFindItem(id) {
+            for (const c of (hwlibCategoriesCache || [])) {
+                const item = (c.items || []).find(i => i.id == id);
+                if (item) return item;
+            }
+            return null;
+        }
+
+        // Categories with subcategories flatten into one option per
+        // subcategory ("Category - Subcategory"); a category with
+        // uncategorized items keeps/gets a plain "Category" option. Option
+        // values are "c<id>" (category, no subcategory filter) or
+        // "s<id>" (a specific subcategory) — mirrors the frame configurator's
+        // hardware picker (resources/views/configurator/frame.blade.php).
+        function hwlibBuildCategoryOptions() {
+            const options = [];
+            (hwlibCategoriesCache || []).forEach(c => {
+                const items = c.items || [];
+                const subs = c.subcategories || [];
+                subs.forEach(s => {
+                    if (items.some(i => i.subcategory_id == s.id)) {
+                        options.push({ value: `s${s.id}`, label: `${c.name} - ${s.name}`, categoryId: c.id, subcategoryId: s.id });
+                    }
+                });
+                if (items.some(i => !i.subcategory_id)) {
+                    options.push({ value: `c${c.id}`, label: c.name, categoryId: c.id, subcategoryId: null });
+                }
+            });
+            return options;
+        }
+
+        function hwlibCategoryOptionForItem(item) {
+            if (!item) return null;
+            const options = hwlibBuildCategoryOptions();
+            return options.find(o => o.categoryId == item.category_id && o.subcategoryId == (item.subcategory_id || null));
+        }
+
+        function jobHwsiItemsForCategory(rowEl) {
+            const value = rowEl.querySelector('.job-hwsi-category').value;
+            const selected = hwlibBuildCategoryOptions().find(o => o.value === value);
+            const cat = selected ? (hwlibCategoriesCache || []).find(c => c.id == selected.categoryId) : null;
+            let items = cat?.items || [];
+            if (selected) {
+                items = selected.subcategoryId
+                    ? items.filter(i => i.subcategory_id == selected.subcategoryId)
+                    : items.filter(i => !i.subcategory_id);
+            }
+            return items;
+        }
+
+        function jobHwsiRenderCategorySelect(rowEl) {
+            const catSelect = rowEl.querySelector('.job-hwsi-category');
+            const current = catSelect.value;
+            const options = hwlibBuildCategoryOptions();
+            catSelect.innerHTML = options.map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('');
+            if (options.some(o => o.value === current)) catSelect.value = current;
+            jobHwsiFilterItems(rowEl);
+        }
+
+        function jobHwsiFilterItems(rowEl) {
+            const items = jobHwsiItemsForCategory(rowEl);
+            const mfrSelect = rowEl.querySelector('.job-hwsi-manufacturer');
+            const mfrs = Array.from(new Set(items.map(i => i.manufacturer || ''))).sort((a, b) => a.localeCompare(b));
+            mfrSelect.innerHTML = mfrs.map(m => `<option value="${escapeHtml(m)}">${m ? escapeHtml(m) : '(none)'}</option>`).join('');
+            jobHwsiOnManufacturerChange(rowEl);
+        }
+
+        function jobHwsiOnManufacturerChange(rowEl) {
+            const items = jobHwsiItemsForCategory(rowEl);
+            const manufacturer = rowEl.querySelector('.job-hwsi-manufacturer').value;
+            const filtered = items.filter(i => (i.manufacturer || '') === manufacturer);
+            const itemSelect = rowEl.querySelector('.job-hwsi-item');
+            itemSelect.innerHTML = filtered.map(i =>
+                `<option value="${i.id}">${escapeHtml(i.name)}${i.pn ? ' — ' + escapeHtml(i.pn) : ''}${i.needs_review ? ' (needs review)' : ''}</option>`
+            ).join('');
+            jobHwsiRenderFunctionPicker(rowEl);
+        }
+
+        // Functions sharing a group_name render as a mutually-exclusive radio
+        // group (with a "None" option); ungrouped functions render as
+        // independent checkboxes. Radio group names are scoped per row (via
+        // data-row-seq) so multiple item rows don't collide.
+        function jobHwsiRenderFunctionPicker(rowEl, preselectedIds) {
+            const seq = rowEl.dataset.rowSeq;
+            const itemId = rowEl.querySelector('.job-hwsi-item').value;
+            const item = itemId ? hwlibFindItem(itemId) : null;
+            const functions = item?.functions || [];
+            const wrap = rowEl.querySelector('.job-hwsi-functions-wrap');
+            const container = rowEl.querySelector('.job-hwsi-functions');
+            if (!functions.length) {
+                wrap.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+            const selected = new Set((preselectedIds || []).map(id => String(id)));
+            const byGroup = {};
+            functions.forEach(f => { (byGroup[f.group_name || ''] ||= []).push(f); });
+            container.innerHTML = Object.keys(byGroup).sort().map(group => {
+                const groupFns = byGroup[group];
+                if (group) {
+                    const name = `job-hwsi-func-group-${seq}-${group.replace(/[^a-z0-9]/gi, '_')}`;
+                    const noneChecked = !groupFns.some(f => selected.has(String(f.id)));
+                    return `<div>
+                        <div class="text-muted small mb-1">${escapeHtml(group)}</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <label class="form-check form-check-inline"><input class="form-check-input job-hwsi-func-radio" type="radio" name="${name}" value="" ${noneChecked ? 'checked' : ''}><span class="form-check-label text-muted">None</span></label>
+                            ${groupFns.map(f => `<label class="form-check form-check-inline"><input class="form-check-input job-hwsi-func-radio" type="radio" name="${name}" value="${f.id}" ${selected.has(String(f.id)) ? 'checked' : ''}><span class="form-check-label">${escapeHtml(f.label)} <span class="text-muted small">(${escapeHtml(f.code)})</span></span></label>`).join('')}
+                        </div>
+                    </div>`;
+                }
+                return `<div>
+                    <div class="text-muted small mb-1">Options</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        ${groupFns.map(f => `<label class="form-check form-check-inline"><input class="form-check-input job-hwsi-func-cb" type="checkbox" value="${f.id}" ${selected.has(String(f.id)) ? 'checked' : ''}><span class="form-check-label">${escapeHtml(f.label)} <span class="text-muted small">(${escapeHtml(f.code)})</span></span></label>`).join('')}
+                    </div>
+                </div>`;
+            }).join('');
+            wrap.style.display = '';
+        }
+
+        function jobHwsiCollectFunctionIds(rowEl) {
+            const radios = Array.from(rowEl.querySelectorAll('.job-hwsi-func-radio:checked')).map(r => r.value).filter(Boolean);
+            const checks = Array.from(rowEl.querySelectorAll('.job-hwsi-func-cb:checked')).map(c => c.value);
+            return [...radios, ...checks].map(v => parseInt(v, 10));
+        }
+
+        let jobHwSetRowSeq = 0;
+
+        // Populates a freshly-inserted row's Category/Manufacturer/Part
+        // selects (and function picker), pre-selecting the existing item
+        // when editing. Runs after the row's HTML is in the DOM since it
+        // depends on the row's own elements.
+        function jobHwsiInitRow(rowEl, row) {
+            const item = row?.item_id ? hwlibFindItem(row.item_id) : (row?.item ? hwlibFindItem(row.item.id) : null);
+            const catOption = hwlibCategoryOptionForItem(item);
+            jobHwsiRenderCategorySelect(rowEl);
+            if (catOption) {
+                rowEl.querySelector('.job-hwsi-category').value = catOption.value;
+                jobHwsiFilterItems(rowEl);
+            }
+            if (item) {
+                rowEl.querySelector('.job-hwsi-manufacturer').value = item.manufacturer || '';
+                jobHwsiOnManufacturerChange(rowEl);
+                rowEl.querySelector('.job-hwsi-item').value = item.id;
+            }
+            const preselectedIds = (row?.functions || []).map(f => f.id);
+            jobHwsiRenderFunctionPicker(rowEl, preselectedIds);
         }
 
         async function loadJobHwSets(jobId) {
@@ -1730,30 +1889,57 @@
             applyActionPermissions();
         }
 
-        function jobHwSetItemRowHtml(row) {
-            const items = hwlibItemsCache || [];
-            const opts = items.map(i => `<option value="${i.id}" ${row?.item_id == i.id ? 'selected' : ''}>${escapeHtml(i.name)}</option>`).join('');
+        function jobHwSetItemRowHtml(seq) {
+            const isPair = document.getElementById('job-hwset-ispair')?.checked;
             return `
-                <div class="row g-2 align-items-center mb-2 job-hwset-item-row">
-                    <div class="col-md-4"><select class="form-select form-select-sm job-hwsi-item"><option value="">— select item —</option>${opts}</select></div>
-                    <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm job-hwsi-qty" placeholder="qty" value="${row?.quantity ?? 1}"></div>
-                    <div class="col-md-2"><select class="form-select form-select-sm job-hwsi-series">
-                        <option value="Standard" ${!row || row?.series === 'Standard' ? 'selected' : ''}>Standard</option>
-                        <option value="Thermal" ${row?.series === 'Thermal' ? 'selected' : ''}>Thermal</option>
-                        <option value="Monumental" ${row?.series === 'Monumental' ? 'selected' : ''}>Monumental</option>
-                    </select></div>
-                    <div class="col-md-2"><select class="form-select form-select-sm job-hwsi-leaf">
-                        <option value="both" ${!row || row?.leaf === 'both' ? 'selected' : ''}>Both</option>
-                        <option value="active" ${row?.leaf === 'active' ? 'selected' : ''}>Active</option>
-                        <option value="inactive" ${row?.leaf === 'inactive' ? 'selected' : ''}>Inactive</option>
-                    </select></div>
-                    <div class="col-md-1"><input type="text" class="form-control form-control-sm job-hwsi-notes" placeholder="notes" value="${escapeHtml(row?.notes || '')}"></div>
-                    <div class="col-md-1"><button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.job-hwset-item-row').remove()"><i class="ti ti-x"></i></button></div>
+                <div class="border rounded p-2 mb-2 job-hwset-item-row" data-row-seq="${seq}">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3"><label class="form-label form-label-sm mb-1">Category</label><select class="form-select form-select-sm job-hwsi-category" onchange="jobHwsiFilterItems(this.closest('.job-hwset-item-row'))"></select></div>
+                        <div class="col-md-2"><label class="form-label form-label-sm mb-1">Manufacturer</label><select class="form-select form-select-sm job-hwsi-manufacturer" onchange="jobHwsiOnManufacturerChange(this.closest('.job-hwset-item-row'))"></select></div>
+                        <div class="col-md-3"><label class="form-label form-label-sm mb-1">Part</label><select class="form-select form-select-sm job-hwsi-item" onchange="jobHwsiRenderFunctionPicker(this.closest('.job-hwset-item-row'))"></select></div>
+                        <div class="col-md-1"><label class="form-label form-label-sm mb-1">Qty</label><input type="number" min="1" class="form-control form-control-sm job-hwsi-qty" value="1"></div>
+                        <div class="col-md-1"><label class="form-label form-label-sm mb-1">Series</label><select class="form-select form-select-sm job-hwsi-series">
+                            <option value="Standard" selected>Standard</option>
+                            <option value="Thermal">Thermal</option>
+                            <option value="Monumental">Monumental</option>
+                        </select></div>
+                        <div class="col-md-1 job-hwsi-leaf-wrap" style="${isPair ? '' : 'display:none'}"><label class="form-label form-label-sm mb-1">Leaf</label><select class="form-select form-select-sm job-hwsi-leaf">
+                            <option value="both" selected>Both</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select></div>
+                        <div class="col-md-1 d-flex align-items-end"><button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.job-hwset-item-row').remove()"><i class="ti ti-x"></i></button></div>
+                    </div>
+                    <div class="row g-2 mt-1">
+                        <div class="col-md-8"><input type="text" class="form-control form-control-sm job-hwsi-notes" placeholder="notes"></div>
+                    </div>
+                    <div class="job-hwsi-functions-wrap mt-2" style="display:none">
+                        <div class="job-hwsi-functions"></div>
+                    </div>
                 </div>`;
         }
 
         function jobHwSetAddItemRow(row) {
-            document.getElementById('job-hwset-items').insertAdjacentHTML('beforeend', jobHwSetItemRowHtml(row));
+            const seq = ++jobHwSetRowSeq;
+            document.getElementById('job-hwset-items').insertAdjacentHTML('beforeend', jobHwSetItemRowHtml(seq));
+            const rowEl = document.querySelector(`#job-hwset-items .job-hwset-item-row[data-row-seq="${seq}"]`);
+            if (row) {
+                rowEl.querySelector('.job-hwsi-qty').value = row.quantity ?? 1;
+                rowEl.querySelector('.job-hwsi-series').value = row.series || 'Standard';
+                rowEl.querySelector('.job-hwsi-leaf').value = row.leaf || 'both';
+                rowEl.querySelector('.job-hwsi-notes').value = row.notes || '';
+            }
+            jobHwsiInitRow(rowEl, row);
+        }
+
+        // Leaf (active/inactive/both) only applies to paired openings; hide it
+        // entirely for single (non-pair) hardware sets rather than leaving a
+        // control on the row that has no effect.
+        function toggleJobHwSetLeafVisibility() {
+            const isPair = document.getElementById('job-hwset-ispair')?.checked;
+            document.querySelectorAll('#job-hwset-items .job-hwsi-leaf-wrap').forEach(el => {
+                el.style.display = isPair ? '' : 'none';
+            });
         }
 
         function jobHwSetCollectItems() {
@@ -1763,6 +1949,7 @@
                 series: row.querySelector('.job-hwsi-series').value,
                 leaf: row.querySelector('.job-hwsi-leaf').value,
                 notes: row.querySelector('.job-hwsi-notes').value || null,
+                function_ids: jobHwsiCollectFunctionIds(row),
             })).filter(r => r.item_id);
         }
 
@@ -1779,6 +1966,7 @@
             document.getElementById('job-hwset-notes').value = '';
             document.getElementById('job-hwset-ispair').checked = false;
             document.getElementById('job-hwset-items').innerHTML = '';
+            toggleJobHwSetLeafVisibility();
             showModal(document.getElementById('jobHwSetModal'));
         }
 
@@ -1797,6 +1985,7 @@
             document.getElementById('job-hwset-ispair').checked = !!s.is_pair;
             document.getElementById('job-hwset-items').innerHTML = '';
             (s.set_items || []).forEach(row => jobHwSetAddItemRow(row));
+            toggleJobHwSetLeafVisibility();
         }
 
         async function submitJobHwSet() {
@@ -2201,6 +2390,142 @@
             return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
+        // ============================================================
+        // Jobs table column order + visibility — persisted per-user
+        // ============================================================
+        const JOBS_COLUMNS = [
+            { key: 'job_number',   label: 'Job #' },
+            { key: 'name',         label: 'Name' },
+            { key: 'customer',     label: 'Customer' },
+            { key: 'status',       label: 'Status' },
+            { key: 'reservations', label: 'Res.' },
+            { key: 'work_orders',  label: 'WOs' },
+            { key: 'start',        label: 'Start' },
+            { key: 'target',       label: 'Target' },
+            { key: 'days_left',    label: 'Days left' },
+        ];
+        let jobsColumnOrder = JOBS_COLUMNS.map(c => c.key);
+        let jobsHiddenColumns = new Set();
+        let _jobsColDragKey = null;
+
+        function initJobsColumnPrefs() {
+            applyStoredJobsColumnPrefs(currentUser?.jobs_column_prefs);
+            renderJobsColumnsMenu();
+            applyJobsColumnOrder();
+        }
+
+        function applyStoredJobsColumnPrefs(prefs) {
+            const validKeys = JOBS_COLUMNS.map(c => c.key);
+            const storedOrder = Array.isArray(prefs?.order) ? prefs.order.filter(k => validKeys.includes(k)) : [];
+            // Any column not in the saved order (e.g. newly added) is appended
+            // at the end so it still shows up rather than silently vanishing.
+            validKeys.forEach(k => { if (!storedOrder.includes(k)) storedOrder.push(k); });
+            jobsColumnOrder = storedOrder;
+            jobsHiddenColumns = new Set(Array.isArray(prefs?.hidden) ? prefs.hidden : []);
+        }
+
+        function renderJobsColumnsMenu() {
+            const menu = document.getElementById('jobs-columns-menu');
+            if (!menu) return;
+            const cols = jobsColumnOrder.map(key => JOBS_COLUMNS.find(c => c.key === key)).filter(Boolean);
+            menu.innerHTML = cols.map(c => `
+                <div class="d-flex align-items-center gap-2 py-1 jobs-col-row" draggable="true" data-col-key="${c.key}"
+                    ondragstart="jobsColDragStart(event)" ondragover="jobsColDragOver(event)" ondrop="jobsColDrop(event)" ondragend="jobsColDragEnd(event)">
+                    <i class="ti ti-grip-vertical text-muted" style="cursor:grab"></i>
+                    <label class="form-check mb-0 flex-fill">
+                        <input class="form-check-input" type="checkbox" ${jobsHiddenColumns.has(c.key) ? '' : 'checked'}
+                            onchange="toggleJobsColumn('${c.key}', this.checked)">
+                        <span class="form-check-label">${escapeHtml(c.label)}</span>
+                    </label>
+                </div>
+            `).join('');
+        }
+
+        function jobsColDragStart(e) {
+            _jobsColDragKey = e.currentTarget.dataset.colKey;
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function jobsColDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function jobsColDrop(e) {
+            e.preventDefault();
+            const targetKey = e.currentTarget.dataset.colKey;
+            if (!_jobsColDragKey || _jobsColDragKey === targetKey) return;
+            const from = jobsColumnOrder.indexOf(_jobsColDragKey);
+            const to = jobsColumnOrder.indexOf(targetKey);
+            if (from === -1 || to === -1) return;
+            jobsColumnOrder.splice(from, 1);
+            jobsColumnOrder.splice(to, 0, _jobsColDragKey);
+            renderJobsColumnsMenu();
+            applyJobsColumnOrder();
+            saveJobsColumnPrefs();
+        }
+
+        function jobsColDragEnd() {
+            _jobsColDragKey = null;
+        }
+
+        function toggleJobsColumn(key, visible) {
+            if (visible) jobsHiddenColumns.delete(key);
+            else jobsHiddenColumns.add(key);
+            applyJobsColumnVisibility();
+            saveJobsColumnPrefs();
+        }
+
+        function applyJobsColumnVisibility() {
+            JOBS_COLUMNS.forEach(c => {
+                const hidden = jobsHiddenColumns.has(c.key);
+                document.querySelectorAll(`#jobsTableEl [data-col="${c.key}"]`).forEach(el => {
+                    el.style.display = hidden ? 'none' : '';
+                });
+            });
+        }
+
+        // Reorders a row's <td>/<th> children to match jobsColumnOrder. Cells
+        // with no data-col (e.g. the trailing actions column, or the single
+        // colspan detail-expand cell) are left exactly where they are.
+        function reorderJobsRowCells(row) {
+            const cells = Array.from(row.children);
+            const colIndices = [];
+            cells.forEach((cell, idx) => { if (cell.dataset.col) colIndices.push(idx); });
+            if (!colIndices.length) return;
+
+            const sorted = colIndices
+                .map(idx => cells[idx])
+                .sort((a, b) => jobsColumnOrder.indexOf(a.dataset.col) - jobsColumnOrder.indexOf(b.dataset.col));
+            colIndices.forEach((idx, i) => { cells[idx] = sorted[i]; });
+            cells.forEach(cell => row.appendChild(cell));
+        }
+
+        function applyJobsColumnOrder() {
+            const headRow = document.querySelector('#jobsTableEl thead tr');
+            if (headRow) reorderJobsRowCells(headRow);
+            document.querySelectorAll('#jobsTableBody > tr').forEach(reorderJobsRowCells);
+            applyJobsColumnVisibility();
+        }
+
+        let _jobsColumnSaveTimeout = null;
+        function saveJobsColumnPrefs() {
+            if (currentUser) {
+                currentUser.jobs_column_prefs = { order: [...jobsColumnOrder], hidden: [...jobsHiddenColumns] };
+                try { localStorage.setItem('userData', JSON.stringify(currentUser)); } catch (e) { /* best-effort */ }
+            }
+            clearTimeout(_jobsColumnSaveTimeout);
+            _jobsColumnSaveTimeout = setTimeout(async () => {
+                try {
+                    await jobsAPI('/api/v1/user/jobs-column-prefs', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ order: [...jobsColumnOrder], hidden: [...jobsHiddenColumns] }),
+                    });
+                } catch (e) { console.error('Failed to save jobs column preferences:', e); }
+            }, 400);
+        }
+
         // ===== INLINE JOB EXPAND =====
         let expandedJobId = null;
         let jobTabLoaded = {};
@@ -2250,12 +2575,22 @@
         async function loadJobDetail(jobId) {
             currentJobForReservations = allJobs.find(j => j.id === jobId);
             updateJobTabActions(jobId, 'wo');
-            // Load work orders (default active tab)
-            const woKey = `${jobId}-wo`;
-            if (!jobTabLoaded[woKey]) {
-                jobTabLoaded[woKey] = true;
-                await loadJobWorkOrders(jobId);
-            }
+            // Eagerly load every tab's data so tab-label badge counts are correct
+            // as soon as the job opens, not just after each tab is clicked.
+            const eagerLoaders = {
+                wo: loadJobWorkOrders,
+                res: loadJobReservationsInline,
+                tx: loadJobTransactions,
+                doc: loadJobDocuments,
+                doorcfg: loadJobDoorConfigs,
+                hwsets: loadJobHwSets,
+            };
+            await Promise.all(Object.entries(eagerLoaders).map(([tab, loader]) => {
+                const key = `${jobId}-${tab}`;
+                if (jobTabLoaded[key]) return Promise.resolve();
+                jobTabLoaded[key] = true;
+                return loader(jobId);
+            }));
             // Wire product search for transaction form
             wireJobTxProductSearch(jobId);
         }

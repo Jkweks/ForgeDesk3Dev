@@ -21,6 +21,12 @@ laravel/storage/logs/*
 laravel/storage/framework/cache/*
 laravel/storage/framework/sessions/*
 laravel/storage/framework/views/*
+# Runtime uploads (job docs, EZ Estimate files, quality report PDFs, work
+# order drawings) — served from the app_private volume at runtime, never
+# baked into the image. Also unreadable by the host build user (0700, owned
+# by uid 82/www-data in the container), which fails the build context send.
+laravel/storage/app/private/*
+laravel/storage/framework/testing/*
 laravel/tests/
 laravel/.phpunit*
 

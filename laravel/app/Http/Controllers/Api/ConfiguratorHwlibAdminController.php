@@ -564,6 +564,7 @@ class ConfiguratorHwlibAdminController extends Controller
             ->with([
                 'setItems.item',
                 'setItems.values.variable',
+                'setItems.functions',
                 'appliedConfigurations' => fn ($q) => $q->with('doors'),
             ])
             ->orderBy('name')

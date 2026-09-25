@@ -167,6 +167,10 @@ class FdWorkOrder extends Model
 
             $auto = $all->where('priority_locked', false)
                 ->sortBy(fn ($w) => [
+                    // On-hold work always ranks below every active one, no
+                    // matter how soon its due date is — due date only breaks
+                    // ties within each status bucket, not across them.
+                    $w->status === 'on_hold' ? 1 : 0,
                     $w->due_date === null,
                     optional($w->due_date)->format('Y-m-d') ?? '9999-99-99',
                     optional($w->date_issued)->format('Y-m-d') ?? '9999-99-99',

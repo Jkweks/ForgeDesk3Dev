@@ -45,7 +45,7 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $configurations = $query
-                ->with(['businessJob', 'doors', 'createdBy', 'workOrder'])
+                ->with(['businessJob', 'doors', 'createdBy', 'workOrder', 'openingSpecs', 'frameConfig', 'doorConfigs'])
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($config) {
