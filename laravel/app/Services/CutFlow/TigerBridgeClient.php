@@ -16,12 +16,28 @@ class TigerBridgeClient
 {
     protected string $baseUrl;
 
+    protected string $token;
+
     protected bool $fake;
 
     public function __construct()
     {
         $this->baseUrl = config('services.tiger_bridge.url', 'http://127.0.0.1:9111');
+        $this->token = (string) config('services.tiger_bridge.token', '');
         $this->fake = (bool) config('services.tiger_bridge.fake', false);
+
+        if (! $this->fake && $this->token === '') {
+            // Not fatal here — the bridge itself refuses to run without a
+            // token, so a misconfigured deploy fails loudly there instead of
+            // silently talking to an open bridge. This just surfaces it
+            // sooner on the Laravel side.
+            Log::warning('[tiger-bridge] TIGER_BRIDGE_TOKEN is not configured; bridge calls will be rejected.');
+        }
+    }
+
+    protected function client()
+    {
+        return Http::baseUrl($this->baseUrl)->withToken($this->token);
     }
 
     public function move(float $inches): array
@@ -33,7 +49,7 @@ class TigerBridgeClient
         }
 
         try {
-            $response = Http::baseUrl($this->baseUrl)->timeout(20)->post('/move', [
+            $response = $this->client()->timeout(20)->post('/move', [
                 'inches' => $inches,
             ]);
 
@@ -55,7 +71,7 @@ class TigerBridgeClient
         }
 
         try {
-            $response = Http::baseUrl($this->baseUrl)->timeout(10)->post('/print', $payload);
+            $response = $this->client()->timeout(10)->post('/print', $payload);
 
             return [
                 'ok' => $response->successful(),
@@ -79,7 +95,7 @@ class TigerBridgeClient
         }
 
         try {
-            $response = Http::baseUrl($this->baseUrl)->timeout(5)->get('/status');
+            $response = $this->client()->timeout(5)->get('/status');
 
             return ['ok' => $response->successful(), 'data' => $response->json()];
         } catch (Throwable $e) {
@@ -101,7 +117,7 @@ class TigerBridgeClient
         }
 
         try {
-            $response = Http::baseUrl($this->baseUrl)->timeout(5)->get('/sensor/status');
+            $response = $this->client()->timeout(5)->get('/sensor/status');
 
             return ['ok' => $response->successful(), 'data' => $response->json()];
         } catch (Throwable $e) {

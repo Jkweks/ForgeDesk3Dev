@@ -241,4 +241,17 @@ class User extends Authenticatable
     {
         return $query->where('role', $role);
     }
+
+    /**
+     * Scope to users who can perform a given permission — either via their
+     * role's granted permissions, or because they're an admin (who implicitly
+     * has every permission; see hasPermission()).
+     */
+    public function scopeWithPermission($query, string $permission)
+    {
+        return $query->where(function ($q) use ($permission) {
+            $q->where('role', 'admin')
+                ->orWhereHas('roleModel.permissions', fn ($p) => $p->where('name', $permission));
+        });
+    }
 }

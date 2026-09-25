@@ -126,13 +126,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .btn-outline { background: var(--panel); border: 1.5px solid var(--ink); color: var(--ink); }
 .btn-success { background: var(--success); color: #fff; }
 
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; }
+.card { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; }
 
 .stick-header { display: flex; align-items: center; justify-content: space-between; }
 .stick-header .label { font-size: 10.5px; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
 .stick-header .length { font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 700; }
 
-.now-cutting { background: var(--accent-bg); border: 1.5px solid var(--accent-border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.now-cutting { position: relative; background: var(--accent-bg); border: 1.5px solid var(--accent-border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .now-cutting .dim { font-family: 'IBM Plex Mono', monospace; font-size: 42px; font-weight: 700; color: var(--accent); line-height: 1; }
 
 .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
@@ -157,6 +157,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .dim-table td { font-size: 12.5px; padding: 6px; border-bottom: 1px solid var(--surface); }
 .dim-table tr.current td { font-weight: 700; color: var(--accent); }
 .dim-table td:nth-child(2) { color: var(--muted-2); }
+.photo-lightbox { position: absolute; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 5; cursor: zoom-out; border-radius: 14px; }
+.photo-lightbox.open { display: flex; }
+.photo-lightbox img { max-width: 85%; max-height: 85%; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+
 .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .key { cursor: pointer; height: 60px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 700; }
 .space-key { cursor: pointer; height: 48px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; letter-spacing: .1em; color: var(--muted); }

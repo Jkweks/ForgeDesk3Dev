@@ -147,7 +147,7 @@ Route::prefix('v1')->group(function () {
     // only closes the endpoints to anonymous callers, viewers and office staff.
     // IMPORTANT: specific routes MUST come before parameterized routes like {id}.
     Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/job-reservations', [JobReservationController::class, 'index'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations', [JobReservationController::class, 'index'])->middleware('permission:reservations.dashboard.view');
         Route::post('/job-reservations/create-manual', [JobReservationController::class, 'createManual'])->middleware('permission:jobs.manage-reservations');
         Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct'])->middleware('permission:jobs.view');
         Route::get('/job-reservations/search-products', [JobReservationController::class, 'searchProducts'])->middleware('permission:jobs.view');
@@ -408,6 +408,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/purchase-orders/{purchaseOrder}/pdf', [PurchaseOrderController::class, 'exportPdf'])->middleware('permission:orders.view');
         Route::get('/purchase-orders-open', [PurchaseOrderController::class, 'open']);
         Route::get('/purchase-orders-statistics', [PurchaseOrderController::class, 'statistics']);
+        Route::get('/purchase-orders-eligible-approvers', [PurchaseOrderController::class, 'eligibleApprovers'])->middleware('permission:orders.edit');
 
         // Cycle Counting
         Route::apiResource('cycle-counts', CycleCountController::class)
@@ -509,9 +510,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Door/Frame Configurator
         Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');
-        Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.create');
+        Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.edit');
         Route::get('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'show'])->middleware('permission:configurator.view');
-        Route::post('/door-frame-configurations/{id}/duplicate', [DoorFrameConfigurationController::class, 'duplicate'])->middleware('permission:configurator.create');
+        Route::post('/door-frame-configurations/{id}/duplicate', [DoorFrameConfigurationController::class, 'duplicate'])->middleware('permission:configurator.edit');
         Route::post('/door-frame-configurations/{id}/unlink', [DoorFrameConfigurationController::class, 'unlink'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/opening-specs', [DoorFrameConfigurationController::class, 'updateOpeningSpecs'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/frame-config', [DoorFrameConfigurationController::class, 'updateFrameConfig'])->middleware('permission:configurator.edit');

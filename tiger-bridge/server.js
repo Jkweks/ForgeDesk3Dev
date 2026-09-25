@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const crypto = require('crypto');
 const express = require('express');
 const net = require('net');
 const { SerialPort } = require('serialport');
@@ -13,6 +14,119 @@ const SERIAL_PATH = process.env.SERIAL_PORT || 'COM3';
 const BAUD_RATE = parseInt(process.env.BAUD_RATE || '57600', 10);
 const PRINTER_HOST = process.env.PRINTER_HOST || '192.168.1.50';
 const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
+const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || '';
+const ALLOWED_CLIENT_IPS = (process.env.ALLOWED_CLIENT_IPS || '')
+  .split(',')
+  .map((ip) => ip.trim())
+  .filter(Boolean);
+
+// --- auth --------------------------------------------------------------
+//
+// This service drives real hardware (a saw's stop position, a printer) for
+// any client that can reach it over the LAN. BRIDGE_TOKEN is a long-lived
+// shared secret: only the ForgeDesk instance configured with the matching
+// TIGER_BRIDGE_TOKEN is allowed to issue commands. Without a token
+// configured, this refuses to start rather than silently running open —
+// there is no hardware-safe "no auth" mode.
+if (!BRIDGE_TOKEN) {
+  console.error(
+    '[tiger-bridge] BRIDGE_TOKEN is not set. Refusing to start: without it, ' +
+    'anyone on the network could move the saw or trigger the printer. ' +
+    'Set BRIDGE_TOKEN in .env (see .env.example) to a long random value ' +
+    'and configure the same value as TIGER_BRIDGE_TOKEN in ForgeDesk.'
+  );
+  process.exit(1);
+}
+
+function timingSafeEqual(a, b) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // still run a compare of matching length so this doesn't short-circuit
+    // on length and leak timing info about the token's length.
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function requireToken(req, res, next) {
+  const header = req.get('authorization') || '';
+  const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+
+  if (!presented || !timingSafeEqual(presented, BRIDGE_TOKEN)) {
+    return res.status(401).json({ ok: false, error: 'missing or invalid bridge token' });
+  }
+
+  next();
+}
+
+// --- IP allowlist --------------------------------------------------------
+//
+// Second, independent layer on top of the token: even a request carrying a
+// valid BRIDGE_TOKEN is rejected unless it comes from a source address in
+// ALLOWED_CLIENT_IPS. In this deployment the only thing that ever calls the
+// bridge over the network is the ForgeDesk app server (TigerBridgeClient),
+// so this should normally be set to that single host's IP (or its /32,
+// or a narrow CIDR if it's a small trusted subnet). Left unset, this layer
+// is skipped and the token alone gates access — set ALLOWED_CLIENT_IPS as
+// soon as the app server's IP is known.
+//
+// Only exact IPs and simple IPv4 CIDR ranges are supported — no DNS names
+// (a spoofed/poisoned lookup would defeat the point of an IP check).
+
+function normalizeIp(ip) {
+  return ip && ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+}
+
+function ipv4ToInt(ip) {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
+    return null;
+  }
+  return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
+function ipMatches(clientIp, rule) {
+  if (rule === clientIp) return true;
+
+  if (rule.includes('/')) {
+    const [rangeIp, prefixStr] = rule.split('/');
+    const prefix = Number(prefixStr);
+    const rangeInt = ipv4ToInt(rangeIp);
+    const clientInt = ipv4ToInt(clientIp);
+    if (rangeInt === null || clientInt === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+      return false;
+    }
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    return (rangeInt & mask) === (clientInt & mask);
+  }
+
+  return false;
+}
+
+function requireAllowedIp(req, res, next) {
+  if (ALLOWED_CLIENT_IPS.length === 0) {
+    return next();
+  }
+
+  const clientIp = normalizeIp(req.socket.remoteAddress);
+
+  if (!ALLOWED_CLIENT_IPS.some((rule) => ipMatches(clientIp, rule))) {
+    console.warn(`[tiger-bridge] rejected request from disallowed IP ${clientIp}`);
+    return res.status(403).json({ ok: false, error: 'source address not authorized' });
+  }
+
+  next();
+}
+
+// Not behind a reverse proxy — remoteAddress is the real peer, not a
+// spoofable X-Forwarded-For header. If this ever moves behind one, trust
+// proxy config and this check both need revisiting together.
+app.set('trust proxy', false);
+
+app.use(requireAllowedIp);
+app.use(requireToken);
 
 let port;
 let parser;

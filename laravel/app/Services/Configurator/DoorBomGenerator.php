@@ -29,6 +29,8 @@ class DoorBomGenerator
     /** @var array<int, string> PNs that couldn't be matched to a Product, so their BOM row was skipped. */
     private array $warnings = [];
 
+    public function __construct(private FinishFallbackResolver $finishResolver = new FinishFallbackResolver) {}
+
     /**
      * @return array{rows: array<int, array>, warnings: array<int, string>}
      */
@@ -287,6 +289,33 @@ class DoorBomGenerator
             ];
         };
 
+        // Gaskets are cut from roll/reel stock, not counted as individual eaches —
+        // $qtyVal here is the total inches of gasket needed, so (unlike $addComponent)
+        // this carries it as calculated_length with quantity=1, matching how
+        // $addExtrusion reports extrusion lengths. That's what lets
+        // ConfigurationReservationBridge::quantityContribution() reserve it as a
+        // fraction of a roll (once the product's is_length_based/configurator_length
+        // are set) instead of reserving N inches as N eaches.
+        $addLengthComponent = function (string $label, ?string $pn, float|int $lengthNeeded) use (&$rows, &$sortOrder) {
+            if (! $pn || $pn === '—' || $lengthNeeded <= 0) {
+                return;
+            }
+            $productId = $this->resolveComponentProduct($pn);
+            if (! $productId) {
+                return;
+            }
+            $rows[] = [
+                'part_label' => $label,
+                'product_id' => $productId,
+                'calculated_length' => round((float) $lengthNeeded, 4),
+                'quantity' => 1,
+                'unit_type' => 'length',
+                'source_type' => 'component',
+                'is_auto_generated' => true,
+                'sort_order' => $sortOrder++,
+            ];
+        };
+
         $addExtrusion('Top Rail', $topRailPn, $topQty, $railLen);
         $addExtrusion('Bottom Rail', $botRailPn, $botQty, $railLen);
         $addExtrusion('Midrail', $midRailPn, $midExtQty, $railLen);
@@ -310,8 +339,8 @@ class DoorBomGenerator
         $addComponent('Fasteners #1 (Stacked)', $stackedF1Pn, $stackedF1Qty);
         $addComponent('Fasteners #2 (Stacked)', $stackedF2Pn, $stackedF2Qty);
         $addComponent('Stacked Rail Clip', 'P1173-0R', $stackedClipQty);
-        $addComponent('Gasket', $gasketPn, $gasketQty);
-        $addComponent('Gasket #2', $gasket2Pn, $gasket2Qty);
+        $addLengthComponent('Gasket', $gasketPn, $gasketQty);
+        $addLengthComponent('Gasket #2', $gasket2Pn, $gasket2Qty);
         $addComponent('Tie Rod', $tieRodPn, $tieRodQty);
         $addComponent('Tie Rod Nuts', 'S081-0R', $tieRodNutQty);
         $addComponent('Setting Block Kit', $sbkPn, $sbkQty);
@@ -363,31 +392,40 @@ class DoorBomGenerator
     /**
      * Extrusion PNs (E/A-prefix) need the config's selected finish (ForgeDesk
      * keeps finish as its own Product column, unlike fab_utils' PN-suffix
-     * convention) — falls back to any finish if that exact variant isn't stocked.
+     * convention) — walks the finish fallback chain (see FinishFallbackResolver)
+     * if that exact variant isn't stocked.
      */
     private function resolveExtrusionProduct(string $pn, string $finish): ?int
     {
-        $product = Product::where('part_number', $pn)->where('finish', $finish)->first()
-            ?? Product::where('part_number', $pn)->first();
+        $product = $this->finishResolver->resolve($pn, $finish);
 
         if (! $product) {
-            $this->warnings[] = "No product found for extrusion PN \"{$pn}\".";
+            $this->warnings[] = "No product found for extrusion PN \"{$pn}\" in finish {$finish} or any fallback finish.";
+
+            return null;
         }
 
-        return $product?->id;
+        if ($product->finish !== strtoupper($finish)) {
+            $this->warnings[] = "Extrusion PN \"{$pn}\" not available in {$finish} — substituted {$product->finish}.";
+        }
+
+        return $product->id;
     }
 
     /**
      * Hardware PNs sometimes carry a baked-in finish suffix in the catalog
-     * data itself (e.g. "P797-0R") — split it off and match ForgeDesk's
-     * separate part_number/finish columns.
+     * data itself (e.g. "P797-0R") — split it off and walk the finish
+     * fallback chain from that baked-in finish if it isn't stocked.
      */
     private function resolveComponentProduct(string $pn): ?int
     {
         if (preg_match('/^(.*)-(BL|C2|DB|0R)$/', $pn, $m)) {
             [$base, $finish] = [$m[1], $m[2]];
-            $product = Product::where('part_number', $base)->where('finish', $finish)->first()
-                ?? Product::where('part_number', $base)->first();
+            $product = $this->finishResolver->resolve($base, $finish);
+
+            if ($product && $product->finish !== $finish) {
+                $this->warnings[] = "Component PN \"{$pn}\" not available — substituted {$product->finish}.";
+            }
         } else {
             $product = Product::where('part_number', $pn)->first();
         }

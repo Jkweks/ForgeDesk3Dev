@@ -15,7 +15,7 @@
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
             <a href="/config/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
-            <button class="btn btn-primary" onclick="fbOpenNewModal()" data-permission="configurator.create"><i class="ti ti-plus me-1"></i>New Configuration</button>
+            <button class="btn btn-primary" onclick="fbOpenNewModal()" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>New Configuration</button>
           </div>
         </div>
       </div>
@@ -59,7 +59,7 @@
                   <button class="btn btn-success" id="fb-release-btn" onclick="fbRelease()" data-permission="configurator.release"><i class="ti ti-lock me-1"></i>Release</button>
                 </div>
                 <div class="btn-group" role="group">
-                  <button class="btn btn-outline-secondary" onclick="fbOpenDuplicateModal()" data-permission="configurator.create"><i class="ti ti-copy me-1"></i>Duplicate</button>
+                  <button class="btn btn-outline-secondary" onclick="fbOpenDuplicateModal()" data-permission="configurator.edit"><i class="ti ti-copy me-1"></i>Duplicate</button>
                   <button class="btn btn-outline-primary" onclick="fbExportPdf()" data-permission="configurator.view"><i class="ti ti-file-download me-1"></i>Export PDF</button>
                   <button class="btn btn-outline-primary" onclick="fbExportCsv()" data-permission="configurator.view"><i class="ti ti-file-spreadsheet me-1"></i>Export CSV</button>
                 </div>
@@ -332,6 +332,10 @@
                       <label class="form-label">Category</label>
                       <select class="form-select" id="fb-hw-category" onchange="fbFilterHwItems()" required></select>
                     </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Manufacturer</label>
+                      <select class="form-select" id="fb-hw-manufacturer" onchange="fbOnHwManufacturerChange()"></select>
+                    </div>
                     <div class="col-md-3">
                       <label class="form-label">Item</label>
                       <select class="form-select" id="fb-hw-item" required onchange="fbRenderHwFunctionPicker()"></select>
@@ -358,6 +362,15 @@
                     </div>
                     <div class="col-md-1">
                       <button type="submit" class="btn btn-primary w-100" data-permission="configurator.edit"><i class="ti ti-plus"></i></button>
+                    </div>
+                    <div class="col-12 small">
+                      <a href="#" onclick="event.preventDefault(); fbToggleHwQuickAdd()">+ Add new part</a>
+                      <div id="fb-hw-quickadd-form" class="d-none d-flex gap-2 mt-1 align-items-center">
+                        <input type="text" class="form-control form-control-sm" id="fb-hw-qa-mfr" placeholder="Manufacturer" style="max-width:180px">
+                        <input type="text" class="form-control form-control-sm" id="fb-hw-qa-name" placeholder="Part name" style="max-width:220px">
+                        <input type="text" class="form-control form-control-sm" id="fb-hw-qa-pn" placeholder="PN" style="max-width:140px">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="fbHwQuickAddSave()">Add</button>
+                      </div>
                     </div>
                     <div class="col-12" id="fb-hw-functions-wrap" style="display:none">
                       <label class="form-label mb-1">Functions</label>
@@ -709,7 +722,10 @@ function fbRenderHwCategorySelect() {
   fbFilterHwItems();
 }
 
-function fbFilterHwItems() {
+// Items for the currently selected category option (ignoring manufacturer) —
+// the base set that fbFilterHwItems narrows by scope/subcategory, and that
+// the Manufacturer select's option list is built from.
+function fbHwItemsForSelectedCategory() {
   const value = document.getElementById('fb-hw-category').value;
   const selected = fbBuildHwCategoryOptions().find(o => o.value === value);
   const cat = selected ? fbHwCategories.find(c => c.id == selected.categoryId) : null;
@@ -720,10 +736,17 @@ function fbFilterHwItems() {
       ? items.filter(i => i.subcategory_id == selected.subcategoryId)
       : items.filter(i => !i.subcategory_id);
   }
-  const itemSelect = document.getElementById('fb-hw-item');
-  itemSelect.innerHTML = items.map(i =>
-    `<option value="${i.id}">${esc(i.name)}${i.pn ? ' — ' + esc(i.pn) : ''}</option>`
-  ).join('');
+  return { cat, items };
+}
+
+function fbFilterHwItems() {
+  const { cat, items } = fbHwItemsForSelectedCategory();
+
+  const mfrSelect = document.getElementById('fb-hw-manufacturer');
+  const mfrs = Array.from(new Set(items.map(i => i.manufacturer || ''))).sort((a, b) => a.localeCompare(b));
+  mfrSelect.innerHTML = mfrs.map(m => `<option value="${esc(m)}">${m ? esc(m) : '(none)'}</option>`).join('');
+
+  fbOnHwManufacturerChange();
 
   // Butt-hinge hardware quantity always matches the hinge count set on the
   // Opening tab — it's read-only here; change it on Opening instead.
@@ -734,7 +757,70 @@ function fbFilterHwItems() {
     const buttHingeCount = fbSelectedDetail?.opening_specs?.butt_hinge_count;
     if (buttHingeCount) qtyInput.value = buttHingeCount;
   }
+}
+
+function fbOnHwManufacturerChange() {
+  const { items } = fbHwItemsForSelectedCategory();
+  const manufacturer = document.getElementById('fb-hw-manufacturer').value;
+  const filtered = items.filter(i => (i.manufacturer || '') === manufacturer);
+
+  const itemSelect = document.getElementById('fb-hw-item');
+  itemSelect.innerHTML = filtered.map(i =>
+    `<option value="${i.id}">${esc(i.name)}${i.pn ? ' — ' + esc(i.pn) : ''}${i.needs_review ? ' (needs review)' : ''}</option>`
+  ).join('');
+
   fbRenderHwFunctionPicker();
+}
+
+function fbToggleHwQuickAdd() {
+  const form = document.getElementById('fb-hw-quickadd-form');
+  const opening = form.classList.contains('d-none');
+  form.classList.toggle('d-none');
+  if (opening) {
+    document.getElementById('fb-hw-qa-mfr').value = document.getElementById('fb-hw-manufacturer').value || '';
+    document.getElementById('fb-hw-qa-name').focus();
+  }
+}
+
+async function fbHwQuickAddSave() {
+  const value = document.getElementById('fb-hw-category').value;
+  const selected = fbBuildHwCategoryOptions().find(o => o.value === value);
+  const categoryId = selected?.categoryId;
+  const manufacturer = document.getElementById('fb-hw-qa-mfr').value.trim();
+  const name = document.getElementById('fb-hw-qa-name').value.trim();
+  const pn = document.getElementById('fb-hw-qa-pn').value.trim();
+  if (!categoryId) { showNotification('Pick a category first', 'warning'); return; }
+  if (!name) { showNotification('Part name is required', 'warning'); return; }
+  try {
+    const res = await authenticatedFetch('/config/hwlib-items', {
+      method: 'POST',
+      body: JSON.stringify({
+        category_id: categoryId,
+        subcategory_id: selected?.subcategoryId || null,
+        manufacturer: manufacturer || null,
+        name, pn: pn || null,
+        needs_review: true,
+      }),
+    });
+    const cat = fbHwCategories.find(c => c.id == categoryId);
+    if (cat) (cat.items ||= []).push(res.item);
+
+    // A quick-added part isn't marked VOS Standard yet, so the "Standard"
+    // scope filter would hide it immediately after adding it — switch to
+    // Custom so the part just created is actually selectable.
+    document.getElementById('fb-hw-scope').value = 'custom';
+    fbRenderHwCategorySelect();
+    document.getElementById('fb-hw-manufacturer').value = manufacturer;
+    fbOnHwManufacturerChange();
+    document.getElementById('fb-hw-item').value = res.item.id;
+    fbRenderHwFunctionPicker();
+
+    document.getElementById('fb-hw-quickadd-form').classList.add('d-none');
+    document.getElementById('fb-hw-qa-mfr').value = '';
+    document.getElementById('fb-hw-qa-name').value = '';
+    document.getElementById('fb-hw-qa-pn').value = '';
+    showNotification('Part added — flagged for review', 'success');
+  } catch (err) { showNotification(err.message, 'danger'); }
 }
 
 function fbFindHwItem(id) {

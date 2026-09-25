@@ -27,10 +27,34 @@ runs as a normal process on the shop-floor PC. Laravel calls it over
 ```bash
 npm install
 cp .env.example .env
-# edit .env: set SERIAL_PORT to the TigerStop's COM port, and PRINTER_HOST
-# to the Zebra's IP
+# edit .env: set SERIAL_PORT to the TigerStop's COM port, PRINTER_HOST to
+# the Zebra's IP, and BRIDGE_TOKEN to a long random value (e.g.
+# `openssl rand -hex 32`) — set the same value as TIGER_BRIDGE_TOKEN in
+# ForgeDesk's .env. The service refuses to start without BRIDGE_TOKEN set.
 npm start
 ```
+
+## Auth
+
+Every endpoint requires `Authorization: Bearer <BRIDGE_TOKEN>`. This is a
+long-lived shared secret, not a per-user credential — its only job is making
+sure requests actually came from the ForgeDesk instance that's supposed to
+be driving this saw, not just any device on the shop LAN. There's no
+per-request expiry or rotation; rotate it manually (update both `.env`
+files and restart both services) if it's ever suspected to have leaked.
+Requests without a valid token get `401 { "ok": false, "error": "missing or
+invalid bridge token" }`.
+
+On top of the token, `ALLOWED_CLIENT_IPS` (comma-separated IPs and/or IPv4
+CIDRs) restricts which source addresses may reach the bridge at all —
+checked before the token, so an unlisted IP gets `403` even with a valid
+token. The only real caller is the ForgeDesk app server (`TigerBridgeClient`
+makes every request server-side), so in a normal deployment this should be
+set to that one host's IP. Left blank, this layer is skipped and the token
+alone gates access. This is a network check on the raw TCP peer address
+(not `X-Forwarded-For`), so it only does what you'd expect as long as
+nothing is proxying in front of this service — if one ever is added, this
+check and `trust proxy` need to be revisited together.
 
 ## Endpoints
 

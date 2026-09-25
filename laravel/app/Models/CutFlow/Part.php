@@ -67,11 +67,35 @@ class Part extends Model
      * real FK to join on. This is a best-effort lookup by that same
      * part_number+finish pair, used only to show the operator a reference
      * photo of the profile they're about to cut.
+     *
+     * Manually-uploaded cutlists (ImportController) sometimes store the
+     * human-readable finish label (e.g. "Black Anodized") rather than the
+     * 2-letter code products.finish actually uses, and/or bake the finish
+     * code into `name` as a suffix (e.g. "E14025-BL", where products.
+     * part_number is just "E14025" and products.finish is "BL"). Strip a
+     * trailing finish-code suffix off `name` and resolve label -> code
+     * before matching.
      */
     public function getPhotoUrlAttribute(): ?string
     {
-        $product = Product::where('part_number', $this->name)
-            ->where('finish', $this->finish)
+        $partNumber = $this->name;
+        $finish = $this->finish;
+
+        if ($partNumber && str_contains($partNumber, '-')) {
+            $suffix = strtoupper(substr($partNumber, strrpos($partNumber, '-') + 1));
+
+            if (array_key_exists($suffix, Product::$finishCodes)) {
+                $partNumber = substr($partNumber, 0, strrpos($partNumber, '-'));
+                $finish = $suffix;
+            }
+        }
+
+        if ($finish && ! array_key_exists($finish, Product::$finishCodes)) {
+            $finish = array_search($finish, Product::$finishCodes, true) ?: $finish;
+        }
+
+        $product = Product::where('part_number', $partNumber)
+            ->where('finish', $finish)
             ->whereNotNull('photo_path')
             ->first();
 

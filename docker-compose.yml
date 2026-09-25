@@ -120,6 +120,8 @@ services:
       BAUD_RATE: ${BAUD_RATE:-57600}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.1.50}
       PRINTER_PORT: ${PRINTER_PORT:-9100}
+      BRIDGE_TOKEN: ${TIGER_BRIDGE_TOKEN:?TIGER_BRIDGE_TOKEN must be set — the bridge refuses to start without it}
+      ALLOWED_CLIENT_IPS: ${ALLOWED_CLIENT_IPS:-}
     devices:
       - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
     restart: unless-stopped

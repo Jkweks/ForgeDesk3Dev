@@ -122,6 +122,26 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Create new configuration
      */
+    /**
+     * Returns door tags that either repeat within $tags itself, or already
+     * belong to another configuration on this job — one physical opening
+     * should only ever be claimed by one DoorFrameConfiguration, since a
+     * second claimant makes ElevationConfigurationMatcher::
+     * findMatchingConfiguration() match ambiguously (it just takes the
+     * first row it finds) once a work-order elevation tries to link up.
+     */
+    private function conflictingDoorTags(int $businessJobId, array $tags): array
+    {
+        $withinRequest = array_unique(array_diff_assoc($tags, array_unique($tags)));
+
+        $existing = DoorFrameConfigurationDoor::whereIn('door_tag', $tags)
+            ->whereHas('configuration', fn ($q) => $q->where('business_job_id', $businessJobId))
+            ->pluck('door_tag')
+            ->all();
+
+        return array_values(array_unique(array_merge($withinRequest, $existing)));
+    }
+
     public function store(Request $request)
     {
         try {
@@ -136,6 +156,14 @@ class DoorFrameConfigurationController extends Controller
                 return response()->json([
                     'message' => 'Validation failed',
                     'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            $conflicts = $this->conflictingDoorTags((int) $request->business_job_id, $request->door_tags);
+            if (! empty($conflicts)) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => ['door_tags' => ['Door tag(s) '.implode(', ', $conflicts).' already belong to another configuration on this job.']],
                 ], 422);
             }
 
@@ -225,6 +253,15 @@ class DoorFrameConfigurationController extends Controller
             return response()->json([
                 'message' => 'Validation failed',
                 'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $allTags = collect($request->duplicates)->pluck('door_tags')->flatten()->all();
+        $conflicts = $this->conflictingDoorTags($source->business_job_id, $allTags);
+        if (! empty($conflicts)) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['duplicates' => ['Door tag(s) '.implode(', ', $conflicts).' already belong to another configuration on this job.']],
             ], 422);
         }
 
@@ -693,7 +730,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         try {
-            $rows = $generator->generate($config);
+            $result = $generator->generate($config);
         } catch (RuntimeException $e) {
             return response()->json([
                 'error' => 'Cannot generate parts',
@@ -706,7 +743,8 @@ class DoorFrameConfigurationController extends Controller
         if ($request->boolean('preview')) {
             return response()->json([
                 'preview' => true,
-                'parts' => collect($rows)->map(fn ($r) => $this->formatPreviewRow($r)),
+                'parts' => collect($result['rows'])->map(fn ($r) => $this->formatPreviewRow($r)),
+                'warnings' => $result['warnings'],
             ]);
         }
 
@@ -717,7 +755,7 @@ class DoorFrameConfigurationController extends Controller
                 ->where('is_auto_generated', true)
                 ->delete();
 
-            foreach ($rows as $row) {
+            foreach ($result['rows'] as $row) {
                 $row['frame_config_id'] = $config->frameConfig->id;
                 DoorFrameFramePart::create($row);
             }
@@ -743,6 +781,7 @@ class DoorFrameConfigurationController extends Controller
         return response()->json([
             'message' => 'Frame parts generated successfully',
             'parts' => $config->frameConfig->parts->map(fn ($p) => $this->formatPart($p)),
+            'warnings' => $result['warnings'],
         ]);
     }
 

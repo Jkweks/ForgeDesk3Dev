@@ -27,4 +27,15 @@ class ConfiguratorHwlibSetItem extends Model
     {
         return $this->hasMany(ConfiguratorHwlibSetItemValue::class, 'set_item_id');
     }
+
+    /** Functions selected for this hardware item on this set. */
+    public function functions()
+    {
+        return $this->belongsToMany(
+            ConfiguratorHwlibFunction::class,
+            'configurator_hwlib_set_item_functions',
+            'set_item_id',
+            'function_id'
+        )->orderBy('configurator_hwlib_functions.sort_order')->orderBy('configurator_hwlib_functions.label');
+    }
 }

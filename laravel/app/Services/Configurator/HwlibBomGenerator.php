@@ -16,6 +16,8 @@ class HwlibBomGenerator
     /** @var array<int, string> PNs that couldn't be matched to a Product. */
     private array $warnings = [];
 
+    public function __construct(private FinishFallbackResolver $finishResolver = new FinishFallbackResolver) {}
+
     /**
      * @return array{rows: array<int, array>, warnings: array<int, string>}
      */
@@ -35,7 +37,7 @@ class HwlibBomGenerator
         foreach ($links as $link) {
             $item = $link->item;
 
-            $itemProductId = $this->resolveProduct($item->pn, $item->finishes ?? [], $finish);
+            $itemProductId = $this->resolveProduct($item->pn, $finish);
             if ($itemProductId) {
                 $rows[] = [
                     'part_label' => $item->name,
@@ -101,29 +103,29 @@ class HwlibBomGenerator
     }
 
     /**
-     * Hardware item PNs carry a finish list (e.g. ["C2","DB","BL"] or
-     * ["0R"] for mill-finish-only hardware) — match the config's selected
-     * finish only if the item actually offers it, otherwise fall back to
-     * whatever finish that PN is stocked in.
+     * Standard hardware items follow the config's selected finish, walking
+     * the finish fallback chain (see FinishFallbackResolver) when the exact
+     * finish isn't stocked for that PN.
      */
-    private function resolveProduct(?string $pn, array $availableFinishes, string $wantFinish): ?int
+    private function resolveProduct(?string $pn, string $wantFinish): ?int
     {
         if (! $pn) {
             return null;
         }
 
-        $finish = in_array($wantFinish, $availableFinishes, true) ? $wantFinish : null;
+        $product = $this->finishResolver->resolve($pn, $wantFinish);
 
-        $product = $finish
-            ? Product::where('part_number', $pn)->where('finish', $finish)->first()
-            : null;
+        if ($product && $product->finish !== strtoupper($wantFinish)) {
+            $this->warnings[] = "Hardware item PN \"{$pn}\" not available in {$wantFinish} — substituted {$product->finish}.";
+        }
 
-        return ($product ?? Product::where('part_number', $pn)->first())?->id;
+        return $product?->id;
     }
 
     /**
      * Backer/fastener PNs sometimes carry a baked-in finish suffix (e.g.
-     * "P797-0R") — same convention as the door catalog.
+     * "P797-0R") — same convention as the door catalog. Walks the finish
+     * fallback chain from that baked-in finish if it isn't stocked.
      */
     private function resolveHardwareProduct(?string $pn): ?int
     {
@@ -133,8 +135,11 @@ class HwlibBomGenerator
 
         if (preg_match('/^(.*)-(BL|C2|DB|0R)$/', $pn, $m)) {
             [$base, $finish] = [$m[1], $m[2]];
-            $product = Product::where('part_number', $base)->where('finish', $finish)->first()
-                ?? Product::where('part_number', $base)->first();
+            $product = $this->finishResolver->resolve($base, $finish);
+
+            if ($product && $product->finish !== $finish) {
+                $this->warnings[] = "Backer/fastener PN \"{$pn}\" not available — substituted {$product->finish}.";
+            }
         } else {
             $product = Product::where('part_number', $pn)->first();
         }

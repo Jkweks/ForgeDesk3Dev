@@ -1669,10 +1669,12 @@
 
   function hwItemRender() {
     const catFilter = document.getElementById('hwlib-item-catfilter').value;
+    const reviewOnly = document.getElementById('hwlib-item-reviewfilter').checked;
     const tbody = document.getElementById('hwlib-item-tbody');
     let list = hwItems;
-    if (catFilter.startsWith('s')) list = hwItems.filter(i => i.subcategory_id == catFilter.slice(1));
-    else if (catFilter.startsWith('c')) list = hwItems.filter(i => i.category_id == catFilter.slice(1) && !i.subcategory_id);
+    if (catFilter.startsWith('s')) list = list.filter(i => i.subcategory_id == catFilter.slice(1));
+    else if (catFilter.startsWith('c')) list = list.filter(i => i.category_id == catFilter.slice(1) && !i.subcategory_id);
+    if (reviewOnly) list = list.filter(i => i.needs_review);
     tbody.innerHTML = list.map(i => `
       <tr>
         <td>${esc(i.name)}</td>
@@ -1680,11 +1682,12 @@
         <td>${esc(i.manufacturer || '')}</td>
         <td>${esc(i.pn || '')}</td>
         <td>${i.active ? '<span class="badge bg-green-lt">active</span>' : '<span class="badge bg-secondary-lt">inactive</span>'}</td>
+        <td>${i.needs_review ? '<span class="badge bg-yellow-lt">needs review</span>' : ''}</td>
         <td class="text-end">
           <button type="button" class="btn btn-sm btn-icon" onclick="hwItemOpenModal(${i.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwItemDelete(${i.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="6" class="text-muted">No items found.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="7" class="text-muted">No items found.</td></tr>';
     applyActionPermissions();
   }
 
@@ -1819,6 +1822,7 @@
     document.getElementById('hwlib-item-minheight').value = i?.min_height ?? '';
     document.getElementById('hwlib-item-maxheight').value = i?.max_height ?? '';
     document.getElementById('hwlib-item-active').checked = i ? !!i.active : true;
+    document.getElementById('hwlib-item-needsreview').checked = !!i?.needs_review;
     document.getElementById('hwlib-item-vosstandard').checked = !!i?.vos_standard;
     document.getElementById('hwlib-item-fieldinstall').checked = !!i?.field_install;
     document.getElementById('hwlib-item-handed').checked = !!i?.handed;
@@ -1854,6 +1858,7 @@
       min_height: document.getElementById('hwlib-item-minheight').value || null,
       max_height: document.getElementById('hwlib-item-maxheight').value || null,
       active: document.getElementById('hwlib-item-active').checked,
+      needs_review: document.getElementById('hwlib-item-needsreview').checked,
       vos_standard: document.getElementById('hwlib-item-vosstandard').checked,
       field_install: document.getElementById('hwlib-item-fieldinstall').checked,
       handed: document.getElementById('hwlib-item-handed').checked,
@@ -2037,32 +2042,200 @@
     applyActionPermissions();
   }
 
+  // Set item rows are entered as Category -> Manufacturer -> Part, mirroring
+  // the same cascade the Configurator's per-opening hardware picker uses
+  // (see fbFilterHwItems in frame.blade.php), plus a per-row function picker
+  // once a part is chosen, and a "+ Add new part" quick-add for parts that
+  // aren't in the library yet (created with needs_review so it can be found
+  // and cleaned up later on the Items tab).
+  let hwSiRowSeq = 0;
+
+  function hwSiCategoryOptionsHtml(selectedId) {
+    return hwCategories.slice().sort((a, b) => a.name.localeCompare(b.name))
+      .map(c => `<option value="${c.id}" ${selectedId == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+  }
+
+  function hwSiManufacturersForCategory(categoryId) {
+    const mfrs = new Set(hwItems.filter(i => i.category_id == categoryId).map(i => i.manufacturer || ''));
+    return Array.from(mfrs).sort((a, b) => a.localeCompare(b));
+  }
+
+  function hwSiManufacturerOptionsHtml(categoryId, selected) {
+    return hwSiManufacturersForCategory(categoryId)
+      .map(m => `<option value="${esc(m)}" ${m === (selected || '') ? 'selected' : ''}>${m ? esc(m) : '(none)'}</option>`).join('');
+  }
+
+  function hwSiPartsFor(categoryId, manufacturer) {
+    return hwItems.filter(i => i.category_id == categoryId && (i.manufacturer || '') === (manufacturer || ''))
+      .slice().sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function hwSiPartOptionsHtml(categoryId, manufacturer, selectedId) {
+    const parts = hwSiPartsFor(categoryId, manufacturer);
+
+    return '<option value="">— select part —</option>' + parts.map(i =>
+      `<option value="${i.id}" ${selectedId == i.id ? 'selected' : ''}>${esc(i.name)}${i.pn ? ' — ' + esc(i.pn) : ''}${i.needs_review ? ' (needs review)' : ''}</option>`
+    ).join('');
+  }
+
+  function hwSiRenderFunctions(rowEl, itemId, selectedFunctionIds) {
+    const wrap = rowEl.querySelector('.hwlib-si-functions');
+    const item = itemId ? hwFindItem(itemId) : null;
+    const functions = item?.functions || [];
+    if (!functions.length) { wrap.innerHTML = ''; return; }
+
+    const rowUid = rowEl.dataset.rowUid;
+    const selected = new Set((selectedFunctionIds || []).map(id => String(id)));
+    const byGroup = {};
+    functions.forEach(f => { (byGroup[f.group_name || ''] ||= []).push(f); });
+
+    wrap.innerHTML = Object.keys(byGroup).sort().map(group => {
+      const groupFns = byGroup[group];
+      if (group) {
+        const name = `hwsi-func-${rowUid}-${group.replace(/[^a-z0-9]/gi, '_')}`;
+        const noneChecked = !groupFns.some(f => selected.has(String(f.id)));
+
+        return `<div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+          <span class="text-muted small">${esc(group)}:</span>
+          <label class="form-check form-check-inline mb-0"><input class="form-check-input hwlib-si-func-radio" type="radio" name="${name}" value="" ${noneChecked ? 'checked' : ''}><span class="form-check-label small text-muted">None</span></label>
+          ${groupFns.map(f => `<label class="form-check form-check-inline mb-0"><input class="form-check-input hwlib-si-func-radio" type="radio" name="${name}" value="${f.id}" ${selected.has(String(f.id)) ? 'checked' : ''}><span class="form-check-label small">${esc(f.code)}</span></label>`).join('')}
+        </div>`;
+      }
+
+      return `<div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+        <span class="text-muted small">Options:</span>
+        ${groupFns.map(f => `<label class="form-check form-check-inline mb-0"><input class="form-check-input hwlib-si-func-cb" type="checkbox" value="${f.id}" ${selected.has(String(f.id)) ? 'checked' : ''}><span class="form-check-label small">${esc(f.code)}</span></label>`).join('')}
+      </div>`;
+    }).join('');
+  }
+
+  function hwSiOnCategoryChange(selectEl) {
+    const rowEl = selectEl.closest('.hwlib-set-item-row');
+    const mfrSelect = rowEl.querySelector('.hwlib-si-manufacturer');
+    mfrSelect.innerHTML = hwSiManufacturerOptionsHtml(selectEl.value, null);
+    hwSiOnManufacturerChange(mfrSelect);
+  }
+
+  function hwSiOnManufacturerChange(selectEl) {
+    const rowEl = selectEl.closest('.hwlib-set-item-row');
+    const categoryId = rowEl.querySelector('.hwlib-si-category').value;
+    const partSelect = rowEl.querySelector('.hwlib-si-part');
+    partSelect.innerHTML = hwSiPartOptionsHtml(categoryId, selectEl.value, null);
+    hwSiOnPartChange(partSelect);
+  }
+
+  function hwSiOnPartChange(selectEl) {
+    hwSiRenderFunctions(selectEl.closest('.hwlib-set-item-row'), selectEl.value, []);
+  }
+
+  function hwSiToggleQuickAdd(link) {
+    const rowEl = link.closest('.hwlib-set-item-row');
+    const form = rowEl.querySelector('.hwlib-si-quickadd-form');
+    const opening = form.classList.contains('d-none');
+    form.classList.toggle('d-none');
+    if (opening) {
+      rowEl.querySelector('.hwlib-si-qa-mfr').value = rowEl.querySelector('.hwlib-si-manufacturer').value || '';
+      rowEl.querySelector('.hwlib-si-qa-name').focus();
+    }
+  }
+
+  async function hwSiQuickAddSave(btn) {
+    const rowEl = btn.closest('.hwlib-set-item-row');
+    const categoryId = rowEl.querySelector('.hwlib-si-category').value;
+    const manufacturer = rowEl.querySelector('.hwlib-si-qa-mfr').value.trim();
+    const name = rowEl.querySelector('.hwlib-si-qa-name').value.trim();
+    const pn = rowEl.querySelector('.hwlib-si-qa-pn').value.trim();
+    if (!categoryId) { showNotification('Pick a category first', 'warning'); return; }
+    if (!name) { showNotification('Part name is required', 'warning'); return; }
+    try {
+      const res = await authenticatedFetch('/config/hwlib-items', {
+        method: 'POST',
+        body: JSON.stringify({ category_id: categoryId, manufacturer: manufacturer || null, name, pn: pn || null, needs_review: true }),
+      });
+      hwItems.push(res.item);
+
+      const mfrSelect = rowEl.querySelector('.hwlib-si-manufacturer');
+      mfrSelect.innerHTML = hwSiManufacturerOptionsHtml(categoryId, manufacturer);
+      const partSelect = rowEl.querySelector('.hwlib-si-part');
+      partSelect.innerHTML = hwSiPartOptionsHtml(categoryId, manufacturer, res.item.id);
+      hwSiRenderFunctions(rowEl, res.item.id, []);
+
+      rowEl.querySelector('.hwlib-si-quickadd-form').classList.add('d-none');
+      rowEl.querySelector('.hwlib-si-qa-mfr').value = '';
+      rowEl.querySelector('.hwlib-si-qa-name').value = '';
+      rowEl.querySelector('.hwlib-si-qa-pn').value = '';
+      showNotification('Part added — flagged for review', 'success');
+    } catch (err) { showNotification(err.message, 'danger'); }
+  }
+
   function hwSetItemRowHtml(row) {
-    const itemOptions = hwItems.map(i => `<option value="${i.id}" ${row?.item_id == i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('');
+    const rowUid = ++hwSiRowSeq;
+    const item = row?.item_id ? hwFindItem(row.item_id) : null;
+    const categoryId = item?.category_id ?? '';
+    const manufacturer = item?.manufacturer ?? '';
+
     return `
-      <div class="row g-2 align-items-center mb-2 hwlib-set-item-row">
-        <div class="col-md-4"><select class="form-select form-select-sm hwlib-si-item"><option value="">— select item —</option>${itemOptions}</select></div>
-        <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm hwlib-si-qty" placeholder="qty" value="${row?.quantity ?? 1}"></div>
-        <div class="col-md-2"><select class="form-select form-select-sm hwlib-si-series"><option value="Standard" ${!row || row?.series === 'Standard' ? 'selected' : ''}>Standard</option><option value="Thermal" ${row?.series === 'Thermal' ? 'selected' : ''}>Thermal</option><option value="Monumental" ${row?.series === 'Monumental' ? 'selected' : ''}>Monumental</option></select></div>
-        <div class="col-md-2"><select class="form-select form-select-sm hwlib-si-leaf"><option value="both" ${!row || row?.leaf === 'both' ? 'selected' : ''}>Both</option><option value="active" ${row?.leaf === 'active' ? 'selected' : ''}>Active</option><option value="inactive" ${row?.leaf === 'inactive' ? 'selected' : ''}>Inactive</option></select></div>
-        <div class="col-md-1"><input type="text" class="form-control form-control-sm hwlib-si-notes" placeholder="notes" value="${esc(row?.notes || '')}"></div>
-        <div class="col-md-1"><button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.hwlib-set-item-row').remove()"><i class="ti ti-x"></i></button></div>
+      <div class="border rounded p-2 mb-2 hwlib-set-item-row" data-row-uid="${rowUid}">
+        <div class="row g-2 align-items-center mb-2">
+          <div class="col-md-3">
+            <select class="form-select form-select-sm hwlib-si-category" onchange="hwSiOnCategoryChange(this)">
+              <option value="">— category —</option>${hwSiCategoryOptionsHtml(categoryId)}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <select class="form-select form-select-sm hwlib-si-manufacturer" onchange="hwSiOnManufacturerChange(this)">
+              ${categoryId !== '' ? hwSiManufacturerOptionsHtml(categoryId, manufacturer) : ''}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <select class="form-select form-select-sm hwlib-si-part" onchange="hwSiOnPartChange(this)">
+              ${categoryId !== '' ? hwSiPartOptionsHtml(categoryId, manufacturer, row?.item_id) : '<option value="">— select part —</option>'}
+            </select>
+          </div>
+          <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm hwlib-si-qty" placeholder="qty" value="${row?.quantity ?? 1}"></div>
+          <div class="col-md-1 text-end"><button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.hwlib-set-item-row').remove()"><i class="ti ti-x"></i></button></div>
+        </div>
+        <div class="row g-2 align-items-center mb-2">
+          <div class="col-md-3"><select class="form-select form-select-sm hwlib-si-series"><option value="Standard" ${!row || row?.series === 'Standard' ? 'selected' : ''}>Standard</option><option value="Thermal" ${row?.series === 'Thermal' ? 'selected' : ''}>Thermal</option><option value="Monumental" ${row?.series === 'Monumental' ? 'selected' : ''}>Monumental</option></select></div>
+          <div class="col-md-3"><select class="form-select form-select-sm hwlib-si-leaf"><option value="both" ${!row || row?.leaf === 'both' ? 'selected' : ''}>Both</option><option value="active" ${row?.leaf === 'active' ? 'selected' : ''}>Active</option><option value="inactive" ${row?.leaf === 'inactive' ? 'selected' : ''}>Inactive</option></select></div>
+          <div class="col-md-6"><input type="text" class="form-control form-control-sm hwlib-si-notes" placeholder="notes" value="${esc(row?.notes || '')}"></div>
+        </div>
+        <div class="hwlib-si-functions mb-1"></div>
+        <div class="small">
+          <a href="#" onclick="event.preventDefault(); hwSiToggleQuickAdd(this)">+ Add new part</a>
+          <div class="hwlib-si-quickadd-form d-none d-flex gap-2 mt-1 align-items-center">
+            <input type="text" class="form-control form-control-sm hwlib-si-qa-mfr" placeholder="Manufacturer" style="max-width:160px">
+            <input type="text" class="form-control form-control-sm hwlib-si-qa-name" placeholder="Part name" style="max-width:200px">
+            <input type="text" class="form-control form-control-sm hwlib-si-qa-pn" placeholder="PN" style="max-width:120px">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="hwSiQuickAddSave(this)">Add</button>
+          </div>
+        </div>
       </div>`;
   }
 
   function hwSetAddItemRow(row) {
     document.getElementById('hwlib-set-items').insertAdjacentHTML('beforeend', hwSetItemRowHtml(row));
+    if (row?.item_id) {
+      const rows = document.querySelectorAll('.hwlib-set-item-row');
+      hwSiRenderFunctions(rows[rows.length - 1], row.item_id, (row.functions || []).map(f => f.id));
+    }
   }
 
   function hwSetCollectItems() {
     return Array.from(document.querySelectorAll('.hwlib-set-item-row'))
-      .map(row => ({
-        item_id: row.querySelector('.hwlib-si-item').value,
-        quantity: parseInt(row.querySelector('.hwlib-si-qty').value || 1, 10),
-        series: row.querySelector('.hwlib-si-series').value,
-        leaf: row.querySelector('.hwlib-si-leaf').value,
-        notes: row.querySelector('.hwlib-si-notes').value || null,
-      }))
+      .map(row => {
+        const radios = Array.from(row.querySelectorAll('.hwlib-si-func-radio:checked')).map(r => r.value).filter(Boolean);
+        const checks = Array.from(row.querySelectorAll('.hwlib-si-func-cb:checked')).map(c => c.value);
+
+        return {
+          item_id: row.querySelector('.hwlib-si-part').value,
+          quantity: parseInt(row.querySelector('.hwlib-si-qty').value || 1, 10),
+          series: row.querySelector('.hwlib-si-series').value,
+          leaf: row.querySelector('.hwlib-si-leaf').value,
+          notes: row.querySelector('.hwlib-si-notes').value || null,
+          function_ids: [...radios, ...checks].map(v => parseInt(v, 10)),
+        };
+      })
       .filter(r => r.item_id);
   }
 

@@ -12,8 +12,10 @@ use App\Models\FdUser;
 use App\Services\CutFlow\CutPlanner;
 use App\Services\CutFlow\TigerBridgeClient;
 use App\Support\Dimension;
+use App\Support\IpAllowlist;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -458,7 +460,31 @@ class Dashboard extends Component
 
     // --- confirm: login pin, manual move, or new stick plan -----------------
 
-    public function confirmModal(CutPlanner $planner, TigerBridgeClient $bridge): void
+    /**
+     * /cut-station itself stays unauthenticated on purpose (kiosk route —
+     * anyone on the network can view it and sign in with a crew PIN, per
+     * signedIn()/findUserByPin()). This is a separate, narrower gate: only
+     * the shop-floor tablet's IP (config('cutflow.tablet_allowed_ips')) may
+     * trigger the handful of actions below that actually move the saw or
+     * fire the printer, so a laptop elsewhere on the LAN can't drive
+     * hardware even if someone signs in there. Left unconfigured, this is a
+     * no-op (every device can command the saw) — logged so it's visible in
+     * ops that the allowlist isn't set yet.
+     */
+    protected function authorizedTabletRequest(Request $request): bool
+    {
+        $allowed = IpAllowlist::allows($request->ip(), config('cutflow.tablet_allowed_ips', []));
+
+        if (! $allowed) {
+            Log::warning('[cutflow] rejected saw/printer command from disallowed IP', [
+                'ip' => $request->ip(),
+            ]);
+        }
+
+        return $allowed;
+    }
+
+    public function confirmModal(CutPlanner $planner, TigerBridgeClient $bridge, Request $request): void
     {
         $raw = trim($this->keypadValue);
 
@@ -495,6 +521,14 @@ class Dashboard extends Component
         }
 
         if ($this->modal === 'manual') {
+            if (! $this->authorizedTabletRequest($request)) {
+                $this->lastError = 'This action is only available from the cut station tablet.';
+                $this->modal = null;
+                $this->keypadValue = '';
+
+                return;
+            }
+
             $inches = Dimension::parse($raw);
 
             $entry = CutLogEntry::create([
@@ -551,9 +585,15 @@ class Dashboard extends Component
      * enabled, this only moves the stop and waits — recordCut() fires once
      * the sensor confirms (see checkSensor(), polled from the view).
      */
-    public function nextCut(TigerBridgeClient $bridge): void
+    public function nextCut(TigerBridgeClient $bridge, Request $request): void
     {
         if (! $this->signedIn()) {
+            return;
+        }
+
+        if (! $this->authorizedTabletRequest($request)) {
+            $this->lastError = 'This action is only available from the cut station tablet.';
+
             return;
         }
 
@@ -620,9 +660,13 @@ class Dashboard extends Component
      * Polled from the view (wire:poll) only while a sensor-gated cut is in
      * flight, so this stays a no-op the rest of the time.
      */
-    public function checkSensor(TigerBridgeClient $bridge): void
+    public function checkSensor(TigerBridgeClient $bridge, Request $request): void
     {
         if ($this->tigerStatus !== 'waiting_for_sensor') {
+            return;
+        }
+
+        if (! $this->authorizedTabletRequest($request)) {
             return;
         }
 
@@ -786,8 +830,14 @@ class Dashboard extends Component
      * uuid family via the original entry's data) with is_reprint set, so
      * there's a record a second label went out for this cut.
      */
-    public function reprintEntry(int $cutLogEntryId, TigerBridgeClient $bridge): void
+    public function reprintEntry(int $cutLogEntryId, TigerBridgeClient $bridge, Request $request): void
     {
+        if (! $this->authorizedTabletRequest($request)) {
+            $this->lastError = 'This action is only available from the cut station tablet.';
+
+            return;
+        }
+
         $entry = CutLogEntry::findOrFail($cutLogEntryId);
 
         $reprint = CutLogEntry::create([

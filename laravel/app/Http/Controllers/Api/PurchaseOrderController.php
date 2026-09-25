@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\PurchaseOrderSubmittedForApproval;
 use App\Models\CompanyLocation;
 use App\Models\CompanySetting;
 use App\Models\InventoryTransaction;
@@ -10,13 +11,11 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\StorageLocation;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-
 class PurchaseOrderController extends Controller
 {
     /** Statuses where the PO — its header, addresses, and line items — may still be edited. */
@@ -75,10 +74,26 @@ class PurchaseOrderController extends Controller
             'items.product',
             'creator',
             'approver',
+            'assignedApprover',
             'shipToLocation',
         ]);
 
         return response()->json($purchaseOrder);
+    }
+
+    /**
+     * Users eligible to be picked as a PO's approver (anyone with
+     * orders.approve permission) — for the approver-selection dropdown.
+     */
+    public function eligibleApprovers()
+    {
+        $users = User::query()
+            ->active()
+            ->withPermission('orders.approve')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+
+        return response()->json($users);
     }
 
     /**
@@ -195,6 +210,7 @@ class PurchaseOrderController extends Controller
             'contact_name' => 'nullable|string|max:255',
             'contact_email' => 'nullable|email|max:255',
             'contact_phone' => 'nullable|string|max:255',
+            'approver_id' => 'nullable|exists:users,id',
         ]);
 
         if ($validator->fails()) {
@@ -214,11 +230,12 @@ class PurchaseOrderController extends Controller
             'contact_name',
             'contact_email',
             'contact_phone',
+            'approver_id',
         ]));
 
         return response()->json([
             'message' => 'Purchase order updated successfully',
-            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'shipToLocation']),
+            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'assignedApprover', 'shipToLocation']),
         ]);
     }
 
@@ -240,6 +257,12 @@ class PurchaseOrderController extends Controller
         }
 
         $purchaseOrder->update(['status' => 'submitted']);
+
+        $purchaseOrder->load('assignedApprover');
+        if ($purchaseOrder->assignedApprover?->email) {
+            Mail::to($purchaseOrder->assignedApprover->email)
+                ->send(new PurchaseOrderSubmittedForApproval($purchaseOrder));
+        }
 
         return response()->json([
             'message' => 'Purchase order submitted successfully',
@@ -739,51 +762,41 @@ class PurchaseOrderController extends Controller
             return response()->json(['message' => 'EZ Estimate template is missing on the server'], 500);
         }
 
-        try {
-            // The EZ Estimate template is a ~40-sheet, formula-heavy workbook;
-            // loading/writing it through PhpSpreadsheet peaks around 650MB, well
-            // above the app's default memory_limit.
-            @ini_set('memory_limit', '1024M');
+        $tempFile = tempnam(sys_get_temp_dir(), 'po_ez_').'.xlsm';
 
-            $reader = IOFactory::createReaderForFile($templatePath);
-            $reader->setReadDataOnly(false);
-            $spreadsheet = $reader->load($templatePath);
+        try {
+            if (! copy($templatePath, $tempFile)) {
+                throw new \Exception('Unable to copy EZ Estimate template');
+            }
 
             // Stock Lengths: 3 pages, input rows 11-47 (37 rows/page), columns A=Qty, B=Part#, C=Finish
-            $this->fillEzEstimateSheets(
-                $spreadsheet,
-                ['Stock Lengths', 'Stock Lengths (2)', 'Stock Lengths (3)'],
-                11,
-                47,
-                $slItems
-            );
-
             // Accessories: 3 pages, input rows 11-46 (36 rows/page), columns A=Qty, B=Part#, C=Finish
-            $this->fillEzEstimateSheets(
-                $spreadsheet,
-                ['Accessories', 'Accessories (2)', 'Accessories (3)'],
-                11,
-                46,
-                $accessoryItems
-            );
+            // — plain input cells on both; the PO's quantity_ordered is written
+            // as-is (no pack/eaches conversion — Accessories!A/B/C are normally
+            // formulas pulling a converted quantity from CALCULATIONS, but we
+            // overwrite them directly so the PO quantity is exactly what shows).
+            $updates = [];
+            $this->collectEzEstimateCellUpdates($updates, ['Stock Lengths', 'Stock Lengths (2)', 'Stock Lengths (3)'], 11, 47, $slItems);
+            $this->collectEzEstimateCellUpdates($updates, ['Accessories', 'Accessories (2)', 'Accessories (3)'], 11, 46, $accessoryItems);
 
-            $spreadsheet->setActiveSheetIndexByName('Stock Lengths');
+            // The template is a 70+ sheet, macro-enabled, formula-heavy workbook.
+            // A full PhpSpreadsheet load/write round trip cannot losslessly
+            // reconstruct it (drops VBA, mangles pivots/defined names, etc.),
+            // which is what produced Excel's "file is corrupted" prompt. Instead,
+            // patch only the target worksheet XML parts directly inside the zip
+            // container, leaving every other byte of the package untouched.
+            $this->patchEzEstimateWorkbook($tempFile, $updates);
 
-            $filename = 'EZ_Estimate_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number).'_'.date('Ymd').'.xlsx';
-            $tempFile = tempnam(sys_get_temp_dir(), 'po_ez_');
-
-            $writer = new Xlsx($spreadsheet);
-            // This workbook's formula graph is too large/complex for PhpSpreadsheet's
-            // calculation engine to re-evaluate reliably on save (it errors out deep in
-            // unrelated sheets). Skip recalculation entirely and let Excel recalculate
-            // on open — we only need our overwritten cells to carry through as values.
-            $writer->setPreCalculateFormulas(false);
-            $writer->save($tempFile);
+            $filename = 'EZ_Estimate_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $purchaseOrder->po_number).'_'.date('Ymd').'.xlsm';
 
             return response()->download($tempFile, $filename, [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Type' => 'application/vnd.ms-excel.sheet.macroEnabled.12',
             ])->deleteFileAfterSend(true);
         } catch (\Exception $e) {
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
+
             \Log::error('EZ Estimate export failed', [
                 'purchase_order_id' => $purchaseOrder->id,
                 'error' => $e->getMessage(),
@@ -798,16 +811,16 @@ class PurchaseOrderController extends Controller
     }
 
     /**
-     * Write Qty/Part#/Finish values into consecutive EZ Estimate template pages
-     * (Stock Lengths or Accessories, each spanning up to 3 sheets).
-     *
-     * These cells are formula-driven in the template (they feed a separate
-     * internal Tubelite tool via the CALCULATIONS sheet), but for this export
-     * they're overwritten directly with values from the purchase order. The
-     * remaining columns (description/price/etc.) are left as live formulas
-     * so pricing still recalculates from the template's own price sheets.
+     * Build the Qty/Part#/Finish cell updates for consecutive EZ Estimate
+     * template pages (Stock Lengths or Accessories, each spanning up to 3
+     * sheets), keyed by sheet name then cell reference. On Accessories these
+     * columns are normally formulas pulling a pack-converted quantity from
+     * CALCULATIONS, but per the PO these are overwritten directly with the
+     * PO's own quantity/part/finish, with no unit conversion. The remaining
+     * columns (description/price/etc.) are left as live formulas so pricing
+     * still recalculates from the template's own price sheets.
      */
-    private function fillEzEstimateSheets(Spreadsheet $spreadsheet, array $sheetNames, int $startRow, int $endRow, array $items): void
+    private function collectEzEstimateCellUpdates(array &$updates, array $sheetNames, int $startRow, int $endRow, array $items): void
     {
         $rowsPerPage = $endRow - $startRow + 1;
         $capacity = $rowsPerPage * count($sheetNames);
@@ -823,20 +836,258 @@ class PurchaseOrderController extends Controller
 
         $itemIndex = 0;
         foreach ($sheetNames as $sheetName) {
-            $sheet = $spreadsheet->getSheetByName($sheetName);
-            if (! $sheet) {
-                throw new \Exception("EZ Estimate template sheet not found: {$sheetName}");
-            }
-
             for ($row = $startRow; $row <= $endRow && $itemIndex < count($items); $row++, $itemIndex++) {
                 $item = $items[$itemIndex];
                 $product = $item->product;
 
-                $sheet->setCellValue("A{$row}", $item->quantity_ordered);
-                $sheet->setCellValue("B{$row}", $product->part_number ?? $product->sku ?? '');
-                $sheet->setCellValue("C{$row}", $product->finish ?? '');
+                $updates[$sheetName]["A{$row}"] = ['type' => 'n', 'value' => $item->quantity_ordered];
+                $updates[$sheetName]["B{$row}"] = ['type' => 's', 'value' => $product->part_number ?? $product->sku ?? ''];
+                $updates[$sheetName]["C{$row}"] = ['type' => 's', 'value' => $product->finish ?? ''];
             }
         }
+    }
+
+    /**
+     * Patch the given worksheet cell values directly into an EZ Estimate
+     * .xlsm's zip container, without loading/rewriting the workbook through
+     * PhpSpreadsheet. Only the worksheet XML parts named in $updatesBySheetName
+     * are touched; every other part of the package (macros, other sheets,
+     * styles, pivots, defined names, etc.) is left byte-for-byte as-is.
+     */
+    private function patchEzEstimateWorkbook(string $filePath, array $updatesBySheetName): void
+    {
+        $mainNs = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+        $relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+        $zip = new \ZipArchive;
+        if ($zip->open($filePath) !== true) {
+            throw new \Exception('Unable to open EZ Estimate template as a zip archive');
+        }
+
+        try {
+            $workbookXml = $zip->getFromName('xl/workbook.xml');
+            $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+
+            if ($workbookXml === false || $relsXml === false) {
+                throw new \Exception('EZ Estimate template is missing workbook parts');
+            }
+
+            $workbookDoc = new \DOMDocument;
+            $workbookDoc->loadXML($workbookXml);
+            $relsDoc = new \DOMDocument;
+            $relsDoc->loadXML($relsXml);
+
+            $relTargets = [];
+            foreach ($relsDoc->getElementsByTagName('Relationship') as $rel) {
+                $relTargets[$rel->getAttribute('Id')] = $rel->getAttribute('Target');
+            }
+
+            $sheetParts = [];
+            foreach ($workbookDoc->getElementsByTagNameNS($mainNs, 'sheet') as $sheetEl) {
+                $rId = $sheetEl->getAttributeNS($relNs, 'id');
+                if ($rId === '' || ! isset($relTargets[$rId])) {
+                    continue;
+                }
+
+                $target = ltrim($relTargets[$rId], '/');
+                if (! str_starts_with($target, 'xl/')) {
+                    $target = 'xl/'.$target;
+                }
+
+                $sheetParts[$sheetEl->getAttribute('name')] = $target;
+            }
+
+            foreach ($updatesBySheetName as $sheetName => $cellUpdates) {
+                if (! isset($sheetParts[$sheetName])) {
+                    throw new \Exception("EZ Estimate template sheet not found: {$sheetName}");
+                }
+
+                $partPath = $sheetParts[$sheetName];
+                $sheetXml = $zip->getFromName($partPath);
+                if ($sheetXml === false) {
+                    throw new \Exception("EZ Estimate template worksheet part not found: {$partPath}");
+                }
+
+                $patchedXml = $this->patchWorksheetXml($sheetXml, $cellUpdates);
+
+                if (! $zip->addFromString($partPath, $patchedXml)) {
+                    throw new \Exception("Failed to write patched worksheet: {$partPath}");
+                }
+            }
+
+            $this->forceFullCalcOnLoad($zip, $workbookDoc, $mainNs);
+            $this->stripCalcChain($zip, $relsDoc);
+        } finally {
+            $zip->close();
+        }
+    }
+
+    /**
+     * Set calcPr fullCalcOnLoad="1" in xl/workbook.xml so Excel recalculates
+     * every formula the moment the file opens, instead of trusting the
+     * cached <v> values that were sitting in the template's formula cells
+     * (e.g. Accessories!A11/B11, and everything downstream of CALCULATIONS)
+     * before we overwrote their inputs. Without this, those cells keep
+     * showing their old cached result until something (e.g. the user
+     * retyping a cell) triggers Excel's own dirty-tracking — which for a
+     * cross-sheet chain this size doesn't reliably happen on its own,
+     * especially once calcChain.xml (Excel's calc-order cache) is gone.
+     */
+    private function forceFullCalcOnLoad(\ZipArchive $zip, \DOMDocument $workbookDoc, string $mainNs): void
+    {
+        $calcPr = $workbookDoc->getElementsByTagNameNS($mainNs, 'calcPr')->item(0);
+        if (! $calcPr) {
+            throw new \Exception('EZ Estimate template is missing its calcPr element');
+        }
+        $calcPr->setAttribute('fullCalcOnLoad', '1');
+
+        $zip->addFromString('xl/workbook.xml', $workbookDoc->saveXML());
+    }
+
+    /**
+     * Remove xl/calcChain.xml and every reference to it (its workbook
+     * relationship and its [Content_Types].xml override). calcChain.xml is
+     * just a cached calculation-order hint — Excel rebuilds it fine on open
+     * with none present — but any edit made outside Excel invalidates its
+     * cached ordering, and a stale-but-still-referenced calcChain is what
+     * triggers Excel's "we found a problem... removed records: formula from
+     * /xl/calcChain.xml" repair prompt on open. Dropping it (and its
+     * references, so nothing dangles) avoids that prompt entirely.
+     */
+    private function stripCalcChain(\ZipArchive $zip, \DOMDocument $relsDoc): void
+    {
+        if ($zip->locateName('xl/calcChain.xml') === false) {
+            return;
+        }
+
+        $zip->deleteName('xl/calcChain.xml');
+
+        foreach ($relsDoc->getElementsByTagName('Relationship') as $rel) {
+            if (rtrim($rel->getAttribute('Target'), '/') === 'calcChain.xml') {
+                $rel->parentNode->removeChild($rel);
+                break;
+            }
+        }
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $relsDoc->saveXML());
+
+        $contentTypesXml = $zip->getFromName('[Content_Types].xml');
+        if ($contentTypesXml !== false) {
+            $contentTypesDoc = new \DOMDocument;
+            $contentTypesDoc->loadXML($contentTypesXml);
+            foreach ($contentTypesDoc->getElementsByTagName('Override') as $override) {
+                if ($override->getAttribute('PartName') === '/xl/calcChain.xml') {
+                    $override->parentNode->removeChild($override);
+                    break;
+                }
+            }
+            $zip->addFromString('[Content_Types].xml', $contentTypesDoc->saveXML());
+        }
+    }
+
+    /**
+     * Set values on specific cells of a single worksheet XML part, creating
+     * rows/cells that don't already exist. Any existing formula/value on a
+     * touched cell is replaced; every other cell in the sheet is left as-is.
+     * Strings are written as inline strings so the shared-string table
+     * (used by every other sheet) never needs to be touched.
+     */
+    private function patchWorksheetXml(string $xml, array $cellUpdates): string
+    {
+        $ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+        $doc = new \DOMDocument;
+        $doc->preserveWhiteSpace = true;
+        $doc->loadXML($xml);
+
+        $sheetData = $doc->getElementsByTagNameNS($ns, 'sheetData')->item(0);
+        if (! $sheetData) {
+            throw new \Exception('sheetData not found in worksheet XML');
+        }
+
+        $byRow = [];
+        foreach ($cellUpdates as $ref => $update) {
+            preg_match('/^([A-Z]+)(\d+)$/', $ref, $m);
+            $byRow[(int) $m[2]][$m[1]] = $update;
+        }
+
+        foreach ($byRow as $rowNum => $cols) {
+            $rowEl = null;
+            foreach ($sheetData->getElementsByTagNameNS($ns, 'row') as $existingRow) {
+                if ((int) $existingRow->getAttribute('r') === $rowNum) {
+                    $rowEl = $existingRow;
+                    break;
+                }
+            }
+
+            if (! $rowEl) {
+                $rowEl = $doc->createElementNS($ns, 'row');
+                $rowEl->setAttribute('r', (string) $rowNum);
+
+                $before = null;
+                foreach ($sheetData->getElementsByTagNameNS($ns, 'row') as $existingRow) {
+                    if ((int) $existingRow->getAttribute('r') > $rowNum) {
+                        $before = $existingRow;
+                        break;
+                    }
+                }
+                $before ? $sheetData->insertBefore($rowEl, $before) : $sheetData->appendChild($rowEl);
+            }
+
+            foreach ($cols as $col => $update) {
+                $cellRef = $col.$rowNum;
+                $colIndex = $this->columnLetterToIndex($col);
+
+                $cEl = null;
+                foreach ($rowEl->getElementsByTagNameNS($ns, 'c') as $existingCell) {
+                    if ($existingCell->getAttribute('r') === $cellRef) {
+                        $cEl = $existingCell;
+                        break;
+                    }
+                }
+
+                if (! $cEl) {
+                    $cEl = $doc->createElementNS($ns, 'c');
+                    $cEl->setAttribute('r', $cellRef);
+
+                    $before = null;
+                    foreach ($rowEl->getElementsByTagNameNS($ns, 'c') as $existingCell) {
+                        if ($this->columnLetterToIndex(preg_replace('/\d+/', '', $existingCell->getAttribute('r'))) > $colIndex) {
+                            $before = $existingCell;
+                            break;
+                        }
+                    }
+                    $before ? $rowEl->insertBefore($cEl, $before) : $rowEl->appendChild($cEl);
+                } else {
+                    while ($cEl->firstChild) {
+                        $cEl->removeChild($cEl->firstChild);
+                    }
+                }
+
+                if ($update['type'] === 'n') {
+                    $cEl->removeAttribute('t');
+                    $cEl->appendChild($doc->createElementNS($ns, 'v', (string) $update['value']));
+                } else {
+                    $cEl->setAttribute('t', 'inlineStr');
+                    $isEl = $doc->createElementNS($ns, 'is');
+                    $tEl = $doc->createElementNS($ns, 't');
+                    $tEl->appendChild($doc->createTextNode((string) $update['value']));
+                    $isEl->appendChild($tEl);
+                    $cEl->appendChild($isEl);
+                }
+            }
+        }
+
+        return $doc->saveXML();
+    }
+
+    private function columnLetterToIndex(string $col): int
+    {
+        $index = 0;
+        foreach (str_split($col) as $char) {
+            $index = $index * 26 + (ord($char) - ord('A') + 1);
+        }
+
+        return $index;
     }
 
     /**

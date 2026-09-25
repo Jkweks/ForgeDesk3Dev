@@ -260,7 +260,8 @@
                                 <div style="display:flex;align-items:center;gap:14px;">
                                     @if ($currentItem->part->photo_url)
                                         <img src="{{ $currentItem->part->photo_url }}" alt=""
-                                             style="width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;">
+                                             onclick="openPartPhoto()"
+                                             style="width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;cursor:zoom-in;">
                                     @else
                                         <span style="width:64px;height:64px;border-radius:10px;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--faint);">&#128247;</span>
                                     @endif
@@ -319,6 +320,12 @@
                             </div>
                         @endforeach
                     </div>
+
+                    @if ($currentItem && $currentItem->part->photo_url)
+                        <div class="photo-lightbox" id="photo-lightbox" onclick="closePartPhoto()">
+                            <img src="{{ $currentItem->part->photo_url }}" alt="">
+                        </div>
+                    @endif
 
                 </div>
             @endif
@@ -511,6 +518,20 @@
          bottom-right (see Dashboard::announceCutStarted() /
          resources/css/cutflow.css .cut-toast*). Settings-gated. --}}
     <div class="cut-toast-stack" id="cut-toast-stack"></div>
+
+    <script>
+        function openPartPhoto() {
+            document.getElementById('photo-lightbox')?.classList.add('open');
+        }
+
+        function closePartPhoto() {
+            document.getElementById('photo-lightbox')?.classList.remove('open');
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closePartPhoto();
+        });
+    </script>
 
     <script>
         document.addEventListener('livewire:init', () => {

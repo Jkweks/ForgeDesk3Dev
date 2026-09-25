@@ -27,6 +27,7 @@ class PurchaseOrder extends Model
         'created_by',
         'approved_by',
         'approved_at',
+        'approver_id',
     ];
 
     protected $casts = [
@@ -61,6 +62,12 @@ class PurchaseOrder extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /** Who this PO should be routed to for approval — a per-PO choice, distinct from `approver()` (who actually approved it). */
+    public function assignedApprover()
+    {
+        return $this->belongsTo(User::class, 'approver_id');
     }
 
     // Computed properties

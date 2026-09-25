@@ -41,6 +41,11 @@ return [
         // runs on the shop tablet itself.
         'url' => env('TIGER_BRIDGE_URL', 'http://127.0.0.1:9111'),
 
+        // Shared secret the bridge requires on every request (see
+        // tiger-bridge/.env.example's BRIDGE_TOKEN) so only ForgeDesk can
+        // move the saw or trigger the printer — not just anyone on the LAN.
+        'token' => env('TIGER_BRIDGE_TOKEN'),
+
         // No tiger-bridge reachable from here (e.g. local dev away from the
         // shop). When true, App\Services\CutFlow\TigerBridgeClient simulates
         // every response instead of making an HTTP call.

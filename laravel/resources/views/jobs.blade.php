@@ -352,6 +352,85 @@
       </div>
     </div>
 
+    <!-- Hardware Set Modal (shared across all job rows) -->
+    <div class="modal fade" id="jobHwSetModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="job-hwset-modal-title">New Hardware Set</h5>
+            <button type="button" class="btn-close" onclick="hideJobHwSetForm()"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="job-hwset-id">
+            <div class="row g-2">
+              <div class="col-md-8">
+                <label class="form-label form-label-sm mb-1">Name</label>
+                <input type="text" class="form-control form-control-sm" id="job-hwset-name">
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <label class="form-check"><input class="form-check-input" type="checkbox" id="job-hwset-ispair"><span class="form-check-label">Pair</span></label>
+              </div>
+              <div class="col-12">
+                <label class="form-label form-label-sm mb-1">Notes</label>
+                <input type="text" class="form-control form-control-sm" id="job-hwset-notes" placeholder="Optional">
+              </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
+              <label class="form-label form-label-sm mb-0">Items</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="jobHwSetAddItemRow()"><i class="ti ti-plus"></i> Item</button>
+            </div>
+            <div id="job-hwset-items"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideJobHwSetForm()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="submitJobHwSet()">Save Set</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Door Config Modal (shared across all job rows) -->
+    <div class="modal fade" id="jobDoorConfigModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">New Door/Frame Configuration</h5>
+            <button type="button" class="btn-close" onclick="hideJobDoorConfigForm()"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Scope</label>
+              <select class="form-select" id="job-doorcfg-scope">
+                <option value="door_and_frame">Door and Frame</option>
+                <option value="frame_only">Frame Only</option>
+                <option value="door_only">Door Only</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Door Tags (comma separated)</label>
+              <input type="text" class="form-control" id="job-doorcfg-tags" placeholder="D1, D2">
+              <div class="form-hint">One tag per physical opening — this also sets the quantity (2 tags = qty 2) and becomes this configuration's name.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <input type="text" class="form-control" id="job-doorcfg-notes" placeholder="Optional">
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Pair with Hardware Set <span class="text-secondary">(optional)</span></label>
+              <select class="form-select" id="job-doorcfg-hwset">
+                <option value="">— none —</option>
+              </select>
+              <div class="form-hint">Autofills this opening's hardware section from the selected set's items.</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideJobDoorConfigForm()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="submitJobDoorConfig()">Create</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Add Reservation Modal -->
     <div class="modal fade" id="addReservationModal" tabindex="-1">
       <div class="modal-dialog modal-xl">
@@ -850,6 +929,11 @@
                 ...(opts.headers || {}),
             },
         });
+        // Prefers the first field-level validation message (e.g. from a 422's
+        // `errors` object) over the generic top-level `message`, so specific
+        // failures (like a hardware-set/opening type mismatch) are actually
+        // legible instead of just "Validation failed".
+        const apiErrorDetail = (err) => (err?.errors ? Object.values(err.errors).flat()[0] : null) || err?.message;
 
         let allJobs = [];
         let currentJob = null;
@@ -1115,7 +1199,12 @@
                                     <div id="detail-doorcfg-loading-${job.id}" class="text-muted small py-2">
                                         <span class="spinner-border spinner-border-sm me-1"></span>Loading…
                                     </div>
-                                    <div id="detail-doorcfg-content-${job.id}" style="display:none;"></div>
+                                    <div id="detail-doorcfg-content-wrap-${job.id}" style="display:none;">
+                                        <div class="d-flex justify-content-end mb-2">
+                                            <button class="btn btn-sm btn-outline-primary" data-permission="configurator.edit" onclick="showJobDoorConfigForm(${job.id})"><i class="ti ti-plus me-1"></i>New Config</button>
+                                        </div>
+                                        <div id="detail-doorcfg-content-${job.id}"></div>
+                                    </div>
                                 </div>
                                 <!-- Hardware Sets pane -->
                                 <div id="job-pane-hwsets-${job.id}" style="display:none;">
@@ -1127,34 +1216,6 @@
                                             <button class="btn btn-sm btn-outline-primary" data-permission="configurator.catalog.manage" onclick="showJobHwSetForm(${job.id})"><i class="ti ti-plus me-1"></i>New Set</button>
                                         </div>
                                         <div id="job-hwsets-list-${job.id}"></div>
-
-                                        <!-- Inline new/edit set form -->
-                                        <div id="job-hwset-form-${job.id}" style="display:none;" class="mt-2 p-3 rounded job-tx-form-wrap">
-                                            <input type="hidden" id="job-hwset-id-${job.id}">
-                                            <h6 class="mb-2" id="job-hwset-form-title-${job.id}">New Hardware Set</h6>
-                                            <div class="row g-2">
-                                                <div class="col-md-8">
-                                                    <label class="form-label form-label-sm mb-1">Name</label>
-                                                    <input type="text" class="form-control form-control-sm" id="job-hwset-name-${job.id}">
-                                                </div>
-                                                <div class="col-md-4 d-flex align-items-end">
-                                                    <label class="form-check"><input class="form-check-input" type="checkbox" id="job-hwset-ispair-${job.id}"><span class="form-check-label">Pair</span></label>
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label form-label-sm mb-1">Notes</label>
-                                                    <input type="text" class="form-control form-control-sm" id="job-hwset-notes-${job.id}" placeholder="Optional">
-                                                </div>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
-                                                <label class="form-label form-label-sm mb-0">Items</label>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="jobHwSetAddItemRow(${job.id})"><i class="ti ti-plus"></i> Item</button>
-                                            </div>
-                                            <div id="job-hwset-items-${job.id}"></div>
-                                            <div class="d-flex gap-2 mt-2">
-                                                <button class="btn btn-primary btn-sm" onclick="submitJobHwSet(${job.id})">Save Set</button>
-                                                <button class="btn btn-link btn-sm text-secondary p-0" onclick="hideJobHwSetForm(${job.id})">Cancel</button>
-                                            </div>
-                                        </div>
 
                                         <!-- Apply-to-opening modal target (rendered inline, one per job row) -->
                                         <div id="job-hwset-apply-${job.id}" style="display:none;" class="mt-2 p-3 rounded job-tx-form-wrap">
@@ -1455,6 +1516,7 @@
         async function loadJobDoorConfigs(jobId) {
             const loadingEl = document.getElementById(`detail-doorcfg-loading-${jobId}`);
             const contentEl = document.getElementById(`detail-doorcfg-content-${jobId}`);
+            const wrapEl = document.getElementById(`detail-doorcfg-content-wrap-${jobId}`);
             if (loadingEl) loadingEl.style.display = 'block';
             try {
                 const r = await jobsAPI(`/api/v1/door-frame-configurations?business_job_id=${jobId}`);
@@ -1469,7 +1531,7 @@
                 if (contentEl) contentEl.innerHTML = '<div class="job-detail-empty">Failed to load door configurations.</div>';
             } finally {
                 if (loadingEl) loadingEl.style.display = 'none';
-                if (contentEl) contentEl.style.display = 'block';
+                if (wrapEl) wrapEl.style.display = 'block';
             }
         }
 
@@ -1507,6 +1569,86 @@
                     <thead><tr><th>Configuration</th><th>Scope</th><th>Status</th><th>Qty</th><th>WO</th><th></th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>`;
+        }
+
+        // Tracks which job's Door Config modal is currently open (shared
+        // modal, same pattern as currentHwSetJobId for the Hardware Set modal).
+        let currentDoorConfigJobId = null;
+
+        async function showJobDoorConfigForm(jobId) {
+            currentDoorConfigJobId = jobId;
+            document.getElementById('job-doorcfg-scope').value = 'door_and_frame';
+            document.getElementById('job-doorcfg-tags').value = '';
+            document.getElementById('job-doorcfg-notes').value = '';
+            // Awaited so the hardware-set dropdown is already populated by
+            // the time the modal is visible, instead of briefly showing only
+            // "— none —" while the fetch is still in flight.
+            await populateJobDoorConfigHwSetSelect(jobId);
+            showModal(document.getElementById('jobDoorConfigModal'));
+        }
+
+        function hideJobDoorConfigForm() {
+            hideModal(document.getElementById('jobDoorConfigModal'));
+        }
+
+        // Hardware sets aren't necessarily loaded yet if the Hardware Sets
+        // tab hasn't been opened for this job — load them on demand so the
+        // pairing dropdown is always populated.
+        async function populateJobDoorConfigHwSetSelect(jobId) {
+            const select = document.getElementById('job-doorcfg-hwset');
+            select.innerHTML = '<option value="">— none —</option>';
+            if (!jobHwSets[jobId]) {
+                await loadJobHwSets(jobId);
+            }
+            (jobHwSets[jobId] || []).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.name;
+                select.appendChild(opt);
+            });
+        }
+
+        async function submitJobDoorConfig() {
+            const jobId = currentDoorConfigJobId;
+            const tags = document.getElementById('job-doorcfg-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+            if (!tags.length) { showNotification('At least one door tag is required', 'warning'); return; }
+            const payload = {
+                business_job_id: jobId,
+                job_scope: document.getElementById('job-doorcfg-scope').value,
+                door_tags: tags,
+                notes: document.getElementById('job-doorcfg-notes').value || null,
+            };
+            const hwSetId = document.getElementById('job-doorcfg-hwset').value;
+            try {
+                const res = await jobsAPI('/api/v1/door-frame-configurations', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+                });
+                if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(apiErrorDetail(err) || 'Failed to create configuration', 'danger'); return; }
+                const data = await res.json();
+                const configId = data.configuration.id;
+
+                // Pairing with a set reuses the same applySet endpoint the
+                // Hardware Sets tab's "Apply" action uses, so a freshly
+                // created opening starts pre-materialized with that set's
+                // hardware instead of needing a separate manual apply step.
+                if (hwSetId) {
+                    const applyRes = await jobsAPI(`/api/v1/config/hwlib-sets/${hwSetId}/apply`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ configuration_ids: [configId] }),
+                    });
+                    if (!applyRes.ok) {
+                        const err = await applyRes.json().catch(() => ({}));
+                        showNotification(`Configuration created, but pairing the hardware set failed: ${apiErrorDetail(err) || 'unknown error'}`, 'warning');
+                    }
+                }
+
+                hideJobDoorConfigForm();
+                showNotification('Door/frame configuration created', 'success');
+                // Refresh only this job's door-config list/badge (and the
+                // hw-set list, if a set was paired) — never the jobs table
+                // itself, so the expanded row and active tab don't move.
+                await loadJobDoorConfigs(jobId);
+                if (hwSetId) await loadJobHwSets(jobId);
+            } catch (err) { console.error(err); showNotification('Failed to create configuration', 'danger'); }
         }
 
         // ===== HARDWARE SETS =====
@@ -1610,12 +1752,12 @@
                 </div>`;
         }
 
-        function jobHwSetAddItemRow(jobId, row) {
-            document.getElementById(`job-hwset-items-${jobId}`).insertAdjacentHTML('beforeend', jobHwSetItemRowHtml(row));
+        function jobHwSetAddItemRow(row) {
+            document.getElementById('job-hwset-items').insertAdjacentHTML('beforeend', jobHwSetItemRowHtml(row));
         }
 
-        function jobHwSetCollectItems(jobId) {
-            return Array.from(document.querySelectorAll(`#job-hwset-items-${jobId} .job-hwset-item-row`)).map(row => ({
+        function jobHwSetCollectItems() {
+            return Array.from(document.querySelectorAll('#job-hwset-items .job-hwset-item-row')).map(row => ({
                 item_id: row.querySelector('.job-hwsi-item').value,
                 quantity: parseInt(row.querySelector('.job-hwsi-qty').value || 1, 10),
                 series: row.querySelector('.job-hwsi-series').value,
@@ -1624,51 +1766,58 @@
             })).filter(r => r.item_id);
         }
 
+        // Tracks which job's Hardware Set modal is currently open, since the
+        // modal itself is a single shared DOM element (one per page, not one
+        // per job row) rather than duplicated per job like the old inline form.
+        let currentHwSetJobId = null;
+
         function showJobHwSetForm(jobId) {
-            document.getElementById(`job-hwset-form-${jobId}`).style.display = 'block';
-            document.getElementById(`job-hwset-form-title-${jobId}`).textContent = 'New Hardware Set';
-            document.getElementById(`job-hwset-id-${jobId}`).value = '';
-            document.getElementById(`job-hwset-name-${jobId}`).value = '';
-            document.getElementById(`job-hwset-notes-${jobId}`).value = '';
-            document.getElementById(`job-hwset-ispair-${jobId}`).checked = false;
-            document.getElementById(`job-hwset-items-${jobId}`).innerHTML = '';
+            currentHwSetJobId = jobId;
+            document.getElementById('job-hwset-modal-title').textContent = 'New Hardware Set';
+            document.getElementById('job-hwset-id').value = '';
+            document.getElementById('job-hwset-name').value = '';
+            document.getElementById('job-hwset-notes').value = '';
+            document.getElementById('job-hwset-ispair').checked = false;
+            document.getElementById('job-hwset-items').innerHTML = '';
+            showModal(document.getElementById('jobHwSetModal'));
         }
 
-        function hideJobHwSetForm(jobId) {
-            document.getElementById(`job-hwset-form-${jobId}`).style.display = 'none';
+        function hideJobHwSetForm() {
+            hideModal(document.getElementById('jobHwSetModal'));
         }
 
         function editJobHwSet(jobId, setId) {
             const s = (jobHwSets[jobId] || []).find(x => x.id === setId);
             if (!s) return;
             showJobHwSetForm(jobId);
-            document.getElementById(`job-hwset-form-title-${jobId}`).textContent = 'Edit Hardware Set';
-            document.getElementById(`job-hwset-id-${jobId}`).value = s.id;
-            document.getElementById(`job-hwset-name-${jobId}`).value = s.name;
-            document.getElementById(`job-hwset-notes-${jobId}`).value = s.notes || '';
-            document.getElementById(`job-hwset-ispair-${jobId}`).checked = !!s.is_pair;
-            document.getElementById(`job-hwset-items-${jobId}`).innerHTML = '';
-            (s.set_items || []).forEach(row => jobHwSetAddItemRow(jobId, row));
+            document.getElementById('job-hwset-modal-title').textContent = 'Edit Hardware Set';
+            document.getElementById('job-hwset-id').value = s.id;
+            document.getElementById('job-hwset-name').value = s.name;
+            document.getElementById('job-hwset-notes').value = s.notes || '';
+            document.getElementById('job-hwset-ispair').checked = !!s.is_pair;
+            document.getElementById('job-hwset-items').innerHTML = '';
+            (s.set_items || []).forEach(row => jobHwSetAddItemRow(row));
         }
 
-        async function submitJobHwSet(jobId) {
-            const id = document.getElementById(`job-hwset-id-${jobId}`).value;
+        async function submitJobHwSet() {
+            const jobId = currentHwSetJobId;
+            const id = document.getElementById('job-hwset-id').value;
             const payload = {
                 business_job_id: jobId,
-                name: document.getElementById(`job-hwset-name-${jobId}`).value,
-                notes: document.getElementById(`job-hwset-notes-${jobId}`).value || null,
-                is_pair: document.getElementById(`job-hwset-ispair-${jobId}`).checked,
+                name: document.getElementById('job-hwset-name').value,
+                notes: document.getElementById('job-hwset-notes').value || null,
+                is_pair: document.getElementById('job-hwset-ispair').checked,
             };
             if (!payload.name) { showNotification('Set name is required', 'warning'); return; }
             try {
                 const res = await jobsAPI(id ? `/api/v1/config/hwlib-sets/${id}` : '/api/v1/config/hwlib-sets', {
-                    method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
+                    method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
                 });
                 if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to save set', 'danger'); return; }
                 const data = await res.json();
                 const setId = id || data.set.id;
                 const itemsRes = await jobsAPI(`/api/v1/config/hwlib-sets/${setId}/items`, {
-                    method: 'PUT', body: JSON.stringify({ items: jobHwSetCollectItems(jobId) }),
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: jobHwSetCollectItems() }),
                 });
                 if (!itemsRes.ok) { const err = await itemsRes.json().catch(() => ({})); showNotification(err.message || 'Failed to save set items', 'danger'); return; }
                 const itemsData = await itemsRes.json();
@@ -1677,7 +1826,9 @@
                 } else {
                     showNotification('Hardware set saved', 'success');
                 }
-                hideJobHwSetForm(jobId);
+                hideJobHwSetForm();
+                // Refresh only this job's sets list/badge — the job row and its
+                // active tab stay exactly as they were (no full table reload).
                 await loadJobHwSets(jobId);
             } catch (err) { console.error(err); showNotification('Failed to save hardware set', 'danger'); }
         }
@@ -1720,9 +1871,9 @@
             try {
                 if (toApply.length) {
                     const res = await jobsAPI(`/api/v1/config/hwlib-sets/${setId}/apply`, {
-                        method: 'POST', body: JSON.stringify({ configuration_ids: toApply }),
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ configuration_ids: toApply }),
                     });
-                    if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(err.message || 'Failed to apply set', 'danger'); return; }
+                    if (!res.ok) { const err = await res.json().catch(() => ({})); showNotification(apiErrorDetail(err) || 'Failed to apply set', 'danger'); return; }
                 }
                 for (const configId of toRemove) {
                     await jobsAPI(`/api/v1/config/hwlib-sets/${setId}/apply/${configId}`, { method: 'DELETE' });

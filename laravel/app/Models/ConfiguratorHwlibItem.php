@@ -11,13 +11,14 @@ class ConfiguratorHwlibItem extends Model
 
     protected $fillable = [
         'category_id', 'subcategory_id', 'name', 'manufacturer', 'model_number', 'pn', 'notes',
-        'active', 'vos_standard', 'finishes', 'min_width', 'max_width',
+        'active', 'needs_review', 'vos_standard', 'finishes', 'min_width', 'max_width',
         'min_height', 'max_height', 'field_install', 'handed',
         'default_strike_item_id', 'default_cover_item_id',
     ];
 
     protected $casts = [
         'active' => 'boolean',
+        'needs_review' => 'boolean',
         'vos_standard' => 'boolean',
         'finishes' => 'array',
         'min_width' => 'decimal:4',

@@ -17,6 +17,9 @@ class InventoryTransaction extends Model
 
     protected $casts = [
         'transaction_date' => 'datetime',
+        'quantity' => 'decimal:1',
+        'quantity_before' => 'decimal:1',
+        'quantity_after' => 'decimal:1',
     ];
 
     public function product()

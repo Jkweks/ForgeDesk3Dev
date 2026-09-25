@@ -282,6 +282,10 @@
                 <th>Approved By:</th>
                 <td id="viewPOApprover"></td>
               </tr>
+              <tr>
+                <th>Send To For Approval:</th>
+                <td id="viewPOAssignedApprover"></td>
+              </tr>
             </table>
           </div>
         </div>
@@ -311,6 +315,12 @@
               <label class="form-label">Ship To Location</label>
               <select class="form-select form-select-sm" id="editPOShipToLocation">
                 <option value="">Primary company location</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Send To For Approval</label>
+              <select class="form-select form-select-sm" id="editPOApprover">
+                <option value="">Not set</option>
               </select>
             </div>
             <div class="col-md-6">
@@ -415,6 +425,28 @@
   </div>
 </div>
 
+<!-- Submit for Approval Modal -->
+<div class="modal modal-blur fade" id="submitApprovalModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Submit for Approval</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="submitApprovalPoId">
+        <div id="submitApprovalBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmSubmitPO()">
+          <i class="ti ti-send me-1"></i>Submit for Approval
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 let currentPO = null;
 let allProducts = [];
@@ -487,6 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSuppliers();
   loadProducts();
   loadCompanyLocations();
+  loadApprovers();
   loadPurchaseOrders();
   loadStatistics();
 
@@ -626,6 +659,16 @@ async function loadCompanyLocations() {
     if (current) select.value = current;
   } catch (error) {
     console.error('Error loading company locations:', error);
+  }
+}
+
+// Load users eligible to approve POs, for the "Send To For Approval" picker
+let allApprovers = [];
+async function loadApprovers() {
+  try {
+    allApprovers = await authenticatedFetch('/purchase-orders-eligible-approvers');
+  } catch (error) {
+    console.error('Error loading eligible approvers:', error);
   }
 }
 
@@ -878,6 +921,7 @@ async function viewPODetails(poId) {
     document.getElementById('viewPOTotal').textContent = formatCurrency(po.total_amount);
     document.getElementById('viewPOCreator').textContent = po.creator ? po.creator.name : '-';
     document.getElementById('viewPOApprover').textContent = po.approver ? po.approver.name : '-';
+    document.getElementById('viewPOAssignedApprover').textContent = po.assigned_approver ? po.assigned_approver.name : '-';
 
     // Notes
     if (po.notes) {
@@ -1042,13 +1086,52 @@ async function viewPODetails(poId) {
   }
 }
 
-// Submit PO
-async function submitPO(poId) {
-  if (!confirm('Submit this purchase order for approval?')) return;
+// Submit PO — opens an in-app modal instead of a browser confirm(); if no
+// approver is set yet, lets the user pick one right there before submitting.
+function submitPO(poId) {
+  const po = (currentPO && currentPO.id === poId) ? currentPO : null;
+  document.getElementById('submitApprovalPoId').value = poId;
+
+  const body = document.getElementById('submitApprovalBody');
+  const hasApprover = po && po.approver_id;
+
+  if (hasApprover) {
+    const approverName = po.assigned_approver ? po.assigned_approver.name : 'the assigned approver';
+    body.innerHTML = `
+      <p>Submit this purchase order for approval to <strong>${escapeHtml(approverName)}</strong>?</p>
+    `;
+  } else {
+    const options = (allApprovers || [])
+      .map(u => `<option value="${u.id}">${escapeHtml(u.name)}</option>`)
+      .join('');
+    body.innerHTML = `
+      <div class="alert alert-warning">No approver is set on this purchase order — no one will be notified unless you pick one now.</div>
+      <label class="form-label">Approver</label>
+      <select id="submitApprovalApproverSelect" class="form-select">
+        <option value="">No approver — submit anyway</option>
+        ${options}
+      </select>
+    `;
+  }
+
+  safeShowModal('submitApprovalModal');
+}
+
+async function confirmSubmitPO() {
+  const poId = parseInt(document.getElementById('submitApprovalPoId').value, 10);
+  const approverSelect = document.getElementById('submitApprovalApproverSelect');
 
   try {
+    if (approverSelect && approverSelect.value) {
+      await authenticatedFetch(`/purchase-orders/${poId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ approver_id: parseInt(approverSelect.value, 10) }),
+      });
+    }
+
     await authenticatedFetch(`/purchase-orders/${poId}/submit`, { method: 'POST' });
     showNotification('Purchase order submitted successfully', 'success');
+    safeHideModal('submitApprovalModal');
     safeHideModal('viewPOModal');
     loadPurchaseOrders();
     loadStatistics();
@@ -1280,6 +1363,11 @@ function populatePOEditPanel(po) {
     .map(l => `<option value="${l.id}" ${l.id === po.ship_to_location_id ? 'selected' : ''}>${escapeHtml(l.name)}${l.is_primary ? ' (primary)' : ''}</option>`)
     .join('');
 
+  const approverSel = document.getElementById('editPOApprover');
+  approverSel.innerHTML = '<option value="">Not set</option>' + (allApprovers || [])
+    .map(u => `<option value="${u.id}" ${u.id === po.approver_id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`)
+    .join('');
+
   document.getElementById('editPOOrderDate').value = po.order_date ? po.order_date.split('T')[0] : '';
   document.getElementById('editPOExpectedDate').value = po.expected_date ? po.expected_date.split('T')[0] : '';
   document.getElementById('editPOShipTo').value = po.ship_to || '';
@@ -1297,6 +1385,7 @@ async function savePODetails() {
     expected_date: document.getElementById('editPOExpectedDate').value || null,
     ship_to_location_id: parseInt(document.getElementById('editPOShipToLocation').value, 10) || null,
     ship_to: document.getElementById('editPOShipTo').value || null,
+    approver_id: parseInt(document.getElementById('editPOApprover').value, 10) || null,
     contact_name: document.getElementById('editPOContactName').value || null,
     contact_email: document.getElementById('editPOContactEmail').value || null,
     contact_phone: document.getElementById('editPOContactPhone').value || null,

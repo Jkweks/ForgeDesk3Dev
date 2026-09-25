@@ -4,6 +4,10 @@
 
 @section('styles')
 .card.bg-light { background: var(--tblr-bg-surface-secondary) !important; }
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--tblr-primary); }
+.sort-icon { opacity: 0.4; font-size: 0.8rem; }
+th.sortable.sort-active .sort-icon { opacity: 1; }
 @endsection
 
 @section('content')
@@ -106,16 +110,16 @@
                   <table class="table table-vcenter card-table">
                     <thead>
                       <tr>
-                        <th>Job #</th>
-                        <th>Release</th>
-                        <th>Job Name</th>
-                        <th>Status</th>
-                        <th>Requested By</th>
-                        <th>Needed By</th>
-                        <th>Items</th>
-                        <th>Committed</th>
-                        <th>Consumed</th>
-                        <th>Created</th>
+                        <th class="sortable" onclick="sortBy('job_number')">Job # <i class="ti ti-selector sort-icon" id="sortIcon-job_number"></i></th>
+                        <th class="sortable" onclick="sortBy('release_number')">Release <i class="ti ti-selector sort-icon" id="sortIcon-release_number"></i></th>
+                        <th class="sortable" onclick="sortBy('job_name')">Job Name <i class="ti ti-selector sort-icon" id="sortIcon-job_name"></i></th>
+                        <th class="sortable" onclick="sortBy('status')">Status <i class="ti ti-selector sort-icon" id="sortIcon-status"></i></th>
+                        <th class="sortable" onclick="sortBy('requested_by')">Requested By <i class="ti ti-selector sort-icon" id="sortIcon-requested_by"></i></th>
+                        <th class="sortable" onclick="sortBy('needed_by')">Needed By <i class="ti ti-selector sort-icon" id="sortIcon-needed_by"></i></th>
+                        <th class="sortable" onclick="sortBy('items_count')">Items <i class="ti ti-selector sort-icon" id="sortIcon-items_count"></i></th>
+                        <th class="sortable" onclick="sortBy('total_committed')">Committed <i class="ti ti-selector sort-icon" id="sortIcon-total_committed"></i></th>
+                        <th class="sortable" onclick="sortBy('total_consumed')">Consumed <i class="ti ti-selector sort-icon" id="sortIcon-total_consumed"></i></th>
+                        <th class="sortable" onclick="sortBy('created_at')">Created <i class="ti ti-selector sort-icon" id="sortIcon-created_at"></i></th>
                         <th class="w-1"></th>
                       </tr>
                     </thead>
@@ -565,6 +569,8 @@
         let completeItems = [];
         let editingReservation = null;
         let editingItems = [];
+        let sortColumn = 'created_at';
+        let sortDirection = 'desc';
 
         // Format a quantity to 1 decimal, dropping trailing .0 for whole numbers
         function fmtQty(n) {
@@ -627,7 +633,19 @@
 
         // Load reservations on page load
         document.addEventListener('DOMContentLoaded', function() {
-            loadReservations();
+            window.sessionReady.then(function() {
+                if (!hasPermission('reservations.dashboard.view')) {
+                    document.getElementById('content').innerHTML = `
+                        <div class="container-xl py-6 text-center">
+                            <p class="empty-title h3">Access restricted</p>
+                            <p class="empty-subtitle text-muted">You don't have permission to view the Job Reservations dashboard.</p>
+                            <a href="/" class="btn btn-primary mt-3">Return to Dashboard</a>
+                        </div>`;
+                    return;
+                }
+                updateSortIcons();
+                loadReservations();
+            });
 
             // Add close button handlers for all modals
             document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(button => {
@@ -654,8 +672,10 @@
                     const data = await response.json();
                     reservations = data.reservations;
                     filteredReservations = [...reservations];
+                    applySort();
                     displayReservations();
                     updateStats();
+                    updateSortIcons();
                 } else {
                     const error = await response.json();
                     console.error('Error loading reservations:', error);
@@ -701,7 +721,7 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l9 18h-18z" /></svg>
                                     </button>
                                 ` : ''}
-                                ${res.status === 'in_progress' && hasPermission('jobs.manage-reservations') ? `
+                                ${['active', 'in_progress', 'on_hold'].includes(res.status) && hasPermission('jobs.manage-reservations') ? `
                                     <button class="btn btn-sm btn-success" onclick="showCompleteModal(${res.id})" title="Complete Job">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-sm"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                                     </button>
@@ -785,12 +805,61 @@
                 return matchesSearch && matchesStatus;
             });
 
+            applySort();
             displayReservations();
         }
 
         function filterByStatus(status) {
             document.getElementById('statusFilter').value = status;
             filterReservations();
+        }
+
+        function sortBy(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            applySort();
+            displayReservations();
+            updateSortIcons();
+        }
+
+        const numericSortColumns = new Set(['items_count', 'total_committed', 'total_consumed']);
+        const dateSortColumns = new Set(['needed_by', 'created_at']);
+
+        function applySort() {
+            const dir = sortDirection === 'asc' ? 1 : -1;
+
+            filteredReservations.sort((a, b) => {
+                let valA = a[sortColumn];
+                let valB = b[sortColumn];
+
+                if (numericSortColumns.has(sortColumn)) {
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return (valA - valB) * dir;
+                }
+
+                if (dateSortColumns.has(sortColumn)) {
+                    valA = valA ? new Date(valA).getTime() : 0;
+                    valB = valB ? new Date(valB).getTime() : 0;
+                    return (valA - valB) * dir;
+                }
+
+                valA = (valA ?? '').toString().toLowerCase();
+                valB = (valB ?? '').toString().toLowerCase();
+                return valA.localeCompare(valB) * dir;
+            });
+        }
+
+        function updateSortIcons() {
+            document.querySelectorAll('th.sortable').forEach(th => th.classList.remove('sort-active'));
+            const icon = document.getElementById(`sortIcon-${sortColumn}`);
+            if (!icon) return;
+            icon.closest('th').classList.add('sort-active');
+            icon.className = `ti sort-icon ${sortDirection === 'asc' ? 'ti-sort-ascending' : 'ti-sort-descending'}`;
         }
 
         async function viewDetails(id) {
@@ -899,13 +968,19 @@
                 </div>
             `;
 
-            // Add Edit button if not in terminal state — writers only
+            // Add Edit / Complete buttons if not in terminal state — writers only
             const detailModalActions = document.getElementById('detailModalActions');
             if (!['fulfilled', 'cancelled'].includes(res.status) && hasPermission('jobs.manage-reservations')) {
+                const completeButton = ['active', 'in_progress', 'on_hold'].includes(res.status) ? `
+                    <button type="button" class="btn btn-success" onclick="closeModal('detailModal'); showCompleteModal(${res.id})">
+                        <i class="ti ti-checkbox me-1"></i>Complete Job
+                    </button>
+                ` : '';
                 detailModalActions.innerHTML = `
                     <button type="button" class="btn btn-primary" onclick="openEditModal(${res.id})">
                         <i class="ti ti-edit me-1"></i>Edit Reservation
                     </button>
+                    ${completeButton}
                 `;
             } else {
                 detailModalActions.innerHTML = '';
@@ -1011,6 +1086,48 @@
             }
         }
 
+        // Transitions a reservation to in_progress, surfacing any insufficient-stock
+        // warnings the way confirmStatusChange does. Returns false if the transition
+        // failed or the user backed out of a warning.
+        async function transitionToInProgress(id) {
+            try {
+                const response = await fetch(`/api/v1/job-reservations/${id}/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    },
+                    body: JSON.stringify({ status: 'in_progress' }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(data.message || 'Error starting fulfillment for this reservation');
+                    return false;
+                }
+
+                if (data.warnings && data.warnings.length > 0) {
+                    let message = data.warnings.join('\n');
+                    if (data.insufficient_items && data.insufficient_items.length > 0) {
+                        message += '\n\nInsufficient items:\n' + data.insufficient_items
+                            .map(item => `${item.part_number}-${item.finish}: need ${item.shortage} more`)
+                            .join('\n');
+                    }
+                    if (!confirm(message + '\n\nContinue anyway?')) {
+                        return false;
+                    }
+                }
+
+                return true;
+            } catch (error) {
+                console.error('Error starting fulfillment:', error);
+                alert('Error starting fulfillment for this reservation');
+                return false;
+            }
+        }
+
         async function showCompleteModal(id) {
             // Show loading indicator
             const loadingDiv = document.createElement('div');
@@ -1033,7 +1150,40 @@
                 loadingDiv.remove();
 
                 if (response.ok) {
-                    const data = await response.json();
+                    let data = await response.json();
+
+                    if (data.reservation.status === 'draft') {
+                        alert('This reservation must be activated before it can be completed.');
+                        return;
+                    }
+
+                    if (['fulfilled', 'cancelled'].includes(data.reservation.status)) {
+                        alert(`This reservation is already ${data.reservation.status}.`);
+                        return;
+                    }
+
+                    // Fulfilling starts the job — transition active/on_hold reservations to
+                    // in_progress automatically instead of making the user do it as a separate step.
+                    if (data.reservation.status !== 'in_progress') {
+                        const started = await transitionToInProgress(id);
+                        if (!started) {
+                            return;
+                        }
+
+                        const refreshed = await fetch(`/api/v1/job-reservations/${id}`, {
+                            method: 'GET',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                            }
+                        });
+                        if (!refreshed.ok) {
+                            alert('Error loading reservation details');
+                            return;
+                        }
+                        data = await refreshed.json();
+                    }
+
                     const items = data.items;
 
                     document.getElementById('completeReservationId').value = id;

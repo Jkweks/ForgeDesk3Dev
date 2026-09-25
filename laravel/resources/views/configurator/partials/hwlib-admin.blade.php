@@ -88,6 +88,10 @@
       <div class="card-header">
         <h3 class="card-title">Items</h3>
         <div class="card-actions">
+          <label class="form-check me-2 mb-0">
+            <input class="form-check-input" type="checkbox" id="hwlib-item-reviewfilter" onchange="hwItemRender()">
+            <span class="form-check-label">Needs review only</span>
+          </label>
           <select class="form-select form-select-sm me-2" id="hwlib-item-catfilter" style="width:220px" onchange="hwItemRender()">
             <option value="">All Categories</option>
           </select>
@@ -96,7 +100,7 @@
       </div>
       <div class="table-responsive">
         <table class="table table-vcenter card-table">
-          <thead><tr><th>Name</th><th>Category</th><th>Manufacturer</th><th>PN</th><th>Active</th><th class="w-1"></th></tr></thead>
+          <thead><tr><th>Name</th><th>Category</th><th>Manufacturer</th><th>PN</th><th>Active</th><th>Review</th><th class="w-1"></th></tr></thead>
           <tbody id="hwlib-item-tbody"></tbody>
         </table>
       </div>

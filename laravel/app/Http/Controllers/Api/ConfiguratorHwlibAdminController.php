@@ -65,7 +65,7 @@ class ConfiguratorHwlibAdminController extends Controller
             'items' => ConfiguratorHwlibItem::with('values.variable', 'backers.backer', 'functions')->orderBy('name')->get(),
             'backers' => ConfiguratorHwlibBacker::with('fasteners.fastener')->orderBy('pn')->get(),
             'fasteners' => ConfiguratorHwlibFastener::orderBy('pn')->get(),
-            'sets' => ConfiguratorHwlibSet::with('businessJob', 'setItems.item', 'setItems.values.variable')->orderBy('name')->get(),
+            'sets' => ConfiguratorHwlibSet::with('businessJob', 'setItems.item', 'setItems.values.variable', 'setItems.functions')->orderBy('name')->get(),
         ]);
     }
 
@@ -317,6 +317,7 @@ class ConfiguratorHwlibAdminController extends Controller
             'pn' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
             'active' => 'boolean',
+            'needs_review' => 'boolean',
             'vos_standard' => 'boolean',
             'finishes' => 'nullable|array',
             'min_width' => 'nullable|numeric',
@@ -622,6 +623,8 @@ class ConfiguratorHwlibAdminController extends Controller
             'items.*.values' => 'nullable|array',
             'items.*.values.*.variable_id' => 'required_with:items.*.values|integer|exists:configurator_hwlib_variables,id',
             'items.*.values.*.value_text' => 'nullable|string',
+            'items.*.function_ids' => 'nullable|array',
+            'items.*.function_ids.*' => 'integer|exists:configurator_hwlib_functions,id',
         ]);
 
         DB::transaction(function () use ($set, $data) {
@@ -645,10 +648,11 @@ class ConfiguratorHwlibAdminController extends Controller
                         'value_text' => $value['value_text'],
                     ]);
                 }
+                $setItem->functions()->sync($row['function_ids'] ?? []);
             }
         });
 
-        $set->load('setItems.values');
+        $set->load('setItems.values', 'setItems.functions');
 
         $reappliedTo = [];
         $skippedReleased = [];
@@ -678,13 +682,13 @@ class ConfiguratorHwlibAdminController extends Controller
      */
     public function applySet(Request $request, $id)
     {
-        $set = ConfiguratorHwlibSet::with('setItems.values')->findOrFail($id);
+        $set = ConfiguratorHwlibSet::with('setItems.values', 'setItems.functions')->findOrFail($id);
         $data = $this->validateOrFail($request, [
             'configuration_ids' => 'required|array|min:1',
             'configuration_ids.*' => 'integer|exists:door_frame_configurations,id',
         ]);
 
-        $configurations = DoorFrameConfiguration::whereIn('id', $data['configuration_ids'])->get();
+        $configurations = DoorFrameConfiguration::whereIn('id', $data['configuration_ids'])->with('openingSpecs')->get();
 
         $invalidJob = $configurations->where('business_job_id', '!=', $set->business_job_id)->pluck('id');
         if ($invalidJob->isNotEmpty()) {
@@ -699,6 +703,26 @@ class ConfiguratorHwlibAdminController extends Controller
             return response()->json([
                 'message' => 'Validation failed',
                 'errors' => ['configuration_ids' => ['Configuration(s) '.$notEditable->implode(', ').' are not editable (already released).']],
+            ], 422);
+        }
+
+        // A Pair set carries leaf-specific (active/inactive) items, which
+        // only make sense on a Pair opening, and vice versa. Only enforced
+        // once an opening actually has a type — a brand-new configuration
+        // with no opening_type set yet has nothing to conflict with (e.g.
+        // pairing a set at creation time, before the Opening tab is filled
+        // in), so those are left to pass through here.
+        $mismatched = $configurations->reject(function ($c) use ($set) {
+            $openingType = $c->openingSpecs?->opening_type;
+
+            return $openingType === null || ($openingType === 'pair') === $set->is_pair;
+        })->pluck('id');
+        if ($mismatched->isNotEmpty()) {
+            $setType = $set->is_pair ? 'Pair' : 'Single';
+
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['configuration_ids' => ['Configuration(s) '.$mismatched->implode(', ')." are not a {$setType} opening, which does not match this set."]],
             ], 422);
         }
 
@@ -774,6 +798,8 @@ class ConfiguratorHwlibAdminController extends Controller
                     'value_text' => $value->value_text,
                 ]);
             }
+
+            $link->functions()->sync($setItem->functions->pluck('id'));
         }
     }
 
