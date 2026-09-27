@@ -562,7 +562,7 @@
                             </div>
                             <div class="size-line">${sizeLine}</div>
                         </div>
-                        <div class="cut-toast-qr"></div>
+                        <div class="cut-toast-qr">${label.qrSvg || ''}</div>
                     </div>
                 `;
 

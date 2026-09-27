@@ -56,6 +56,19 @@ alone gates access. This is a network check on the raw TCP peer address
 nothing is proxying in front of this service — if one ever is added, this
 check and `trust proxy` need to be revisited together.
 
+## Stopping it
+
+Stop with Ctrl+C in the console it's running in (`SIGINT`), or `pm2 stop
+tiger-bridge` / a service manager's stop action (`SIGTERM`) if it's running
+under one. Either one triggers a graceful shutdown: the HTTP server stops
+accepting new requests, then the real serial connection (if any — not in
+`MOCK_SERIAL` mode) is explicitly closed before the process exits, so the
+COM/USB handle is released immediately rather than left for the OS to
+reclaim. Some USB-serial adapters otherwise report the port as busy for a
+few seconds after an ungraceful kill, which can make a quick restart fail
+to reopen it. Killing it harder (`taskkill /F`, `kill -9`) skips all of
+this, same as before.
+
 ## Endpoints
 
 - `POST /move` — body `{ "inches": 48.375 }`. Sends `MG48.375\r` to the
@@ -84,6 +97,13 @@ check and `trust proxy` need to be revisited together.
 - `SERIAL_PORT` will look like `COM3` on Windows or `/dev/ttyUSB0` on Linux.
 - If the TigerStop is reset or unplugged, this reconnects automatically every
   3 seconds.
+- Set `MOCK_SERIAL=true` to run without a real TigerStop attached at all —
+  no COM port is opened; `portReady` is forced true and `POST /move` just
+  logs the command it would have sent (e.g. `MG48.375\r`) and resolves after
+  a short simulated delay instead of waiting on a real `MGF` ack. Useful for
+  running the service standalone on a dev machine. `GET /status` reports
+  `mockSerial: true` when this is on. Never enable it on the real
+  shop-floor deployment.
 - The ZPL label layout in `buildZpl()` matches the spec in
   `../docs/cutlist.txt` (1"x4", job/part/use top-left, elevation-length
   bottom-left, QR right side) — adjust dot offsets for your actual printer's

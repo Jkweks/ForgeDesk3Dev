@@ -15,6 +15,7 @@ const BAUD_RATE = parseInt(process.env.BAUD_RATE || '57600', 10);
 const PRINTER_HOST = process.env.PRINTER_HOST || '192.168.1.50';
 const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || '';
+const MOCK_SERIAL = process.env.MOCK_SERIAL === 'true';
 const ALLOWED_CLIENT_IPS = (process.env.ALLOWED_CLIENT_IPS || '')
   .split(',')
   .map((ip) => ip.trim())
@@ -131,6 +132,8 @@ app.use(requireToken);
 let port;
 let parser;
 let portReady = false;
+let reconnectTimer = null;
+let shuttingDown = false;
 
 // --- TigerStop serial connection ------------------------------------------
 // Protocol: plain ASCII, \r terminated. "MG<inches>\r" moves the stop.
@@ -138,11 +141,19 @@ let portReady = false;
 // Requires TigerSET enabled on the amp (firmware v5.60+).
 
 function connectSerial() {
+  if (MOCK_SERIAL) {
+    // No real TigerStop attached — skip opening a COM port entirely and
+    // just pretend one is connected so /move can be exercised standalone.
+    portReady = true;
+    console.log('[tiger-bridge] MOCK_SERIAL enabled — no real COM port opened');
+    return;
+  }
+
   port = new SerialPort({ path: SERIAL_PATH, baudRate: BAUD_RATE }, (err) => {
     if (err) {
       console.error('[tiger-bridge] serial open failed:', err.message);
       portReady = false;
-      setTimeout(connectSerial, 3000);
+      if (!shuttingDown) reconnectTimer = setTimeout(connectSerial, 3000);
       return;
     }
     portReady = true;
@@ -153,14 +164,17 @@ function connectSerial() {
 
   port.on('close', () => {
     portReady = false;
+    if (shuttingDown) return;
     console.warn('[tiger-bridge] serial port closed, retrying in 3s');
-    setTimeout(connectSerial, 3000);
+    reconnectTimer = setTimeout(connectSerial, 3000);
   });
 
   port.on('error', (e) => console.error('[tiger-bridge] serial error:', e.message));
 }
 
-connectSerial();
+if (require.main === module) {
+  connectSerial();
+}
 
 function sendMove(inches) {
   return new Promise((resolve, reject) => {
@@ -169,6 +183,18 @@ function sendMove(inches) {
     }
 
     const cmd = `MG${Number(inches).toFixed(3)}\r`;
+
+    if (MOCK_SERIAL) {
+      console.log(`[tiger-bridge] MOCK_SERIAL: would send ${JSON.stringify(cmd)}`);
+      // simulate the amp actually taking a second to move instead of an
+      // instant resolve, so callers (CutFlow's UI, position display) see
+      // roughly realistic timing rather than an immediate ack.
+      setTimeout(() => {
+        console.log(`[tiger-bridge] MOCK_SERIAL: move complete, stop at ${Number(inches).toFixed(3)}"`);
+        resolve({ started: true, finished: true, raw: 'MGF (mocked)' });
+      }, 1000);
+      return;
+    }
 
     const timeout = setTimeout(() => {
       cleanup();
@@ -342,11 +368,65 @@ app.get('/status', (req, res) => {
     serialConnected: portReady,
     serialPath: SERIAL_PATH,
     baudRate: BAUD_RATE,
+    mockSerial: MOCK_SERIAL,
     printerHost: PRINTER_HOST,
     printerPort: PRINTER_PORT,
   });
 });
 
-app.listen(BRIDGE_PORT, () => {
-  console.log(`[tiger-bridge] listening on http://localhost:${BRIDGE_PORT}`);
-});
+// --- shutdown -----------------------------------------------------------
+//
+// A plain `kill`/window-close on the old code left the OS to reclaim the
+// COM handle whenever it got around to it — usually fine, but on some
+// USB-serial adapters the port stays "busy" for a few seconds after an
+// ungraceful exit, so a quick stop/start could fail to reopen it. This
+// closes the serial port explicitly before exiting so the handle is
+// released immediately, and stops the reconnect loop from re-opening it
+// again the instant we've asked it to close.
+
+let httpServer;
+
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[tiger-bridge] ${signal} received, shutting down...`);
+
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+
+  // don't hang forever if the serial close (or an in-flight request)
+  // never calls back — e.g. a wedged USB-serial adapter.
+  const forceExit = setTimeout(() => {
+    console.error('[tiger-bridge] shutdown timed out, forcing exit');
+    process.exit(1);
+  }, 5000);
+
+  const finish = () => {
+    clearTimeout(forceExit);
+    process.exit(0);
+  };
+
+  httpServer.close(() => {
+    if (port && port.isOpen) {
+      port.close((err) => {
+        if (err) console.error('[tiger-bridge] error closing serial port:', err.message);
+        else console.log(`[tiger-bridge] serial port ${SERIAL_PATH} released`);
+        finish();
+      });
+    } else {
+      finish();
+    }
+  });
+}
+
+if (require.main === module) {
+  httpServer = app.listen(BRIDGE_PORT, () => {
+    console.log(`[tiger-bridge] listening on http://localhost:${BRIDGE_PORT}`);
+  });
+
+  // SIGINT: Ctrl+C in the console this was started from, or `pm2 stop`.
+  // SIGTERM: sent by most service managers/`taskkill` (without /F) on stop.
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+module.exports = { app };

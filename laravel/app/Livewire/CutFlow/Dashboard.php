@@ -13,6 +13,9 @@ use App\Services\CutFlow\CutPlanner;
 use App\Services\CutFlow\TigerBridgeClient;
 use App\Support\Dimension;
 use App\Support\IpAllowlist;
+use Endroid\QrCode\Builder\Builder;
+use Endroid\QrCode\ErrorCorrectionLevel;
+use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -545,8 +548,11 @@ class Dashboard extends Component
             $result = $bridge->move($inches);
             $this->lastError = $result['ok'] ? '' : ($result['error'] ?? 'Move failed');
 
+            $qrUrl = route('cutflow.cuts.show', $entry->uuid);
+
             $this->announceCutStarted([
                 'size' => Dimension::toFraction($inches),
+                'qrSvg' => $this->renderCutQrSvg($qrUrl),
             ]);
 
             // manual stickers carry only size + cut record data, no job/part fields
@@ -555,7 +561,7 @@ class Dashboard extends Component
                 'operator' => $entry->operator_name,
                 'timestamp' => $entry->created_at?->format('n/j/y g:i A'),
                 'uuid' => $entry->uuid,
-                'qrUrl' => route('cutflow.cuts.show', $entry->uuid),
+                'qrUrl' => $qrUrl,
             ]);
 
             $this->modal = null;
@@ -618,16 +624,6 @@ class Dashboard extends Component
         $this->tigerPosition = (float) $item->dimension_inches;
         $this->tigerPositionAt = now()->toIso8601String();
         $this->tigerConnected = true;
-
-        $part = $item->part;
-
-        $this->announceCutStarted([
-            'job' => $part->cutJob?->name,
-            'part' => $part->profile_label,
-            'partUse' => $part->description,
-            'elevation' => $part->phase,
-            'size' => Dimension::toFraction((float) $item->dimension_inches),
-        ]);
 
         if (CutFlowSetting::current()->cut_sensor_active) {
             $this->tigerStatus = 'waiting_for_sensor';
@@ -709,6 +705,15 @@ class Dashboard extends Component
             'type' => 'planned',
         ]);
 
+        $this->announceCutStarted([
+            'job' => $entry->job_name,
+            'part' => $part->profile_label,
+            'partUse' => $part->description,
+            'elevation' => $entry->phase,
+            'size' => Dimension::toFraction((float) $entry->dimension_inches),
+            'qrSvg' => $this->renderCutQrSvg(route('cutflow.cuts.show', $entry->uuid)),
+        ]);
+
         $this->printLabelForEntry($bridge, $entry);
 
         $this->tigerStatus = 'idle';
@@ -762,9 +767,13 @@ class Dashboard extends Component
 
     /**
      * Fires a browser event carrying a preview of the label that will
-     * print at the end of this cut (see the "cut-started" listener in
+     * print for this cut (see the "cut-started" listener in
      * dashboard.blade.php, which renders it as a bottom-right toast).
      * Settings-gated since some shops find a popup on every cut distracting.
+     *
+     * For planned cuts this fires from recordCut() rather than at move-start,
+     * because the CutLogEntry (and its uuid) doesn't exist until then — the
+     * toast's QR needs a real qrUrl to render, not just a size preview.
      */
     protected function announceCutStarted(array $label): void
     {
@@ -773,6 +782,28 @@ class Dashboard extends Component
         }
 
         $this->dispatch('cut-started', label: $label);
+    }
+
+    /**
+     * Renders the same QR a cut's printed label carries — a real scannable
+     * code, not the CSS placeholder the toast used before this pointed at
+     * a live qrUrl. SVG keeps it dependency-free (no GD) and cheap enough
+     * to inline straight into the Livewire payload.
+     */
+    protected function renderCutQrSvg(string $url): string
+    {
+        $svg = (new Builder(writer: new SvgWriter()))
+            ->build(
+                data: $url,
+                errorCorrectionLevel: ErrorCorrectionLevel::Low,
+                size: 56,
+                margin: 0,
+            )
+            ->getString();
+
+        // strip the XML prolog — harmless if left in (browsers treat it as
+        // a bogus comment when set via innerHTML) but pointless to ship.
+        return preg_replace('/^<\?xml.*?\?>\s*/', '', $svg);
     }
 
     // --- recut / reprint -----------------------------------------------
