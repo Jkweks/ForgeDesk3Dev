@@ -485,7 +485,7 @@ class Dashboard extends Component
      */
     protected function authorizedTabletRequest(Request $request): bool
     {
-        $allowed = IpAllowlist::allows($request->ip(), config('cutflow.tablet_allowed_ips', []));
+        $allowed = IpAllowlist::allows($request->ip(), CutFlowSetting::current()->tabletAllowedIps());
 
         if (! $allowed) {
             Log::warning('[cutflow] rejected saw/printer command from disallowed IP', [

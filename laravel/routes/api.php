@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\BusinessJobController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyLocationController;
 use App\Http\Controllers\Api\CompanySettingController;
+use App\Http\Controllers\Api\CutFlowBridgeSettingController;
 use App\Http\Controllers\Api\ConfiguratorCatalogController;
 use App\Http\Controllers\Api\ConfiguratorDoorCatalogController;
 use App\Http\Controllers\Api\ConfiguratorHwlibAdminController;
@@ -276,6 +277,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/company-settings/logo', [CompanySettingController::class, 'uploadLogo'])->middleware('permission:settings.edit');
         Route::delete('/company-settings/logo', [CompanySettingController::class, 'deleteLogo'])->middleware('permission:settings.edit');
 
+        // CutFlow bridge connection (tiger-bridge URL/token/fake mode + tablet IP allowlist)
+        Route::get('/cutflow-bridge-settings', [CutFlowBridgeSettingController::class, 'show'])->middleware('permission:settings.view');
+        Route::put('/cutflow-bridge-settings', [CutFlowBridgeSettingController::class, 'update'])->middleware('permission:settings.edit');
+
         Route::get('/supplier-countries', [SupplierController::class, 'countries']);
         Route::get('/supplier-statistics', [SupplierController::class, 'statistics']);
         Route::get('/suppliers/{supplier}/products', [SupplierController::class, 'products']);
@@ -403,6 +408,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/purchase-orders/{purchaseOrder}/approve', [PurchaseOrderController::class, 'approve'])->middleware('permission:orders.approve');
         Route::post('/purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->middleware('permission:orders.receive');
         Route::post('/purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel'])->middleware('permission:orders.edit');
+        Route::patch('/purchase-orders/{purchaseOrder}/job', [PurchaseOrderController::class, 'updateJob'])->middleware('permission:orders.edit');
         Route::post('/purchase-orders/{purchaseOrder}/items', [PurchaseOrderController::class, 'addItem'])->middleware('permission:orders.edit');
         Route::patch('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'updateItem'])->middleware('permission:orders.edit');
         Route::delete('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'removeItem'])->middleware('permission:orders.edit');

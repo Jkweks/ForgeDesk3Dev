@@ -232,7 +232,12 @@
                 $colorName = $p ? ($p->finish_name ?? null) : null;
             @endphp
             <tr>
-                <td class="pn">{{ $p->manufacturer_part_number ?? $p->sku ?? $p->part_number ?? '—' }}</td>
+                <td class="pn">
+                    {{ $p->supplier_sku ?? $p->manufacturer_part_number ?? $p->sku ?? $p->part_number ?? '—' }}
+                    @if ($i->cost_code)
+                        <div class="sub">{{ $i->cost_code }}</div>
+                    @endif
+                </td>
                 <td>
                     {{ $p->description ?? $i->notes ?? '—' }}
                     @if ($colorCode)

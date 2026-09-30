@@ -20,6 +20,10 @@ class CutFlowSetting extends Model
         'show_cut_toast',
         'kerf_inches',
         'standard_stock_length',
+        'bridge_url',
+        'bridge_token',
+        'bridge_fake',
+        'tablet_allowed_ips',
     ];
 
     protected $casts = [
@@ -27,6 +31,11 @@ class CutFlowSetting extends Model
         'show_cut_toast' => 'boolean',
         'kerf_inches' => 'decimal:3',
         'standard_stock_length' => 'decimal:3',
+        'bridge_fake' => 'boolean',
+    ];
+
+    protected $hidden = [
+        'bridge_token',
     ];
 
     public static function current(): self
@@ -46,5 +55,39 @@ class CutFlowSetting extends Model
         return $this->standard_stock_length !== null
             ? (float) $this->standard_stock_length
             : (float) config('cutflow.standard_stock_length', 288);
+    }
+
+    public function bridgeUrl(): string
+    {
+        return $this->bridge_url !== null && $this->bridge_url !== ''
+            ? $this->bridge_url
+            : (string) config('services.tiger_bridge.url', 'http://127.0.0.1:9111');
+    }
+
+    public function bridgeToken(): string
+    {
+        return $this->bridge_token !== null && $this->bridge_token !== ''
+            ? $this->bridge_token
+            : (string) config('services.tiger_bridge.token', '');
+    }
+
+    public function bridgeFake(): bool
+    {
+        return (bool) $this->bridge_fake;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function tabletAllowedIps(): array
+    {
+        if ($this->tablet_allowed_ips === null || $this->tablet_allowed_ips === '') {
+            return config('cutflow.tablet_allowed_ips', []);
+        }
+
+        return array_values(array_filter(array_map(
+            'trim',
+            explode(',', $this->tablet_allowed_ips)
+        )));
     }
 }

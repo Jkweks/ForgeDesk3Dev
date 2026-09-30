@@ -2,6 +2,7 @@
 
 namespace App\Services\CutFlow;
 
+use App\Models\CutFlow\CutFlowSetting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -22,9 +23,11 @@ class TigerBridgeClient
 
     public function __construct()
     {
-        $this->baseUrl = config('services.tiger_bridge.url', 'http://127.0.0.1:9111');
-        $this->token = (string) config('services.tiger_bridge.token', '');
-        $this->fake = (bool) config('services.tiger_bridge.fake', false);
+        $settings = CutFlowSetting::current();
+
+        $this->baseUrl = $settings->bridgeUrl();
+        $this->token = $settings->bridgeToken();
+        $this->fake = $settings->bridgeFake() || (bool) config('services.tiger_bridge.fake', false);
 
         if (! $this->fake && $this->token === '') {
             // Not fatal here — the bridge itself refuses to run without a

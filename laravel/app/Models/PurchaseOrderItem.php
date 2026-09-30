@@ -18,6 +18,7 @@ class PurchaseOrderItem extends Model
         'total_cost',
         'destination_location',
         'notes',
+        'cost_code',
     ];
 
     protected $casts = [

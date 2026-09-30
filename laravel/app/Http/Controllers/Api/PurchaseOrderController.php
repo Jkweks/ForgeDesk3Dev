@@ -242,6 +242,32 @@ class PurchaseOrderController extends Controller
     }
 
     /**
+     * Update the free-text job reference on a purchase order. Unlike update(),
+     * this is allowed at any status — including after approval/receipt — since
+     * the job a PO was cut against can legitimately need correcting later.
+     */
+    public function updateJob(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        $validator = Validator::make($request->all(), [
+            'job_name' => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $purchaseOrder->update($request->only(['job_name']));
+
+        return response()->json([
+            'message' => 'Job updated successfully',
+            'purchase_order' => $purchaseOrder->load(['supplier', 'items.product', 'creator', 'approver', 'assignedApprover', 'shipToLocation']),
+        ]);
+    }
+
+    /**
      * Submit purchase order for approval
      */
     public function submit(PurchaseOrder $purchaseOrder)
@@ -581,6 +607,7 @@ class PurchaseOrderController extends Controller
             'unit_cost' => 'required|numeric|min:0',
             'destination_location' => 'nullable|string',
             'notes' => 'nullable|string',
+            'cost_code' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -597,6 +624,7 @@ class PurchaseOrderController extends Controller
                 'total_cost' => $request->quantity * $request->unit_cost,
                 'destination_location' => $request->destination_location,
                 'notes' => $request->notes,
+                'cost_code' => $request->cost_code,
             ]);
 
             $product = Product::find($request->product_id);
@@ -639,6 +667,7 @@ class PurchaseOrderController extends Controller
             'unit_cost' => 'sometimes|required|numeric|min:0',
             'destination_location' => 'sometimes|nullable|string',
             'notes' => 'sometimes|nullable|string',
+            'cost_code' => 'sometimes|nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -662,6 +691,7 @@ class PurchaseOrderController extends Controller
                 'unit_cost' => $request->has('unit_cost') ? $request->unit_cost : $item->unit_cost,
                 'destination_location' => $request->has('destination_location') ? $request->destination_location : $item->destination_location,
                 'notes' => $request->has('notes') ? $request->notes : $item->notes,
+                'cost_code' => $request->has('cost_code') ? $request->cost_code : $item->cost_code,
             ]);
             $item->save(); // model boot() recomputes total_cost
 

@@ -262,6 +262,17 @@
                 <th>Expected Date:</th>
                 <td id="viewPOExpectedDate"></td>
               </tr>
+              <tr>
+                <th>Job:</th>
+                <td>
+                  <div class="input-group input-group-sm" style="max-width:260px;">
+                    <input type="text" class="form-control form-control-sm" id="viewPOJobInput" placeholder="Job name">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="savePOJob()" title="Save job">
+                      <i class="ti ti-device-floppy"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
             </table>
           </div>
           <div class="col-md-6">
@@ -922,6 +933,7 @@ async function viewPODetails(poId) {
     document.getElementById('viewPOCreator').textContent = po.creator ? po.creator.name : '-';
     document.getElementById('viewPOApprover').textContent = po.approver ? po.approver.name : '-';
     document.getElementById('viewPOAssignedApprover').textContent = po.assigned_approver ? po.assigned_approver.name : '-';
+    document.getElementById('viewPOJobInput').value = po.job_name || '';
 
     // Notes
     if (po.notes) {
@@ -959,11 +971,18 @@ async function viewPODetails(poId) {
         : `${formatCurrency(item.unit_cost)}
            ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}`;
 
+      const costCodeCell = rowEditable
+        ? `<input type="text" class="form-control form-control-sm" id="editCostCode${item.id}"
+                  value="${escapeHtml(item.cost_code || '')}" placeholder="Cost code" style="width:120px"
+                  onchange="updateDraftLineItem(${po.id}, ${item.id})">`
+        : (item.cost_code ? `<small class="text-muted">${escapeHtml(item.cost_code)}</small>` : '');
+
       return `
         <tr>
           <td>
             <strong>${escapeHtml(item.product.sku)}</strong><br>
-            <small class="text-muted">${escapeHtml(item.product.description)}</small>
+            <small class="text-muted">${escapeHtml(item.product.description)}</small><br>
+            ${costCodeCell}
           </td>
           <td class="text-end">${qtyCell}</td>
           <td class="text-end text-success">${item.quantity_received}</td>
@@ -992,6 +1011,7 @@ async function viewPODetails(poId) {
             <div id="newItemProductResults" class="list-group shadow-sm mt-1"
                  style="display:none; position:absolute; z-index:1050; width:100%; max-height:220px; overflow-y:auto;"></div>
             <input type="hidden" id="newItemProduct">
+            <input type="text" class="form-control form-control-sm mt-1" id="newItemCostCode" placeholder="Cost code">
           </td>
           <td class="text-end" style="vertical-align:top; padding-top:8px;">
             <input type="number" class="form-control form-control-sm text-end" id="newItemQty" min="1" value="1" style="width:80px">
@@ -1288,6 +1308,7 @@ async function addDraftLineItem(poId) {
   const productId = document.getElementById('newItemProduct').value;
   const qty       = parseInt(document.getElementById('newItemQty').value, 10);
   const cost      = parseFloat(document.getElementById('newItemCost').value);
+  const costCode  = document.getElementById('newItemCostCode').value || null;
 
   if (!productId) { showNotification('Please search and select a product', 'warning'); return; }
   if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
@@ -1296,7 +1317,7 @@ async function addDraftLineItem(poId) {
   try {
     await authenticatedFetch(`/purchase-orders/${poId}/items`, {
       method: 'POST',
-      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: qty, unit_cost: cost }),
+      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: qty, unit_cost: cost, cost_code: costCode }),
     });
     showNotification('Line item added', 'success');
     viewPODetails(poId);
@@ -1326,6 +1347,7 @@ async function removeDraftLineItem(poId, itemId) {
 async function updateDraftLineItem(poId, itemId) {
   const qty = parseInt(document.getElementById(`editQty${itemId}`)?.value, 10);
   const cost = parseFloat(document.getElementById(`editCost${itemId}`)?.value);
+  const costCode = document.getElementById(`editCostCode${itemId}`)?.value || null;
 
   if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
   if (isNaN(cost) || cost < 0) { showNotification('Invalid unit cost', 'warning'); return; }
@@ -1333,7 +1355,7 @@ async function updateDraftLineItem(poId, itemId) {
   try {
     await authenticatedFetch(`/purchase-orders/${poId}/items/${itemId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ quantity: qty, unit_cost: cost }),
+      body: JSON.stringify({ quantity: qty, unit_cost: cost, cost_code: costCode }),
     });
     showNotification('Line item updated', 'success');
     viewPODetails(poId);
@@ -1402,6 +1424,24 @@ async function savePODetails() {
     loadPurchaseOrders();
   } catch (error) {
     showNotification(error.message || 'Error saving details', 'danger');
+  }
+}
+
+// Update the free-text job reference — allowed at any PO status, including after approval
+async function savePOJob() {
+  if (!currentPO) return;
+  const jobName = document.getElementById('viewPOJobInput').value || null;
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${currentPO.id}/job`, {
+      method: 'PATCH',
+      body: JSON.stringify({ job_name: jobName }),
+    });
+    currentPO.job_name = jobName;
+    showNotification('Job updated', 'success');
+    loadPurchaseOrders();
+  } catch (error) {
+    showNotification(error.message || 'Error updating job', 'danger');
   }
 }
 
