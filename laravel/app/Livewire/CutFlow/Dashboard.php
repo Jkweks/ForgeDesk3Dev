@@ -52,7 +52,11 @@ class Dashboard extends Component
     // handful still pending under noise.
     public bool $showCompleted = true;
 
-    // idle | positioning | ready | waiting_for_sensor
+    // idle | positioning | printing — just tracks whether a move/print
+    // request is in flight, to disable buttons and block concurrent
+    // actions. The red/orange/yellow/green cut state and the "awaiting cut
+    // sensor" state are both computed (see currentItemState()/
+    // awaitingSensor()), not stored here.
     public string $tigerStatus = 'idle';
 
     // Last known TigerStop connection/position, from tiger-bridge's GET
@@ -64,6 +68,11 @@ class Dashboard extends Component
     public ?float $tigerPosition = null;
 
     public ?string $tigerPositionAt = null;
+
+    // Unix timestamp of the last manual move/cut action (see
+    // markBridgeActivity()) — drives the fast-vs-slow status poll interval
+    // in bridgePollIntervalMs() below.
+    public ?int $lastBridgeActivityAt = null;
 
     public string $lastError = '';
 
@@ -547,6 +556,7 @@ class Dashboard extends Component
 
             $result = $bridge->move($inches);
             $this->lastError = $result['ok'] ? '' : ($result['error'] ?? 'Move failed');
+            $this->markBridgeActivity();
 
             $qrUrl = route('cutflow.cuts.show', $entry->uuid);
 
@@ -559,7 +569,7 @@ class Dashboard extends Component
             $bridge->printLabel([
                 'size' => Dimension::toFraction($inches),
                 'operator' => $entry->operator_name,
-                'timestamp' => $entry->created_at?->format('n/j/y g:i A'),
+                'timestamp' => $entry->cut_at_local?->format('n/j/y g:i A'),
                 'uuid' => $entry->uuid,
                 'qrUrl' => $qrUrl,
             ]);
@@ -584,32 +594,62 @@ class Dashboard extends Component
 
     // --- active stick actions ----------------------------------------------
 
-    /**
-     * Collapses the old two-step "Send to TigerStop" + "Record Cut" flow
-     * into one button. Without the cut sensor enabled, "complete" is just
-     * "the operator pressed the button" (today's behavior). With the sensor
-     * enabled, this only moves the stop and waits — recordCut() fires once
-     * the sensor confirms (see checkSensor(), polled from the view).
-     */
-    public function nextCut(TigerBridgeClient $bridge, Request $request): void
+    protected function guardTabletAction(Request $request): bool
     {
         if (! $this->signedIn()) {
-            return;
+            return false;
         }
 
         if (! $this->authorizedTabletRequest($request)) {
             $this->lastError = 'This action is only available from the cut station tablet.';
 
-            return;
+            return false;
         }
 
-        $item = $this->currentItem();
+        return true;
+    }
 
-        if (! $item || $this->tigerStatus === 'positioning' || $this->tigerStatus === 'waiting_for_sensor') {
-            return;
-        }
+    /**
+     * Whether tiger-bridge's last confirmed position matches this item's
+     * dimension — the saw-position half of the red/orange/yellow/green
+     * state (see currentItemState()). A small epsilon absorbs float
+     * round-tripping through JSON, not real-world slop.
+     */
+    protected function positionMatches(StickItem $item): bool
+    {
+        return $this->tigerPosition !== null
+            && abs($this->tigerPosition - (float) $item->dimension_inches) < 0.0005;
+    }
 
+    /**
+     * red: not in position, label not printed — needs both.
+     * orange: label already printed but saw isn't in position yet —
+     *   shouldn't happen with the tablet driving move+print together for a
+     *   fresh piece, but reachable if move and print are triggered out of
+     *   order (or a move fails after a print succeeded), so it gets its own
+     *   state rather than being silently folded into "red".
+     * yellow: in position, not yet printed — e.g. the same dimension cut
+     *   twice in a row, so the saw's already sitting where this piece needs
+     *   it before its label exists.
+     * green: both done — ready for the operator to actually make the cut.
+     */
+    protected function currentItemState(StickItem $item): string
+    {
+        $positioned = $this->positionMatches($item);
+        $printed = $item->isLabelPrinted();
+
+        return match (true) {
+            ! $positioned && ! $printed => 'red',
+            ! $positioned && $printed => 'orange',
+            $positioned && ! $printed => 'yellow',
+            default => 'green',
+        };
+    }
+
+    protected function doMove(StickItem $item, TigerBridgeClient $bridge): bool
+    {
         $this->tigerStatus = 'positioning';
+        $this->markBridgeActivity();
 
         $result = $bridge->move((float) $item->dimension_inches);
 
@@ -618,21 +658,204 @@ class Dashboard extends Component
             $this->lastError = $result['error'] ?? 'Move failed';
             $this->refreshTigerBridgeStatus($bridge);
 
+            return false;
+        }
+
+        // Prefer the position tiger-bridge actually confirmed over our own
+        // guess — it's what GET /status will keep reporting on every
+        // wire:poll refresh, so using anything else here just means the
+        // badge flips back within 10s when the poll disagrees with us.
+        $data = $result['data'] ?? [];
+        $this->tigerPosition = isset($data['lastPosition']) ? (float) $data['lastPosition'] : (float) $item->dimension_inches;
+        $this->tigerPositionAt = $data['lastPositionAt'] ?? now()->toIso8601String();
+        $this->tigerConnected = true;
+        $this->tigerStatus = 'idle';
+        $this->lastError = '';
+
+        return true;
+    }
+
+    /**
+     * Prints straight off the planned StickItem/Part — no CutLogEntry yet,
+     * since a label can now be printed before the cut is confirmed (yellow
+     * state) or even before the saw is in position (red's combined action).
+     * The QR carries a uuid reserved via reservePendingUuid(), which
+     * finalizeCutAndAdvance() reuses as the eventual CutLogEntry's uuid, so
+     * an early-printed sticker's QR resolves once the cut is confirmed.
+     */
+    protected function doPrint(StickItem $item, TigerBridgeClient $bridge): bool
+    {
+        $this->tigerStatus = 'printing';
+        $this->markBridgeActivity();
+
+        $part = $item->part;
+        $uuid = $item->reservePendingUuid();
+        $qrUrl = route('cutflow.cuts.show', $uuid);
+
+        $this->announceCutStarted([
+            'job' => $part->cutJob?->name,
+            'part' => $part->profile_label,
+            'partUse' => $part->description,
+            'elevation' => $part->phase,
+            'size' => Dimension::toFraction((float) $item->dimension_inches),
+            'qrSvg' => $this->renderCutQrSvg($qrUrl),
+        ]);
+
+        $result = $bridge->printLabel([
+            'job' => $part->cutJob?->name,
+            'part' => $part->finish ? "{$part->name} · {$part->finish}" : $part->name,
+            'partUse' => $part->description,
+            'elevation' => $part->phase,
+            'size' => Dimension::toFraction((float) $item->dimension_inches),
+            'uuid' => $uuid,
+            'qrUrl' => $qrUrl,
+        ]);
+
+        $this->tigerStatus = 'idle';
+
+        if (! $result['ok']) {
+            $this->lastError = $result['error'] ?? 'Print failed';
+
+            return false;
+        }
+
+        $item->update(['label_printed_at' => now()]);
+        $this->lastError = '';
+
+        return true;
+    }
+
+    protected function moveAndPrintItem(StickItem $item, TigerBridgeClient $bridge): void
+    {
+        if ($this->doMove($item, $bridge)) {
+            $this->doPrint($item, $bridge);
+        }
+    }
+
+    /** Red state's combined action. */
+    public function moveAndPrintCurrent(TigerBridgeClient $bridge, Request $request): void
+    {
+        if (! $this->guardTabletAction($request) || $this->tigerStatus !== 'idle') {
             return;
         }
 
-        $this->tigerPosition = (float) $item->dimension_inches;
-        $this->tigerPositionAt = now()->toIso8601String();
-        $this->tigerConnected = true;
+        if ($item = $this->currentItem()) {
+            $this->moveAndPrintItem($item, $bridge);
+        }
+    }
+
+    /** Orange state's action — label's already printed, just needs the move. */
+    public function moveCurrentToPosition(TigerBridgeClient $bridge, Request $request): void
+    {
+        if (! $this->guardTabletAction($request) || $this->tigerStatus !== 'idle') {
+            return;
+        }
+
+        if ($item = $this->currentItem()) {
+            $this->doMove($item, $bridge);
+        }
+    }
+
+    /** Yellow state's action — saw's already in position, just needs the label. */
+    public function printCurrentLabel(TigerBridgeClient $bridge, Request $request): void
+    {
+        if (! $this->guardTabletAction($request) || $this->tigerStatus !== 'idle') {
+            return;
+        }
+
+        if ($item = $this->currentItem()) {
+            $this->doPrint($item, $bridge);
+        }
+    }
+
+    /**
+     * Green state's button when the cut sensor is off — the operator is
+     * telling us the cut actually happened. When the sensor is on, this
+     * state is status-only instead (see the view) and checkSensor() fires
+     * finalizeCutAndAdvance() on its own once the sensor confirms.
+     */
+    public function confirmCutAndAdvance(TigerBridgeClient $bridge, Request $request): void
+    {
+        if (! $this->guardTabletAction($request) || $this->tigerStatus !== 'idle') {
+            return;
+        }
+
+        $item = $this->currentItem();
+
+        if (! $item || $this->currentItemState($item) !== 'green') {
+            return;
+        }
 
         if (CutFlowSetting::current()->cut_sensor_active) {
-            $this->tigerStatus = 'waiting_for_sensor';
+            return;
+        }
+
+        $this->finalizeCutAndAdvance($bridge);
+    }
+
+    /**
+     * Records the cut (CutLogEntry, qty decrement, item marked done) and
+     * advances: if the stick has more pending pieces, immediately fires
+     * move+print for the next one rather than waiting on another manual
+     * action; if the stick is now complete and this profile still has
+     * unassigned pieces, prompts for the next stick's length automatically
+     * instead of leaving the operator to notice and click "Start Next
+     * Stick" themselves. Shared by confirmCutAndAdvance() (button, no
+     * sensor) and checkSensor() (sensor confirms the physical cut) — the
+     * bookkeeping is identical either way, only what triggers it differs.
+     */
+    protected function finalizeCutAndAdvance(TigerBridgeClient $bridge): void
+    {
+        $item = $this->currentItem();
+
+        if (! $item) {
+            return;
+        }
+
+        $item->update(['status' => 'done']);
+        $item->part()->decrement('qty_remaining');
+
+        $part = $item->part;
+        $stickSession = $item->stickSession;
+
+        CutLogEntry::create([
+            'uuid' => $item->pending_uuid ?? (string) Str::uuid(),
+            'part_id' => $item->part_id,
+            'part_name' => $part->name,
+            'finish' => $part->finish,
+            'operator_id' => $this->activeOperatorId(),
+            'operator_name' => $this->activeOperatorName(),
+            'cut_job_id' => $part->cut_job_id,
+            'job_name' => $part->cutJob?->name,
+            'work_order' => $part->work_order,
+            'phase' => $part->phase,
+            'description' => $part->description,
+            'dimension_inches' => $item->dimension_inches,
+            'stick_length_label' => $stickSession->length_label,
+            'stick_session_id' => $item->stick_session_id,
+            'type' => 'planned',
+        ]);
+
+        $this->tigerStatus = 'idle';
+
+        if ($stickSession->items()->where('status', 'pending')->exists()) {
+            // Same stick, more pieces — drive the next one automatically.
+            if ($next = $this->currentItem()) {
+                $this->moveAndPrintItem($next, $bridge);
+            }
 
             return;
         }
 
-        $this->tigerStatus = 'ready';
-        $this->recordCut($bridge);
+        $stickSession->update(['status' => 'complete']);
+        $this->activeStickId = null;
+
+        $pool = app(CutPlanner::class)->unassignedPieces($this->activeProfileName, $this->activeProfileFinish, $this->activeJobIds);
+
+        if ($pool->isNotEmpty()) {
+            $this->modal = 'stick';
+            $this->keypadValue = '';
+        }
     }
 
     /**
@@ -652,13 +875,56 @@ class Dashboard extends Component
         $this->tigerPositionAt = $data['lastPositionAt'] ?? null;
     }
 
+    protected function markBridgeActivity(): void
+    {
+        $this->lastBridgeActivityAt = now()->timestamp;
+    }
+
     /**
-     * Polled from the view (wire:poll) only while a sensor-gated cut is in
-     * flight, so this stays a no-op the rest of the time.
+     * True once the current item is green (in position, label printed) and
+     * the shop has the physical cut sensor enabled — the state where
+     * there's nothing left for the operator to click, just a wait for the
+     * sensor to confirm the cut (see checkSensor(), polled by the view).
+     */
+    protected function awaitingSensor(): bool
+    {
+        if (! CutFlowSetting::current()->cut_sensor_active) {
+            return false;
+        }
+
+        $item = $this->currentItem();
+
+        return $item && $this->currentItemState($item) === 'green';
+    }
+
+    /**
+     * Poll interval (ms) for the TigerStop status badge's wire:poll (see
+     * dashboard.blade.php) — 3s while an operator is signed in, a move/cut
+     * is actually in flight, or within 30s of the last manual action;
+     * 20s otherwise. tiger-bridge only ever has one tablet talking to it,
+     * so this is just trimming idle-hours polling chatter, not a
+     * correctness concern — a push/websocket layer would be solving a
+     * problem this app doesn't have.
+     */
+    protected function bridgePollIntervalMs(): int
+    {
+        $active = $this->signedIn()
+            || in_array($this->tigerStatus, ['positioning', 'printing'], true)
+            || $this->awaitingSensor()
+            || ($this->lastBridgeActivityAt && (now()->timestamp - $this->lastBridgeActivityAt) <= 30);
+
+        return $active ? 3000 : 20000;
+    }
+
+    /**
+     * Polled from the view (wire:poll) only while awaiting the physical cut
+     * sensor (green state + cut_sensor_active — see awaitingSensor() /
+     * the view's $awaitingSensor), so this stays a no-op the rest of the
+     * time.
      */
     public function checkSensor(TigerBridgeClient $bridge, Request $request): void
     {
-        if ($this->tigerStatus !== 'waiting_for_sensor') {
+        if (! $this->awaitingSensor()) {
             return;
         }
 
@@ -669,57 +935,7 @@ class Dashboard extends Component
         $status = $bridge->sensorStatus();
 
         if (($status['data']['status'] ?? null) === 'complete') {
-            $this->tigerStatus = 'ready';
-            $this->recordCut($bridge);
-        }
-    }
-
-    public function recordCut(TigerBridgeClient $bridge): void
-    {
-        $item = $this->currentItem();
-
-        if (! $item) {
-            return;
-        }
-
-        $item->update(['status' => 'done']);
-        $item->part()->decrement('qty_remaining');
-
-        $part = $item->part;
-
-        $entry = CutLogEntry::create([
-            'uuid' => (string) Str::uuid(),
-            'part_id' => $item->part_id,
-            'part_name' => $part->name,
-            'finish' => $part->finish,
-            'operator_id' => $this->activeOperatorId(),
-            'operator_name' => $this->activeOperatorName(),
-            'cut_job_id' => $part->cut_job_id,
-            'job_name' => $part->cutJob?->name,
-            'work_order' => $part->work_order,
-            'phase' => $part->phase,
-            'description' => $part->description,
-            'dimension_inches' => $item->dimension_inches,
-            'stick_length_label' => $item->stickSession->length_label,
-            'stick_session_id' => $item->stick_session_id,
-            'type' => 'planned',
-        ]);
-
-        $this->announceCutStarted([
-            'job' => $entry->job_name,
-            'part' => $part->profile_label,
-            'partUse' => $part->description,
-            'elevation' => $entry->phase,
-            'size' => Dimension::toFraction((float) $entry->dimension_inches),
-            'qrSvg' => $this->renderCutQrSvg(route('cutflow.cuts.show', $entry->uuid)),
-        ]);
-
-        $this->printLabelForEntry($bridge, $entry);
-
-        $this->tigerStatus = 'idle';
-
-        if (! $item->stickSession->items()->where('status', 'pending')->exists()) {
-            $item->stickSession->update(['status' => 'complete']);
+            $this->finalizeCutAndAdvance($bridge);
         }
     }
 
@@ -735,7 +951,7 @@ class Dashboard extends Component
      */
     public function stopStick(): void
     {
-        if (! $this->activeStickId || in_array($this->tigerStatus, ['positioning', 'waiting_for_sensor'], true)) {
+        if (! $this->activeStickId || in_array($this->tigerStatus, ['positioning', 'printing'], true) || $this->awaitingSensor()) {
             return;
         }
 
@@ -771,9 +987,10 @@ class Dashboard extends Component
      * dashboard.blade.php, which renders it as a bottom-right toast).
      * Settings-gated since some shops find a popup on every cut distracting.
      *
-     * For planned cuts this fires from recordCut() rather than at move-start,
-     * because the CutLogEntry (and its uuid) doesn't exist until then — the
-     * toast's QR needs a real qrUrl to render, not just a size preview.
+     * For planned cuts this fires from doPrint() (the item's reserved
+     * pending_uuid gives it a real qrUrl before the CutLogEntry exists),
+     * not from finalizeCutAndAdvance() — the toast previews the label at
+     * print time, whenever that happens to fall relative to the move.
      */
     protected function announceCutStarted(array $label): void
     {
@@ -792,7 +1009,7 @@ class Dashboard extends Component
      */
     protected function renderCutQrSvg(string $url): string
     {
-        $svg = (new Builder(writer: new SvgWriter()))
+        $svg = (new Builder(writer: new SvgWriter))
             ->build(
                 data: $url,
                 errorCorrectionLevel: ErrorCorrectionLevel::Low,
@@ -895,7 +1112,7 @@ class Dashboard extends Component
             $bridge->printLabel([
                 'size' => Dimension::toFraction((float) $reprint->dimension_inches),
                 'operator' => $reprint->operator_name,
-                'timestamp' => $reprint->created_at?->format('n/j/y g:i A'),
+                'timestamp' => $reprint->cut_at_local?->format('n/j/y g:i A'),
                 'uuid' => $reprint->uuid,
                 'qrUrl' => route('cutflow.cuts.show', $reprint->uuid),
             ]);
@@ -937,8 +1154,11 @@ class Dashboard extends Component
             ? $planner->projectRemainingStandardSticks($this->activeProfileName, $this->activeProfileFinish, $this->activeJobIds)
             : null;
 
+        $currentItem = $signedIn ? $this->currentItem() : null;
+
         return view('cutflow.livewire.dashboard', [
             'signedIn' => $signedIn,
+            'tigerPollIntervalMs' => $this->bridgePollIntervalMs(),
             'jobs' => $this->modal === 'jobs' ? $this->filteredJobs() : collect(),
             'selectedJobs' => $signedIn ? CutJob::whereIn('id', $this->activeJobIds)->orderBy('name')->get() : collect(),
             'totalJobCount' => CutJob::count(),
@@ -947,7 +1167,9 @@ class Dashboard extends Component
             'completedCount' => $completedCount,
             'projection' => $projection,
             'stick' => ($signedIn && $this->activeStickId) ? StickSession::with('items.part')->find($this->activeStickId) : null,
-            'currentItem' => $signedIn ? $this->currentItem() : null,
+            'currentItem' => $currentItem,
+            'currentItemState' => $currentItem ? $this->currentItemState($currentItem) : null,
+            'awaitingSensor' => $this->awaitingSensor(),
             'log' => CutLogEntry::latest()->limit(6)->get(),
         ]);
     }

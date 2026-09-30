@@ -146,6 +146,8 @@
                 <table>
                     <tr><td class="flabel">Order#:</td><td class="fval">{{ $po->po_number }}</td></tr>
                     <tr><td class="flabel">Date:</td><td class="fval">{{ optional($po->order_date)->format('m/d/Y') ?: '—' }}</td></tr>
+                    <tr><td class="flabel">Job Name:</td><td class="fval">{{ $po->job_name ?: '________________' }}</td></tr>
+                    <tr><td class="flabel">Cost Code:</td><td class="fval">{{ $po->cost_code ?: '________________' }}</td></tr>
                 </table>
             </div>
         </td>
@@ -230,7 +232,7 @@
                 $colorName = $p ? ($p->finish_name ?? null) : null;
             @endphp
             <tr>
-                <td class="pn">{{ $p->sku ?? $p->part_number ?? '—' }}</td>
+                <td class="pn">{{ $p->manufacturer_part_number ?? $p->sku ?? $p->part_number ?? '—' }}</td>
                 <td>
                     {{ $p->description ?? $i->notes ?? '—' }}
                     @if ($colorCode)

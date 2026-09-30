@@ -135,6 +135,13 @@ let portReady = false;
 let reconnectTimer = null;
 let shuttingDown = false;
 
+// Last confirmed stop position — set once sendMove() resolves (real or
+// mocked), reported back via GET /status. Without this, ForgeDesk's
+// wire:poll.10s status refresh has nothing but null to read every 10s,
+// which stomps the position it set optimistically right after a move.
+let lastPosition = null;
+let lastPositionAt = null;
+
 // --- TigerStop serial connection ------------------------------------------
 // Protocol: plain ASCII, \r terminated. "MG<inches>\r" moves the stop.
 // The amp replies "MGS ..." (move started) then "MGF" (move finished).
@@ -242,7 +249,9 @@ app.post('/move', async (req, res) => {
     // a fresh move means whatever the sensor reported for the previous cut
     // no longer applies — back to idle until this new cut completes.
     sensorState = 'idle';
-    res.json({ ok: true, ...result });
+    lastPosition = inches;
+    lastPositionAt = new Date().toISOString();
+    res.json({ ok: true, lastPosition, lastPositionAt, ...result });
   } catch (e) {
     res.status(502).json({ ok: false, error: e.message });
   }
@@ -304,6 +313,15 @@ function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uu
 app.post('/print', (req, res) => {
   const { job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl } = req.body;
   const zpl = buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl });
+
+  if (MOCK_SERIAL) {
+    // No real Zebra printer either in this mode — same spirit as the
+    // mocked /move: skip the real socket, log what would have been sent,
+    // and report success so the dashboard's move/print/confirm flow can be
+    // exercised end-to-end without any hardware attached.
+    console.log(`[tiger-bridge] MOCK_SERIAL: would print label uuid=${uuid}`);
+    return res.json({ ok: true, mocked: true });
+  }
 
   const socket = new net.Socket();
   socket.setTimeout(5000);
@@ -371,6 +389,8 @@ app.get('/status', (req, res) => {
     mockSerial: MOCK_SERIAL,
     printerHost: PRINTER_HOST,
     printerPort: PRINTER_PORT,
+    lastPosition,
+    lastPositionAt,
   });
 });
 

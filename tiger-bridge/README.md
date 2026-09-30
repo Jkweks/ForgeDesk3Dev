@@ -97,13 +97,16 @@ this, same as before.
 - `SERIAL_PORT` will look like `COM3` on Windows or `/dev/ttyUSB0` on Linux.
 - If the TigerStop is reset or unplugged, this reconnects automatically every
   3 seconds.
-- Set `MOCK_SERIAL=true` to run without a real TigerStop attached at all —
+- Set `MOCK_SERIAL=true` to run without any real hardware attached at all —
   no COM port is opened; `portReady` is forced true and `POST /move` just
   logs the command it would have sent (e.g. `MG48.375\r`) and resolves after
-  a short simulated delay instead of waiting on a real `MGF` ack. Useful for
-  running the service standalone on a dev machine. `GET /status` reports
-  `mockSerial: true` when this is on. Never enable it on the real
-  shop-floor deployment.
+  a short simulated delay instead of waiting on a real `MGF` ack. `POST
+  /print` also skips the real printer socket in this mode, logging what it
+  would have sent and reporting success instead of trying to reach a real
+  Zebra printer — useful for exercising ForgeDesk's whole move/print/confirm
+  flow standalone on a dev machine with nothing physically attached. `GET
+  /status` reports `mockSerial: true` when this is on. Never enable it on
+  the real shop-floor deployment.
 - The ZPL label layout in `buildZpl()` matches the spec in
   `../docs/cutlist.txt` (1"x4", job/part/use top-left, elevation-length
   bottom-left, QR right side) — adjust dot offsets for your actual printer's

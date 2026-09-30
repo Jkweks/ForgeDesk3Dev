@@ -45,7 +45,7 @@
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;">
                     <span style="color:var(--muted);">Cut at</span>
-                    <span class="mono" style="font-weight:600;">{{ $entry->created_at?->format('n/j/y g:i:s A') }}</span>
+                    <span class="mono" style="font-weight:600;">{{ $entry->cut_at_local?->format('n/j/y g:i:s A T') }}</span>
                 </div>
                 @if ($entry->work_order)
                     <div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;">

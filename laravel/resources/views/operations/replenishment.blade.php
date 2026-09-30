@@ -932,6 +932,7 @@ async function submitPO() {
       order_date: document.getElementById('confirmOrderDate').value,
       expected_date: document.getElementById('confirmExpectedDate').value || null,
       notes: document.getElementById('confirmNotes').value || null,
+      source: 'replenishment',
       items: items.map(i => ({
         product_id: i.product_id,
         quantity: i.quantity,
@@ -993,6 +994,7 @@ async function createAllPendingPOs() {
         body: JSON.stringify({
           supplier_id: sid,
           order_date: todayDate(),
+          source: 'replenishment',
           items: items.map(i => ({
             product_id: i.product_id,
             quantity: i.quantity,

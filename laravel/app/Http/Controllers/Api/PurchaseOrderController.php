@@ -109,6 +109,7 @@ class PurchaseOrderController extends Controller
             'notes' => 'nullable|string',
             'ship_to' => 'nullable|string',
             'ship_to_location_id' => 'nullable|exists:company_locations,id',
+            'source' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
@@ -141,6 +142,7 @@ class PurchaseOrderController extends Controller
                 'notes' => $request->notes,
                 'ship_to' => $request->ship_to,
                 'ship_to_location_id' => $request->ship_to_location_id,
+                'job_name' => $request->source === 'replenishment' ? 'Shop Stock (690)' : null,
                 'created_by' => auth()->id(),
             ]);
 

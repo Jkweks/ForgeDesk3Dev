@@ -56,4 +56,15 @@ class CutLogEntry extends Model
     {
         return $this->belongsTo(CutJob::class);
     }
+
+    /**
+     * created_at is stored/read in the app's configured timezone (UTC —
+     * see config/app.php) but the shop this runs in is US Eastern, and
+     * anything a person reads (the QR-scan page, a printed label's
+     * timestamp) should show that, DST-aware, not raw UTC.
+     */
+    public function getCutAtLocalAttribute(): ?\Illuminate\Support\Carbon
+    {
+        return $this->created_at?->clone()->setTimezone('America/New_York');
+    }
 }

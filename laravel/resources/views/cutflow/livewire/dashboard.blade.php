@@ -32,10 +32,12 @@
             {{-- TigerStop connection + last-known position. The amp has no
                  "read current position" query (see tiger-bridge's README),
                  so this is the last inches value we successfully commanded
-                 it to — refreshed on load, after every move, and on a slow
-                 poll so a dropped connection shows up without a move
-                 happening first. --}}
-            <div wire:poll.10s="refreshTigerBridgeStatus"
+                 it to — refreshed on load, after every move, and on a poll
+                 so a dropped connection shows up without a move happening
+                 first. The poll interval itself is dynamic (see
+                 Dashboard::bridgePollIntervalMs()) — 3s while someone's
+                 actively working the tablet, 20s otherwise. --}}
+            <div wire:poll.{{ $tigerPollIntervalMs }}ms="refreshTigerBridgeStatus"
                  style="display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--border);">
                 <span style="width:8px;height:8px;border-radius:50%;background: {{ $tigerConnected ? 'var(--success)' : 'var(--danger)' }};"></span>
                 <span style="font-size:11px;color:var(--muted);">TigerStop</span>
@@ -247,15 +249,34 @@
                             <button class="btn btn-outline" style="padding:9px 14px;font-size:12.5px;color:var(--danger);border-color:var(--danger);"
                                     wire:click="stopStick"
                                     wire:confirm="Stop this stick? The {{ $stick->items->where('status', 'pending')->count() }} uncut piece(s) on it will go back to the cut list."
-                                    @if (in_array($tigerStatus, ['positioning', 'waiting_for_sensor'])) disabled @endif>
+                                    @if (in_array($tigerStatus, ['positioning', 'printing']) || $awaitingSensor) disabled @endif>
                                 Stop Stick
                             </button>
                         </div>
                     </div>
 
                     @if ($currentItem)
-                        <div class="now-cutting"
-                             @if ($tigerStatus === 'waiting_for_sensor') wire:poll.1s="checkSensor" @endif>
+                        @php
+                            // Busy (a move/print request is actually in flight) always
+                            // wins the status pill over the red/orange/yellow/green
+                            // state, since that state doesn't change mid-request.
+                            $busyMap = [
+                                'positioning' => ['text' => 'Positioning…', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
+                                'printing' => ['text' => 'Printing…', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
+                            ];
+                            $stateMap = [
+                                'red' => ['text' => 'Needs move + label', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
+                                'orange' => ['text' => 'Label printed — not in position', 'dot' => 'var(--warning)', 'bg' => 'var(--warning-bg)', 'color' => 'var(--warning)'],
+                                'yellow' => ['text' => 'In position — needs label', 'dot' => 'var(--caution)', 'bg' => 'var(--caution-bg)', 'color' => 'var(--caution)'],
+                                'green' => $awaitingSensor
+                                    ? ['text' => 'Ready — waiting for cut sensor…', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)']
+                                    : ['text' => 'Ready to cut', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)'],
+                            ];
+                            $s = $busyMap[$tigerStatus] ?? $stateMap[$currentItemState] ?? $stateMap['red'];
+                            $busy = in_array($tigerStatus, ['positioning', 'printing']);
+                        @endphp
+                        <div class="now-cutting @if ($currentItemState !== 'red') state-{{ $currentItemState }} @endif"
+                             @if ($awaitingSensor) wire:poll.1s="checkSensor" @endif>
                             <div style="display:flex;align-items:center;justify-content:space-between;">
                                 <div style="display:flex;align-items:center;gap:14px;">
                                     @if ($currentItem->part->photo_url)
@@ -266,29 +287,37 @@
                                         <span style="width:64px;height:64px;border-radius:10px;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--faint);">&#128247;</span>
                                     @endif
                                     <div>
-                                        <div class="label" style="color:var(--accent);">NOW CUTTING</div>
+                                        <div class="label" style="color: {{ $s['color'] }};">NEXT CUT</div>
                                         <div class="display" style="font-size:20px;font-weight:700;">{{ $currentItem->part->name }}</div>
                                     </div>
                                 </div>
-                                @php
-                                    $statusMap = [
-                                        'idle' => ['text' => 'Idle', 'dot' => 'var(--muted)', 'bg' => 'var(--surface)', 'color' => 'var(--muted-2)'],
-                                        'positioning' => ['text' => 'Positioning…', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
-                                        'ready' => ['text' => 'Ready — at target', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)'],
-                                        'waiting_for_sensor' => ['text' => 'Waiting for cut sensor…', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
-                                    ];
-                                    $s = $statusMap[$tigerStatus] ?? $statusMap['idle'];
-                                @endphp
                                 <span class="status-pill" style="background: {{ $s['bg'] }}; color: {{ $s['color'] }};">
                                     <span class="status-dot" style="background: {{ $s['dot'] }};"></span>
                                     {{ $s['text'] }}
                                 </span>
                             </div>
                             <div class="dim">{{ number_format($currentItem->dimension_inches, 3) }}"</div>
-                            <button class="btn btn-accent" style="width:100%;" wire:click="nextCut"
-                                    @if (in_array($tigerStatus, ['positioning', 'waiting_for_sensor'])) disabled @endif>
-                                Next Cut &mdash; Move &amp; Print Label
-                            </button>
+                            @if ($currentItemState === 'red')
+                                <button class="btn btn-accent" style="width:100%;" wire:click="moveAndPrintCurrent" @if ($busy) disabled @endif>
+                                    Move to position and print label
+                                </button>
+                            @elseif ($currentItemState === 'orange')
+                                <button class="btn btn-warning" style="width:100%;" wire:click="moveCurrentToPosition" @if ($busy) disabled @endif>
+                                    Move to position
+                                </button>
+                            @elseif ($currentItemState === 'yellow')
+                                <button class="btn btn-caution" style="width:100%;" wire:click="printCurrentLabel" @if ($busy) disabled @endif>
+                                    Print label
+                                </button>
+                            @elseif ($awaitingSensor)
+                                <div class="btn btn-success" style="width:100%;text-align:center;opacity:.7;">
+                                    Ready to cut &mdash; waiting for cut sensor…
+                                </div>
+                            @else
+                                <button class="btn btn-success" style="width:100%;" wire:click="confirmCutAndAdvance" @if ($busy) disabled @endif>
+                                    Ready for next cut
+                                </button>
+                            @endif
                         </div>
                     @else
                         <div class="stick-complete">
@@ -341,7 +370,7 @@
                 @forelse ($log as $entry)
                     <div class="cutlog-row">
                         <div style="display:flex;align-items:center;gap:12px;">
-                            <span class="mono" style="font-size:11px;color:var(--muted);width:80px;">{{ $entry->created_at->format('g:i:s A') }}</span>
+                            <span class="mono" style="font-size:11px;color:var(--muted);width:80px;">{{ $entry->cut_at_local->format('g:i:s A') }}</span>
                             <span style="font-size:12.5px;font-weight:600;">{{ $entry->part_name }}</span>
                             <span style="font-size:11px;color:var(--muted);">{{ $entry->operator_name }}</span>
                             @if ($entry->is_recut)

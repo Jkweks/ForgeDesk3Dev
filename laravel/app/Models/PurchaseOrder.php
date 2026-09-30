@@ -21,6 +21,8 @@ class PurchaseOrder extends Model
         'notes',
         'ship_to',
         'ship_to_location_id',
+        'job_name',
+        'cost_code',
         'contact_name',
         'contact_email',
         'contact_phone',

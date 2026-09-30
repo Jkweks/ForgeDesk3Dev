@@ -18,6 +18,12 @@
     --success-border: #C8E0CD;
     --danger: #C63A3A;
     --danger-bg: #FBEAEA;
+    --warning: #B8722A;
+    --warning-bg: #FBF0E4;
+    --warning-border: #F0DAB8;
+    --caution: #9C8A1E;
+    --caution-bg: #FBF6E0;
+    --caution-border: #EDE2AE;
     --disabled: #B7BBC0;
 }
 
@@ -46,6 +52,12 @@
     --success-border: #2E4A34;
     --danger: #E2605C;
     --danger-bg: #3A1F1A;
+    --warning: #D8934F;
+    --warning-bg: #3A2A18;
+    --warning-border: #5C4326;
+    --caution: #D6C34D;
+    --caution-bg: #35311A;
+    --caution-border: #56502A;
     --disabled: #4A4F54;
 }
 
@@ -125,6 +137,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .btn-accent { background: var(--accent); color: #fff; }
 .btn-outline { background: var(--panel); border: 1.5px solid var(--ink); color: var(--ink); }
 .btn-success { background: var(--success); color: #fff; }
+.btn-warning { background: var(--warning); color: #fff; }
+.btn-caution { background: var(--caution); color: #1C1F23; }
 
 .card { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; }
 
@@ -132,8 +146,20 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .stick-header .label { font-size: 10.5px; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
 .stick-header .length { font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 700; }
 
+/* "now cutting" card recolors per Dashboard::currentItemState(): red (needs
+   move + print), orange (printed but not yet in position — shouldn't
+   happen with the tablet driving both actions in order, kept anyway for a
+   manual/out-of-order recovery), yellow (in position, not yet printed —
+   e.g. the same dimension cut twice in a row), green (in position and
+   printed — ready to cut). */
 .now-cutting { position: relative; background: var(--accent-bg); border: 1.5px solid var(--accent-border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .now-cutting .dim { font-family: 'IBM Plex Mono', monospace; font-size: 42px; font-weight: 700; color: var(--accent); line-height: 1; }
+.now-cutting.state-orange { background: var(--warning-bg); border-color: var(--warning-border); }
+.now-cutting.state-orange .dim { color: var(--warning); }
+.now-cutting.state-yellow { background: var(--caution-bg); border-color: var(--caution-border); }
+.now-cutting.state-yellow .dim { color: var(--caution); }
+.now-cutting.state-green { background: var(--success-bg); border-color: var(--success-border); }
+.now-cutting.state-green .dim { color: var(--success); }
 
 .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
