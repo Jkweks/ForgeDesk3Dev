@@ -21,11 +21,14 @@ class JobReservation extends Model
         'needed_by',
         'status',
         'notes',
+        'fulfilled_by_id',
+        'fulfilled_at',
     ];
 
     protected $casts = [
         'needed_by' => 'date',
         'release_number' => 'integer',
+        'fulfilled_at' => 'datetime',
     ];
 
     /**
@@ -120,6 +123,12 @@ class JobReservation extends Model
     public function requestedByUser()
     {
         return $this->belongsTo(User::class, 'requested_by_id');
+    }
+
+    /** The user who confirmed this reservation as fulfilled. */
+    public function fulfilledBy()
+    {
+        return $this->belongsTo(User::class, 'fulfilled_by_id');
     }
 
     /**

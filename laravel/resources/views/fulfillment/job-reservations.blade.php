@@ -927,6 +927,12 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                             <dd class="col-7">${res.job_name}</dd>
                             <dt class="col-5">Status:</dt>
                             <dd class="col-7">${getStatusBadge(res.status)}</dd>
+                            ${res.status === 'fulfilled' ? `
+                            <dt class="col-5">Fulfilled By:</dt>
+                            <dd class="col-7">${res.fulfilled_by_name || '-'}</dd>
+                            <dt class="col-5">Fulfilled At:</dt>
+                            <dd class="col-7">${res.fulfilled_at ? new Date(res.fulfilled_at).toLocaleString() : '-'}</dd>
+                            ` : ''}
                         </dl>
                     </div>
                     <div class="col-md-6">

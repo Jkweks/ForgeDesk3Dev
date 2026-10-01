@@ -121,15 +121,18 @@ class WorkOrderStageController extends Controller
      * sort order so per-stage gates clear as we go (a lingering gate can still
      * be pushed past with `override`).
      *
-     * Body: { stage_name?, fab_user_id?, override? }
+     * Body: { stage_name?, fab_user_id?, completed_at?, override? }
      * `fab_user_id` credits a fabricator with the work and is honoured only for
      * manager / admin app users — everyone else completes without a credit.
+     * `completed_at` lets a manager / admin backdate the completion; everyone
+     * else completes with the current timestamp.
      */
     public function bulkComplete(Request $request, int $id)
     {
         $data = $request->validate([
             'stage_name' => 'nullable|string|max:255',
             'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+            'completed_at' => 'nullable|date',
             'override' => 'sometimes|boolean',
         ]);
 
@@ -137,6 +140,9 @@ class WorkOrderStageController extends Controller
 
         $isManager = in_array($request->user()?->role, ['admin', 'manager'], true);
         $fabUserId = $isManager ? ($data['fab_user_id'] ?? null) : null;
+        $completedAt = ($isManager && ! empty($data['completed_at']))
+            ? \Carbon\Carbon::parse($data['completed_at'])
+            : now();
         $resolution = $this->overrides->resolve($request);
         $actor = $resolution['actor_label'] ?: ($request->user()?->name ?? 'Office user');
         $target = isset($data['stage_name']) ? mb_strtolower($data['stage_name']) : null;
@@ -148,7 +154,7 @@ class WorkOrderStageController extends Controller
             $updated = 0;
             $elevationsClosed = 0;
 
-            DB::transaction(function () use ($wo, $target, $fabUserId, $resolution, $logMessage, &$updated, &$elevationsClosed) {
+            DB::transaction(function () use ($wo, $target, $fabUserId, $completedAt, $resolution, $logMessage, &$updated, &$elevationsClosed) {
                 foreach ($wo->elevations as $elevation) {
                     $stages = $elevation->stages
                         ->filter(fn ($s) => $target === null || mb_strtolower($s->name) === $target)
@@ -164,7 +170,7 @@ class WorkOrderStageController extends Controller
                         );
 
                         $stage->status = 'complete';
-                        $stage->completed_at = now();
+                        $stage->completed_at = $completedAt;
                         $stage->completed_by_id = $fabUserId;
                         $stage->save();
 
@@ -184,7 +190,7 @@ class WorkOrderStageController extends Controller
                         fn ($s) => in_array($s->status, ['complete', 'not_required'], true)
                     );
                     if ($allTerminal && ! $elevation->date_completed) {
-                        $elevation->date_completed = now()->toDateString();
+                        $elevation->date_completed = $completedAt->toDateString();
                         $elevation->completed_by_id = $fabUserId;
                         $elevation->save();
                         $elevationsClosed++;

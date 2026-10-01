@@ -2952,13 +2952,19 @@ function openBulkCompletePrompt({ title, message, allowUser, stageNames }) {
 
     const userWrap = document.getElementById('bcp-user-wrap');
     const userSel  = document.getElementById('bcp-user');
+    const dateWrap = document.getElementById('bcp-date-wrap');
+    const dateInp  = document.getElementById('bcp-date');
     if (allowUser) {
         userWrap.style.display = '';
         userSel.innerHTML = '<option value="">— none —</option>' +
             fabUsers.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+        dateWrap.style.display = '';
+        dateInp.value = new Date().toISOString().slice(0, 10);
     } else {
         userWrap.style.display = 'none';
         userSel.innerHTML = '';
+        dateWrap.style.display = 'none';
+        dateInp.value = '';
     }
 
     document.getElementById('bulk-complete-prompt').style.display = 'flex';
@@ -2968,11 +2974,12 @@ function openBulkCompletePrompt({ title, message, allowUser, stageNames }) {
 function _bcpDone(confirmed) {
     const stageSel = document.getElementById('bcp-stage');
     const userSel  = document.getElementById('bcp-user');
+    const dateInp  = document.getElementById('bcp-date');
     document.getElementById('bulk-complete-prompt').style.display = 'none';
     const res = _bcpResolve; _bcpResolve = null;
     if (!res) return;
     res(confirmed
-        ? { stageName: stageSel.value || null, fabUserId: userSel.value || null }
+        ? { stageName: stageSel.value || null, fabUserId: userSel.value || null, completedAt: dateInp.value || null }
         : null);
 }
 
@@ -3012,7 +3019,7 @@ async function openBulkCompleteStage() {
     try {
         const data = await sendBulkComplete(
             `/work-orders/${currentWO.id}/stages/bulk-complete`,
-            { stage_name: res.stageName, fab_user_id: res.fabUserId },
+            { stage_name: res.stageName, fab_user_id: res.fabUserId, completed_at: res.completedAt },
             'Failed to complete stages.',
         );
         if (!data) return;
@@ -3043,7 +3050,7 @@ async function openBulkCompleteWO() {
     try {
         const data = await sendBulkComplete(
             `/work-orders/${currentWO.id}/stages/bulk-complete`,
-            { fab_user_id: res.fabUserId },
+            { fab_user_id: res.fabUserId, completed_at: res.completedAt },
             'Failed to complete the work order.',
         );
         if (!data) return;
@@ -3071,7 +3078,7 @@ async function bulkCompleteElevation(elevId) {
     try {
         const data = await sendBulkComplete(
             `/elevations/${elevId}/complete-all-stages`,
-            { fab_user_id: res.fabUserId },
+            { fab_user_id: res.fabUserId, completed_at: res.completedAt },
             'Failed to complete the elevation.',
         );
         if (!data) return;
@@ -4671,11 +4678,15 @@ async function saveQuickJob() {
         <label class="form-label form-label-sm mb-1">Stage</label>
         <select class="form-select form-select-sm" id="bcp-stage"></select>
       </div>
-      <div class="mb-0" id="bcp-user-wrap" style="display:none">
+      <div class="mb-3" id="bcp-user-wrap" style="display:none">
         <label class="form-label form-label-sm mb-1">Completed by</label>
         <select class="form-select form-select-sm" id="bcp-user">
           <option value="">— none —</option>
         </select>
+      </div>
+      <div class="mb-0" id="bcp-date-wrap" style="display:none">
+        <label class="form-label form-label-sm mb-1">Completed on</label>
+        <input type="date" class="form-control form-control-sm" id="bcp-date">
       </div>
     </div>
     <div class="card-footer d-flex justify-content-end gap-2">

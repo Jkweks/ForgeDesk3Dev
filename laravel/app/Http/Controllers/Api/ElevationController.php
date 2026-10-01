@@ -340,26 +340,32 @@ class ElevationController extends Controller
      * stages are terminal. Stages on hold / blocked / not-required are left as
      * they are; a lingering gate can be pushed past with `override`.
      *
-     * Body: { fab_user_id?, override? }
+     * Body: { fab_user_id?, completed_at?, override? }
      * `fab_user_id` is credited on both the stages and the elevation, and is
      * honoured only for manager / admin app users.
+     * `completed_at` lets a manager / admin backdate the completion; everyone
+     * else completes with the current timestamp.
      */
     public function completeAllStages(Request $request, int $id)
     {
         $data = $request->validate([
             'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+            'completed_at' => 'nullable|date',
             'override' => 'sometimes|boolean',
         ]);
 
         $elevation = FdWoElevation::with('stages')->findOrFail($id);
         $isManager = in_array($request->user()?->role, ['admin', 'manager'], true);
         $fabUserId = $isManager ? ($data['fab_user_id'] ?? null) : null;
+        $completedAt = ($isManager && ! empty($data['completed_at']))
+            ? \Carbon\Carbon::parse($data['completed_at'])
+            : now();
         $resolution = $this->overrides->resolve($request);
 
         try {
             $updated = 0;
 
-            DB::transaction(function () use ($elevation, $fabUserId, $resolution, &$updated) {
+            DB::transaction(function () use ($elevation, $fabUserId, $completedAt, $resolution, &$updated) {
                 $stages = $elevation->stages
                     ->whereIn('status', ['pending', 'in_progress'])
                     ->sortBy('sort_order');
@@ -373,7 +379,7 @@ class ElevationController extends Controller
                     );
 
                     $stage->status = 'complete';
-                    $stage->completed_at = now();
+                    $stage->completed_at = $completedAt;
                     $stage->completed_by_id = $fabUserId;
                     $stage->save();
                     $updated++;
@@ -385,7 +391,7 @@ class ElevationController extends Controller
                     fn ($s) => in_array($s->status, ['complete', 'not_required'], true)
                 );
                 if ($allTerminal && ! $elevation->date_completed) {
-                    $elevation->date_completed = now()->toDateString();
+                    $elevation->date_completed = $completedAt->toDateString();
                     $elevation->completed_by_id = $fabUserId;
                     $elevation->save();
                 }

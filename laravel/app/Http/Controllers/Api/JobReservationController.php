@@ -56,7 +56,7 @@ class JobReservationController extends Controller
             }
 
             // New API: all job reservations
-            $reservations = JobReservation::with('items')
+            $reservations = JobReservation::with(['items', 'fulfilledBy'])
                 ->orderByRaw("CASE WHEN status IN ('fulfilled', 'cancelled') THEN 1 ELSE 0 END")
                 ->orderBy('created_at', 'desc')
                 ->get()
@@ -72,6 +72,9 @@ class JobReservationController extends Controller
                         'status' => $reservation->status,
                         'status_label' => $reservation->status_label,
                         'notes' => $reservation->notes,
+                        'fulfilled_by_id' => $reservation->fulfilled_by_id,
+                        'fulfilled_by_name' => $reservation->fulfilledBy?->name,
+                        'fulfilled_at' => $reservation->fulfilled_at?->format('Y-m-d H:i:s'),
                         'created_at' => $reservation->created_at->format('Y-m-d H:i:s'),
                         'items_count' => $reservation->items->count(),
                         'total_requested' => $reservation->items->sum('requested_qty'),
@@ -103,7 +106,7 @@ class JobReservationController extends Controller
     public function show($id)
     {
         try {
-            $reservation = JobReservation::with(['items.product.inventoryLocations.storageLocation'])->findOrFail($id);
+            $reservation = JobReservation::with(['items.product.inventoryLocations.storageLocation', 'fulfilledBy'])->findOrFail($id);
 
             $items = $reservation->items->map(function ($item) {
                 $locations = $item->product->inventoryLocations->map(function ($loc) {
@@ -152,6 +155,9 @@ class JobReservationController extends Controller
                     'status' => $reservation->status,
                     'status_label' => $reservation->status_label,
                     'notes' => $reservation->notes,
+                    'fulfilled_by_id' => $reservation->fulfilled_by_id,
+                    'fulfilled_by_name' => $reservation->fulfilledBy?->name,
+                    'fulfilled_at' => $reservation->fulfilled_at?->format('Y-m-d H:i:s'),
                     'created_at' => $reservation->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $reservation->updated_at->format('Y-m-d H:i:s'),
                 ],
@@ -432,6 +438,7 @@ class JobReservationController extends Controller
                             'reference_number' => $reservation->job_number.'-R'.$reservation->release_number,
                             'notes' => "Job completion: {$reservation->job_number} R{$reservation->release_number}",
                             'transaction_date' => now(),
+                            'user_id' => $request->user()?->id,
                         ]);
 
                         Log::info('Stock updated for product', [
@@ -455,6 +462,8 @@ class JobReservationController extends Controller
 
                 // Update reservation status to fulfilled
                 $reservation->status = 'fulfilled';
+                $reservation->fulfilled_by_id = $request->user()?->id;
+                $reservation->fulfilled_at = now();
                 $reservation->save();
 
                 DB::commit();

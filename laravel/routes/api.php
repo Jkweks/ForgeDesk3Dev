@@ -172,6 +172,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
         Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
         Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
+        Route::get('/ez-estimate/part-lookup', [\App\Http\Controllers\Api\EzEstimateController::class, 'lookupPart']);
     });
 });
 
