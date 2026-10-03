@@ -317,7 +317,41 @@ function qrLayout(payload) {
   return { ...best, y: Math.max(0, Math.floor((LABEL_HEIGHT_DOTS - best.size) / 2)) };
 }
 
-function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl }) {
+// Drop-rack tag: profile image left, SKU + length to its right. A scrap tag
+// swaps the length for "SCRAP" with the real length as a small detail line.
+// `image` is a pre-rendered 1-bit bitmap ({ bytesPerRow, total, hex }) so the
+// bridge needs no image library.
+function buildDropZpl({ kind, sku, size, detail, image }) {
+  const lines = ['^XA'];
+  let textX = 20;
+
+  if (image && image.hex) {
+    lines.push(`^FO10,10^GFA,${image.total},${image.total},${image.bytesPerRow},${image.hex}^FS`);
+    textX = 10 + image.bytesPerRow * 8 + 20;
+  }
+
+  lines.push('^CF0,28');
+  lines.push(`^FO${textX},12^FD${escapeZpl(kind === 'scrap' ? 'SCRAP' : 'DROP')}^FS`);
+  lines.push('^CF0,56');
+  lines.push(`^FO${textX},44^FD${escapeZpl(sku)}^FS`);
+  lines.push('^CF0,80');
+  lines.push(`^FO${textX},108^FD${escapeZpl(size)}${kind === 'scrap' ? '' : '"'}^FS`);
+
+  if (detail) {
+    lines.push('^CF0,28');
+    lines.push(`^FO${textX + 340},150^FD${escapeZpl(detail)}^FS`);
+  }
+
+  lines.push('^XZ');
+
+  return lines.join('\n');
+}
+
+function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image }) {
+  if (kind === 'drop' || kind === 'scrap') {
+    return buildDropZpl({ kind, sku, size, detail, image });
+  }
+
   const lines = ['^XA'];
 
   if (part) {
@@ -356,8 +390,8 @@ function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uu
 }
 
 app.post('/print', (req, res) => {
-  const { job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl } = req.body;
-  const zpl = buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl });
+  const { job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image } = req.body;
+  const zpl = buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image });
 
   if (MOCK_SERIAL) {
     // No real Zebra printer either in this mode — same spirit as the

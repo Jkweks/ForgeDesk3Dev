@@ -82,6 +82,10 @@ this, same as before.
     code on the label's right side).
   - Manual entry: `{ "size", "operator", "timestamp", "uuid" }` — no job/part
     fields, per the "manual sticker has only size + cut record data" spec.
+  - Drop-rack tag: `{ "kind": "drop" | "scrap", "sku", "size", "detail"?, "image"? }`
+    — `sku` is PARTID-FINISHCODE, `size` is the (already floored) length or
+    `SCRAP`, `image` is `{ bytesPerRow, total, hex }`, a 1-bit bitmap of the
+    profile photo rendered by ForgeDesk. No QR; drops live outside inventory.
 - `GET /sensor/status` — `{ "status": "idle" | "cutting" | "complete" }`.
   Polled by Laravel's `nextCut()`/`checkSensor()` flow while
   `cut_sensor_active` is on in Settings.

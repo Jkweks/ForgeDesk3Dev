@@ -279,8 +279,8 @@
                              @if ($awaitingSensor) wire:poll.1s="checkSensor" @endif>
                             <div style="display:flex;align-items:center;justify-content:space-between;">
                                 <div style="display:flex;align-items:center;gap:14px;">
-                                    @if ($currentItem->part->photo_url)
-                                        <img src="{{ $currentItem->part->photo_url }}" alt=""
+                                    @if ($currentItem->photo_url)
+                                        <img src="{{ $currentItem->photo_url }}" alt=""
                                              onclick="openPartPhoto()"
                                              style="width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;cursor:zoom-in;">
                                     @else
@@ -288,7 +288,7 @@
                                     @endif
                                     <div>
                                         <div class="label" style="color: {{ $s['color'] }};">NEXT CUT</div>
-                                        <div class="display" style="font-size:20px;font-weight:700;">{{ $currentItem->part->name }}</div>
+                                        <div class="display" style="font-size:20px;font-weight:700;">{{ $currentItem->display_name }}{{ $currentItem->isDrop() ? ' · DROP' : '' }}</div>
                                     </div>
                                 </div>
                                 <span class="status-pill" style="background: {{ $s['bg'] }}; color: {{ $s['color'] }};">
@@ -342,7 +342,7 @@
                                 <div style="display:flex;align-items:center;gap:12px;">
                                     <span class="dot" style="background: {{ $dotBg }};">{{ $done ? '✓' : '' }}</span>
                                     <span style="font-size:13px;font-weight: {{ $isCurrent ? 700 : 500 }}; color: {{ $done ? 'var(--muted)' : 'var(--ink)' }};">
-                                        {{ $item->part->name }}
+                                        {{ $item->display_name }}{{ $item->isDrop() ? ' · drop' : '' }}
                                     </span>
                                 </div>
                                 <span class="mono" style="font-size:12.5px;color:var(--muted-2);">{{ number_format($item->dimension_inches, 3) }}"</span>
@@ -350,9 +350,9 @@
                         @endforeach
                     </div>
 
-                    @if ($currentItem && $currentItem->part->photo_url)
+                    @if ($currentItem && $currentItem->photo_url)
                         <div class="photo-lightbox" id="photo-lightbox" onclick="closePartPhoto()">
-                            <img src="{{ $currentItem->part->photo_url }}" alt="">
+                            <img src="{{ $currentItem->photo_url }}" alt="">
                         </div>
                     @endif
 
@@ -373,6 +373,9 @@
                             <span class="mono" style="font-size:11px;color:var(--muted);width:80px;">{{ $entry->cut_at_local->format('g:i:s A') }}</span>
                             <span style="font-size:12.5px;font-weight:600;">{{ $entry->part_name }}</span>
                             <span style="font-size:11px;color:var(--muted);">{{ $entry->operator_name }}</span>
+                            @if ($entry->type === 'drop')
+                                <span class="badge" style="background:var(--surface);color:var(--muted-2);">DROP</span>
+                            @endif
                             @if ($entry->is_recut)
                                 <span class="badge" style="background:var(--danger-bg);color:var(--danger);">RECUT</span>
                             @endif
@@ -579,6 +582,32 @@
                 const sizeLine = label.elevation
                     ? `<span class="elevation">${escapeHtml(label.elevation)}</span>${escapeHtml(label.size)}"`
                     : `${escapeHtml(label.size)}"`;
+
+                if (label.kind === 'drop' || label.kind === 'scrap') {
+                    // Mirrors the printed drop tag: profile photo, SKU, length.
+                    const photo = label.photoUrl
+                        ? `<img src="${escapeHtml(label.photoUrl)}" alt="" style="width:64px;height:64px;object-fit:contain;border:1.5px solid #E4DFD5;border-radius:4px;flex-shrink:0;">`
+                        : '<span style="width:64px;height:64px;border:1.5px solid #E4DFD5;border-radius:4px;flex-shrink:0;"></span>';
+
+                    toast.innerHTML = `
+                        <div class="cut-toast-eyebrow"><span class="dot"></span> ${label.kind === 'scrap' ? 'SCRAP' : 'DROP'} &mdash; LABEL PREVIEW</div>
+                        <div class="cut-toast-label" style="justify-content:flex-start;gap:12px;">
+                            ${photo}
+                            <div class="text">
+                                <div class="part">${escapeHtml(label.sku)}</div>
+                                <div class="size-line">${escapeHtml(label.size)}${label.kind === 'scrap' ? '' : '"'}</div>
+                                ${label.detail ? `<div class="use">${escapeHtml(label.detail)}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                    stack.appendChild(toast);
+                    setTimeout(() => {
+                        toast.classList.add('leaving');
+                        setTimeout(() => toast.remove(), 200);
+                    }, 6000);
+
+                    return;
+                }
 
                 toast.innerHTML = `
                     <div class="cut-toast-eyebrow"><span class="dot"></span> CUT STARTED &mdash; LABEL PREVIEW</div>

@@ -29,3 +29,19 @@ test('buildZpl emits the computed QR placement', () => {
 
   assert.match(zpl, new RegExp(`\\^FO600,${qr.y}\\n\\^BQN,2,${qr.magnification}\\n\\^FD${qr.ecLevel}A,`));
 });
+
+test('drop tag prints image, SKU and length, and no QR', () => {
+  const zpl = buildZpl({ kind: 'drop', sku: 'E14025-BL', size: '85', image: { bytesPerRow: 2, total: 4, hex: 'FF00FF00' } });
+
+  assert.match(zpl, /\^GFA,4,4,2,FF00FF00/);
+  assert.match(zpl, /E14025-BL/);
+  assert.match(zpl, /\^FD85"\^FS/);
+  assert.doesNotMatch(zpl, /\^BQN/);
+});
+
+test('scrap tag says SCRAP with the real length as detail', () => {
+  const zpl = buildZpl({ kind: 'scrap', sku: 'E14025-BL', size: 'SCRAP', detail: 'too short - 71"' });
+
+  assert.match(zpl, /\^FDSCRAP\^FS/);
+  assert.match(zpl, /too short - 71"/);
+});

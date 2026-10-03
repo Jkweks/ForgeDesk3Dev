@@ -460,10 +460,6 @@
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorWeightPerInch">
                   </div>
                   <div class="col-md-3">
-                    <label class="form-label">Min. Drop Length (in)</label>
-                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorMinDropLength" placeholder="e.g. 24">
-                  </div>
-                  <div class="col-md-3">
                     <label class="form-label"><strong>Dimensions</strong></label>
                     <div id="configuratorDimensions" class="text-muted">-</div>
                   </div>
@@ -477,6 +473,29 @@
                       <input class="form-check-input" type="checkbox" id="configuratorIsLengthBased">
                       <span class="form-check-label">Length-based (sold/stocked in fixed-length sticks) — when reserved from a cut length, rounds up to the next 1/10th of the Stock Length above.</span>
                     </label>
+                  </div>
+                </div>
+                <div class="row g-2 align-items-end mt-2">
+                  <div class="col-12">
+                    <label class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="configuratorDropRack" onchange="toggleDropRackFields()">
+                      <span class="form-check-label"><strong>Drop Rack</strong> — Cut Flow racks the offcut from each stick (tagged to the nearest 5" below) instead of scrapping it.</span>
+                    </label>
+                  </div>
+                  <div class="col-md-3 drop-rack-field d-none">
+                    <label class="form-label">Min Drop (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorMinDropLength" placeholder="e.g. 72">
+                    <div class="form-hint">Shorter than this is scrapped.</div>
+                  </div>
+                  <div class="col-md-3 drop-rack-field d-none">
+                    <label class="form-label">Min Split (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMinSplit" placeholder="e.g. 120">
+                    <div class="form-hint">Piece cut off an oversized drop.</div>
+                  </div>
+                  <div class="col-md-3 drop-rack-field d-none">
+                    <label class="form-label">Max Drop (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMaxLength" placeholder="e.g. 144">
+                    <div class="form-hint">Longer than this gets split.</div>
                   </div>
                 </div>
                 <div class="mt-2 small text-muted" id="configuratorLinkedVariants"></div>
@@ -1031,6 +1050,10 @@
         document.getElementById('configuratorLength').value = product.configurator_length ?? '';
         document.getElementById('configuratorWeightPerInch').value = product.configurator_weight_per_inch ?? '';
         document.getElementById('configuratorMinDropLength').value = product.minimum_drop_length ?? '';
+        document.getElementById('configuratorDropRack').checked = !!product.drop_rack_enabled;
+        document.getElementById('configuratorDropMinSplit').value = product.drop_min_split ?? '';
+        document.getElementById('configuratorDropMaxLength').value = product.drop_max_length ?? '';
+        toggleDropRackFields();
         document.getElementById('configuratorIsLengthBased').checked = !!product.is_length_based;
         document.getElementById('configuratorLinkedVariants').textContent = '';
         if (product.part_number) {
@@ -1583,11 +1606,18 @@
       }
     }
 
+    function toggleDropRackFields() {
+      const on = document.getElementById('configuratorDropRack').checked;
+      document.querySelectorAll('.drop-rack-field').forEach(el => el.classList.toggle('d-none', !on));
+    }
+
     async function saveConfiguratorSpecs() {
       try {
         const length = document.getElementById('configuratorLength').value;
         const weightPerInch = document.getElementById('configuratorWeightPerInch').value;
         const minDropLength = document.getElementById('configuratorMinDropLength').value;
+        const dropMinSplit = document.getElementById('configuratorDropMinSplit').value;
+        const dropMaxLength = document.getElementById('configuratorDropMaxLength').value;
 
         const response = await apiCall(`/products/${currentProductId}/configurator-specs`, {
           method: 'PUT',
@@ -1596,6 +1626,9 @@
             configurator_length: length === '' ? null : length,
             configurator_weight_per_inch: weightPerInch === '' ? null : weightPerInch,
             minimum_drop_length: minDropLength === '' ? null : minDropLength,
+            drop_rack_enabled: document.getElementById('configuratorDropRack').checked,
+            drop_min_split: dropMinSplit === '' ? null : dropMinSplit,
+            drop_max_length: dropMaxLength === '' ? null : dropMaxLength,
             is_length_based: document.getElementById('configuratorIsLengthBased').checked,
           }),
         });

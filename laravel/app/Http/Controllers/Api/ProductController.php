@@ -319,7 +319,24 @@ class ProductController extends Controller
             'configurator_weight_per_inch' => 'nullable|numeric|min:0',
             'is_length_based' => 'nullable|boolean',
             'minimum_drop_length' => 'nullable|numeric|min:0',
+            'drop_rack_enabled' => 'nullable|boolean',
+            'drop_min_split' => 'nullable|numeric|min:0',
+            'drop_max_length' => 'nullable|numeric|min:0',
         ]);
+
+        if (! empty($validated['drop_rack_enabled'])) {
+            $min = (float) ($validated['minimum_drop_length'] ?? 0);
+            $split = (float) ($validated['drop_min_split'] ?? 0);
+            $max = (float) ($validated['drop_max_length'] ?? 0);
+
+            if ($min <= 0 || $split <= 0 || $max <= 0) {
+                abort(422, 'Min Drop, Min Split and Max Drop are all required when Drop Rack is on.');
+            }
+
+            if (! ($min <= $split && $split <= $max)) {
+                abort(422, 'Lengths must satisfy Min Drop ≤ Min Split ≤ Max Drop.');
+            }
+        }
 
         if (! $product->part_number) {
             $product->update($validated);

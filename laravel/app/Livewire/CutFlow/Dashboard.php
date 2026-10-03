@@ -10,6 +10,7 @@ use App\Models\CutFlow\StickItem;
 use App\Models\CutFlow\StickSession;
 use App\Models\FdUser;
 use App\Services\CutFlow\CutPlanner;
+use App\Services\CutFlow\DropLabel;
 use App\Services\CutFlow\TigerBridgeClient;
 use App\Support\Dimension;
 use App\Support\IpAllowlist;
@@ -688,6 +689,24 @@ class Dashboard extends Component
         $this->tigerStatus = 'printing';
         $this->markBridgeActivity();
 
+        if ($item->isDrop()) {
+            $session = $item->stickSession;
+            $result = $this->printDropTag($bridge, 'drop', $session->part_name, $session->finish, (float) $item->dimension_inches);
+
+            $this->tigerStatus = 'idle';
+
+            if (! $result['ok']) {
+                $this->lastError = $result['error'] ?? 'Print failed';
+
+                return false;
+            }
+
+            $item->update(['label_printed_at' => now()]);
+            $this->lastError = '';
+
+            return true;
+        }
+
         $part = $item->part;
         $uuid = $item->reservePendingUuid();
         $qrUrl = route('cutflow.cuts.show', $uuid);
@@ -813,10 +832,56 @@ class Dashboard extends Component
         }
 
         $item->update(['status' => 'done']);
+
+        $stickSession = $item->stickSession;
+
+        if ($item->isDrop()) {
+            // Shows in history, but touches neither the cut list nor stock consumption.
+            CutLogEntry::create([
+                'uuid' => (string) Str::uuid(),
+                'part_id' => null,
+                'part_name' => $stickSession->part_name,
+                'finish' => $stickSession->finish,
+                'operator_id' => $this->activeOperatorId(),
+                'operator_name' => $this->activeOperatorName(),
+                'description' => 'Drop cut',
+                'dimension_inches' => $item->dimension_inches,
+                'stick_length_label' => $stickSession->length_label,
+                'stick_session_id' => $item->stick_session_id,
+                'type' => 'drop',
+            ]);
+            $this->tigerStatus = 'idle';
+        } else {
+            $this->recordPieceCut($item, $stickSession);
+        }
+
+        if ($stickSession->items()->where('status', 'pending')->exists()) {
+            // Same stick, more pieces — drive the next one automatically.
+            if ($next = $this->currentItem()) {
+                $this->moveAndPrintItem($next, $bridge);
+            }
+
+            return;
+        }
+
+        $stickSession->update(['status' => 'complete']);
+        $this->activeStickId = null;
+
+        $this->printDropLabels($stickSession, $bridge);
+
+        $pool = app(CutPlanner::class)->unassignedPieces($this->activeProfileName, $this->activeProfileFinish, $this->activeJobIds);
+
+        if ($pool->isNotEmpty()) {
+            $this->modal = 'stick';
+            $this->keypadValue = '';
+        }
+    }
+
+    protected function recordPieceCut(StickItem $item, StickSession $stickSession): void
+    {
         $item->part()->decrement('qty_remaining');
 
         $part = $item->part;
-        $stickSession = $item->stickSession;
 
         $entry = CutLogEntry::create([
             'uuid' => $item->pending_uuid ?? (string) Str::uuid(),
@@ -839,25 +904,6 @@ class Dashboard extends Component
         $this->recordCutConsumed($entry);
 
         $this->tigerStatus = 'idle';
-
-        if ($stickSession->items()->where('status', 'pending')->exists()) {
-            // Same stick, more pieces — drive the next one automatically.
-            if ($next = $this->currentItem()) {
-                $this->moveAndPrintItem($next, $bridge);
-            }
-
-            return;
-        }
-
-        $stickSession->update(['status' => 'complete']);
-        $this->activeStickId = null;
-
-        $pool = app(CutPlanner::class)->unassignedPieces($this->activeProfileName, $this->activeProfileFinish, $this->activeJobIds);
-
-        if ($pool->isNotEmpty()) {
-            $this->modal = 'stick';
-            $this->keypadValue = '';
-        }
     }
 
     /**
@@ -980,6 +1026,58 @@ class Dashboard extends Component
         $session?->update(['status' => 'complete', 'cancelled_at' => now()]);
         $this->activeStickId = null;
         $this->tigerStatus = 'idle';
+    }
+
+    /**
+     * Tags the offcut(s) a finished stick leaves behind: a rack tag carrying the floored drop length
+     * for each piece worth keeping, or a scrap tag for one that's too short. A failed print is
+     * surfaced but never blocks the next stick.
+     */
+    /** Previews (toast) and prints one drop-rack or scrap tag. */
+    protected function printDropTag(TigerBridgeClient $bridge, string $kind, ?string $name, ?string $finish, float $length): array
+    {
+        $labels = app(DropLabel::class);
+
+        $this->announceCutStarted($labels->preview($kind, $name, $finish, $length));
+
+        return $bridge->printLabel($labels->payload($kind, $name, $finish, $length));
+    }
+
+    protected function printDropLabels(StickSession $session, TigerBridgeClient $bridge): void
+    {
+        foreach ($session->drop_plan ?? [] as $segment) {
+            // Split-off pieces were already tagged when the saw cut them.
+            if ($segment['cut_at'] !== null) {
+                continue;
+            }
+
+            // The uncut leftover isn't a saw cut, but the tag that went out is still recorded.
+            CutLogEntry::create([
+                'uuid' => (string) Str::uuid(),
+                'part_id' => null,
+                'part_name' => $session->part_name,
+                'finish' => $session->finish,
+                'operator_id' => $this->activeOperatorId(),
+                'operator_name' => $this->activeOperatorName(),
+                'description' => $segment['type'] === 'rack' ? 'Drop (not cut)' : 'Scrap - too short',
+                'dimension_inches' => $segment['length'],
+                'stick_length_label' => $session->length_label,
+                'stick_session_id' => $session->id,
+                'type' => 'drop',
+            ]);
+
+            $result = $this->printDropTag(
+                $bridge,
+                $segment['type'] === 'rack' ? 'drop' : 'scrap',
+                $session->part_name,
+                $session->finish,
+                (float) $segment['length'],
+            );
+
+            if (! $result['ok']) {
+                $this->lastError = $result['error'] ?? 'Drop label print failed';
+            }
+        }
     }
 
     protected function printLabelForEntry(TigerBridgeClient $bridge, CutLogEntry $entry): void
@@ -1124,7 +1222,12 @@ class Dashboard extends Component
             'is_reprint' => true,
         ]);
 
-        if ($entry->part_id) {
+        if ($entry->type === 'drop') {
+            $bridge->printLabel(app(DropLabel::class)->payload(
+                str_starts_with((string) $entry->description, 'Scrap') ? 'scrap' : 'drop',
+                $entry->part_name, $entry->finish, (float) $entry->dimension_inches
+            ));
+        } elseif ($entry->part_id) {
             $this->printLabelForEntry($bridge, $reprint);
         } else {
             $bridge->printLabel([

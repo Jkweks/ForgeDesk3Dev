@@ -14,6 +14,7 @@ class StickSession extends Model
         'finish',
         'length_inches',
         'waste_inches',
+        'drop_plan',
         'status',
         'cancelled_at',
     ];
@@ -21,6 +22,7 @@ class StickSession extends Model
     protected $casts = [
         'length_inches' => 'decimal:3',
         'waste_inches' => 'decimal:3',
+        'drop_plan' => 'array',
         'cancelled_at' => 'datetime',
     ];
 

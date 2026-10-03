@@ -107,13 +107,16 @@ class CutPlanner
             }
         }
 
-        return DB::connection('cutflow')->transaction(function () use ($lengthLabel, $lengthInches, $remaining, $picked, $name, $finish) {
+        $dropPlan = $picked->isEmpty() ? null : $this->planDrop($name, $finish, $remaining);
+
+        return DB::connection('cutflow')->transaction(function () use ($lengthLabel, $lengthInches, $remaining, $picked, $name, $finish, $dropPlan) {
             $session = StickSession::create([
                 'length_label' => $lengthLabel,
                 'part_name' => $name,
                 'finish' => $finish,
                 'length_inches' => $lengthInches,
                 'waste_inches' => round($remaining, 3),
+                'drop_plan' => $dropPlan,
                 'status' => 'active',
             ]);
 
@@ -127,8 +130,51 @@ class CutPlanner
                 ]);
             }
 
+            // Oversized drops get cut down on the saw too — after the real pieces, no part attached.
+            $sequence = $picked->count();
+            foreach ($dropPlan ?? [] as $segment) {
+                if ($segment['cut_at'] === null) {
+                    continue;
+                }
+
+                StickItem::create([
+                    'stick_session_id' => $session->id,
+                    'part_id' => null,
+                    'kind' => 'drop',
+                    'dimension_inches' => $segment['length'],
+                    'sequence' => ++$sequence,
+                    'status' => 'pending',
+                ]);
+            }
+
             return $session->fresh(['items.part']);
         });
+    }
+
+    /**
+     * What to do with the offcut once a stick's pieces are cut, per the SKU's
+     * drop-rack rules. Null when the SKU has no drop rack (or isn't a known
+     * product), so those sticks keep today's behaviour.
+     *
+     * @param  float  $remaining  Stock left after the last piece, before the kerf that frees it.
+     */
+    protected function planDrop(string $name, ?string $finish, float $remaining): ?array
+    {
+        $product = Part::resolveProductFor($name, $finish);
+
+        if (! $product?->drop_rack_enabled) {
+            return null;
+        }
+
+        $min = (float) $product->minimum_drop_length;
+        $split = (float) $product->drop_min_split;
+        $max = (float) $product->drop_max_length;
+
+        if ($min <= 0 || $split <= 0 || $max <= 0) {
+            return null;
+        }
+
+        return (new DropPlanner)->plan($remaining - $this->kerf, $min, $split, $max, $this->kerf);
     }
 
     /**
