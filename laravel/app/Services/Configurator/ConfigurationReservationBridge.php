@@ -2,43 +2,51 @@
 
 namespace App\Services\Configurator;
 
+use App\Models\BusinessJob;
 use App\Models\DoorFrameConfiguration;
 use App\Models\JobReservation;
 use App\Models\JobReservationItem;
+use App\Models\Product;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Commits a configuration's generated BOM (frame + door + hardware parts)
- * against real inventory by creating (or, on later calls, syncing) a
- * JobReservation — the same mechanism every other ForgeDesk fulfillment path
- * uses, so a configured opening actually reduces quantity_available like any
- * other reservation, not just a number on a report.
+ * Keeps inventory committed for a job's door/frame configurations — the same JobReservation
+ * mechanism every other fulfillment path uses, so a configured opening really reduces
+ * quantity_available.
  *
- * Used both when a configuration is first reserved (still editable) and
- * again at release — and, while a configuration stays in the editable
- * "reserved" status, every time its generated parts change, to keep the
- * reservation's item quantities in sync rather than drifting from the BOM.
+ * ONE reservation per job (JobReservation.source = 'configurator'), summarising every configuration
+ * of that job that is reserved, released or in progress. It is recomputed from the whole job each
+ * time — never patched per opening — because quantities don't add up per opening:
+ *
+ *  - Extrusions are stocked in whole sticks. The job's cuts for a part number are bin-packed together
+ *    (StickYield: the same number the stock-length page prints), so 5 openings sharing offcuts need
+ *    fewer sticks than 5 x "one stick per opening".
+ *  - Roll/length stock (gasket, weatherstrip) is the job's total inches over the roll length, to the
+ *    next 1/10.
+ *  - Everything else is the summed quantity.
+ *  - Special-order hardware (no product) commits nothing.
+ *
+ * Reserve-on-rough-sizes -> final measure -> release: the configuration stays editable ("reserved")
+ * and every edit re-syncs the job; release locks it and leaves its lines committed until consumed.
+ * Consumed quantity is never reduced below what has already been drawn.
  */
 class ConfigurationReservationBridge
 {
+    /** Configuration statuses whose BOM is committed. */
+    public const COUNTED_STATUSES = ['reserved', 'released', 'in_progress'];
+
     /**
-     * Never blocks — a configuration with nothing generated yet (or only
-     * some sections generated) can still be reserved; incomplete sections
-     * just come back as warnings instead of committing anything for them.
-     * If literally nothing has been generated anywhere and there's no
-     * existing reservation to sync, this is a no-op (reservation: null).
+     * Never blocks — an opening with nothing generated yet (or only some sections) can still be
+     * reserved; incomplete sections come back as warnings. If nothing at all is committed for the
+     * job and no reservation exists, this is a no-op (reservation: null).
      *
      * @return array{reservation: ?JobReservation, warnings: string[]}
      */
     public function reserve(DoorFrameConfiguration $config, ?User $requestedBy = null): array
     {
-        $config->loadMissing([
-            'businessJob',
-            'frameConfig.parts.product',
-            'doorConfigs.parts.product',
-            'hardwareParts',
-        ]);
+        $config->loadMissing(['businessJob', 'frameConfig.parts', 'doorConfigs.parts', 'hardwareParts']);
 
         $warnings = [];
         if ($config->includesFrame() && ! $config->frameConfig?->parts->count()) {
@@ -51,75 +59,169 @@ class ConfigurationReservationBridge
             $warnings[] = 'Hardware parts have not been generated yet.';
         }
 
-        $lines = collect()
-            ->merge($config->frameConfig?->parts ?? [])
-            ->merge($config->doorConfigs->flatMap(fn ($dc) => $dc->parts))
-            ->merge($config->hardwareParts);
+        $reservation = $this->syncJob($config->businessJob, $requestedBy, $warnings);
 
-        // Merge duplicate products (e.g. the same fastener PN used by both
-        // the frame and hardware sections) by summing each line's quantity
-        // contribution — for a length-based stock product this is a
-        // fraction-of-a-stick (rounded up to the next 1/10th), not "1 per cut".
-        $desired = $lines->groupBy('product_id')->map(
-            fn ($group) => $group->sum(fn ($part) => $this->quantityContribution($part))
-        );
-
-        if ($desired->isEmpty() && ! $config->job_reservation_id) {
-            $warnings[] = 'Nothing has been generated yet — no inventory has been committed. Reservation will be created automatically once parts are generated.';
-
-            return ['reservation' => null, 'warnings' => $warnings];
+        if (! $reservation) {
+            $warnings[] = 'Nothing has been generated yet — no inventory has been committed. The job reservation is created automatically once parts are generated.';
         }
-
-        $reservation = $config->job_reservation_id
-            ? $this->syncReservation($config, $desired, $warnings)
-            : $this->createReservation($config, $desired, $requestedBy);
 
         return ['reservation' => $reservation, 'warnings' => $warnings];
     }
 
     /**
-     * How much of a BOM line's product should count toward the reservation.
-     * For an ordinary (unit-counted) part, that's just its quantity column.
-     * For a length-based stock product (e.g. a 288" extrusion, cut to a
-     * calculated length), it's the cut length expressed as a fraction of one
-     * stick — rounded UP to the next 1/10th, so a 145" cut against a 288"
-     * stick reserves 0.6 sticks, not the exact 0.503472... — matching
-     * JobReservationItem::binAwareCommitted()'s own 1/10th-stick bin-packing
-     * downstream, which assumes committed_qty is already in these units.
+     * Recompute the job's reservation from all of its counted configurations.
+     *
+     * @param  string[]  $warnings
      */
-    private function quantityContribution($part): float
+    public function syncJob(BusinessJob $job, ?User $requestedBy = null, array &$warnings = []): ?JobReservation
     {
-        $product = $part->product ?? null;
+        $configs = DoorFrameConfiguration::with([
+            'frameConfig.parts.product', 'doorConfigs.parts.product', 'hardwareParts.product',
+        ])->where('business_job_id', $job->id)->whereIn('status', self::COUNTED_STATUSES)->get();
 
-        if (
-            $product?->is_length_based
-            && (float) ($product->configurator_length ?? 0) > 0
-            && ($part->unit_type ?? null) === 'length'
-            && $part->calculated_length
-        ) {
-            $sticksPerCut = $part->calculated_length / $product->configurator_length;
-            $roundedUp = ceil($sticksPerCut * 10) / 10;
+        $desired = $this->desiredQuantities($configs, $warnings);
 
-            return $roundedUp * (float) $part->quantity;
-        }
+        return DB::transaction(function () use ($job, $requestedBy, $configs, $desired, &$warnings) {
+            $reservation = JobReservation::where('business_job_id', $job->id)->where('source', 'configurator')->first();
 
-        return (float) $part->quantity;
+            if (! $reservation) {
+                if ($desired->isEmpty()) {
+                    $this->linkConfigurations($configs, null);
+
+                    return null;
+                }
+                $reservation = JobReservation::create([
+                    'business_job_id' => $job->id,
+                    'job_number' => $job->job_number,
+                    'job_name' => $job->job_name,
+                    'requested_by' => $requestedBy?->name ?? 'Configurator',
+                    'requested_by_id' => $requestedBy?->id,
+                    'status' => 'active',
+                    'source' => 'configurator',
+                    'notes' => 'Auto-managed from this job\'s door/frame configurations (reserved + released). Edit the configurations, not this reservation.',
+                ]);
+            }
+
+            $this->syncItems($reservation, $desired, $warnings);
+
+            // Revive a reservation that was emptied earlier; stand one down when nothing is left to hold.
+            $reservation->refresh();
+            $holding = $reservation->items()->exists();
+            if ($holding && $reservation->status === 'cancelled') {
+                $reservation->status = 'active';
+                $reservation->save();
+            } elseif (! $holding && ! in_array($reservation->status, ['cancelled', 'fulfilled'], true)) {
+                $reservation->status = 'cancelled';
+                $reservation->save();
+            }
+
+            $this->linkConfigurations($configs, $holding ? $reservation : null);
+
+            return $holding ? $reservation : null;
+        });
     }
 
-    private function createReservation(DoorFrameConfiguration $config, $desired, ?User $requestedBy): JobReservation
+    /**
+     * What the job would be short of if this configuration were committed on top of what the job
+     * already holds: needed vs (on hand not committed elsewhere + what this job's reservation already
+     * holds of that product). Read-only — nothing is reserved.
+     *
+     * @param  string[]  $warnings
+     * @return array<int, array{product_id: int, part_number: string, needed: float, available: float}>
+     */
+    public function shortages(DoorFrameConfiguration $config, array &$warnings = []): array
     {
-        return DB::transaction(function () use ($config, $desired, $requestedBy) {
-            $reservation = JobReservation::create([
-                'business_job_id' => $config->business_job_id,
-                'job_number' => $config->businessJob->job_number,
-                'job_name' => $config->businessJob->job_name,
-                'requested_by' => $requestedBy?->name ?? 'Configurator',
-                'requested_by_id' => $requestedBy?->id,
-                'status' => 'active',
-                'notes' => "Auto-created from door/frame configuration #{$config->id}.",
-            ]);
+        $counted = DoorFrameConfiguration::with(['frameConfig.parts.product', 'doorConfigs.parts.product', 'hardwareParts.product'])
+            ->where('business_job_id', $config->business_job_id)
+            ->where(fn ($q) => $q->whereIn('status', self::COUNTED_STATUSES)->orWhere('id', $config->id))
+            ->get();
 
-            foreach ($desired as $productId => $qty) {
+        $desired = $this->desiredQuantities($counted, $warnings);
+        $held = JobReservation::where('business_job_id', $config->business_job_id)->where('source', 'configurator')->first()
+            ?->items()->get()->keyBy('product_id') ?? collect();
+
+        $products = Product::whereIn('id', $desired->keys())->get()->keyBy('id');
+        $short = [];
+        foreach ($desired as $pid => $needed) {
+            $available = (float) $products[$pid]->quantity_available + (float) ($held->get($pid)?->committed_qty ?? 0);
+            if ($needed > $available + 0.0001) {
+                $short[] = ['product_id' => $pid, 'part_number' => $products[$pid]->sku, 'needed' => $needed, 'available' => max(0, $available)];
+            }
+        }
+
+        return $short;
+    }
+
+    /**
+     * @param  Collection<int, DoorFrameConfiguration>  $configs
+     * @return Collection<int, float> product_id => quantity to commit
+     */
+    public function desiredQuantities(Collection $configs, array &$warnings = []): Collection
+    {
+        $cuts = [];   // product_id => [inches, ...]   (extrusions -> sticks)
+        $inches = []; // product_id => total inches    (roll stock)
+        $units = [];  // product_id => quantity
+
+        foreach ($configs as $config) {
+            $parts = collect()
+                ->merge($config->frameConfig?->parts ?? [])
+                ->merge($config->doorConfigs->flatMap(fn ($dc) => $dc->parts))
+                ->merge($config->hardwareParts)
+                ->filter(fn ($p) => $p->product_id && $p->product); // special-order hardware has no product
+
+            foreach ($parts as $part) {
+                $pid = $part->product_id;
+                $isLength = $part->unit_type === 'length' && (float) $part->calculated_length > 0;
+
+                if ($isLength && in_array($part->source_type, ['extrusion', 'profile'], true)) {
+                    for ($i = 0; $i < (int) round((float) $part->quantity); $i++) {
+                        $cuts[$pid][] = (float) $part->calculated_length;
+                    }
+                } elseif ($isLength && $part->product->is_length_based && (float) $part->product->configurator_length > 0) {
+                    $inches[$pid] = ($inches[$pid] ?? 0) + (float) $part->calculated_length * (float) $part->quantity;
+                } else {
+                    if ($isLength) {
+                        $note = "{$part->product->part_number} is cut to length but has no roll length set — reserved as one each per line.";
+                        if (! in_array($note, $warnings, true)) {
+                            $warnings[] = $note;
+                        }
+                    }
+                    $units[$pid] = ($units[$pid] ?? 0) + (float) $part->quantity;
+                }
+            }
+        }
+
+        $products = Product::whereIn('id', array_unique([...array_keys($cuts), ...array_keys($inches), ...array_keys($units)]))->get()->keyBy('id');
+
+        $desired = collect();
+        foreach ($cuts as $pid => $lengths) {
+            $desired[$pid] = (float) StickYield::sticks($lengths, StickYield::stockLengthFor($products[$pid]));
+        }
+        foreach ($inches as $pid => $total) {
+            // 1/10th-of-a-roll granularity, the same unit JobReservationItem::binAwareCommitted() packs in.
+            $desired[$pid] = ($desired[$pid] ?? 0) + ceil($total / (float) $products[$pid]->configurator_length * 10) / 10;
+        }
+        foreach ($units as $pid => $qty) {
+            $desired[$pid] = ($desired[$pid] ?? 0) + $qty;
+        }
+
+        return $desired->filter(fn ($q) => $q > 0);
+    }
+
+    /**
+     * Diffs the desired product/quantity map against the reservation's current items, mutating one
+     * JobReservationItem at a time (never a bulk delete-then-reinsert) so its saved/deleted model
+     * hooks keep Product::quantity_committed/quantity_available correctly in sync — the same
+     * per-item CRUD convention JobReservationController uses.
+     */
+    private function syncItems(JobReservation $reservation, Collection $desired, array &$warnings): void
+    {
+        $existingByProduct = $reservation->items()->get()->keyBy('product_id');
+
+        foreach ($desired as $productId => $qty) {
+            $item = $existingByProduct->get($productId);
+
+            if (! $item) {
                 JobReservationItem::create([
                     'reservation_id' => $reservation->id,
                     'product_id' => $productId,
@@ -127,71 +229,47 @@ class ConfigurationReservationBridge
                     'committed_qty' => $qty,
                     'consumed_qty' => 0,
                 ]);
+
+                continue;
             }
 
-            $config->update(['job_reservation_id' => $reservation->id]);
+            $newQty = max((float) $qty, (float) $item->consumed_qty);
+            if ($newQty > (float) $qty) {
+                $warnings[] = "Could not reduce product #{$productId} below the {$item->consumed_qty} already consumed.";
+            }
 
-            return $reservation;
-        });
+            if ((float) $item->requested_qty !== $newQty || (float) $item->committed_qty !== $newQty) {
+                $item->requested_qty = $newQty;
+                $item->committed_qty = $newQty;
+                $item->save();
+            }
+        }
+
+        foreach ($existingByProduct as $productId => $item) {
+            if ($desired->has($productId)) {
+                continue;
+            }
+
+            if ((float) $item->consumed_qty > 0) {
+                $warnings[] = "Kept product #{$productId} reserved — already partially consumed.";
+
+                continue;
+            }
+
+            $item->delete();
+        }
     }
 
-    /**
-     * Diffs the desired product/quantity map against the reservation's
-     * current items, mutating one JobReservationItem row at a time (never a
-     * bulk delete-then-reinsert) so its saved/deleted model hooks keep
-     * Product::quantity_committed/quantity_available correctly in sync —
-     * the same per-item CRUD convention JobReservationController's
-     * addItem/updateItem/removeItem already use.
-     */
-    private function syncReservation(DoorFrameConfiguration $config, $desired, array &$warnings): JobReservation
+    /** Point every counted configuration at the job reservation (and release any that no longer count). */
+    private function linkConfigurations(Collection $counted, ?JobReservation $reservation): void
     {
-        $reservation = $config->jobReservation()->with('items')->first();
-
-        return DB::transaction(function () use ($reservation, $desired, &$warnings) {
-            $existingByProduct = $reservation->items->keyBy('product_id');
-
-            foreach ($desired as $productId => $qty) {
-                $item = $existingByProduct->get($productId);
-
-                if (! $item) {
-                    JobReservationItem::create([
-                        'reservation_id' => $reservation->id,
-                        'product_id' => $productId,
-                        'requested_qty' => $qty,
-                        'committed_qty' => $qty,
-                        'consumed_qty' => 0,
-                    ]);
-
-                    continue;
-                }
-
-                $newQty = max((float) $qty, (float) $item->consumed_qty);
-                if ($newQty < (float) $qty) {
-                    $warnings[] = "Could not reduce product #{$productId} below the {$item->consumed_qty} already consumed.";
-                }
-
-                if ((float) $item->requested_qty !== $newQty || (float) $item->committed_qty !== $newQty) {
-                    $item->requested_qty = $newQty;
-                    $item->committed_qty = $newQty;
-                    $item->save();
-                }
-            }
-
-            foreach ($existingByProduct as $productId => $item) {
-                if ($desired->has($productId)) {
-                    continue;
-                }
-
-                if ((float) $item->consumed_qty > 0) {
-                    $warnings[] = "Kept product #{$productId} reserved — already partially consumed.";
-
-                    continue;
-                }
-
-                $item->delete();
-            }
-
-            return $reservation;
-        });
+        $ids = $counted->pluck('id');
+        if ($reservation) {
+            DoorFrameConfiguration::whereIn('id', $ids)->update(['job_reservation_id' => $reservation->id]);
+            DoorFrameConfiguration::where('business_job_id', $reservation->business_job_id)
+                ->whereNotIn('id', $ids)->where('job_reservation_id', $reservation->id)->update(['job_reservation_id' => null]);
+        } else {
+            DoorFrameConfiguration::whereIn('id', $ids)->update(['job_reservation_id' => null]);
+        }
     }
 }

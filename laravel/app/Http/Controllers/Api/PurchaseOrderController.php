@@ -14,8 +14,10 @@ use App\Models\StorageLocation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+
 class PurchaseOrderController extends Controller
 {
     /** Statuses where the PO — its header, addresses, and line items — may still be edited. */
@@ -116,6 +118,7 @@ class PurchaseOrderController extends Controller
             'items.*.unit_cost' => 'required|numeric|min:0',
             'items.*.destination_location' => 'nullable|string',
             'items.*.notes' => 'nullable|string',
+            'items.*.cost_code' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -157,6 +160,7 @@ class PurchaseOrderController extends Controller
                     'total_cost' => $itemData['quantity'] * $itemData['unit_cost'],
                     'destination_location' => $itemData['destination_location'] ?? null,
                     'notes' => $itemData['notes'] ?? null,
+                    'cost_code' => $itemData['cost_code'] ?? null,
                 ]);
 
                 $totalAmount += $item->total_cost;
@@ -474,8 +478,19 @@ class PurchaseOrderController extends Controller
     /**
      * Cancel purchase order
      */
-    public function cancel(PurchaseOrder $purchaseOrder)
+    public function cancel(Request $request, PurchaseOrder $purchaseOrder)
     {
+        $request->validate([
+            'current_password' => 'required',
+        ]);
+
+        if (! Hash::check($request->current_password, $request->user()->password)) {
+            return response()->json([
+                'message' => 'Password is incorrect',
+                'errors' => ['current_password' => ['Password is incorrect']],
+            ], 422);
+        }
+
         if ($purchaseOrder->status === 'cancelled') {
             return response()->json([
                 'message' => 'Order is already cancelled',

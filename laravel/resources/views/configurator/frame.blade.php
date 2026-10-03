@@ -56,12 +56,14 @@
                 <div class="btn-group" role="group">
                   <button class="btn btn-outline-secondary" id="fb-reserve-toggle-btn" onclick="fbToggleReserve()" style="display:none" data-permission="configurator.release"><i class="ti ti-bookmark me-1"></i>Reserve</button>
                   <button class="btn btn-outline-secondary" id="fb-reserve-btn" onclick="fbCreateReservation()" style="display:none" data-permission="configurator.release"><i class="ti ti-package me-1"></i>Create Reservation</button>
-                  <button class="btn btn-success" id="fb-release-btn" onclick="fbRelease()" data-permission="configurator.release"><i class="ti ti-lock me-1"></i>Release</button>
+                  <button class="btn btn-success" id="fb-release-btn" onclick="fbOpenRelease()" data-permission="configurator.release"><i class="ti ti-lock me-1"></i>Release&hellip;</button>
+                  <button class="btn btn-outline-danger" id="fb-unrelease-btn" onclick="fbUnrelease()" style="display:none" data-permission="configurator.release"><i class="ti ti-lock-open me-1"></i>Un-release</button>
                 </div>
                 <div class="btn-group" role="group">
                   <button class="btn btn-outline-secondary" onclick="fbOpenDuplicateModal()" data-permission="configurator.edit"><i class="ti ti-copy me-1"></i>Duplicate</button>
                   <button class="btn btn-outline-primary" onclick="fbExportPdf()" data-permission="configurator.view"><i class="ti ti-file-download me-1"></i>Export PDF</button>
                   <button class="btn btn-outline-primary" onclick="fbExportCsv()" data-permission="configurator.view"><i class="ti ti-file-spreadsheet me-1"></i>Export CSV</button>
+                  <button class="btn btn-outline-primary" onclick="window.open('/config/labels?config=' + fbSelectedId, '_blank')" data-permission="configurator.view"><i class="ti ti-tag me-1"></i>Labels</button>
                 </div>
               </div>
             </div>
@@ -557,6 +559,22 @@
   </div>
 </div>
 
+<div class="modal modal-blur fade" id="fb-release-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Release to production</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="fb-release-body">Checking&hellip;</div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="fb-release-confirm" onclick="fbConfirmRelease()" disabled><i class="ti ti-lock me-1"></i>Release &amp; lock</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 let fbConfigs = [];
 let fbSelectedId = null;
@@ -951,7 +969,9 @@ function fbRenderHwParts(parts) {
   tbody.innerHTML = parts.map(p => `
     <tr>
       <td>${esc(p.formatted_label)}</td>
-      <td>${esc(p.product.part_number)}<div class="text-muted small">${esc(p.product.description || '')}</div></td>
+      <td>${p.product
+        ? `${esc(p.product.part_number)}<div class="text-muted small">${esc(p.product.description || '')}</div>`
+        : `<span class="badge bg-orange-lt">Special order</span><div class="text-muted small">${esc([p.manufacturer, p.model_number].filter(Boolean).join(' · '))}</div>`}</td>
       <td>${p.quantity}</td>
       <td><span class="badge ${sourceBadge[p.source_type] || 'bg-secondary-lt'}">${esc(p.source_type)}</span></td>
       <td class="text-end">
@@ -1052,24 +1072,37 @@ function fbRenderDetail() {
   const badge = document.getElementById('fb-status-badge');
   badge.textContent = c.status_label;
   badge.className = 'badge ' + fbStatusBadgeClass(c.status);
+  // One primary path per state: draft -> Reserve / Release; reserved -> Back to draft / Release;
+  // released -> locked (only Un-release, and only until cutting starts).
   const isDraftOrReserved = c.status === 'draft' || c.status === 'reserved';
   const reserveToggleBtn = document.getElementById('fb-reserve-toggle-btn');
   reserveToggleBtn.style.display = isDraftOrReserved ? '' : 'none';
   if (c.status === 'reserved') {
     reserveToggleBtn.classList.remove('btn-outline-secondary');
-    reserveToggleBtn.classList.add('btn-primary');
-    reserveToggleBtn.innerHTML = '<i class="ti ti-bookmark-off me-1"></i>Reserved';
+    reserveToggleBtn.classList.add('btn-outline-warning');
+    reserveToggleBtn.innerHTML = '<i class="ti ti-bookmark-off me-1"></i>Back to draft';
   } else {
-    reserveToggleBtn.classList.remove('btn-primary');
+    reserveToggleBtn.classList.remove('btn-outline-warning');
     reserveToggleBtn.classList.add('btn-outline-secondary');
     reserveToggleBtn.innerHTML = '<i class="ti ti-bookmark me-1"></i>Reserve';
   }
   document.getElementById('fb-release-btn').style.display = (isDraftOrReserved && c.is_complete) ? '' : 'none';
   document.getElementById('fb-reserve-btn').style.display = (c.status === 'released' && !c.job_reservation) ? '' : 'none';
+  const unreleaseBtn = document.getElementById('fb-unrelease-btn');
+  unreleaseBtn.style.display = c.status === 'released' ? '' : 'none';
+  const cutStarted = !!(c.cut_list && c.cut_list.cut_started);
+  unreleaseBtn.disabled = cutStarted;
+  unreleaseBtn.title = cutStarted ? 'Cutting has started on this work order — it can no longer be un-released.' : 'Unlock this opening for edits (before cutting starts)';
 
   const errBox = document.getElementById('fb-validation-errors');
   errBox.innerHTML = (c.validation_errors && c.validation_errors.length)
     ? `<div class="alert alert-warning mb-0"><strong>Incomplete:</strong> ${c.validation_errors.map(esc).join(', ')}</div>` : '';
+  if (c.status === 'released') {
+    errBox.innerHTML += `<div class="alert alert-secondary mb-0 mt-2"><i class="ti ti-lock me-1"></i>Released and locked. ${cutStarted ? 'Cutting has started.' : 'Un-release to edit (until cutting starts).'}</div>`;
+  }
+  if (c.cut_list && c.cut_list.diverged) {
+    errBox.innerHTML += `<div class="alert alert-warning mb-0 mt-2"><i class="ti ti-alert-triangle me-1"></i><strong>Cut list edited by hand</strong> (${esc((c.cut_list.diverged_at || '').slice(0, 10))}) — it no longer matches this configuration's BOM. Check it before re-running this opening (e.g. after install damage).</div>`;
+  }
 
   const linkedBanner = document.getElementById('fb-linked-banner');
   if (c.duplicate_group_id && (c.linked_siblings || []).length) {
@@ -1550,7 +1583,7 @@ async function fbOpenPartModal(kind, id) {
   document.getElementById('fb-part-kind').value = kind;
   document.getElementById('fb-part-label').value = part.part_label;
   document.getElementById('fb-part-label').disabled = part.is_auto_generated;
-  document.getElementById('fb-part-product').innerHTML = fbProductOptions(part.product.id);
+  document.getElementById('fb-part-product').innerHTML = fbProductOptions(part.product?.id);
   document.getElementById('fb-part-unittype').value = part.unit_type;
   document.getElementById('fb-part-unittype').disabled = part.is_auto_generated;
   document.getElementById('fb-part-amount').value = part.unit_type === 'length' ? part.calculated_length : part.quantity;
@@ -1595,7 +1628,7 @@ document.getElementById('fb-part-form').addEventListener('submit', async (e) => 
     } else {
       // Frame manual add: merge with existing manual parts and bulk-save.
       const existingManual = fbPartsSource('frame').filter(p => !p.is_auto_generated).map(p => ({
-        part_label: p.part_label, product_id: p.product.id, calculated_length: p.calculated_length,
+        part_label: p.part_label, product_id: p.product?.id ?? null, calculated_length: p.calculated_length,
         quantity: p.quantity, unit_type: p.unit_type,
       }));
       existingManual.push({
@@ -1637,7 +1670,7 @@ async function fbReserveConfiguration() {
 }
 
 async function fbUnreserveConfiguration() {
-  if (!confirm('Move this configuration back to draft? Its reservation will be cancelled and the committed inventory released.')) return;
+  if (!confirm('Move this opening back to draft? It drops out of the job reservation (other openings stay reserved).')) return;
   try {
     await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/unreserve`, { method: 'POST' });
     showNotification('Configuration moved back to draft', 'success');
@@ -1646,12 +1679,53 @@ async function fbUnreserveConfiguration() {
   } catch (err) { showNotification(err.message, 'danger'); }
 }
 
-// ---- Release ----
-async function fbRelease() {
-  if (!confirm('Release this configuration to production? Catalog-driven edits will be locked.')) return;
+// ---- Release (preflight + confirmations) ----
+let fbPreflight = null;
+
+async function fbOpenRelease() {
+  const body = document.getElementById('fb-release-body');
+  body.textContent = 'Checking…';
+  document.getElementById('fb-release-confirm').disabled = true;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('fb-release-modal')).show();
   try {
-    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/release`, { method: 'POST' });
-    showNotification('Configuration released', 'success');
+    fbPreflight = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/release-preflight`);
+  } catch (err) { body.innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`; return; }
+
+  const p = fbPreflight;
+  const list = (items, cls) => items.length ? `<div class="alert alert-${cls}"><ul class="mb-0 ps-3">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>` : '';
+  body.innerHTML =
+    list(p.blockers, 'danger') +
+    list(p.warnings, 'warning') +
+    (p.ready ? `<p>Releasing <strong>locks</strong> this opening, commits its parts to the job reservation and sends its extrusions to the cut list.</p>
+      ${p.confirmations.map(c => `<label class="form-check"><input class="form-check-input fb-rel-confirm" type="checkbox" data-key="${c.key}" onchange="fbReleaseCheck()"><span class="form-check-label">${esc(c.label)}</span></label>`).join('')}` : '<p class="text-muted mb-0">Fix the items above, then try again.</p>');
+  fbReleaseCheck();
+}
+
+function fbReleaseCheck() {
+  const boxes = [...document.querySelectorAll('.fb-rel-confirm')];
+  document.getElementById('fb-release-confirm').disabled = !(fbPreflight && fbPreflight.ready && boxes.length && boxes.every(b => b.checked));
+}
+
+async function fbConfirmRelease() {
+  const payload = {};
+  document.querySelectorAll('.fb-rel-confirm').forEach(b => { payload[b.dataset.key] = b.checked; });
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/release`, { method: 'POST', body: JSON.stringify(payload) });
+    bootstrap.Modal.getInstance(document.getElementById('fb-release-modal')).hide();
+    showNotification('Configuration released and locked', 'success');
+    await fbLoadList();
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+async function fbUnrelease() {
+  const diverged = fbSelectedDetail.cut_list && fbSelectedDetail.cut_list.diverged;
+  const msg = 'Un-release this opening? It becomes editable again (still reserved) and its generated cut-list lines are rebuilt.'
+    + (diverged ? '\n\nThe work order\'s cut list has hand edits — rebuilding discards edits to the generated lines.' : '');
+  if (!confirm(msg)) return;
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/unrelease`, { method: 'POST', body: JSON.stringify({ confirm_discard_cut_edits: !!diverged }) });
+    showNotification('Configuration is editable again (reserved)', 'success');
     await fbLoadList();
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }

@@ -41,9 +41,11 @@ class CutlistIngestService
      *   call is left alone (never deleted) — a partial re-export (e.g. one
      *   opening released at a time) only ever adds to or corrects a job,
      *   never drops lines that came from an earlier call.
+     * @param  string  $source  'configurator' | 'csv' — stamped on lines this call creates (an existing
+     *   line keeps the source it already had, so a hand-added line never turns into a generated one).
      * @return array{job: CutJob, line_count: int}
      */
-    public function ingest(array $rawRows, ?string $fallbackJobName, ?int $workOrderId = null): array
+    public function ingest(array $rawRows, ?string $fallbackJobName, ?int $workOrderId = null, string $source = 'csv'): array
     {
         $lines = collect();
         $jobName = null;
@@ -112,6 +114,7 @@ class CutlistIngestService
                 : $line['qty'];
 
             Part::updateOrCreate($identity, [
+                'source' => $existing?->source ?? $source,
                 'qty_original' => $line['qty'],
                 'qty_remaining' => $qtyRemaining,
                 'work_order' => $line['work_order'],

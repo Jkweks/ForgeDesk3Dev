@@ -171,7 +171,7 @@
         <tr><th>Part</th><th>PN</th><th>Description</th><th class="num">Qty</th><th>Source</th></tr>
     </thead>
     <tbody>
-        @forelse ($hardwareParts as $part)
+        @forelse ($hardwareParts->filter(fn ($p) => $p->product) as $part)
             @php
                 $functions = $part->hwlibLink?->functions ?? collect();
             @endphp
@@ -187,6 +187,26 @@
         @endforelse
     </tbody>
 </table>
+
+@php $specialOrder = $hardwareParts->filter(fn ($p) => ! $p->product); @endphp
+@if ($specialOrder->isNotEmpty())
+<div class="section-title">Special-Order Hardware <span class="muted">(not stocked — ordered for this job)</span></div>
+<table class="items">
+    <thead>
+        <tr><th>Item</th><th>Manufacturer</th><th>Model</th><th class="num">Qty</th></tr>
+    </thead>
+    <tbody>
+        @foreach ($specialOrder as $part)
+            <tr>
+                <td>{{ $part->part_label }}</td>
+                <td class="muted">{{ $part->manufacturer }}</td>
+                <td class="pn">{{ $part->model_number }}</td>
+                <td class="num">{{ $part->quantity }}</td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
+@endif
 
 @if ($config->notes)
     <div class="section-title">Notes</div>

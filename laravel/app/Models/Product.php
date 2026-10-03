@@ -21,7 +21,7 @@ class Product extends Model
         'minimum_quantity', 'reorder_point', 'safety_stock', 'nonsof', 'cp_part', 'is_shared', 'is_special_order', 'average_daily_use',
         'on_order_qty', 'maximum_quantity', 'unit_of_measure',
         'pack_size', 'purchase_uom', 'stock_uom', 'min_order_qty', 'order_multiple',
-        'supplier_id', 'supplier_sku', 'supplier_contact', 'lead_time_days',
+        'supplier_id', 'supplier_sku', 'supplier_contact', 'lead_time_days', 'cost_code',
         'manufacturer', 'manufacturer_part_number',
         'is_active', 'is_discontinued', 'status',
         'configurator_length', 'configurator_weight_per_inch', 'is_length_based', 'minimum_drop_length',

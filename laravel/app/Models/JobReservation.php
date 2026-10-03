@@ -23,6 +23,7 @@ class JobReservation extends Model
         'notes',
         'fulfilled_by_id',
         'fulfilled_at',
+        'source',
     ];
 
     protected $casts = [

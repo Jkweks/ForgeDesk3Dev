@@ -273,6 +273,50 @@ function escapeZpl(value) {
   return String(value ?? '').replace(/[\^~]/g, '');
 }
 
+// The label is only 1" tall (203 dots), so the QR code has to be sized to
+// its payload: a fixed magnification overflows once the payload (the cut-
+// record URL, ~75 bytes) pushes the symbol past version 5. Byte-mode
+// capacities per version (1-10) at each error-correction level; a QR symbol
+// is (17 + 4*version) modules per side, and ZPL prints each module as
+// `magnification` dots. ZPL adds no quiet zone, so the margin is just the
+// bare label stock around it.
+const LABEL_HEIGHT_DOTS = 203;
+const QR_MAX_DOTS = 183; // leaves ~10 dots top and bottom
+const QR_BYTE_CAPACITY = {
+  Q: [11, 20, 32, 46, 60, 74, 86, 108, 130, 151],
+  M: [14, 26, 42, 62, 84, 106, 122, 152, 180, 213],
+  L: [17, 32, 53, 78, 106, 134, 154, 192, 230, 271],
+};
+
+// Picks the sturdiest error-correction level that still prints at a module
+// size of at least 5 dots (reliable for phone cameras on thermal prints),
+// else the largest module size achievable at level L. Returns the y offset
+// that vertically centres the symbol on the label.
+function qrLayout(payload) {
+  const bytes = Buffer.byteLength(payload, 'utf8');
+  let best = null;
+
+  for (const ecLevel of ['Q', 'M', 'L']) {
+    const version = QR_BYTE_CAPACITY[ecLevel].findIndex((cap) => cap >= bytes) + 1;
+    if (version === 0) continue;
+
+    const modules = 17 + 4 * version;
+    const magnification = Math.min(10, Math.floor(QR_MAX_DOTS / modules));
+    if (magnification < 1) continue;
+
+    best = { ecLevel, magnification, size: modules * magnification };
+    if (magnification >= 5) break;
+  }
+
+  if (!best) {
+    // Payload too large for any symbol we can fit; fall back to the old
+    // fixed size rather than refusing to print the label.
+    return { ecLevel: 'L', magnification: 2, y: 15, size: 0 };
+  }
+
+  return { ...best, y: Math.max(0, Math.floor((LABEL_HEIGHT_DOTS - best.size) / 2)) };
+}
+
 function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl }) {
   const lines = ['^XA'];
 
@@ -300,9 +344,10 @@ function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uu
   // haven't been updated to send qrUrl yet.
   const qrPayload = qrUrl || uuid;
   if (qrPayload) {
-    lines.push('^FO600,15');
-    lines.push('^BQN,2,5');
-    lines.push(`^FDQA,${escapeZpl(qrPayload)}^FS`);
+    const qr = qrLayout(escapeZpl(qrPayload));
+    lines.push(`^FO600,${qr.y}`);
+    lines.push(`^BQN,2,${qr.magnification}`);
+    lines.push(`^FD${qr.ecLevel}A,${escapeZpl(qrPayload)}^FS`);
   }
 
   lines.push('^XZ');
@@ -449,4 +494,4 @@ if (require.main === module) {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-module.exports = { app };
+module.exports = { app, buildZpl, qrLayout };

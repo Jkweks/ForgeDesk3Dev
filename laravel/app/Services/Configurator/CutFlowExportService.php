@@ -3,6 +3,10 @@
 namespace App\Services\Configurator;
 
 use App\Models\DoorFrameConfiguration;
+use App\Models\CutFlow\CutJob;
+use App\Models\CutFlow\CutLogEntry;
+use App\Models\CutFlow\Part;
+use App\Models\CutFlow\StickItem;
 use App\Models\FdWorkOrder;
 use App\Services\CutFlow\CutlistIngestService;
 
@@ -32,7 +36,58 @@ class CutFlowExportService
             return ['sent' => false, 'reason' => 'No released lineal cut-list parts to export yet.'];
         }
 
-        return $this->sendRows($workOrder, $rows->values()->all());
+        return $this->sendRows($workOrder, $rows->values()->all(), 'configurator');
+    }
+
+    /**
+     * The work order's CutFlow cut list and whether cutting has begun on it (any cut logged).
+     *
+     * @return array{exists: bool, cut_started: bool, diverged: bool, diverged_at: ?string, manual_lines: int}
+     */
+    public function status(FdWorkOrder $workOrder): array
+    {
+        $job = CutJob::where('work_order_id', $workOrder->id)->first();
+        if (! $job) {
+            return ['exists' => false, 'cut_started' => false, 'diverged' => false, 'diverged_at' => null, 'manual_lines' => 0];
+        }
+
+        return [
+            'exists' => true,
+            'cut_started' => CutLogEntry::where('cut_job_id', $job->id)->exists(),
+            'diverged' => $job->bom_diverged_at !== null,
+            'diverged_at' => $job->bom_diverged_at?->toIso8601String(),
+            'manual_lines' => $job->parts()->where('source', 'manual')->count(),
+        ];
+    }
+
+    /**
+     * Throws away the generated lines and regenerates them from the work order's currently
+     * released configurations — used when a configuration is un-released (before any cutting).
+     * Hand-added and uploaded lines are kept. Refuses once any cut has been logged.
+     *
+     * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int, discarded_edits: bool}
+     */
+    public function rebuildWorkOrder(FdWorkOrder $workOrder): array
+    {
+        $job = CutJob::where('work_order_id', $workOrder->id)->first();
+        $discarded = (bool) $job?->bom_diverged_at;
+
+        if ($job) {
+            if (CutLogEntry::where('cut_job_id', $job->id)->exists()) {
+                throw new \RuntimeException('Cutting has started on this work order — its cut list can no longer be rebuilt.');
+            }
+
+            $partIds = $job->parts()->where('source', 'configurator')->pluck('id');
+            StickItem::whereIn('part_id', $partIds)->delete();
+            Part::whereIn('id', $partIds)->delete();
+
+            // Divergence stays only while hand-made lines remain; the generated side is fresh again.
+            $job->update(['bom_diverged_at' => $job->parts()->where('source', 'manual')->exists() ? $job->bom_diverged_at : null]);
+        }
+
+        $result = $this->exportWorkOrder($workOrder);
+
+        return $result + ['discarded_edits' => $discarded];
     }
 
     /**
@@ -46,7 +101,7 @@ class CutFlowExportService
      * @param  array<int, array>  $rows
      * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int}
      */
-    public function sendRows(FdWorkOrder $workOrder, array $rows): array
+    public function sendRows(FdWorkOrder $workOrder, array $rows, string $source = 'csv'): array
     {
         if (empty($rows)) {
             return ['sent' => false, 'reason' => 'No cut-list rows to send.'];
@@ -55,7 +110,7 @@ class CutFlowExportService
         $job = $workOrder->businessJob;
         $jobName = trim(($job?->job_number ?? 'Job').'-'.$workOrder->release_token);
 
-        $result = $this->ingest->ingest($rows, $jobName, $workOrder->id);
+        $result = $this->ingest->ingest($rows, $jobName, $workOrder->id, $source);
 
         return [
             'sent' => true,

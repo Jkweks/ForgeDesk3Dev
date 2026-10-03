@@ -110,6 +110,7 @@ class ProductController extends Controller
             'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
+            'cost_code' => 'nullable|max:255',
 
             // Manufacturer
             'manufacturer' => 'nullable|max:255',
@@ -229,6 +230,7 @@ class ProductController extends Controller
             'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
+            'cost_code' => 'nullable|max:255',
 
             // Manufacturer
             'manufacturer' => 'nullable|max:255',

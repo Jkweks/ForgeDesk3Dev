@@ -15,11 +15,13 @@ class ConfiguratorFrameComponent extends Model
         'product_id',
         'qty_type',
         'qty_per',
+        'glass_thicknesses',
         'sort_order',
     ];
 
     protected $casts = [
         'qty_per' => 'decimal:3',
+        'glass_thicknesses' => 'array',
         'sort_order' => 'integer',
     ];
 

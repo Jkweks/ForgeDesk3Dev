@@ -106,13 +106,17 @@ class JobReservationItem extends Model
      */
     public static function binAwareCommitted(int $productId): float
     {
+        // Only what is still open counts: a partly-consumed item (stock already taken off the shelf as
+        // sticks were cut) must not also be held against the reduced on-hand quantity.
         $items = self::where('product_id', $productId)
             ->whereHas('reservation', fn ($q) => $q->whereIn('status', ['active', 'in_progress', 'on_hold'])
                 ->whereNull('deleted_at')
             )
-            ->orderByDesc('committed_qty')
-            ->pluck('committed_qty')
-            ->map(fn ($v) => (float) $v)
+            ->get(['committed_qty', 'consumed_qty'])
+            ->map(fn ($i) => max(0.0, (float) $i->committed_qty - (float) $i->consumed_qty))
+            ->filter(fn ($open) => $open > 0)
+            ->sortDesc()
+            ->values()
             ->toArray();
 
         if (empty($items)) {

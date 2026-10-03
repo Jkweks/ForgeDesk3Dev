@@ -46,6 +46,10 @@ class FinishFallbackResolver
             }
         }
 
-        return null;
+        // Finish-less stock (e.g. a strike or cover plate with no color) has a NULL/blank
+        // finish, which no chain entry matches — without this the part silently vanishes.
+        return Product::where('part_number', $partNumber)
+            ->where(fn ($q) => $q->whereNull('finish')->orWhere('finish', ''))
+            ->first();
     }
 }

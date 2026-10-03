@@ -25,51 +25,96 @@ class HwlibBomGenerator
     {
         $this->warnings = [];
 
-        $links = $config->hardwareLinks()->with('item')->get();
+        $links = $config->relationLoaded('hardwareLinks')
+            ? $config->hardwareLinks->loadMissing('item')
+            : $config->hardwareLinks()->with('item')->get();
         if ($links->isEmpty()) {
             throw new RuntimeException('No hardware items are linked to this configuration yet.');
         }
 
         $finish = strtoupper($config->openingSpecs->finish ?? '');
+        $isPair = ($config->openingSpecs->opening_type ?? null) === 'pair';
+        // Links are per opening; a configuration with N door tags is N openings of the same hardware.
+        $openingQty = max(1, (int) $config->quantity);
+        $handing = $config->openingSpecs->deriveDoorHanding();
+
+        // Backers are keyed to the door or the frame; only the sides this opening's scope
+        // actually includes get pulled (a frame-only job must not get door backers).
+        $sides = array_values(array_filter([
+            $config->includesDoor() ? 'door' : null,
+            $config->includesFrame() ? 'frame' : null,
+        ]));
         $rows = [];
         $sortOrder = 0;
 
         foreach ($links as $link) {
             $item = $link->item;
 
-            $itemProductId = $this->resolveProduct($item->pn, $finish);
-            if ($itemProductId) {
-                $rows[] = [
-                    'part_label' => $item->name,
-                    'product_id' => $itemProductId,
-                    'quantity' => $link->quantity,
-                    'source_type' => 'item',
-                    'hwlib_link_id' => $link->id,
-                    'is_auto_generated' => true,
-                    'sort_order' => $sortOrder++,
-                ];
-            } elseif ($item->pn) {
-                $this->warnings[] = "No product found for hardware item PN \"{$item->pn}\" ({$item->name}).";
+            // A link flagged for "both" leaves is per leaf: on a pair that's two of everything
+            // (fab_utils' effectiveLinkQty). 'active'/'inactive' links name one leaf already.
+            $linkQty = (($link->leaf === 'both' && $isPair) ? $link->quantity * 2 : $link->quantity) * $openingQty;
+
+            // Handed items (locks, covers) are stocked per hand (P1421 -> P1421L / P1421R); on a pair
+            // each leaf has its own hand, so a link on both leaves is one of each (see HandedHardware).
+            foreach (HandedHardware::variants($link, $item, $isPair, $handing) as [$hand, $variantQty]) {
+                $pieceQty = $variantQty * $openingQty;
+                $stockPn = $item->pn ? $item->pn.$hand : null;
+
+                $itemProductId = $this->resolveProduct($stockPn, $finish);
+                if ($itemProductId) {
+                    $rows[] = [
+                        'part_label' => $item->name,
+                        'product_id' => $itemProductId,
+                        'quantity' => $pieceQty,
+                        'source_type' => 'item',
+                        'hwlib_link_id' => $link->id,
+                        'is_auto_generated' => true,
+                        'sort_order' => $sortOrder++,
+                    ];
+                } else {
+                    // No stock product: custom-ordered for the job (non-VOS-standard hardware).
+                    // Listed by name/manufacturer/model on the job's hardware list instead of
+                    // being dropped; it commits nothing against inventory.
+                    $rows[] = [
+                        'part_label' => $item->name,
+                        'manufacturer' => $item->manufacturer,
+                        'model_number' => ($item->model_number ?: $item->pn).$hand ?: null,
+                        'product_id' => null,
+                        'quantity' => $pieceQty,
+                        'source_type' => 'item',
+                        'hwlib_link_id' => $link->id,
+                        'is_auto_generated' => true,
+                        'sort_order' => $sortOrder++,
+                    ];
+                    if ($item->pn) {
+                        $this->warnings[] = "Hardware item \"{$item->name}\" (PN {$stockPn}) has no stock product — listed as special-order hardware.";
+                    }
+                }
             }
 
             $backers = ConfiguratorHwlibItemBacker::where('item_id', $item->id)
                 ->where('series', $link->series)
+                ->whereIn('side', $sides)
                 ->get();
 
             foreach ($backers as $backerLink) {
-                if (! $backerLink->pn) {
+                // Catalog-imported item-backer rows carry no PN/description of their own — they
+                // point at a shared backer record that does. An explicit override on the row wins.
+                $backerPn = $backerLink->pn ?: $backerLink->backer?->pn;
+                $backerDescription = $backerLink->description ?: $backerLink->backer?->description;
+                if (! $backerPn) {
                     continue;
                 }
-                $backerProductId = $this->resolveHardwareProduct($backerLink->pn);
+                $backerProductId = $this->resolveHardwareProduct($backerPn);
                 if (! $backerProductId) {
-                    $this->warnings[] = "No product found for backer PN \"{$backerLink->pn}\" ({$item->name} — {$backerLink->side}).";
+                    $this->warnings[] = "No product found for backer PN \"{$backerPn}\" ({$item->name} — {$backerLink->side}).";
 
                     continue;
                 }
 
-                $backerQty = round((float) $backerLink->qty * $link->quantity, 3);
+                $backerQty = round((float) $backerLink->qty * $linkQty, 3);
                 $rows[] = [
-                    'part_label' => $backerLink->description ?: "{$item->name} Backer ({$backerLink->side})",
+                    'part_label' => $backerDescription ?: "{$item->name} Backer ({$backerLink->side})",
                     'product_id' => $backerProductId,
                     'quantity' => $backerQty,
                     'source_type' => 'backer',
@@ -99,7 +144,18 @@ class HwlibBomGenerator
             }
         }
 
+        $rows = app(KitExpander::class)->expand($rows, $this->warnings);
+
         return ['rows' => $rows, 'warnings' => $this->warnings];
+    }
+
+    /**
+     * fab_utils' handingLRSuffix(): LH and RHR share the physical left-hand part; RH and LHR the
+     * right-hand part. Pairs and center-pivot carry no single L/R suffix.
+     */
+    public function handingSuffix(string $handing): string
+    {
+        return HandedHardware::suffix($handing);
     }
 
     /**

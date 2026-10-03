@@ -10,7 +10,7 @@ class DoorFrameHardwarePart extends Model
     use HasFactory;
 
     protected $fillable = [
-        'configuration_id', 'part_label', 'product_id', 'quantity',
+        'configuration_id', 'part_label', 'manufacturer', 'model_number', 'product_id', 'quantity',
         'source_type', 'hwlib_link_id', 'is_auto_generated', 'sort_order',
     ];
 
@@ -33,6 +33,12 @@ class DoorFrameHardwarePart extends Model
     public function hwlibLink()
     {
         return $this->belongsTo(ConfiguratorHwlibLink::class, 'hwlib_link_id');
+    }
+
+    /** No inventory product: a special-order item listed by name/model on the job's hardware list. */
+    public function isNonStock(): bool
+    {
+        return $this->product_id === null;
     }
 
     public function getFormattedLabelAttribute()

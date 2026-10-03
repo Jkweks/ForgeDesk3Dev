@@ -818,7 +818,7 @@ class Dashboard extends Component
         $part = $item->part;
         $stickSession = $item->stickSession;
 
-        CutLogEntry::create([
+        $entry = CutLogEntry::create([
             'uuid' => $item->pending_uuid ?? (string) Str::uuid(),
             'part_id' => $item->part_id,
             'part_name' => $part->name,
@@ -835,6 +835,8 @@ class Dashboard extends Component
             'stick_session_id' => $item->stick_session_id,
             'type' => 'planned',
         ]);
+
+        $this->recordCutConsumed($entry);
 
         $this->tigerStatus = 'idle';
 
@@ -855,6 +857,23 @@ class Dashboard extends Component
         if ($pool->isNotEmpty()) {
             $this->modal = 'stick';
             $this->keypadValue = '';
+        }
+    }
+
+    /**
+     * Every real cut draws stock down by its share of a stock length — never a share of the stick on the
+     * saw, so a drop and a full stick consume alike (CutConsumptionService). Never allowed to interrupt
+     * cutting: a failure is logged and the cut stays in the log for reconciliation.
+     */
+    protected function recordCutConsumed(CutLogEntry $entry): void
+    {
+        try {
+            app(\App\Services\CutFlow\CutConsumptionService::class)->recordCut($entry);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Cut station: failed to record stock consumption', [
+                'cut_log_entry_id' => $entry->id,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -959,7 +978,6 @@ class Dashboard extends Component
 
         $session?->items()->where('status', 'pending')->delete();
         $session?->update(['status' => 'complete', 'cancelled_at' => now()]);
-
         $this->activeStickId = null;
         $this->tigerStatus = 'idle';
     }

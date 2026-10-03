@@ -23,6 +23,7 @@ class Part extends Model
         'column',
         'left_cut_angle',
         'right_cut_angle',
+        'source',
     ];
 
     protected $casts = [
@@ -78,12 +79,43 @@ class Part extends Model
      */
     public function getPhotoUrlAttribute(): ?string
     {
-        $partNumber = $this->name;
-        $finish = $this->finish;
+        [$partNumber, $finish] = static::profileKey($this->name, $this->finish);
 
+        $product = Product::where('part_number', $partNumber)
+            ->where('finish', $finish)
+            ->whereNotNull('photo_path')
+            ->first();
+
+        return $product?->photo_url;
+    }
+
+    /**
+     * The inventory product this profile is (part number + finish code), or null when none matches.
+     */
+    public function resolveProduct(): ?Product
+    {
+        return static::resolveProductFor($this->name, $this->finish);
+    }
+
+    public static function resolveProductFor(?string $name, ?string $finish): ?Product
+    {
+        [$partNumber, $finish] = static::profileKey($name, $finish);
+
+        return Product::where('part_number', $partNumber)->where('finish', $finish)->first();
+    }
+
+    /**
+     * Normalises how CutFlow spells a profile into products.part_number + products.finish: strips a
+     * baked-in finish suffix off the name ("E14025-BL" -> E14025 / BL) and maps a finish label
+     * ("Black Anodized") back to its code.
+     *
+     * @return array{0: ?string, 1: ?string}
+     */
+    public static function profileKey(?string $name, ?string $finish): array
+    {
+        $partNumber = $name;
         if ($partNumber && str_contains($partNumber, '-')) {
             $suffix = strtoupper(substr($partNumber, strrpos($partNumber, '-') + 1));
-
             if (array_key_exists($suffix, Product::$finishCodes)) {
                 $partNumber = substr($partNumber, 0, strrpos($partNumber, '-'));
                 $finish = $suffix;
@@ -94,11 +126,6 @@ class Part extends Model
             $finish = array_search($finish, Product::$finishCodes, true) ?: $finish;
         }
 
-        $product = Product::where('part_number', $partNumber)
-            ->where('finish', $finish)
-            ->whereNotNull('photo_path')
-            ->first();
-
-        return $product?->photo_url;
+        return [$partNumber, $finish];
     }
 }

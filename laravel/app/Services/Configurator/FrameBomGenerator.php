@@ -54,8 +54,24 @@ class FrameBomGenerator
         // section_height is a fixed catalog dimension, known for every profile in
         // the series regardless of which ones end up in this config's BOM — so
         // TH/section/if_threshold terms can all resolve in a single pass.
-        $sectionHeights = $series->profiles->pluck('section_height', 'role_label')
-            ->map(fn ($v) => (float) $v)->all();
+        //
+        // A series can hold several profiles sharing one role label that differ by glazing
+        // (e.g. two "Head Transom Gutter"s, 1.25" for 1" glass vs 1.0" for thin glass). A
+        // formula's `section:<role>` term must then use the one that applies to this
+        // configuration's glazing; profiles that don't apply only fill roles nothing else covers.
+        $sectionHeights = [];
+        $applicableRoles = [];
+        foreach ($series->profiles as $profile) {
+            $applies = $profile->appliesTo($openingType, $hasTransom, $hasThreshold, $transomGlazing);
+            $role = $profile->role_label;
+            if ($applies || ! isset($applicableRoles[$role])) {
+                $sectionHeights[$role] = (float) $profile->section_height;
+                $applicableRoles[$role] = $applicableRoles[$role] ?? $applies;
+                if ($applies) {
+                    $applicableRoles[$role] = true;
+                }
+            }
+        }
 
         $totalHeight = $this->evaluator->resolveTotalHeight(
             $height, $hasTransom, $frameConfig->total_frame_height !== null ? (float) $frameConfig->total_frame_height : null, $sectionHeights
@@ -91,6 +107,13 @@ class FrameBomGenerator
             ];
 
             foreach ($profile->components as $component) {
+                // Same rule as fab_utils' accessory glass filter: a component limited to
+                // certain glazings is skipped when the (transom) glazing isn't one of them.
+                if ($transomGlazing !== null && ! empty($component->glass_thicknesses)
+                    && ! in_array(round($transomGlazing, 4), array_map(fn ($v) => round((float) $v, 4), $component->glass_thicknesses), true)) {
+                    continue;
+                }
+
                 $isLengthComponent = $component->qty_type === 'per_length';
 
                 // Linear-feet items (gaskets, weatherstrip): total footage needed, rounded up.
@@ -147,6 +170,8 @@ class FrameBomGenerator
                 }
             }
         }
+
+        $rows = app(KitExpander::class)->expand($rows, $this->warnings);
 
         return ['rows' => $rows, 'warnings' => $this->warnings];
     }

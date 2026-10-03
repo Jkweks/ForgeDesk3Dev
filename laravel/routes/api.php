@@ -544,10 +544,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyHardwarePart'])->middleware('permission:configurator.edit');
         Route::post('/door-frame-configurations/{id}/reserve', [DoorFrameConfigurationController::class, 'reserveConfiguration'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/unreserve', [DoorFrameConfigurationController::class, 'unreserveConfiguration'])->middleware('permission:configurator.release');
+        Route::get('/door-frame-configurations/{id}/release-preflight', [DoorFrameConfigurationController::class, 'releasePreflight'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release'])->middleware('permission:configurator.release');
+        Route::post('/door-frame-configurations/{id}/unrelease', [DoorFrameConfigurationController::class, 'unrelease'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/create-reservation', [DoorFrameConfigurationController::class, 'createReservation'])->middleware('permission:configurator.release');
         Route::get('/door-frame-configurations/{id}/export-pdf', [DoorFrameConfigurationController::class, 'exportPdf'])->middleware('permission:configurator.view');
         Route::get('/door-frame-configurations/{id}/export-csv', [DoorFrameConfigurationController::class, 'exportCsv'])->middleware('permission:configurator.view');
+
+        // Door fabrication labels (label data; sheet layout lives in the /config/labels page)
+        Route::get('/config/labels/sources', [\App\Http\Controllers\Api\DoorLabelController::class, 'sources'])->middleware('permission:configurator.view');
+        Route::get('/config/labels', [\App\Http\Controllers\Api\DoorLabelController::class, 'index'])->middleware('permission:configurator.view');
+
+        // Fabricator package (door/frame sheets + cut list / stock / BOM / field-install) and its layout template
+        Route::get('/config/package/sources', [\App\Http\Controllers\Api\PackageReportController::class, 'sources'])->middleware('permission:configurator.view');
+        Route::get('/config/package', [\App\Http\Controllers\Api\PackageReportController::class, 'show'])->middleware('permission:configurator.view');
+        Route::get('/config/pdf-templates', [\App\Http\Controllers\Api\PackageReportController::class, 'templates'])->middleware('permission:configurator.view');
+        Route::put('/config/pdf-templates/{type}', [\App\Http\Controllers\Api\PackageReportController::class, 'updateTemplate'])->middleware('permission:configurator.catalog.manage');
 
         // Configurator Catalog (frame systems / series / profiles / components / fasteners)
         Route::get('/config/catalog/tree', [ConfiguratorCatalogController::class, 'tree'])->middleware('permission:configurator.view');
@@ -680,6 +692,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/work-orders/{id}/status', [\App\Http\Controllers\Api\WorkOrderController::class, 'updateStatus'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-orders/{id}/completion-email', [\App\Http\Controllers\Api\WorkOrderController::class, 'sendCompletionEmail'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-orders/{id}/cutlist-upload', [\App\Http\Controllers\Api\WorkOrderController::class, 'uploadCutlist'])->middleware('permission:fabrication.work-orders.edit');
+
+            // Cut lists (CutFlow cut_jobs/parts) — edit while uncut, view once cut
+            $cl = \App\Http\Controllers\Api\CutListController::class;
+            Route::get('/cut-lists', [$cl, 'index']);
+            Route::get('/cut-lists/{id}', [$cl, 'show']);
+            Route::get('/cut-lists/{id}/log', [$cl, 'log']);
+            Route::put('/cut-lists/{id}', [$cl, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/cut-lists/{id}', [$cl, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/cut-lists/{id}/parts', [$cl, 'storePart'])->middleware('permission:fabrication.work-orders.edit');
+            Route::put('/cut-lists/{id}/parts/{partId}', [$cl, 'updatePart'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/cut-lists/{id}/parts/{partId}', [$cl, 'destroyPart'])->middleware('permission:fabrication.work-orders.edit');
 
             // Work Order Drawings (shop drawings file uploads)
             Route::get('/work-orders/{id}/drawings', [\App\Http\Controllers\Api\WoDrawingController::class, 'index']);

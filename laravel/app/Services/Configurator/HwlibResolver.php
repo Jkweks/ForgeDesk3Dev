@@ -112,6 +112,24 @@ class HwlibResolver
     }
 
     /**
+     * Whether a variable has anything actually entered for this link — an override on the link, a
+     * value on the item (its hardware standard) — or is calculated (which never carries its own
+     * value by design, so counts as configured whenever it resolves). Used to hide an item's whole
+     * variable block on reports when nothing about it was ever configured.
+     */
+    public function isConfigured(int $linkId, string $code): bool
+    {
+        $raw = collect($this->rawVarsByLink[$linkId] ?? [])->firstWhere('code', $code);
+        if (! $raw) {
+            return false;
+        }
+
+        return (bool) $raw->is_calculated
+            || ($raw->item_value_text !== null && $raw->item_value_text !== '')
+            || ($raw->link_value_text !== null && $raw->link_value_text !== '');
+    }
+
+    /**
      * @return array{value: ?string, overridden: bool}
      */
     public function resolveVar(string $code, int $linkId, array &$seen = []): array

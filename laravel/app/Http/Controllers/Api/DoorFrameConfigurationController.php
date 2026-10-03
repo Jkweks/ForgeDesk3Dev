@@ -1126,6 +1126,24 @@ class DoorFrameConfigurationController extends Controller
                 ], 422);
             }
 
+            // Release locks the configuration and hands the paper to the shop, so the two
+            // attestations fab_utils asked for are required, not optional.
+            if (! request()->boolean('confirm_dimensions') || ! request()->boolean('confirm_hardware')) {
+                return response()->json([
+                    'error' => 'Confirmation required',
+                    'message' => 'Confirm that all dimensions are up to date and all hardware has been added before releasing.',
+                ], 422);
+            }
+
+            $preflight = $this->releasePreflightData($config);
+            if (! empty($preflight['blockers'])) {
+                return response()->json([
+                    'error' => 'Cannot release',
+                    'message' => implode(' ', $preflight['blockers']),
+                    'blockers' => $preflight['blockers'],
+                ], 422);
+            }
+
             // A configuration built ahead of production scheduling may not have
             // a work order yet — try to pick one up now, in case one has since
             // been created (going-forward matching normally handles this from
@@ -1220,6 +1238,133 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Everything to check before release, without changing anything: hard blockers, softer
+     * warnings, stock shortages for the job, and the two confirmations release requires.
+     */
+    public function releasePreflight($id)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        return response()->json($this->releasePreflightData($config));
+    }
+
+    private function releasePreflightData(DoorFrameConfiguration $config): array
+    {
+        $config->load(['openingSpecs', 'frameConfig.parts', 'doorConfigs.parts', 'hardwareLinks', 'hardwareParts', 'workOrder', 'businessJob']);
+
+        $blockers = [];
+        $warnings = [];
+
+        if (! in_array($config->status, ['draft', 'reserved'], true)) {
+            $blockers[] = 'Only a draft or reserved configuration can be released.';
+        }
+        foreach ($config->getValidationErrors() as $error) {
+            $blockers[] = $error.'.';
+        }
+        if ($config->includesFrame() && ! $config->frameConfig?->parts->count()) {
+            $blockers[] = 'Frame parts have not been generated.';
+        }
+        if ($config->includesDoor() && $config->doorConfigs->flatMap(fn ($dc) => $dc->parts)->isEmpty()) {
+            $blockers[] = 'Door parts have not been generated.';
+        }
+        if ($config->hardwareLinks->isNotEmpty() && $config->hardwareParts->isEmpty()) {
+            $blockers[] = 'Hardware is linked but its parts have not been generated.';
+        }
+        if ($config->hardwareLinks->isEmpty()) {
+            $warnings[] = 'No hardware is linked to this opening.';
+        }
+
+        // Release ties the opening to its work order (matching it now if one has since been created).
+        if (! $config->work_order_id) {
+            try {
+                app(\App\Services\Configurator\ElevationConfigurationMatcher::class)->linkConfigurationToWorkOrder($config);
+                $config->refresh();
+            } catch (\Throwable $e) {
+                // reported below
+            }
+        }
+        if (! $config->work_order_id) {
+            $blockers[] = 'Not tied to a work order yet — create the work order\'s elevation for this opening first.';
+        }
+
+        $shortages = [];
+        if (! $blockers) {
+            $shortages = app(\App\Services\Configurator\ConfigurationReservationBridge::class)->shortages($config, $warnings);
+            foreach ($shortages as $s) {
+                $warnings[] = "Short on {$s['part_number']}: need {$s['needed']}, available {$s['available']}.";
+            }
+        }
+
+        $specialOrder = $config->hardwareParts->whereNull('product_id')->count();
+        if ($specialOrder) {
+            $warnings[] = "{$specialOrder} special-order hardware item(s) will print on the package but are not reserved from stock.";
+        }
+
+        $cutList = $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder) : null;
+        if ($cutList && $cutList['diverged']) {
+            $warnings[] = 'This work order\'s cut list has hand edits; releasing adds generated lines alongside them.';
+        }
+
+        return [
+            'ready' => ! $blockers,
+            'blockers' => $blockers,
+            'warnings' => array_values(array_unique($warnings)),
+            'shortages' => $shortages,
+            'cut_list' => $cutList,
+            'confirmations' => [
+                ['key' => 'confirm_dimensions', 'label' => 'All dimensions are up to date for this opening.'],
+                ['key' => 'confirm_hardware', 'label' => 'All hardware has been added for this opening.'],
+            ],
+        ];
+    }
+
+    /**
+     * Take a released configuration back to "reserved" (editable, still committed) — the explicit
+     * escape hatch for a mistaken release. Refused once any cut has been logged on its work order;
+     * its generated cut-list lines are rebuilt from whatever is still released.
+     */
+    public function unrelease(Request $request, $id, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge, \App\Services\Configurator\CutFlowExportService $cutFlow)
+    {
+        $config = DoorFrameConfiguration::with(['workOrder', 'businessJob'])->findOrFail($id);
+
+        if ($config->status !== 'released') {
+            return response()->json([
+                'error' => 'Cannot un-release',
+                'message' => 'Only a released configuration can be taken back to reserved (once fabrication is in progress it is locked).',
+            ], 422);
+        }
+
+        $cut = $config->workOrder ? $cutFlow->status($config->workOrder) : null;
+        if ($cut && $cut['cut_started']) {
+            return response()->json([
+                'error' => 'Cutting has started',
+                'message' => 'Cutting has started on this work order, so this opening can no longer be un-released.',
+            ], 422);
+        }
+        if ($cut && $cut['diverged'] && ! $request->boolean('confirm_discard_cut_edits')) {
+            return response()->json([
+                'error' => 'Confirmation required',
+                'message' => 'The work order\'s cut list has hand edits. Un-releasing rebuilds the generated lines and discards edits to them.',
+                'code' => 'cut_list_edits',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($config, $reservationBridge, $cutFlow) {
+            $config->status = 'reserved';
+            $config->save();
+            $reservationBridge->syncJob($config->businessJob, auth()->user());
+            if ($config->workOrder) {
+                $cutFlow->rebuildWorkOrder($config->workOrder);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Configuration is editable again (reserved).',
+            'configuration' => ['id' => $config->id, 'status' => $config->status, 'status_label' => $config->status_label],
+        ]);
+    }
+
+    /**
      * Reserve a draft configuration's current BOM against real inventory —
      * unlike release(), this leaves the configuration editable ("reserved"),
      * and further edits/regenerated parts keep syncing into the same
@@ -1237,16 +1382,16 @@ class DoorFrameConfigurationController extends Controller
             ], 422);
         }
 
-        // Never blocks on incomplete/ungenerated sections — reserve() only
-        // returns warnings for those; a config with nothing generated at all
-        // anywhere still transitions to "reserved" with no reservation yet
-        // (one gets created automatically by the sync below once parts exist).
-        $result = $reservationBridge->reserve($config, auth()->user());
-
+        // The job reservation counts configurations by status, so this one has to be "reserved"
+        // before the sync. Never blocks on incomplete/ungenerated sections — reserve() only returns
+        // warnings for those.
         if ($config->status === 'draft') {
             $config->status = 'reserved';
             $config->save();
         }
+
+        $result = $reservationBridge->reserve($config, auth()->user());
+        $config->refresh();
 
         return response()->json([
             'message' => 'Configuration reserved',
@@ -1279,17 +1424,13 @@ class DoorFrameConfigurationController extends Controller
             ], 422);
         }
 
-        if ($config->job_reservation_id) {
-            $reservation = $config->jobReservation;
-            if ($reservation && ! in_array($reservation->status, ['fulfilled', 'cancelled'])) {
-                $reservation->status = 'cancelled';
-                $reservation->save();
-            }
-        }
-
+        // Back to draft: this opening drops out of the job's reservation, which is recomputed from
+        // the job's remaining reserved/released configurations (other openings stay committed).
         $config->status = 'draft';
         $config->job_reservation_id = null;
         $config->save();
+
+        app(\App\Services\Configurator\ConfigurationReservationBridge::class)->syncJob($config->businessJob, auth()->user());
 
         return response()->json([
             'message' => 'Configuration moved back to draft',
@@ -1489,6 +1630,7 @@ class DoorFrameConfigurationController extends Controller
             'hardware_parts' => $config->hardwareParts->map(fn ($p) => $this->formatPart($p)),
             'is_complete' => $config->isComplete(),
             'can_edit' => $config->canEdit(),
+            'cut_list' => $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder) : null,
             'validation_errors' => $config->getValidationErrors(),
             'created_at' => $config->created_at->format('Y-m-d H:i:s'),
             'updated_at' => $config->updated_at->format('Y-m-d H:i:s'),
@@ -1583,12 +1725,15 @@ class DoorFrameConfigurationController extends Controller
             'id' => $part->id,
             'part_label' => $part->part_label,
             'formatted_label' => $part->formatted_label,
-            'product' => [
+            'product' => $part->product ? [
                 'id' => $part->product->id,
                 'part_number' => $part->product->part_number,
                 'finish' => $part->product->finish,
                 'description' => $part->product->description,
-            ],
+            ] : null,
+            'manufacturer' => $part->manufacturer ?? null,
+            'model_number' => $part->model_number ?? null,
+            'non_stock' => $part->product_id === null,
             'calculated_length' => $part->calculated_length,
             'quantity' => $part->quantity,
             'unit_type' => $part->unit_type,
@@ -1615,6 +1760,8 @@ class DoorFrameConfigurationController extends Controller
                 'finish' => $product->finish,
                 'description' => $product->description,
             ] : null,
+            'manufacturer' => $row['manufacturer'] ?? null,
+            'model_number' => $row['model_number'] ?? null,
             'calculated_length' => $row['calculated_length'] ?? null,
             'quantity' => $row['quantity'] ?? null,
             'unit_type' => $row['unit_type'] ?? null,
@@ -1725,11 +1872,30 @@ class DoorFrameConfigurationController extends Controller
             $link->functions()->sync($request->input('function_ids'));
         }
 
+        // An item's default strike/cover (e.g. a lock body's cover, a panic device's strike) is
+        // added alongside it the first time, unless that item is already on this opening.
+        $addedDefaults = [];
+        foreach (['default_strike_item_id' => 'strike', 'default_cover_item_id' => 'cover'] as $field => $label) {
+            $defaultId = $item?->{$field};
+            if (! $defaultId || ConfiguratorHwlibLink::where('configuration_id', $config->id)->where('item_id', $defaultId)->exists()) {
+                continue;
+            }
+            $default = ConfiguratorHwlibLink::create([
+                'configuration_id' => $config->id,
+                'item_id' => $defaultId,
+                'quantity' => 1,
+                'series' => $request->series ?? 'Standard',
+                'leaf' => $request->leaf ?? 'both',
+            ]);
+            $addedDefaults[] = ['link_id' => $default->id, 'item_id' => $defaultId, 'role' => $label];
+        }
+
         $link->load('item.category', 'item.subcategory', 'functions');
 
         return response()->json([
             'message' => 'Hardware item added successfully',
             'hardware_link' => $this->formatHardwareLink($link),
+            'added_defaults' => $addedDefaults,
         ], 201);
     }
 

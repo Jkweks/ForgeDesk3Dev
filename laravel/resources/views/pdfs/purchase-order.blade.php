@@ -141,13 +141,29 @@
             </table>
         </td>
         <td style="width:42%;">
+            @php
+                // Any po_number that doesn't already carry a "C" (manually entered with the
+                // C-### job-code convention) gets a "C-" prefix added on the printed PO.
+                $displayPoNumber = stripos((string) $po->po_number, 'C') === false
+                    ? "C-{$po->po_number}"
+                    : $po->po_number;
+
+                $itemCostCodes = $po->items
+                    ->pluck('cost_code')
+                    ->filter(fn ($code) => $code !== null && trim($code) !== '')
+                    ->unique()
+                    ->values();
+                $headerCostCode = $itemCostCodes->count() === 1
+                    ? $itemCostCodes->first()
+                    : ($itemCostCodes->count() > 1 ? 'Multiple' : $po->cost_code);
+            @endphp
             <div class="doc-title">Purchase Order</div>
             <div class="doc-facts">
                 <table>
-                    <tr><td class="flabel">Order#:</td><td class="fval">{{ $po->po_number }}</td></tr>
+                    <tr><td class="flabel">Order#:</td><td class="fval">{{ $displayPoNumber }}</td></tr>
                     <tr><td class="flabel">Date:</td><td class="fval">{{ optional($po->order_date)->format('m/d/Y') ?: '—' }}</td></tr>
                     <tr><td class="flabel">Job Name:</td><td class="fval">{{ $po->job_name ?: '________________' }}</td></tr>
-                    <tr><td class="flabel">Cost Code:</td><td class="fval">{{ $po->cost_code ?: '________________' }}</td></tr>
+                    <tr><td class="flabel">Cost Code:</td><td class="fval">{{ $headerCostCode ?: '________________' }}</td></tr>
                 </table>
             </div>
         </td>
@@ -235,7 +251,7 @@
                 <td class="pn">
                     {{ $p->supplier_sku ?? $p->manufacturer_part_number ?? $p->sku ?? $p->part_number ?? '—' }}
                     @if ($i->cost_code)
-                        <div class="sub">{{ $i->cost_code }}</div>
+                        <div class="sub">Cost Code: {{ $i->cost_code }}</div>
                     @endif
                 </td>
                 <td>
@@ -303,7 +319,7 @@ Buyer contact: {{ trim(($po->contact_name ?? '') . '  ' . ($po->contact_phone ??
 </table>
 
 <div class="prepared">
-    {{ $company->name ?? config('app.name') }} &middot; PO {{ $po->po_number }} &middot;
+    {{ $company->name ?? config('app.name') }} &middot; PO {{ $displayPoNumber }} &middot;
     Prepared {{ now()->format('M j, Y g:i A') }}@if ($po->creator) by {{ $po->creator->name }}@endif in ForgeDesk
 </div>
 

@@ -23,7 +23,7 @@ class DoorFrameFrameConfig extends Model
     protected $casts = [
         'has_transom' => 'boolean',
         'has_threshold' => 'boolean',
-        'total_frame_height' => 'decimal:2',
+        'total_frame_height' => 'decimal:4',
     ];
 
     protected $appends = [

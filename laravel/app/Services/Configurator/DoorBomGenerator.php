@@ -348,6 +348,8 @@ class DoorBomGenerator
             $addComponent('Setting Block Kit #2', $sbk2Pn, $sbk2Qty);
         }
 
+        $rows = app(KitExpander::class)->expand($rows, $this->warnings);
+
         return ['rows' => $rows, 'warnings' => $this->warnings];
     }
 

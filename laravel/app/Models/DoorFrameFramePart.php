@@ -22,7 +22,7 @@ class DoorFrameFramePart extends Model
     ];
 
     protected $casts = [
-        'calculated_length' => 'decimal:2',
+        'calculated_length' => 'decimal:4',
         'quantity' => 'decimal:3',
         'is_auto_generated' => 'boolean',
         'sort_order' => 'integer',

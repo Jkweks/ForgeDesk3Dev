@@ -11,7 +11,10 @@ class CutJob extends Model
     protected $fillable = [
         'name',
         'work_order_id',
+        'bom_diverged_at',
     ];
+
+    protected $casts = ['bom_diverged_at' => 'datetime'];
 
     public function parts()
     {

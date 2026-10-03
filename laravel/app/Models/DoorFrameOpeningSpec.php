@@ -24,8 +24,8 @@ class DoorFrameOpeningSpec extends Model
     ];
 
     protected $casts = [
-        'door_opening_width' => 'decimal:2',
-        'door_opening_height' => 'decimal:2',
+        'door_opening_width' => 'decimal:4',
+        'door_opening_height' => 'decimal:4',
     ];
 
     protected $appends = [

@@ -71,6 +71,8 @@
                   </a>
                   <div class="dropdown-menu">
                     <a class="dropdown-item {{ Request::is('config') ? 'active' : '' }}" href="/config" data-permission="configurator.view">Frame Builder</a>
+                    <a class="dropdown-item {{ Request::is('config/package') ? 'active' : '' }}" href="/config/package" data-permission="configurator.view">Fabrication Package</a>
+                    <a class="dropdown-item {{ Request::is('config/labels') ? 'active' : '' }}" href="/config/labels" data-permission="configurator.view">Door Labels</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item {{ Request::is('config/admin') ? 'active' : '' }}" href="/config/admin" data-permission="configurator.catalog.manage">Configurator Admin</a>
                   </div>
@@ -109,6 +111,7 @@
                   <div class="dropdown-menu">
                     <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders</a>
                     <a class="dropdown-item {{ Request::is('fabrication/work-queue') ? 'active' : '' }}" href="/fabrication/work-queue" data-permission="fabrication.work-orders.view">Work Queue</a>
+                    <a class="dropdown-item {{ Request::is('fabrication/cut-lists') ? 'active' : '' }}" href="/fabrication/cut-lists" data-permission="fabrication.work-orders.view">Cut Lists</a>
                     <a class="dropdown-item {{ Request::is('fabrication/quality') ? 'active' : '' }}" href="/fabrication/quality" data-permission="quality.view">Quality Reports</a>
                     <a class="dropdown-item" href="/shop" target="_blank" rel="noopener">Shop Floor Display <i class="ti ti-external-link ms-1" style="font-size:.75rem;vertical-align:middle"></i></a>
                     @if(Auth::user() && Auth::user()->isAdmin())

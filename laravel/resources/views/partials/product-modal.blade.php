@@ -934,6 +934,10 @@
                       <div class="text-muted small">Lead Time</div>
                       <div>${product.lead_time_days ? product.lead_time_days + 'd' : '-'}</div>
                     </div>
+                    <div class="col-12">
+                      <div class="text-muted small">Cost Code</div>
+                      <div>${product.cost_code || '-'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1250,6 +1254,10 @@
                       <label class="form-label small text-muted mb-1">Lead Time (d)</label>
                       <input type="number" class="form-control form-control-sm" name="lead_time_days" value="${product.lead_time_days || ''}" min="0">
                     </div>
+                    <div class="col-12">
+                      <label class="form-label small text-muted mb-1">Cost Code</label>
+                      <input type="text" class="form-control form-control-sm" name="cost_code" value="" placeholder="Auto-fills PO line items for this part">
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1352,6 +1360,7 @@
       editForm.querySelector('[name="description"]').value  = product.description || '';
       editForm.querySelector('[name="long_description"]').value = product.long_description || '';
       editForm.querySelector('[name="supplier_sku"]').value = product.supplier_sku || '';
+      editForm.querySelector('[name="cost_code"]').value = product.cost_code || '';
 
       const nonsofCb = editForm.querySelector('[name="nonsof"]');
       const nonsofLabel = document.getElementById('editNonsofLabel');

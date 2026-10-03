@@ -86,6 +86,10 @@ Route::get('/fabrication/work-orders', function () {
     return view('fabrication.work-orders');
 });
 
+Route::get('/fabrication/cut-lists', function () {
+    return view('fabrication.cut-lists');
+});
+
 Route::get('/fabrication/work-queue', function () {
     return view('fabrication.work-queue');
 });
@@ -97,6 +101,14 @@ Route::get('/fabrication/quality', function () {
 // Configurator
 Route::get('/config', function () {
     return view('configurator.frame');
+});
+
+Route::get('/config/package', function () {
+    return view('configurator.package');
+});
+
+Route::get('/config/labels', function () {
+    return view('configurator.labels');
 });
 
 Route::get('/config/admin', function () {

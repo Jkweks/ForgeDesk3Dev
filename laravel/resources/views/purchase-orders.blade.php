@@ -202,24 +202,25 @@
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th style="width: 35%">Product</th>
-                  <th style="width: 15%">Quantity</th>
-                  <th style="width: 15%">List Price</th>
-                  <th style="width: 15%">Total</th>
-                  <th style="width: 15%">Location</th>
+                  <th style="width: 30%">Product</th>
+                  <th style="width: 12%">Quantity</th>
+                  <th style="width: 12%">List Price</th>
+                  <th style="width: 12%">Total</th>
+                  <th style="width: 12%">Location</th>
+                  <th style="width: 12%">Cost Code</th>
                   <th style="width: 5%"></th>
                 </tr>
               </thead>
               <tbody id="poLineItems">
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td>
+                  <td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td>
                 </tr>
               </tbody>
               <tfoot>
                 <tr>
                   <td colspan="3" class="text-end"><strong>Total:</strong></td>
                   <td><strong id="poTotalAmount">$0.00</strong></td>
-                  <td colspan="2"></td>
+                  <td colspan="3"></td>
                 </tr>
               </tfoot>
             </table>
@@ -430,6 +431,32 @@
         <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-success" onclick="submitReceive()">
           <i class="ti ti-check me-1"></i>Receive Materials
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel PO Confirmation Modal -->
+<div class="modal modal-blur fade" id="cancelPOModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Cancel Purchase Order</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cancelPOId">
+        <p>Cancelling this purchase order will release any on-order quantities. This action cannot be undone.</p>
+        <div class="mb-3">
+          <label class="form-label required">Confirm your password to continue</label>
+          <input type="password" class="form-control" id="cancelPOPassword" autocomplete="current-password" placeholder="Your password">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Back</button>
+        <button type="button" class="btn btn-danger" onclick="confirmCancelPO()">
+          <i class="ti ti-ban me-1"></i>Cancel Purchase Order
         </button>
       </div>
     </div>
@@ -713,7 +740,7 @@ function showCreatePOModal() {
   document.getElementById('poForm').reset();
   document.getElementById('poId').value = '';
   document.getElementById('poOrderDate').value = new Date().toISOString().split('T')[0];
-  document.getElementById('poLineItems').innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+  document.getElementById('poLineItems').innerHTML = '<tr><td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
   document.getElementById('poTotalAmount').textContent = '$0.00';
   lineItemCounter = 0;
 
@@ -736,13 +763,14 @@ function buildProductOptions(products) {
     data-cost="${p.net_cost ?? p.unit_cost ?? 0}"
     data-pack="${p.pack_size || 1}"
     data-pack-uom="${escapeHtml(p.purchase_uom || 'EA')}"
+    data-cost-code="${escapeHtml(p.cost_code || '')}"
   >${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
 }
 
 // Called when supplier selection changes — clear line items and reset the table
 function onSupplierChange() {
   const tbody = document.getElementById('poLineItems');
-  tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
   document.getElementById('poTotalAmount').textContent = '$0.00';
   lineItemCounter = 0;
 }
@@ -788,6 +816,9 @@ function addPOLineItem() {
       <input type="text" class="form-control form-control-sm" id="location${lineItemCounter}" placeholder="Optional">
     </td>
     <td>
+      <input type="text" class="form-control form-control-sm" id="costCode${lineItemCounter}" placeholder="Cost code">
+    </td>
+    <td>
       <button type="button" class="btn btn-sm btn-ghost-danger" onclick="removePOLineItem(${lineItemCounter})">
         <i class="ti ti-trash"></i>
       </button>
@@ -805,7 +836,7 @@ function removePOLineItem(itemId) {
   // Show "no items" message if no items left
   const tbody = document.getElementById('poLineItems');
   if (tbody.children.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
   }
 }
 
@@ -815,6 +846,7 @@ function updateLineItemCost(itemId) {
   const quantityInput = document.getElementById(`quantity${itemId}`);
   const unitCostInput = document.getElementById(`unitCost${itemId}`);
   const lineTotalInput = document.getElementById(`lineTotal${itemId}`);
+  const costCodeInput = document.getElementById(`costCode${itemId}`);
 
   // Auto-fill net cost and show pack context when a product is selected
   if (productSelect.value) {
@@ -822,6 +854,10 @@ function updateLineItemCost(itemId) {
     if (!unitCostInput.value || unitCostInput.dataset.autoFilled) {
       unitCostInput.value = parseFloat(selectedOption.dataset.cost || 0).toFixed(2);
       unitCostInput.dataset.autoFilled = '1';
+    }
+    if (costCodeInput && (!costCodeInput.value || costCodeInput.dataset.autoFilled)) {
+      costCodeInput.value = selectedOption.dataset.costCode || '';
+      costCodeInput.dataset.autoFilled = '1';
     }
     const packSize = parseInt(selectedOption.dataset.pack || 1);
     const packUom  = selectedOption.dataset.packUom || 'EA';
@@ -874,6 +910,7 @@ async function savePurchaseOrder() {
         const quantity = document.getElementById(`quantity${itemId}`).value;
         const unitCost = document.getElementById(`unitCost${itemId}`).value;
         const location = document.getElementById(`location${itemId}`).value;
+        const costCode = document.getElementById(`costCode${itemId}`)?.value || '';
 
         if (productId && quantity && unitCost) {
           items.push({
@@ -881,6 +918,7 @@ async function savePurchaseOrder() {
             quantity: parseInt(quantity),
             unit_cost: parseFloat(unitCost),
             destination_location: location || null,
+            cost_code: costCode || null,
           });
         }
       }
@@ -1177,13 +1215,29 @@ async function approvePO(poId) {
   }
 }
 
-// Cancel PO
-async function cancelPO(poId) {
-  if (!confirm('Cancel this purchase order? This will release any on-order quantities.')) return;
+// Cancel PO — opens a password-confirmation modal before the destructive call
+function cancelPO(poId) {
+  document.getElementById('cancelPOId').value = poId;
+  document.getElementById('cancelPOPassword').value = '';
+  safeShowModal('cancelPOModal');
+}
+
+async function confirmCancelPO() {
+  const poId = document.getElementById('cancelPOId').value;
+  const password = document.getElementById('cancelPOPassword').value;
+
+  if (!password) {
+    showNotification('Please enter your password to confirm', 'warning');
+    return;
+  }
 
   try {
-    await authenticatedFetch(`/purchase-orders/${poId}/cancel`, { method: 'POST' });
+    await authenticatedFetch(`/purchase-orders/${poId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ current_password: password }),
+    });
     showNotification('Purchase order cancelled successfully', 'success');
+    safeHideModal('cancelPOModal');
     safeHideModal('viewPOModal');
     loadPurchaseOrders();
     loadStatistics();
@@ -1254,7 +1308,8 @@ function initDraftProductSearch() {
                  data-desc="${escapeHtml(p.description)}"
                  data-cost="${netCost}"
                  data-pack="${packSize}"
-                 data-pack-uom="${escapeHtml(packUom)}">
+                 data-pack-uom="${escapeHtml(packUom)}"
+                 data-cost-code="${escapeHtml(p.cost_code || '')}">
                 <div class="d-flex justify-content-between align-items-center">
                   <div>
                     <strong class="small">${escapeHtml(p.sku)}</strong>
@@ -1274,6 +1329,10 @@ function initDraftProductSearch() {
             document.getElementById('newItemProduct').value = this.dataset.id;
             input.value = `${this.dataset.sku} — ${this.dataset.desc}`;
             document.getElementById('newItemCost').value = parseFloat(this.dataset.cost).toFixed(2);
+            const newItemCostCodeInput = document.getElementById('newItemCostCode');
+            if (newItemCostCodeInput && !newItemCostCodeInput.value) {
+              newItemCostCodeInput.value = this.dataset.costCode || '';
+            }
             results.style.display = 'none';
 
             // Show pack hint below qty input
