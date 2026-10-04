@@ -158,6 +158,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .now-cutting.state-orange .dim { color: var(--warning); }
 .now-cutting.state-yellow { background: var(--caution-bg); border-color: var(--caution-border); }
 .now-cutting.state-yellow .dim { color: var(--caution); }
+.now-cutting.state-range,
+.now-cutting.state-manual { background: var(--surface); border-color: var(--border); }
+.now-cutting.state-range .dim,
+.now-cutting.state-manual .dim { color: var(--text-2); }
 .now-cutting.state-green { background: var(--success-bg); border-color: var(--success-border); }
 .now-cutting.state-green .dim { color: var(--success); }
 

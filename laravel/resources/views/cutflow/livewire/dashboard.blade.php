@@ -44,11 +44,22 @@
                 <span class="mono" style="font-size:12.5px;font-weight:700;">
                     {{ $tigerPosition !== null ? number_format($tigerPosition, 3).'"' : '—' }}
                 </span>
+                @if ($tigerLimitMin !== null && $tigerLimitMax !== null)
+                    <span class="mono" style="font-size:11px;color:var(--muted);" title="TigerStop travel limits (min – max)">
+                        {{ rtrim(rtrim(number_format($tigerLimitMin, 3), '0'), '.') }}&ndash;{{ rtrim(rtrim(number_format($tigerLimitMax, 3), '0'), '.') }}"
+                    </span>
+                @endif
             </div>
             <a href="{{ route('cutflow.import.show') }}">Import List</a>
             <a href="{{ route('cutflow.settings') }}">Settings</a>
         </div>
     </div>
+
+    @if ($tigerBridgeOutdated)
+        <div style="padding:10px 24px;background:var(--warning-bg);border-bottom:1px solid var(--warning-border);color:var(--warning);font-size:12.5px;font-weight:600;">
+            tiger-bridge on the shop machine is out of date (running {{ $tigerBridgeVersion ?? 'an unversioned build' }}, need {{ \App\Services\CutFlow\TigerBridgeClient::MIN_BRIDGE_VERSION }} or newer) &mdash; update it so out-of-range cuts are caught.
+        </div>
+    @endif
 
     @if (! $signedIn)
         <div style="padding:12px 24px;background:var(--accent-bg);border-bottom:1px solid var(--accent-border);color:var(--accent);font-size:12.5px;font-weight:600;">
@@ -268,6 +279,8 @@
                                 'red' => ['text' => 'Needs move + label', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
                                 'orange' => ['text' => 'Label printed — not in position', 'dot' => 'var(--warning)', 'bg' => 'var(--warning-bg)', 'color' => 'var(--warning)'],
                                 'yellow' => ['text' => 'In position — needs label', 'dot' => 'var(--caution)', 'bg' => 'var(--caution-bg)', 'color' => 'var(--caution)'],
+                                'range' => ['text' => 'Outside TigerStop range', 'dot' => 'var(--muted-2)', 'bg' => 'var(--surface)', 'color' => 'var(--text-2)'],
+                                'manual' => ['text' => 'Label printed — cut by hand', 'dot' => 'var(--muted-2)', 'bg' => 'var(--surface)', 'color' => 'var(--text-2)'],
                                 'green' => $awaitingSensor
                                     ? ['text' => 'Ready — waiting for cut sensor…', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)']
                                     : ['text' => 'Ready to cut', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)'],
@@ -309,6 +322,34 @@
                                 <button class="btn btn-caution" style="width:100%;" wire:click="printCurrentLabel" @if ($busy) disabled @endif>
                                     Print label
                                 </button>
+                            @elseif ($currentItemState === 'range')
+                                <div style="font-size:12.5px;color:var(--text-2);">
+                                    The TigerStop can't reach this length ({{ rtrim(rtrim(number_format($tigerLimitMin, 3), '0'), '.') }}&ndash;{{ rtrim(rtrim(number_format($tigerLimitMax, 3), '0'), '.') }}"). Print its label and cut it by hand, or skip it.
+                                </div>
+                                <div style="display:flex;gap:10px;">
+                                    <button class="btn btn-accent" style="flex:1;" wire:click="printCurrentLabel" @if ($busy) disabled @endif>
+                                        Print label &amp; cut by hand
+                                    </button>
+                                    <button class="btn btn-outline" style="flex:0 0 auto;" wire:click="skipCurrent"
+                                            wire:confirm="Skip this piece? It goes back on the cut list."
+                                            @if ($busy) disabled @endif>
+                                        Skip
+                                    </button>
+                                </div>
+                            @elseif ($currentItemState === 'manual')
+                                <div style="display:flex;gap:10px;">
+                                    <button class="btn btn-success" style="flex:1;" wire:click="confirmCutAndAdvance" @if ($busy) disabled @endif>
+                                        Hand cut done
+                                    </button>
+                                    <button class="btn btn-outline" style="flex:0 0 auto;" wire:click="printCurrentLabel" @if ($busy) disabled @endif>
+                                        Reprint
+                                    </button>
+                                    <button class="btn btn-outline" style="flex:0 0 auto;" wire:click="skipCurrent"
+                                            wire:confirm="Skip this piece? Its label is already printed — discard it. The piece goes back on the cut list."
+                                            @if ($busy) disabled @endif>
+                                        Skip
+                                    </button>
+                                </div>
                             @elseif ($awaitingSensor)
                                 <div class="btn btn-success" style="width:100%;text-align:center;opacity:.7;">
                                     Ready to cut &mdash; waiting for cut sensor…
@@ -381,6 +422,9 @@
                             @endif
                             @if ($entry->is_reprint)
                                 <span class="badge" style="background:var(--surface);color:var(--muted-2);">REPRINT</span>
+                            @endif
+                            @if ($entry->is_manual_cut)
+                                <span class="badge" style="background:var(--surface);color:var(--muted-2);">HAND CUT</span>
                             @endif
                         </div>
                         <div style="display:flex;align-items:center;gap:10px;">

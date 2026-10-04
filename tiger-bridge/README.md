@@ -92,12 +92,27 @@ this, same as before.
 - `POST /sensor/trigger` — body `{ "status": "idle" | "cutting" | "complete" }`.
   **Dev/test only** — simulates the physical sensor firing until real
   hardware is wired in (see Notes).
-- `GET /status` — current serial connection state, for a health check.
+- `GET /status` — serial connection state, `version`, and the amp's travel
+  limits (`limitMin`/`limitMax`, null until read), for a health check.
 
 ## Notes
 
 - Requires TigerSET enabled on the TigerStop amp (firmware v5.60+) — without
   it the serial port doesn't respond to outside commands.
+- **Version:** `package.json`'s `version` is reported as `version` in `GET
+  /status` and printed at startup (`[tiger-bridge] v0.2.0 listening…`).
+  ForgeDesk compares it to `TigerBridgeClient::MIN_BRIDGE_VERSION` and warns
+  on the cut station when the bridge is older. Bump it on every change here
+  (and raise the minimum in ForgeDesk when Laravel starts relying on it).
+  Changelog: 0.2.0 — read travel limits (D10/D11) on connect, reject
+  out-of-range `/move`, report `version`/`limitMin`/`limitMax` in `/status`.
+  0.1.0 — initial.
+- **Travel limits:** on connect the bridge reads the amp's `D10` (max) and
+  `D11` (min) and rejects `POST /move` outside them with HTTP 400 (`outOfRange:
+  true`) before anything is sent. Until they've been read, only the amp's own
+  `ERR_MOVEMAX`/`ERR_MOVEMIN` apply. Protocol reference:
+  `../docs/tigerstop-sdk/`. In `MOCK_SERIAL` mode set `MOCK_LIMIT_MIN` /
+  `MOCK_LIMIT_MAX` to simulate limits.
 - `SERIAL_PORT` will look like `COM3` on Windows or `/dev/ttyUSB0` on Linux.
 - If the TigerStop is reset or unplugged, this reconnects automatically every
   3 seconds.

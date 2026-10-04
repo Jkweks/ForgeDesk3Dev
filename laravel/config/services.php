@@ -50,6 +50,11 @@ return [
         // shop). When true, App\Services\CutFlow\TigerBridgeClient simulates
         // every response instead of making an HTTP call.
         'fake' => env('TIGER_BRIDGE_FAKE', false),
+
+        // Fake mode only: simulated TigerStop travel limits in inches, so the
+        // out-of-range handling can be exercised without a bridge. Null = none.
+        'fake_limit_min' => env('TIGER_BRIDGE_FAKE_LIMIT_MIN') !== null ? (float) env('TIGER_BRIDGE_FAKE_LIMIT_MIN') : null,
+        'fake_limit_max' => env('TIGER_BRIDGE_FAKE_LIMIT_MAX') !== null ? (float) env('TIGER_BRIDGE_FAKE_LIMIT_MAX') : null,
     ],
 
 ];

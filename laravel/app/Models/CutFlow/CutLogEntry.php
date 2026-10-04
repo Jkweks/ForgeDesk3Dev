@@ -27,11 +27,13 @@ class CutLogEntry extends Model
         'type',
         'is_recut',
         'is_reprint',
+        'is_manual_cut',
     ];
 
     protected $casts = [
         'dimension_inches' => 'decimal:3',
         'is_recut' => 'boolean',
+        'is_manual_cut' => 'boolean',
         'is_reprint' => 'boolean',
     ];
 

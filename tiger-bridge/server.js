@@ -6,6 +6,18 @@ const net = require('net');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
+// Single source of truth is package.json — bump it there on every bridge change
+// and raise TigerBridgeClient::MIN_BRIDGE_VERSION in ForgeDesk when Laravel
+// starts depending on new behaviour. Reported via GET /status so the app can
+// tell when the Windows box is still running an old copy.
+const VERSION = require('./package.json').version;
+
+function envNumber(raw) {
+  if (raw === undefined || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 const app = express();
 app.use(express.json());
 
@@ -16,6 +28,9 @@ const PRINTER_HOST = process.env.PRINTER_HOST || '192.168.1.50';
 const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || '';
 const MOCK_SERIAL = process.env.MOCK_SERIAL === 'true';
+// Only used with MOCK_SERIAL — a real amp reports its own limits (D10/D11).
+const MOCK_LIMIT_MIN = envNumber(process.env.MOCK_LIMIT_MIN);
+const MOCK_LIMIT_MAX = envNumber(process.env.MOCK_LIMIT_MAX);
 const ALLOWED_CLIENT_IPS = (process.env.ALLOWED_CLIENT_IPS || '')
   .split(',')
   .map((ip) => ip.trim())
@@ -142,6 +157,25 @@ let shuttingDown = false;
 let lastPosition = null;
 let lastPositionAt = null;
 
+// Travel limits read from the amp's system data on connect (D10 = Lim Max,
+// D11 = Lim Min — see docs/tigerstop-sdk/RS-232-TigerStop-Serial.md). null
+// until read; while null, range checking is skipped and the amp's own
+// ERR_MOVEMAX/ERR_MOVEMIN (EC=6/7) is the only guard.
+let limitMin = null;
+let limitMax = null;
+let readingLimits = false;
+
+// The amp answers one command at a time and replies carry no request id, so
+// every serial exchange (moves, D queries) runs through this chain — a limits
+// query can never interleave with a move's MGS/MGF acks.
+let serialQueue = Promise.resolve();
+
+function enqueueSerial(task) {
+  const run = serialQueue.then(task, task);
+  serialQueue = run.catch(() => {});
+  return run;
+}
+
 // --- TigerStop serial connection ------------------------------------------
 // Protocol: plain ASCII, \r terminated. "MG<inches>\r" moves the stop.
 // The amp replies "MGS ..." (move started) then "MGF" (move finished).
@@ -152,6 +186,8 @@ function connectSerial() {
     // No real TigerStop attached — skip opening a COM port entirely and
     // just pretend one is connected so /move can be exercised standalone.
     portReady = true;
+    limitMin = MOCK_LIMIT_MIN;
+    limitMax = MOCK_LIMIT_MAX;
     console.log('[tiger-bridge] MOCK_SERIAL enabled — no real COM port opened');
     return;
   }
@@ -165,6 +201,7 @@ function connectSerial() {
     }
     portReady = true;
     console.log(`[tiger-bridge] connected to TigerStop on ${SERIAL_PATH} @ ${BAUD_RATE}`);
+    readLimits();
   });
 
   parser = port.pipe(new ReadlineParser({ delimiter: '\r' }));
@@ -183,7 +220,82 @@ if (require.main === module) {
   connectSerial();
 }
 
+// "D<index>\r" reads one system data item. The amp echoes the command ("d10")
+// on its own line, then sends the value ("78.000"); a bad index comes back as
+// "X EC=3 BAD INDEX".
+function queryData(index) {
+  return enqueueSerial(() => new Promise((resolve, reject) => {
+    if (!portReady) {
+      return reject(new Error('serial port not connected'));
+    }
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`timed out waiting for TigerStop reply to D${index}`));
+    }, 3000);
+
+    function onLine(line) {
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith('X ')) {
+        cleanup();
+        reject(new Error(`TigerStop reported an error: ${trimmed}`));
+      } else if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+        cleanup();
+        resolve(parseFloat(trimmed));
+      }
+      // anything else (the "d10" echo) is ignored
+    }
+
+    function cleanup() {
+      clearTimeout(timeout);
+      parser.off('data', onLine);
+    }
+
+    parser.on('data', onLine);
+
+    port.write(`D${index}\r`, (err) => {
+      if (err) {
+        cleanup();
+        reject(err);
+      }
+    });
+  }));
+}
+
+async function readLimits() {
+  if (readingLimits || MOCK_SERIAL) return;
+  readingLimits = true;
+
+  try {
+    const max = await queryData(10);
+    const min = await queryData(11);
+    limitMax = max;
+    limitMin = min;
+    console.log(`[tiger-bridge] TigerStop travel limits: ${min}" to ${max}"`);
+  } catch (e) {
+    console.warn(`[tiger-bridge] could not read travel limits: ${e.message}`);
+  } finally {
+    readingLimits = false;
+  }
+}
+
+// null when the move is fine (or limits aren't known yet), else a message.
+function rangeError(inches) {
+  if (limitMin !== null && inches < limitMin - 0.0005) {
+    return `${inches}" is below the TigerStop's minimum position (${limitMin}")`;
+  }
+  if (limitMax !== null && inches > limitMax + 0.0005) {
+    return `${inches}" is beyond the TigerStop's maximum position (${limitMax}")`;
+  }
+  return null;
+}
+
 function sendMove(inches) {
+  return enqueueSerial(() => sendMoveNow(inches));
+}
+
+function sendMoveNow(inches) {
   return new Promise((resolve, reject) => {
     if (!portReady) {
       return reject(new Error('serial port not connected'));
@@ -242,6 +354,11 @@ app.post('/move', async (req, res) => {
 
   if (!Number.isFinite(inches)) {
     return res.status(400).json({ ok: false, error: 'inches must be a number' });
+  }
+
+  const outOfRange = rangeError(inches);
+  if (outOfRange) {
+    return res.status(400).json({ ok: false, error: outOfRange, outOfRange: true, limitMin, limitMax });
   }
 
   try {
@@ -460,8 +577,15 @@ app.post('/sensor/trigger', (req, res) => {
 // --- status -----------------------------------------------------------------
 
 app.get('/status', (req, res) => {
+  // limits unread (amp was off when we connected, or the first query failed)
+  // — retry in the background; the next poll picks them up.
+  if (portReady && limitMin === null && limitMax === null) {
+    readLimits();
+  }
+
   res.json({
     ok: true,
+    version: VERSION,
     serialConnected: portReady,
     serialPath: SERIAL_PATH,
     baudRate: BAUD_RATE,
@@ -470,6 +594,8 @@ app.get('/status', (req, res) => {
     printerPort: PRINTER_PORT,
     lastPosition,
     lastPositionAt,
+    limitMin,
+    limitMax,
   });
 });
 
@@ -519,7 +645,7 @@ function shutdown(signal) {
 
 if (require.main === module) {
   httpServer = app.listen(BRIDGE_PORT, () => {
-    console.log(`[tiger-bridge] listening on http://localhost:${BRIDGE_PORT}`);
+    console.log(`[tiger-bridge] v${VERSION} listening on http://localhost:${BRIDGE_PORT}`);
   });
 
   // SIGINT: Ctrl+C in the console this was started from, or `pm2 stop`.
@@ -528,4 +654,11 @@ if (require.main === module) {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-module.exports = { app, buildZpl, qrLayout };
+module.exports = {
+  app,
+  buildZpl,
+  qrLayout,
+  VERSION,
+  // test hook: pretend the amp reported these limits
+  _setLimits: (min, max) => { limitMin = min; limitMax = max; },
+};

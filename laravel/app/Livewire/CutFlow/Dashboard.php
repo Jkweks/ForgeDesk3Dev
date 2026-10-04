@@ -70,6 +70,22 @@ class Dashboard extends Component
 
     public ?string $tigerPositionAt = null;
 
+    // The stop's travel limits (inches), read by tiger-bridge from the amp's
+    // D10/D11 on connect and passed through GET /status. Null until known —
+    // then nothing is range-checked here and the amp's own error applies.
+    // Kept across a failed status poll rather than reset, since they only
+    // change if someone reconfigures the amp.
+    public ?float $tigerLimitMin = null;
+
+    public ?float $tigerLimitMax = null;
+
+    // tiger-bridge's own version (from GET /status) and whether it's older
+    // than TigerBridgeClient::MIN_BRIDGE_VERSION — i.e. the shop box is
+    // still running a stale copy of the bridge.
+    public ?string $tigerBridgeVersion = null;
+
+    public bool $tigerBridgeOutdated = false;
+
     // Unix timestamp of the last manual move/cut action (see
     // markBridgeActivity()) — drives the fast-vs-slow status poll interval
     // in bridgePollIntervalMs() below.
@@ -544,6 +560,12 @@ class Dashboard extends Component
 
             $inches = Dimension::parse($raw);
 
+            if ($error = $this->rangeError($inches)) {
+                $this->lastError = $error;
+
+                return;
+            }
+
             $entry = CutLogEntry::create([
                 'uuid' => (string) Str::uuid(),
                 'part_id' => null,
@@ -633,6 +655,8 @@ class Dashboard extends Component
      *   twice in a row, so the saw's already sitting where this piece needs
      *   it before its label exists.
      * green: both done — ready for the operator to actually make the cut.
+     * range / manual: the length is outside the stop's travel limits, so the
+     *   piece is cut by hand (or skipped) instead — see the cases below.
      */
     protected function currentItemState(StickItem $item): string
     {
@@ -640,6 +664,11 @@ class Dashboard extends Component
         $printed = $item->isLabelPrinted();
 
         return match (true) {
+            // Outside the stop's travel: it never moves, so position is moot.
+            // range: needs a label (or a skip). manual: label printed, waiting
+            // for the operator to confirm they cut it by hand.
+            $this->isOutOfRange($item) && ! $printed => 'range',
+            $this->isOutOfRange($item) => 'manual',
             ! $positioned && ! $printed => 'red',
             ! $positioned && $printed => 'orange',
             $positioned && ! $printed => 'yellow',
@@ -649,6 +678,12 @@ class Dashboard extends Component
 
     protected function doMove(StickItem $item, TigerBridgeClient $bridge): bool
     {
+        if ($error = $this->rangeError((float) $item->dimension_inches)) {
+            $this->lastError = $error;
+
+            return false;
+        }
+
         $this->tigerStatus = 'positioning';
         $this->markBridgeActivity();
 
@@ -746,6 +781,11 @@ class Dashboard extends Component
 
     protected function moveAndPrintItem(StickItem $item, TigerBridgeClient $bridge): void
     {
+        // Out of the stop's range: leave it for the operator to cut by hand or skip.
+        if ($this->isOutOfRange($item)) {
+            return;
+        }
+
         if ($this->doMove($item, $bridge)) {
             $this->doPrint($item, $bridge);
         }
@@ -801,15 +841,53 @@ class Dashboard extends Component
 
         $item = $this->currentItem();
 
-        if (! $item || $this->currentItemState($item) !== 'green') {
+        $state = $item ? $this->currentItemState($item) : null;
+
+        // A hand cut never trips the saw's cut sensor, so it's always confirmed by button.
+        if ($state === 'manual') {
+            $this->finalizeCutAndAdvance($bridge);
+
             return;
         }
 
-        if (CutFlowSetting::current()->cut_sensor_active) {
+        if ($state !== 'green' || CutFlowSetting::current()->cut_sensor_active) {
             return;
         }
 
         $this->finalizeCutAndAdvance($bridge);
+    }
+
+    /**
+     * Skips a piece the stop can't reach. Its StickItem is dropped, which puts
+     * the part straight back in the cut list (see stopStick()) for another
+     * stick or a manual cut. The material it would have used stays on this
+     * stick, so the planned offcut is no longer accurate — the drop plan is
+     * cleared rather than tagging a wrong length.
+     */
+    public function skipCurrent(TigerBridgeClient $bridge, Request $request): void
+    {
+        if (! $this->guardTabletAction($request) || $this->tigerStatus !== 'idle') {
+            return;
+        }
+
+        $item = $this->currentItem();
+
+        if (! $item || ! $this->isOutOfRange($item)) {
+            return;
+        }
+
+        $stickSession = $item->stickSession;
+
+        $item->delete();
+
+        if ($stickSession->drop_plan) {
+            $stickSession->items()->where('kind', 'drop')->where('status', 'pending')->delete();
+            $stickSession->update(['drop_plan' => null]);
+        }
+
+        $this->lastError = '';
+
+        $this->advanceStick($stickSession->fresh(), $bridge);
     }
 
     /**
@@ -831,6 +909,9 @@ class Dashboard extends Component
             return;
         }
 
+        // Decided before the status flips; true when the stop couldn't reach it and the operator cut by hand.
+        $manual = $this->isOutOfRange($item);
+
         $item->update(['status' => 'done']);
 
         $stickSession = $item->stickSession;
@@ -849,12 +930,22 @@ class Dashboard extends Component
                 'stick_length_label' => $stickSession->length_label,
                 'stick_session_id' => $item->stick_session_id,
                 'type' => 'drop',
+                'is_manual_cut' => $manual,
             ]);
             $this->tigerStatus = 'idle';
         } else {
-            $this->recordPieceCut($item, $stickSession);
+            $this->recordPieceCut($item, $stickSession, $manual);
         }
 
+        $this->advanceStick($stickSession, $bridge);
+    }
+
+    /**
+     * Whatever follows a piece leaving the stick's queue (cut or skipped): drive
+     * the next piece, or wrap the stick up and prompt for the next one.
+     */
+    protected function advanceStick(StickSession $stickSession, TigerBridgeClient $bridge): void
+    {
         if ($stickSession->items()->where('status', 'pending')->exists()) {
             // Same stick, more pieces — drive the next one automatically.
             if ($next = $this->currentItem()) {
@@ -877,7 +968,7 @@ class Dashboard extends Component
         }
     }
 
-    protected function recordPieceCut(StickItem $item, StickSession $stickSession): void
+    protected function recordPieceCut(StickItem $item, StickSession $stickSession, bool $manual = false): void
     {
         $item->part()->decrement('qty_remaining');
 
@@ -899,6 +990,7 @@ class Dashboard extends Component
             'stick_length_label' => $stickSession->length_label,
             'stick_session_id' => $item->stick_session_id,
             'type' => 'planned',
+            'is_manual_cut' => $manual,
         ]);
 
         $this->recordCutConsumed($entry);
@@ -938,6 +1030,27 @@ class Dashboard extends Component
         $this->tigerConnected = $status['ok'] && ($data['serialConnected'] ?? false);
         $this->tigerPosition = isset($data['lastPosition']) ? (float) $data['lastPosition'] : null;
         $this->tigerPositionAt = $data['lastPositionAt'] ?? null;
+
+        if ($status['ok']) {
+            $this->tigerBridgeVersion = $data['version'] ?? null;
+            $this->tigerBridgeOutdated = TigerBridgeClient::isOutdated($this->tigerBridgeVersion);
+
+            if (isset($data['limitMin'], $data['limitMax'])) {
+                $this->tigerLimitMin = (float) $data['limitMin'];
+                $this->tigerLimitMax = (float) $data['limitMax'];
+            }
+        }
+    }
+
+    /** Why the stop can't reach $inches, or null when it can (or the limits aren't known). */
+    protected function rangeError(float $inches): ?string
+    {
+        return TigerBridgeClient::rangeError($inches, $this->tigerLimitMin, $this->tigerLimitMax);
+    }
+
+    protected function isOutOfRange(StickItem $item): bool
+    {
+        return $this->rangeError((float) $item->dimension_inches) !== null;
     }
 
     protected function markBridgeActivity(): void

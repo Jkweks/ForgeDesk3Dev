@@ -15,6 +15,13 @@ use Throwable;
  */
 class TigerBridgeClient
 {
+    /**
+     * Oldest tiger-bridge (its package.json version, reported by GET /status)
+     * this app works properly with. Raise it whenever Laravel starts relying
+     * on new bridge behaviour — 0.2.0 added travel limits and the version itself.
+     */
+    public const MIN_BRIDGE_VERSION = '0.2.0';
+
     protected string $baseUrl;
 
     protected string $token;
@@ -38,6 +45,29 @@ class TigerBridgeClient
         }
     }
 
+    public static function isOutdated(?string $bridgeVersion): bool
+    {
+        return version_compare($bridgeVersion ?? '0.0.0', self::MIN_BRIDGE_VERSION, '<');
+    }
+
+    /**
+     * Null when the stop can reach $inches (or its limits aren't known yet —
+     * the amp's own ERR_MOVEMAX/ERR_MOVEMIN still guard that case), otherwise a
+     * message for the operator. Same tolerance as tiger-bridge's /move check.
+     */
+    public static function rangeError(float $inches, ?float $min, ?float $max): ?string
+    {
+        if ($min !== null && $inches < $min - 0.0005) {
+            return number_format($inches, 3).'" is below the TigerStop\'s minimum position ('.rtrim(rtrim(number_format($min, 3), '0'), '.').'").';
+        }
+
+        if ($max !== null && $inches > $max + 0.0005) {
+            return number_format($inches, 3).'" is beyond the TigerStop\'s maximum position ('.rtrim(rtrim(number_format($max, 3), '0'), '.').'").';
+        }
+
+        return null;
+    }
+
     protected function client()
     {
         return Http::baseUrl($this->baseUrl)->withToken($this->token);
@@ -59,6 +89,7 @@ class TigerBridgeClient
             return [
                 'ok' => $response->successful(),
                 'data' => $response->json(),
+                'error' => $response->successful() ? null : ($response->json('error') ?? 'Move failed'),
             ];
         } catch (Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
@@ -93,6 +124,9 @@ class TigerBridgeClient
                 'serialConnected' => true,
                 'lastPosition' => null,
                 'lastPositionAt' => null,
+                'version' => self::MIN_BRIDGE_VERSION,
+                'limitMin' => config('services.tiger_bridge.fake_limit_min'),
+                'limitMax' => config('services.tiger_bridge.fake_limit_max'),
                 'fake' => true,
             ]];
         }
