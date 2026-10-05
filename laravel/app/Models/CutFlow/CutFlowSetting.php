@@ -11,6 +11,16 @@ use Illuminate\Database\Eloquent\Model;
  */
 class CutFlowSetting extends Model
 {
+    public const OPTIMIZER_OLD = 'old';
+
+    public const OPTIMIZER_NEW = 'new';
+
+    /** @var array<string, string> */
+    public const OPTIMIZERS = [
+        self::OPTIMIZER_OLD => 'Old Optimizer',
+        self::OPTIMIZER_NEW => 'New Optimizer',
+    ];
+
     protected $connection = 'cutflow';
 
     protected $table = 'cutflow_settings';
@@ -20,6 +30,7 @@ class CutFlowSetting extends Model
         'show_cut_toast',
         'kerf_inches',
         'standard_stock_length',
+        'optimizer',
         'bridge_url',
         'bridge_token',
         'bridge_fake',
@@ -55,6 +66,13 @@ class CutFlowSetting extends Model
         return $this->standard_stock_length !== null
             ? (float) $this->standard_stock_length
             : (float) config('cutflow.standard_stock_length', 288);
+    }
+
+    public function selectedOptimizer(): string
+    {
+        return array_key_exists((string) ($this->attributes['optimizer'] ?? ''), self::OPTIMIZERS)
+            ? $this->attributes['optimizer']
+            : self::OPTIMIZER_OLD;
     }
 
     public function bridgeUrl(): string

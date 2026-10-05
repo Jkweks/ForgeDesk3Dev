@@ -15,6 +15,7 @@ class DoorLabelController extends Controller
     public function sources()
     {
         $configs = DoorFrameConfiguration::with(['businessJob', 'workOrder', 'doors', 'openingSpecs'])
+            ->notArchived()
             ->whereIn('job_scope', ['door_and_frame', 'door_only'])
             ->whereHas('doorConfigs')
             ->get();

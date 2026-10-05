@@ -140,6 +140,11 @@
                                                 @if ($projection['stickCount'] > 0)
                                                     (~{{ number_format($projection['totalWasteInches'], 1) }}" waste)
                                                 @endif
+                                                @if ($projection['optimal'] === true)
+                                                    &mdash; minimum
+                                                @elseif ($projection['optimal'] === false)
+                                                    &mdash; best found (minimum is {{ $projection['lowerBound'] }} or more)
+                                                @endif
                                             </div>
                                             @if ($projection['overLength']->isNotEmpty())
                                                 <div style="font-size:11.5px;color:var(--danger);font-weight:600;">

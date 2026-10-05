@@ -256,6 +256,7 @@ class WorkOrderController extends Controller
             $wo = FdWorkOrder::findOrFail($id);
             $wo->archived = true;
             $wo->save();
+            $wo->syncConfigurationArchive();
 
             return response()->json(['archived' => $id]);
         } catch (\Exception $e) {
@@ -319,6 +320,10 @@ class WorkOrderController extends Controller
                 }
 
                 $wo->save();
+
+                if (($to === 'complete') !== ($from === 'complete')) { // an archived WO stays archived either way
+                    $wo->syncConfigurationArchive();
+                }
 
                 FdWoStatusLog::create([
                     'work_order_id' => $wo->id,

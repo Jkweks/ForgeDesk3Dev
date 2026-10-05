@@ -1024,7 +1024,7 @@ async function fbLoadJobFilterOptions() {
 
 async function fbLoadList() {
   const jobId = document.getElementById('fb-list-job-filter').value;
-  const qs = jobId ? `?business_job_id=${jobId}` : '';
+  const qs = jobId ? `?business_job_id=${jobId}&archived=0` : '?archived=0';
   const data = await authenticatedFetch(`/door-frame-configurations${qs}`);
   fbConfigs = data.configurations || [];
   fbRenderList();

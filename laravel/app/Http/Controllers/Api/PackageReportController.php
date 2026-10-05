@@ -13,7 +13,7 @@ class PackageReportController extends Controller
     /** Jobs -> work orders that have configurations, for the picker. */
     public function sources()
     {
-        $configs = DoorFrameConfiguration::with(['businessJob', 'workOrder'])->get();
+        $configs = DoorFrameConfiguration::with(['businessJob', 'workOrder'])->notArchived()->get();
 
         $jobs = $configs->groupBy('business_job_id')->map(fn ($group) => [
             'id' => $group->first()->business_job_id,

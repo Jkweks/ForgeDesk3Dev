@@ -18,12 +18,16 @@ class DoorFrameConfiguration extends Model
         'quantity',
         'duplicate_group_id',
         'status',
+        'archived',
+        'archived_at',
         'notes',
         'created_by_id',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
+        'archived' => 'boolean',
+        'archived_at' => 'datetime',
     ];
 
     protected $appends = [
@@ -48,6 +52,12 @@ class DoorFrameConfiguration extends Model
         'on_hold' => 'On Hold',
         'cancelled' => 'Cancelled',
     ];
+
+    /** Configurations not archived by a completed work order. */
+    public function scopeNotArchived($query)
+    {
+        return $query->where('archived', false);
+    }
 
     /**
      * Get the business job this configuration belongs to
@@ -174,6 +184,41 @@ class DoorFrameConfiguration extends Model
     public function includesDoor()
     {
         return in_array($this->job_scope, ['door_and_frame', 'door_only']);
+    }
+
+    /** 2 for a pair opening, else 1 — each leaf is its own production line. */
+    public function leavesPerDoor(): int
+    {
+        return $this->openingSpecs?->opening_type === 'pair' ? 2 : 1;
+    }
+
+    /**
+     * The work order lines this configuration produces, one per leaf and per frame: for every door tag, a
+     * single gets one Door line (the tag), a pair gets two (tag-LH, tag-RH), and each tag gets one Frame
+     * line (the tag) when the scope includes frames. Frame-only scope has no Door lines.
+     *
+     * @return array<int, array{type: string, tag: string}>
+     */
+    public function desiredElevationLines(): array
+    {
+        $this->loadMissing(['doors', 'openingSpecs']);
+        $lines = [];
+
+        foreach ($this->doors as $door) {
+            if ($this->includesDoor()) {
+                if ($this->leavesPerDoor() === 2) {
+                    $lines[] = ['type' => 'Door', 'tag' => $door->door_tag.'-LH'];
+                    $lines[] = ['type' => 'Door', 'tag' => $door->door_tag.'-RH'];
+                } else {
+                    $lines[] = ['type' => 'Door', 'tag' => $door->door_tag];
+                }
+            }
+            if ($this->includesFrame()) {
+                $lines[] = ['type' => 'Frame', 'tag' => $door->door_tag];
+            }
+        }
+
+        return $lines;
     }
 
     /**

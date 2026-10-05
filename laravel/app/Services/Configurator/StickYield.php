@@ -2,14 +2,18 @@
 
 namespace App\Services\Configurator;
 
+use App\Models\CutFlow\CutFlowSetting;
 use App\Models\Product;
+use App\Services\CutFlow\StickPacker;
 
 /**
  * How many whole sticks of extrusion a set of cuts needs — the number that goes on the stock-length
  * page and into the job's reservation, so paper and inventory always agree.
  *
- * Same method as fab_utils' stock list: first-fit-decreasing bin packing per part number; a cut
- * longer than the stick still costs one stick.
+ * Old Optimizer: same method as fab_utils' stock list — first-fit-decreasing bin packing per part
+ * number. New Optimizer: StickPacker's fewest-sticks search. Which one runs follows the CutFlow
+ * "Optimizer" setting, so the stock-length page, the job reservation and the cut station all agree.
+ * Either way a cut longer than the stick still costs one stick.
  */
 class StickYield
 {
@@ -36,8 +40,34 @@ class StickYield
 
     /**
      * @param  array<int, float>  $cuts  one entry per piece (inches)
+     * @param  bool|null  $optimized  force the New Optimizer on/off; null follows the CutFlow setting
      */
-    public static function sticks(array $cuts, float $stockLength): int
+    public static function sticks(array $cuts, float $stockLength, ?bool $optimized = null): int
+    {
+        if ($optimized ?? self::usesNewOptimizer()) {
+            $tooLong = count(array_filter($cuts, fn ($cut) => $cut > $stockLength));
+            $fits = array_values(array_filter($cuts, fn ($cut) => $cut <= $stockLength));
+
+            return $tooLong + (new StickPacker)->pack($fits, $stockLength, 0.0)['count'];
+        }
+
+        return self::firstFitSticks($cuts, $stockLength);
+    }
+
+    /** The CutFlow Optimizer setting; any trouble reading it (no CutFlow DB, e.g. in tests) means Old. */
+    private static function usesNewOptimizer(): bool
+    {
+        try {
+            return CutFlowSetting::query()->first()?->selectedOptimizer() === CutFlowSetting::OPTIMIZER_NEW;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * @param  array<int, float>  $cuts
+     */
+    private static function firstFitSticks(array $cuts, float $stockLength): int
     {
         rsort($cuts);
         $bins = [];

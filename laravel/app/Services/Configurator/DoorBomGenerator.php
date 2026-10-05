@@ -224,7 +224,8 @@ class DoorBomGenerator
         // ---- Tie rod ----
         $tieRodOffset = $stile === 'NARROW STILE' ? 1.8125 : 2.5625;
         $tieRodLen = $railLen + $tieRodOffset;
-        $tieRodPn = $this->lookupTieRod($stile, $series, $width);
+        // Catalog ranges are per-leaf door widths, so a pair looks up half the opening.
+        $tieRodPn = $this->lookupTieRod($stile, $series, $pair ? $width / 2 : $width);
         $tieRodQty = $pair ? $qty * 4 : $qty * 2;
         $tieRodNutQty = $pair ? $qty * 8 : $qty * 4;
 

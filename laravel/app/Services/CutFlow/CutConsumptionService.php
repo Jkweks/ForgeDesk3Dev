@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Log;
  *
  * — never a percentage of whatever stick happened to be on the saw. A 25" cut uses the same share of a
  * stock length whether it came off a full 252" stick or a 75" drop (drops are remnants of stock).
+ * Only SOF work orders draw inventory and move reservations (drawsFromInventory); the ledger is kept for all of them.
  * Saw kerf and unusable offcuts aren't counted; they surface in cycle counts.
  *
  * Each real cut (a planned cut, not a recut marker or a manual keypad entry) is one row in
@@ -70,16 +71,40 @@ class CutConsumptionService
             ]);
 
             DB::transaction(function () use ($entry, $product) {
+                if (! self::drawsFromInventory((int) $entry->cut_job_id)) {
+                    return; // job-specific material: logged above, nothing to deduct or reserve against
+                }
                 $this->syncInventory($product);
                 $this->syncReservationItem((int) $entry->cut_job_id, $product->id);
             });
         });
     }
 
+    /**
+     * Whether a cut job's cuts come out of inventory: only when its work order is tagged SOF (stock-on-floor
+     * material). Anything else — "In Shop", a delivery date, no tag yet, or a cut list with no work order —
+     * is job-specific material ordered outside ForgeDesk: its cuts are still logged in cut_consumptions for
+     * the material usage report, but never touch inventory or the job's reservation.
+     */
+    public static function drawsFromInventory(int $cutJobId): bool
+    {
+        $workOrderId = CutJob::whereKey($cutJobId)->value('work_order_id');
+        $delivery = $workOrderId ? FdWorkOrder::whereKey($workOrderId)->value('material_delivery') : null;
+
+        return self::tagDrawsFromInventory($delivery);
+    }
+
+    public static function tagDrawsFromInventory(?string $materialDelivery): bool
+    {
+        return $materialDelivery !== null && strcasecmp(trim($materialDelivery), 'SOF') === 0;
+    }
+
     /** On hand falls to (total consumed, to 1/10) — deducting only what earlier cuts haven't already. */
     private function syncInventory(Product $product): void
     {
-        $total = round((float) CutConsumption::where('product_id', $product->id)->sum('stock_fraction'), 1);
+        $drawingJobIds = CutConsumption::where('product_id', $product->id)->distinct()->pluck('cut_job_id')
+            ->filter(fn ($id) => self::drawsFromInventory((int) $id));
+        $total = round((float) CutConsumption::where('product_id', $product->id)->whereIn('cut_job_id', $drawingJobIds)->sum('stock_fraction'), 1);
         $already = round(-1 * (float) InventoryTransaction::where('product_id', $product->id)->where('reference_number', self::REFERENCE)->sum('quantity'), 1);
         $delta = round($total - $already, 1);
 

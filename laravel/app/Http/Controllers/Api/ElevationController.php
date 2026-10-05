@@ -59,7 +59,47 @@ class ElevationController extends Controller
                 'door_tags' => $c->doors->pluck('door_tag')->values(),
             ]);
 
-        return response()->json(['configurations' => $configurations]);
+        $linked = DoorFrameConfiguration::where('work_order_id', $wo->id)
+            ->with('doors')
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'job_scope' => $c->job_scope,
+                'status' => $c->status,
+                'status_label' => $c->status_label,
+                'quantity' => $c->quantity,
+                'archived' => (bool) $c->archived,
+                'door_tags' => $c->doors->pluck('door_tag')->values(),
+            ]);
+
+        return response()->json(['configurations' => $configurations, 'linked' => $linked]);
+    }
+
+    /** Unlink a configuration from this work order so it can be attached elsewhere. */
+    public function detachConfiguration(int $workOrderId, int $configId)
+    {
+        $wo = FdWorkOrder::findOrFail($workOrderId);
+        $config = DoorFrameConfiguration::findOrFail($configId);
+
+        if ($config->work_order_id !== $wo->id) {
+            return response()->json(['error' => 'This configuration is not linked to this work order.'], 422);
+        }
+
+        try {
+            $this->matcher->detachConfigurationFromWorkOrder($config);
+
+            $wo->recalcDueDateFromElevations();
+            FdWorkOrder::resequencePriorities();
+
+            return response()->json(['detached' => $configId]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            Log::error('ElevationController@detachConfiguration failed', ['config_id' => $configId, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to detach configuration'], 500);
+        }
     }
 
     /**

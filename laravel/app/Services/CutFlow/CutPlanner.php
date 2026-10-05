@@ -8,6 +8,7 @@ use App\Models\CutFlow\StickItem;
 use App\Models\CutFlow\StickSession;
 use App\Support\Dimension;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class CutPlanner
@@ -19,11 +20,14 @@ class CutPlanner
 
     protected float $standardStockLength;
 
+    protected string $optimizer;
+
     public function __construct()
     {
         $settings = CutFlowSetting::current();
         $this->kerf = $settings->kerfInches();
         $this->standardStockLength = $settings->standardStockLength();
+        $this->optimizer = $settings->selectedOptimizer();
     }
 
     /**
@@ -93,18 +97,13 @@ class CutPlanner
 
         $pool = $this->unassignedPieces($name, $finish, $cutJobIds);
 
+        $picked = $this->optimizer === CutFlowSetting::OPTIMIZER_NEW
+            ? $this->pickWithNewOptimizer($pool, $lengthInches, $this->stockLengthFor($name, $finish))
+            : $this->pickGreedy($pool, $lengthInches);
+
         $remaining = $lengthInches;
-        $picked = collect();
-
-        foreach ($pool as $part) {
-            $need = $picked->isEmpty()
-                ? (float) $part->dimension_inches
-                : (float) $part->dimension_inches + $this->kerf;
-
-            if ($need <= $remaining) {
-                $picked->push($part);
-                $remaining -= $need;
-            }
+        foreach ($picked->values() as $i => $part) {
+            $remaining -= (float) $part->dimension_inches + ($i === 0 ? 0 : $this->kerf);
         }
 
         $dropPlan = $picked->isEmpty() ? null : $this->planDrop($name, $finish, $remaining);
@@ -152,6 +151,64 @@ class CutPlanner
     }
 
     /**
+     * Old Optimizer: fill this one stick largest-first with every piece that still fits.
+     */
+    protected function pickGreedy(Collection $pool, float $lengthInches): Collection
+    {
+        $remaining = $lengthInches;
+        $picked = collect();
+
+        foreach ($pool as $part) {
+            $need = $picked->isEmpty()
+                ? (float) $part->dimension_inches
+                : (float) $part->dimension_inches + $this->kerf;
+
+            if ($need <= $remaining) {
+                $picked->push($part);
+                $remaining -= $need;
+            }
+        }
+
+        return $picked;
+    }
+
+    /**
+     * New Optimizer: a stick of the standard length takes the next stick of a plan that packs the
+     * whole pile onto as few sticks as possible; any other length (an offcut) is filled as full as
+     * possible.
+     */
+    protected function pickWithNewOptimizer(Collection $pool, float $lengthInches, float $standardLength): Collection
+    {
+        $packer = new StickPacker;
+        $fits = $pool->filter(fn (Part $p) => (float) $p->dimension_inches <= $lengthInches);
+        $lengths = $fits->map(fn (Part $p) => (float) $p->dimension_inches)->all();
+
+        if (empty($lengths)) {
+            return collect();
+        }
+
+        $wanted = abs($lengthInches - $standardLength) < 0.001
+            ? ($this->packSticks($lengths, $standardLength)['sticks'][0] ?? [])
+            : $packer->bestFill($lengths, $lengthInches, $this->kerf);
+
+        // Map the chosen lengths back onto parts from the pool.
+        $available = $fits->values()->all();
+        $picked = collect();
+
+        foreach ($wanted as $length) {
+            foreach ($available as $k => $part) {
+                if (abs((float) $part->dimension_inches - $length) < 0.0005) {
+                    $picked->push($part);
+                    unset($available[$k]);
+                    break;
+                }
+            }
+        }
+
+        return $picked->sortByDesc(fn (Part $p) => (float) $p->dimension_inches)->values();
+    }
+
+    /**
      * What to do with the offcut once a stick's pieces are cut, per the SKU's
      * drop-rack rules. Null when the SKU has no drop rack (or isn't a known
      * product), so those sticks keep today's behaviour.
@@ -170,11 +227,26 @@ class CutPlanner
         $split = (float) $product->drop_min_split;
         $max = (float) $product->drop_max_length;
 
-        if ($min <= 0 || $split <= 0 || $max <= 0) {
+        if ($min <= 0) {
             return null;
         }
 
         return (new DropPlanner)->plan($remaining - $this->kerf, $min, $split, $max, $this->kerf);
+    }
+
+    /**
+     * Stick length used to estimate how many sticks a profile needs: the stock
+     * length entered on the product for SKUs with a drop rack, otherwise the
+     * standard stock length (288" unless the CutFlow setting overrides it).
+     */
+    public function stockLengthFor(string $name, ?string $finish): float
+    {
+        $product = Part::resolveProductFor($name, $finish);
+        $length = (float) $product?->configurator_length;
+
+        return $product?->drop_rack_enabled && $length > 0
+            ? $length
+            : $this->standardStockLength;
     }
 
     /**
@@ -210,35 +282,26 @@ class CutPlanner
      */
     public function projectRemainingStandardSticks(string $name, ?string $finish, array $cutJobIds, ?float $standardLength = null): array
     {
-        $standardLength ??= $this->standardStockLength;
+        $standardLength ??= $this->stockLengthFor($name, $finish);
 
         $pool = $this->unassignedPieces($name, $finish, $cutJobIds);
 
         $overLength = $pool->filter(fn (Part $p) => (float) $p->dimension_inches > $standardLength);
         $fitsStandard = $pool->reject(fn (Part $p) => (float) $p->dimension_inches > $standardLength);
 
-        $bins = [];
+        $lowerBound = null;
+        $optimal = null;
 
-        foreach ($fitsStandard as $part) {
-            $len = (float) $part->dimension_inches;
-            $placedInBin = null;
-
-            foreach ($bins as $i => $bin) {
-                $need = $bin['count'] === 0 ? $len : $len + $this->kerf;
-
-                if ($need <= $bin['remaining']) {
-                    $placedInBin = $i;
-                    break;
-                }
-            }
-
-            if ($placedInBin === null) {
-                $bins[] = ['remaining' => $standardLength - $len, 'count' => 1];
-            } else {
-                $need = $bins[$placedInBin]['count'] === 0 ? $len : $len + $this->kerf;
-                $bins[$placedInBin]['remaining'] -= $need;
-                $bins[$placedInBin]['count']++;
-            }
+        if ($this->optimizer === CutFlowSetting::OPTIMIZER_NEW) {
+            $plan = $this->packSticks($fitsStandard->map(fn (Part $p) => (float) $p->dimension_inches)->all(), $standardLength);
+            $lowerBound = $plan['lowerBound'];
+            $optimal = $plan['optimal'];
+            $bins = array_map(fn (array $stick) => [
+                'remaining' => $standardLength - array_sum($stick) - $this->kerf * (count($stick) - 1),
+                'count' => count($stick),
+            ], $plan['sticks']);
+        } else {
+            $bins = $this->firstFitBins($fitsStandard, $standardLength);
         }
 
         $overLengthByDimension = $overLength
@@ -255,6 +318,54 @@ class CutPlanner
             'piecesOnStandardStock' => $fitsStandard->count(),
             'totalWasteInches' => round(array_sum(array_column($bins, 'remaining')), 3),
             'overLength' => $overLengthByDimension,
+            'optimizer' => $this->optimizer,
+            'lowerBound' => $lowerBound,
+            'optimal' => $optimal,
         ];
+    }
+
+    /**
+     * New Optimizer plan for a pile, cached by its contents: the dashboard re-renders constantly and the
+     * search is deterministic, so the same pile at the same stock length and kerf always gives the same plan.
+     *
+     * @param  array<int, float>  $lengths
+     */
+    protected function packSticks(array $lengths, float $stockLength): array
+    {
+        sort($lengths);
+        $key = 'cutflow:pack:'.md5(json_encode([$lengths, $stockLength, $this->kerf]));
+
+        return Cache::remember($key, now()->addMinutes(30), fn () => (new StickPacker)->pack($lengths, $stockLength, $this->kerf));
+    }
+
+    /**
+     * Old Optimizer projection: first-fit-decreasing over the whole pile.
+     *
+     * @return array<int, array{remaining: float, count: int}>
+     */
+    protected function firstFitBins(Collection $pieces, float $standardLength): array
+    {
+        $bins = [];
+
+        foreach ($pieces as $part) {
+            $len = (float) $part->dimension_inches;
+            $placedInBin = null;
+
+            foreach ($bins as $i => $bin) {
+                if ($len + $this->kerf <= $bin['remaining']) {
+                    $placedInBin = $i;
+                    break;
+                }
+            }
+
+            if ($placedInBin === null) {
+                $bins[] = ['remaining' => $standardLength - $len, 'count' => 1];
+            } else {
+                $bins[$placedInBin]['remaining'] -= $len + $this->kerf;
+                $bins[$placedInBin]['count']++;
+            }
+        }
+
+        return $bins;
     }
 }

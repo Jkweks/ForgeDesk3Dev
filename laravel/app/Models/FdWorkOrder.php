@@ -55,6 +55,19 @@ class FdWorkOrder extends Model
     ];
 
     /**
+     * A complete or archived work order archives its door/frame configurations (off the configurator, label
+     * and package lists; still shown on the job dashboard); re-opening it brings them back.
+     */
+    public function syncConfigurationArchive(): void
+    {
+        $complete = $this->status === 'complete' || $this->archived;
+
+        DoorFrameConfiguration::where('work_order_id', $this->id)
+            ->where('archived', ! $complete)
+            ->update(['archived' => $complete, 'archived_at' => $complete ? now() : null]);
+    }
+
+    /**
      * The work order's labour-time estimate: every elevation's effective
      * estimate summed, unless a manual override is set on the work order.
      *

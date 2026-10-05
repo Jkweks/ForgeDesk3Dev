@@ -28,7 +28,6 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\PurchaseOrderController;
-use App\Http\Controllers\Api\ReportsController;
 use App\Http\Controllers\Api\RequiredPartsController;
 use App\Http\Controllers\Api\StatusController;
 use App\Http\Controllers\Api\SupplierController;
@@ -367,35 +366,20 @@ Route::middleware('auth:sanctum')->group(function () {
         // Reports & Analytics — all require reports.view; export/PDF/CSV routes
         // additionally require reports.export.
         Route::middleware('permission:reports.view')->group(function () {
-            Route::get('/reports/low-stock', [ReportsController::class, 'lowStockReport']);
-            Route::get('/reports/committed-parts', [ReportsController::class, 'committedPartsReport']);
-            Route::get('/reports/velocity', [ReportsController::class, 'stockVelocityAnalysis']);
-            Route::get('/reports/reorder-recommendations', [ReportsController::class, 'reorderRecommendations']);
-            Route::get('/reports/obsolete', [ReportsController::class, 'obsoleteInventory']);
-            Route::get('/reports/usage-analytics', [ReportsController::class, 'usageAnalytics']);
-            Route::get('/reports/monthly-statement', [ReportsController::class, 'monthlyInventoryStatement']);
-            Route::get('/reports/inventory/data', [ReportsController::class, 'inventoryReportData']);
-            Route::get('/reports/storage-locations', [ReportsController::class, 'storageLocationReport']);
-            Route::get('/reports/work-order-backlog', [ReportsController::class, 'workOrderBacklogReport']);
-            Route::get('/reports/job-status-summary', [ReportsController::class, 'jobStatusSummaryReport']);
-            Route::get('/reports/joints-completed', [ReportsController::class, 'jointsCompletedReport']);
+            // Report endpoints are registered from config/reports.php (data => reports.view, export => reports.export)
+            foreach (config('reports.reports') as $report) {
+                foreach ($report['data'] as $uri => $action) {
+                    Route::get("/reports/{$uri}", [$report['controller'], $action]);
+                }
+            }
 
-            // Exports / PDF / CSV
             Route::middleware('permission:reports.export')->group(function () {
-                Route::get('/reports/export', [ReportsController::class, 'exportReport']);
-                Route::get('/reports/low-stock/pdf', [ReportsController::class, 'lowStockPdf']);
-                Route::get('/reports/committed-parts/pdf', [ReportsController::class, 'committedPartsPdf']);
-                Route::get('/reports/velocity/pdf', [ReportsController::class, 'velocityAnalysisPdf']);
-                Route::get('/reports/reorder-recommendations/pdf', [ReportsController::class, 'reorderRecommendationsPdf']);
-                Route::get('/reports/obsolete/pdf', [ReportsController::class, 'obsoleteInventoryPdf']);
-                Route::get('/reports/usage-analytics/pdf', [ReportsController::class, 'usageAnalyticsPdf']);
-                Route::get('/reports/monthly-statement/pdf', [ReportsController::class, 'monthlyInventoryStatementPdf']);
-                Route::get('/reports/inventory/csv', [ReportsController::class, 'exportInventoryCsv']);
-                Route::get('/reports/inventory/pdf', [ReportsController::class, 'inventoryReportPdf']);
-                Route::get('/reports/storage-locations/pdf', [ReportsController::class, 'storageLocationPdf']);
-                Route::get('/reports/work-order-backlog/pdf', [ReportsController::class, 'workOrderBacklogPdf']);
-                Route::get('/reports/job-status-summary/pdf', [ReportsController::class, 'jobStatusSummaryPdf']);
-                Route::get('/reports/joints-completed/pdf', [ReportsController::class, 'jointsCompletedPdf']);
+                Route::get('/reports/export', \App\Http\Controllers\Api\Reports\ReportExportController::class);
+                foreach (config('reports.reports') as $report) {
+                    foreach ($report['export'] as $uri => $action) {
+                        Route::get("/reports/{$uri}", [$report['controller'], $action]);
+                    }
+                }
             });
         });
 
@@ -720,6 +704,8 @@ Route::middleware('auth:sanctum')->group(function () {
             // Configurator openings available to pull into this work order's Door Schedule
             Route::get('/work-orders/{id}/available-configurations', [\App\Http\Controllers\Api\ElevationController::class, 'availableConfigurations']);
             Route::post('/work-orders/{id}/attach-configuration/{configId}', [\App\Http\Controllers\Api\ElevationController::class, 'attachConfiguration'])->middleware('permission:fabrication.work-orders.edit');
+
+            Route::post('/work-orders/{id}/detach-configuration/{configId}', [\App\Http\Controllers\Api\ElevationController::class, 'detachConfiguration'])->middleware('permission:fabrication.work-orders.edit');
 
             // Elevation Stage cycling (reuse existing stage controller)
             Route::get('/work-order-stages', [\App\Http\Controllers\Api\WorkOrderStageController::class, 'index']);

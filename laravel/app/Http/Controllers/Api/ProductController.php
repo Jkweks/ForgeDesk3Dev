@@ -329,11 +329,15 @@ class ProductController extends Controller
             $split = (float) ($validated['drop_min_split'] ?? 0);
             $max = (float) ($validated['drop_max_length'] ?? 0);
 
-            if ($min <= 0 || $split <= 0 || $max <= 0) {
-                abort(422, 'Min Drop, Min Split and Max Drop are all required when Drop Rack is on.');
+            if ($min <= 0) {
+                abort(422, 'Min Drop is required when Drop Rack is on.');
             }
 
-            if (! ($min <= $split && $split <= $max)) {
+            if (($split > 0) !== ($max > 0)) {
+                abort(422, 'Set both Min Split and Max Drop to split oversized drops, or leave both blank.');
+            }
+
+            if ($split > 0 && ! ($min <= $split && $split <= $max)) {
                 abort(422, 'Lengths must satisfy Min Drop ≤ Min Split ≤ Max Drop.');
             }
         }

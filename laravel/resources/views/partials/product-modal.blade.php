@@ -490,7 +490,7 @@
                   <div class="col-md-3 drop-rack-field d-none">
                     <label class="form-label">Min Split (in)</label>
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMinSplit" placeholder="e.g. 120">
-                    <div class="form-hint">Piece cut off an oversized drop.</div>
+                    <div class="form-hint">Piece cut off an oversized drop. Leave blank (with Max Drop) to never cut drops.</div>
                   </div>
                   <div class="col-md-3 drop-rack-field d-none">
                     <label class="form-label">Max Drop (in)</label>

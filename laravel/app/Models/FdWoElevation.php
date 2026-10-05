@@ -35,6 +35,12 @@ class FdWoElevation extends Model
                 return;
             }
 
+            // Created straight from a configuration (attach / sync): already linked, nothing to match. Matching
+            // would also mistake a pair's "-LH"/"-RH" leaf lines for unconfigured openings.
+            if ($elevation->door_frame_configuration_id) {
+                return;
+            }
+
             try {
                 app(ElevationConfigurationMatcher::class)->syncWorkOrder($elevation->workOrder);
             } catch (\Throwable $e) {

@@ -302,6 +302,27 @@ class ElevationConfigurationMatcher
     }
 
     /**
+     * Unlinks a configuration from its work order (e.g. to move a door to another work order): removes the
+     * elevation rows it created, and restores it to the active lists. Refused once production has started on
+     * any of those rows, since deleting them would lose real work.
+     */
+    public function detachConfigurationFromWorkOrder(DoorFrameConfiguration $config): void
+    {
+        $elevations = FdWoElevation::where('door_frame_configuration_id', $config->id)->with('stages')->get();
+
+        $started = $elevations->filter(fn ($e) => $e->date_completed
+            || $e->stages->contains(fn ($s) => in_array($s->status, ['in_progress', 'complete', 'blocked'], true)));
+        if ($started->isNotEmpty()) {
+            throw new \RuntimeException('Production has started on '.$started->pluck('elevation_tag')->unique()->implode(', ')." — it can't be moved off this work order.");
+        }
+
+        DB::transaction(function () use ($config, $elevations) {
+            $elevations->each->delete();
+            $config->update(['work_order_id' => null, 'archived' => false, 'archived_at' => null]);
+        });
+    }
+
+    /**
      * Keeps a configuration's linked elevations in sync with its *current*
      * job_scope/door_tags after they've changed post-creation (e.g.
      * single-to-pair, or scope narrowing). Only ever creates rows that are
@@ -318,43 +339,33 @@ class ElevationConfigurationMatcher
         }
 
         $workOrder = $config->workOrder;
-        $config->loadMissing('doors');
-
-        $desiredDoorTags = $config->includesDoor() ? $config->doors->pluck('door_tag')->all() : [];
-        $desiredFrameTag = $config->includesFrame()
-            ? ($config->doors->first()->door_tag ?? null)
-            : null;
+        $desired = $config->desiredElevationLines();
+        $key = fn (string $type, string $tag) => $type.'|'.$tag;
 
         $linked = FdWoElevation::where('door_frame_configuration_id', $config->id)
             ->with('elevationType')
             ->get();
-        $linkedDoorTags = $linked->filter(fn ($e) => $e->elevationType?->name === 'Door')->pluck('elevation_tag')->all();
-        $linkedFrameTags = $linked->filter(fn ($e) => $e->elevationType?->name === 'Frame')->pluck('elevation_tag')->all();
+        $linkedKeys = $linked->map(fn ($e) => $key((string) $e->elevationType?->name, (string) $e->elevation_tag))->all();
+        $desiredKeys = array_map(fn ($l) => $key($l['type'], $l['tag']), $desired);
 
-        $missingDoorTags = array_diff($desiredDoorTags, $linkedDoorTags);
-        $needsFrame = $desiredFrameTag !== null && ! in_array($desiredFrameTag, $linkedFrameTags, true);
+        $missing = array_filter($desired, fn ($l) => ! in_array($key($l['type'], $l['tag']), $linkedKeys, true));
 
         $created = collect();
 
-        if (! empty($missingDoorTags) || $needsFrame) {
-            $doorTypeId = FdElevationType::where('name', 'Door')->value('id');
-            $frameTypeId = FdElevationType::where('name', 'Frame')->value('id');
+        if ($missing) {
+            $typeIds = [
+                'Door' => FdElevationType::where('name', 'Door')->value('id'),
+                'Frame' => FdElevationType::where('name', 'Frame')->value('id'),
+            ];
 
-            DB::transaction(function () use (&$created, $missingDoorTags, $needsFrame, $desiredFrameTag, $doorTypeId, $frameTypeId, $workOrder, $config) {
-                foreach ($missingDoorTags as $tag) {
-                    if (! $doorTypeId) {
+            DB::transaction(function () use (&$created, $missing, $typeIds, $workOrder, $config) {
+                foreach ($missing as $line) {
+                    if (! $typeIds[$line['type']]) {
                         continue;
                     }
                     $created->push($this->createElevationRow($workOrder, [
-                        'elevation_tag' => $tag,
-                        'elevation_type_id' => $doorTypeId,
-                        'door_frame_configuration_id' => $config->id,
-                    ]));
-                }
-                if ($needsFrame && $frameTypeId) {
-                    $created->push($this->createElevationRow($workOrder, [
-                        'elevation_tag' => $desiredFrameTag,
-                        'elevation_type_id' => $frameTypeId,
+                        'elevation_tag' => $line['tag'],
+                        'elevation_type_id' => $typeIds[$line['type']],
                         'door_frame_configuration_id' => $config->id,
                     ]));
                 }
@@ -363,15 +374,11 @@ class ElevationConfigurationMatcher
 
         // Linked rows that no longer fit the current desired shape — never
         // deleted, only reported.
-        $orphaned = $linked->filter(function ($e) use ($desiredDoorTags, $desiredFrameTag) {
-            if ($e->elevationType?->name === 'Door') {
-                return ! in_array($e->elevation_tag, $desiredDoorTags, true);
-            }
-            if ($e->elevationType?->name === 'Frame') {
-                return $e->elevation_tag !== $desiredFrameTag;
-            }
+        $orphaned = $linked->filter(function ($e) use ($desiredKeys, $key) {
+            $type = $e->elevationType?->name;
 
-            return false;
+            return in_array($type, ['Door', 'Frame'], true)
+                && ! in_array($key($type, (string) $e->elevation_tag), $desiredKeys, true);
         })->values();
 
         return ['created' => $created, 'orphaned' => $orphaned];
@@ -382,31 +389,21 @@ class ElevationConfigurationMatcher
      */
     private function createElevationRowsFor(DoorFrameConfiguration $config, FdWorkOrder $workOrder): Collection
     {
-        $config->loadMissing('doors');
+        $typeIds = [
+            'Door' => FdElevationType::where('name', 'Door')->value('id'),
+            'Frame' => FdElevationType::where('name', 'Frame')->value('id'),
+        ];
+
         $rows = collect();
-
-        $doorTypeId = FdElevationType::where('name', 'Door')->value('id');
-        $frameTypeId = FdElevationType::where('name', 'Frame')->value('id');
-
-        if ($config->includesDoor() && $doorTypeId) {
-            foreach ($config->doors as $door) {
-                $rows->push($this->createElevationRow($workOrder, [
-                    'elevation_tag' => $door->door_tag,
-                    'elevation_type_id' => $doorTypeId,
-                    'door_frame_configuration_id' => $config->id,
-                ]));
+        foreach ($config->desiredElevationLines() as $line) {
+            if (! $typeIds[$line['type']]) {
+                continue;
             }
-        }
-
-        if ($config->includesFrame() && $frameTypeId) {
-            $frameTag = $config->doors->first()->door_tag ?? null;
-            if ($frameTag) {
-                $rows->push($this->createElevationRow($workOrder, [
-                    'elevation_tag' => $frameTag,
-                    'elevation_type_id' => $frameTypeId,
-                    'door_frame_configuration_id' => $config->id,
-                ]));
-            }
+            $rows->push($this->createElevationRow($workOrder, [
+                'elevation_tag' => $line['tag'],
+                'elevation_type_id' => $typeIds[$line['type']],
+                'door_frame_configuration_id' => $config->id,
+            ]));
         }
 
         return $rows;

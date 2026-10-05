@@ -69,8 +69,10 @@ Route::get('/fulfillment/job-reservations', function () {
 });
 
 // Reports & Maintenance
-Route::get('/reports', function () {
-    return view('reports');
+Route::get('/reports/{report?}', function (?string $report = null) {
+    abort_if($report !== null && ! collect(config('reports.reports'))->contains('key', $report), 404);
+
+    return view('reports', ['initialReport' => $report]);
 });
 
 Route::get('/maintenance', function () {

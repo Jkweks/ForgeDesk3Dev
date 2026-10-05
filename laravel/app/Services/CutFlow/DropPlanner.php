@@ -8,6 +8,9 @@ namespace App\Services\CutFlow;
  * nearest 5" below its real length), or — when it is longer than Max Drop —
  * cut a Min Split piece off the front and re-decide on what's left, so the
  * least material is scrapped while every racked drop stays a usable size.
+ *
+ * When Min Split or Max Drop is not set (<= 0) the drop is never cut to size:
+ * it is racked whole if it is at least Min Drop long, otherwise scrapped.
  */
 class DropPlanner
 {
@@ -24,7 +27,9 @@ class DropPlanner
         $segments = [];
         $remaining = round($leftover, 4);
 
-        while ($remaining > $maxDrop) {
+        $canSplit = $minSplit > 0 && $maxDrop > 0;
+
+        while ($canSplit && $remaining > $maxDrop) {
             $split = $minSplit;
             $rest = $remaining - $split - $kerf;
 

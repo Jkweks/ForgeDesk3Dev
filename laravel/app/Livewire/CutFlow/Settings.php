@@ -25,6 +25,8 @@ class Settings extends Component
 
     public ?float $standardStockLength = null;
 
+    public string $optimizer = CutFlowSetting::OPTIMIZER_OLD;
+
     public function mount(): void
     {
         $settings = CutFlowSetting::current();
@@ -32,6 +34,8 @@ class Settings extends Component
         $this->showCutToast = $settings->show_cut_toast;
         $this->kerfInches = $settings->kerf_inches !== null ? (float) $settings->kerf_inches : null;
         $this->standardStockLength = $settings->standard_stock_length !== null ? (float) $settings->standard_stock_length : null;
+
+        $this->optimizer = $settings->selectedOptimizer();
 
         // an already-active admin crew member on the dashboard doesn't need
         // to re-enter a PIN here
@@ -79,6 +83,7 @@ class Settings extends Component
             'show_cut_toast' => $this->showCutToast,
             'kerf_inches' => $this->kerfInches,
             'standard_stock_length' => $this->standardStockLength,
+            'optimizer' => array_key_exists($this->optimizer, CutFlowSetting::OPTIMIZERS) ? $this->optimizer : CutFlowSetting::OPTIMIZER_OLD,
         ]);
 
         session()->flash('settings_status', 'Settings saved.');
@@ -86,6 +91,6 @@ class Settings extends Component
 
     public function render()
     {
-        return view('cutflow.livewire.settings');
+        return view('cutflow.livewire.settings', ['optimizers' => CutFlowSetting::OPTIMIZERS]);
     }
 }

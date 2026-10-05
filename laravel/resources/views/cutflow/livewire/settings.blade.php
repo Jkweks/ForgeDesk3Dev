@@ -61,6 +61,19 @@
                            style="width:100%;padding:12px 14px;border-radius:9px;border:1.5px solid var(--border);font-family:'IBM Plex Mono',monospace;">
                 </div>
 
+                <div>
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--muted-2);margin-bottom:6px;">Optimizer</label>
+                    <select wire:model="optimizer"
+                            style="width:100%;padding:12px 14px;border-radius:9px;border:1.5px solid var(--border);">
+                        @foreach ($optimizers as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <div style="font-size:12px;color:var(--muted);margin-top:6px;">
+                        Old Optimizer fills each stick largest-first. New Optimizer plans the whole pile to use the fewest sticks. This also sets the stick counts on the configurator stock-length page and job reservations.
+                    </div>
+                </div>
+
                 <button class="btn btn-accent" wire:click="save">Save Settings</button>
             @endif
         </div>

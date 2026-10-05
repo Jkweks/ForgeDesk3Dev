@@ -56,4 +56,12 @@ class DropPlannerTest extends TestCase
         $this->assertSame(108.875, $segments[1]['length']);
         $this->assertSame(105.0, $segments[1]['tag']);
     }
+
+    public function test_without_split_or_max_drop_is_racked_whole_or_scrapped(): void
+    {
+        $planner = new DropPlanner;
+
+        $this->assertSame([['type' => 'rack', 'length' => 300.0, 'tag' => 300.0, 'cut_at' => null]], $planner->plan(300, 72, 0, 0, 0));
+        $this->assertSame('scrap', $planner->plan(71, 72, 0, 0, 0)[0]['type']);
+    }
 }

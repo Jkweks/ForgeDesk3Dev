@@ -521,6 +521,16 @@
 
         <!-- ── Step 3: Door / Frame Schedule ── -->
         <div id="wiz-step-3" style="display:none">
+          <div id="wiz-configs-wrap" class="mb-4 d-none">
+            <h6 class="mb-1">Existing Configurator Openings</h6>
+            <p class="text-muted small mb-2">
+              Openings already built in the Configurator for this job and not on a work order.
+              Tick the ones this work order will produce, then click <strong>Finish</strong> to attach them.
+              Unticked openings can be attached or moved later from the Door Schedule.
+            </p>
+            <div id="wiz-configs-body"></div>
+            <hr class="my-3">
+          </div>
           <p class="text-muted small mb-2">
             Each row creates Door and/or Frame elevations with <strong>Programmed → CNC → Assembled</strong> stages.
             Leave the table empty and click Skip to finish without doors or frames.
@@ -683,15 +693,24 @@
       </div>
       <div class="modal-body">
         <div id="door-schedule-configs-wrap" class="mb-4 d-none">
-          <h6 class="mb-1">Existing Configurator Openings</h6>
-          <p class="text-muted small mb-2">
-            Draft openings already built in the Configurator for this job. Attach one to
-            create its elevations here — no need to re-enter the tag.
-          </p>
-          <div id="door-schedule-configs-body" class="mb-2"></div>
-          <button class="btn btn-sm btn-outline-primary" onclick="attachSelectedConfigurations()" id="door-schedule-attach-btn">
-            <i class="ti ti-link me-1"></i>Attach Selected
-          </button>
+          <h6 class="mb-1">Configurator Openings</h6>
+          <div id="door-schedule-linked-wrap" class="mb-3 d-none">
+            <p class="text-muted small mb-1">
+              Linked to this work order. Detach one to move it to another work order
+              (not possible once production has started on it).
+            </p>
+            <div id="door-schedule-linked-body"></div>
+          </div>
+          <div id="door-schedule-available-wrap" class="d-none">
+            <p class="text-muted small mb-2">
+              Openings already built in the Configurator for this job and not on a work order.
+              Attach one to create its elevations here — no need to re-enter the tag.
+            </p>
+            <div id="door-schedule-configs-body" class="mb-2"></div>
+            <button class="btn btn-sm btn-outline-primary" onclick="attachSelectedConfigurations()" id="door-schedule-attach-btn">
+              <i class="ti ti-link me-1"></i>Attach Selected
+            </button>
+          </div>
           <hr class="my-3">
         </div>
         <p class="text-muted small mb-3">
@@ -3668,7 +3687,7 @@ function showWizardStep(step) {
     skipBtn.textContent   = 'Skip this step';
     if (step === 1) { nextBtn.textContent = 'Create Work Order →'; }
     else if (step === 2) { nextBtn.textContent = 'Save Elevations →'; }
-    else { nextBtn.textContent = 'Finish'; }
+    else { nextBtn.textContent = 'Finish'; loadWizardConfigurations(); }
 
     document.getElementById('wo-wizard-status').textContent = wizardWoLabel
         ? `Work order ${wizardWoLabel} created`
@@ -3843,6 +3862,8 @@ function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId, dateRe
 async function wizardFinishDoors() {
     const doorTypeId  = elevTypes.find(t => t.name === 'Door')?.id;
     const frameTypeId = elevTypes.find(t => t.name === 'Frame')?.id;
+
+    await wizardAttachConfigurations();
 
     const creates = [];
     document.querySelectorAll('#wiz-door-body tr').forEach(row => {
@@ -4298,31 +4319,111 @@ function openDoorSchedule() {
     loadAvailableConfigurations();
 }
 
+function configRowLabel(c) {
+    return `<strong>${esc((c.door_tags || []).join(', ') || ('Opening #' + c.id))}</strong>
+            <span class="text-muted small ms-1">${esc(c.job_scope)} · ${esc(c.status_label)} · qty ${c.quantity}</span>`;
+}
+
 async function loadAvailableConfigurations() {
-    const wrap = document.getElementById('door-schedule-configs-wrap');
+    const linkedWrap = document.getElementById('door-schedule-linked-wrap');
+    const linkedBody = document.getElementById('door-schedule-linked-body');
+    const availWrap = document.getElementById('door-schedule-available-wrap');
     const body = document.getElementById('door-schedule-configs-body');
+    const wrap = document.getElementById('door-schedule-configs-wrap');
     wrap.classList.add('d-none');
+    linkedWrap.classList.add('d-none');
+    availWrap.classList.add('d-none');
     body.innerHTML = '';
+    linkedBody.innerHTML = '';
     if (!currentWO) return;
 
     try {
         const r = await API(`/work-orders/${currentWO.id}/available-configurations`);
         const data = await r.json();
         const configs = data.configurations || [];
-        if (!configs.length) return;
+        const linked = data.linked || [];
 
+        if (linked.length) {
+            linkedBody.innerHTML = linked.map(c => `
+                <div class="d-flex align-items-center gap-2 py-1 border-bottom">
+                    <span class="flex-grow-1">${configRowLabel(c)}${c.archived ? ' <span class="badge bg-secondary-lt ms-1">Archived</span>' : ''}</span>
+                    <button class="btn btn-sm btn-ghost-danger" onclick="detachConfiguration(${c.id})">
+                        <i class="ti ti-unlink me-1"></i>Detach
+                    </button>
+                </div>`).join('');
+            linkedWrap.classList.remove('d-none');
+        }
+        if (configs.length) {
+            body.innerHTML = configs.map(c => `
+                <label class="d-flex align-items-start gap-2 py-1 border-bottom">
+                    <input type="checkbox" class="form-check-input mt-1 door-schedule-config-pick" value="${c.id}">
+                    <span>${configRowLabel(c)}</span>
+                </label>`).join('');
+            availWrap.classList.remove('d-none');
+        }
+        if (linked.length || configs.length) wrap.classList.remove('d-none');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function detachConfiguration(configId) {
+    if (!currentWO) return;
+    if (!confirm('Detach this opening from the work order? Its door/frame rows here will be removed.')) return;
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/detach-configuration/${configId}`, { method: 'POST' });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            fabToast(err.error || 'Failed to detach opening.', 'error');
+            return;
+        }
+        fabToast('Opening detached.', 'success');
+        const wr = await API(`/work-orders/${currentWO.id}`);
+        currentWO = await wr.json();
+        renderElevations(currentWO.elevations || []);
+        loadWorkOrders();
+        loadAvailableConfigurations();
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to detach opening.', 'error');
+    }
+}
+
+// Wizard step 3: the same unlinked openings, picked here and attached on Finish.
+async function loadWizardConfigurations() {
+    const wrap = document.getElementById('wiz-configs-wrap');
+    const body = document.getElementById('wiz-configs-body');
+    wrap.classList.add('d-none');
+    body.innerHTML = '';
+    if (!wizardWoId) return;
+    try {
+        const r = await API(`/work-orders/${wizardWoId}/available-configurations`);
+        const configs = (await r.json()).configurations || [];
+        if (!configs.length) return;
         body.innerHTML = configs.map(c => `
             <label class="d-flex align-items-start gap-2 py-1 border-bottom">
-                <input type="checkbox" class="form-check-input mt-1 door-schedule-config-pick" value="${c.id}">
-                <span>
-                    <strong>${esc(c.door_tags.join(', ') || ('Opening #' + c.id))}</strong>
-                    <span class="text-muted small ms-1">${esc(c.job_scope)} · ${esc(c.status_label)} · qty ${c.quantity}</span>
-                </span>
+                <input type="checkbox" class="form-check-input mt-1 wiz-config-pick" value="${c.id}">
+                <span>${configRowLabel(c)}</span>
             </label>`).join('');
         wrap.classList.remove('d-none');
     } catch (e) {
         console.error(e);
     }
+}
+
+async function wizardAttachConfigurations() {
+    const ids = Array.from(document.querySelectorAll('.wiz-config-pick:checked')).map(el => el.value);
+    let failures = 0;
+    for (const id of ids) {
+        try {
+            const r = await API(`/work-orders/${wizardWoId}/attach-configuration/${id}`, { method: 'POST' });
+            if (!r.ok) failures++;
+        } catch (e) {
+            console.error(e);
+            failures++;
+        }
+    }
+    if (failures) fabToast(`Attached ${ids.length - failures} of ${ids.length} openings; ${failures} failed.`, 'error');
 }
 
 async function attachSelectedConfigurations() {

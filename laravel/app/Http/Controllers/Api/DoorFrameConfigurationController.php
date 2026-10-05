@@ -34,6 +34,13 @@ class DoorFrameConfigurationController extends Controller
         try {
             $query = DoorFrameConfiguration::query();
 
+            // Configurations of completed/archived work orders are archived. Listed by default (the job
+            // dashboard is the source of truth for a job's contents); ?archived=0 hides them, ?archived=1
+            // lists only them.
+            if ($request->has('archived')) {
+                $query->where('archived', $request->boolean('archived'));
+            }
+
             // Filter by job
             if ($request->has('business_job_id')) {
                 $query->where('business_job_id', $request->business_job_id);
@@ -59,6 +66,7 @@ class DoorFrameConfigurationController extends Controller
                         'quantity' => $config->quantity,
                         'status' => $config->status,
                         'status_label' => $config->status_label,
+                        'archived' => (bool) $config->archived,
                         'door_tags' => $config->doors->pluck('door_tag')->implode(', '),
                         'is_complete' => $config->isComplete(),
                         'can_edit' => $config->canEdit(),
