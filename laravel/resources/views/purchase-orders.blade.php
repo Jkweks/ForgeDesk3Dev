@@ -202,24 +202,25 @@
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th style="width: 35%">Product</th>
-                  <th style="width: 15%">Quantity</th>
-                  <th style="width: 15%">List Price</th>
-                  <th style="width: 15%">Total</th>
-                  <th style="width: 15%">Location</th>
+                  <th style="width: 30%">Product</th>
+                  <th style="width: 12%">Quantity</th>
+                  <th style="width: 12%">List Price</th>
+                  <th style="width: 12%">Total</th>
+                  <th style="width: 12%">Location</th>
+                  <th style="width: 12%">Cost Code</th>
                   <th style="width: 5%"></th>
                 </tr>
               </thead>
               <tbody id="poLineItems">
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td>
+                  <td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td>
                 </tr>
               </tbody>
               <tfoot>
                 <tr>
                   <td colspan="3" class="text-end"><strong>Total:</strong></td>
                   <td><strong id="poTotalAmount">$0.00</strong></td>
-                  <td colspan="2"></td>
+                  <td colspan="3"></td>
                 </tr>
               </tfoot>
             </table>
@@ -262,6 +263,17 @@
                 <th>Expected Date:</th>
                 <td id="viewPOExpectedDate"></td>
               </tr>
+              <tr>
+                <th>Job:</th>
+                <td>
+                  <div class="input-group input-group-sm" style="max-width:260px;">
+                    <input type="text" class="form-control form-control-sm" id="viewPOJobInput" placeholder="Job name">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="savePOJob()" title="Save job">
+                      <i class="ti ti-device-floppy"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
             </table>
           </div>
           <div class="col-md-6">
@@ -281,6 +293,10 @@
               <tr>
                 <th>Approved By:</th>
                 <td id="viewPOApprover"></td>
+              </tr>
+              <tr>
+                <th>Send To For Approval:</th>
+                <td id="viewPOAssignedApprover"></td>
               </tr>
             </table>
           </div>
@@ -311,6 +327,12 @@
               <label class="form-label">Ship To Location</label>
               <select class="form-select form-select-sm" id="editPOShipToLocation">
                 <option value="">Primary company location</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Send To For Approval</label>
+              <select class="form-select form-select-sm" id="editPOApprover">
+                <option value="">Not set</option>
               </select>
             </div>
             <div class="col-md-6">
@@ -415,6 +437,54 @@
   </div>
 </div>
 
+<!-- Cancel PO Confirmation Modal -->
+<div class="modal modal-blur fade" id="cancelPOModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Cancel Purchase Order</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cancelPOId">
+        <p>Cancelling this purchase order will release any on-order quantities. This action cannot be undone.</p>
+        <div class="mb-3">
+          <label class="form-label required">Confirm your password to continue</label>
+          <input type="password" class="form-control" id="cancelPOPassword" autocomplete="current-password" placeholder="Your password">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Back</button>
+        <button type="button" class="btn btn-danger" onclick="confirmCancelPO()">
+          <i class="ti ti-ban me-1"></i>Cancel Purchase Order
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Submit for Approval Modal -->
+<div class="modal modal-blur fade" id="submitApprovalModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Submit for Approval</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="submitApprovalPoId">
+        <div id="submitApprovalBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmSubmitPO()">
+          <i class="ti ti-send me-1"></i>Submit for Approval
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 let currentPO = null;
 let allProducts = [];
@@ -487,6 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSuppliers();
   loadProducts();
   loadCompanyLocations();
+  loadApprovers();
   loadPurchaseOrders();
   loadStatistics();
 
@@ -629,6 +700,16 @@ async function loadCompanyLocations() {
   }
 }
 
+// Load users eligible to approve POs, for the "Send To For Approval" picker
+let allApprovers = [];
+async function loadApprovers() {
+  try {
+    allApprovers = await authenticatedFetch('/purchase-orders-eligible-approvers');
+  } catch (error) {
+    console.error('Error loading eligible approvers:', error);
+  }
+}
+
 // Load products
 async function loadProducts() {
   try {
@@ -659,7 +740,7 @@ function showCreatePOModal() {
   document.getElementById('poForm').reset();
   document.getElementById('poId').value = '';
   document.getElementById('poOrderDate').value = new Date().toISOString().split('T')[0];
-  document.getElementById('poLineItems').innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+  document.getElementById('poLineItems').innerHTML = '<tr><td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
   document.getElementById('poTotalAmount').textContent = '$0.00';
   lineItemCounter = 0;
 
@@ -682,13 +763,14 @@ function buildProductOptions(products) {
     data-cost="${p.net_cost ?? p.unit_cost ?? 0}"
     data-pack="${p.pack_size || 1}"
     data-pack-uom="${escapeHtml(p.purchase_uom || 'EA')}"
+    data-cost-code="${escapeHtml(p.cost_code || '')}"
   >${escapeHtml(p.sku)} - ${escapeHtml(p.description)}</option>`).join('');
 }
 
 // Called when supplier selection changes — clear line items and reset the table
 function onSupplierChange() {
   const tbody = document.getElementById('poLineItems');
-  tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
   document.getElementById('poTotalAmount').textContent = '$0.00';
   lineItemCounter = 0;
 }
@@ -734,6 +816,9 @@ function addPOLineItem() {
       <input type="text" class="form-control form-control-sm" id="location${lineItemCounter}" placeholder="Optional">
     </td>
     <td>
+      <input type="text" class="form-control form-control-sm" id="costCode${lineItemCounter}" placeholder="Cost code">
+    </td>
+    <td>
       <button type="button" class="btn btn-sm btn-ghost-danger" onclick="removePOLineItem(${lineItemCounter})">
         <i class="ti ti-trash"></i>
       </button>
@@ -751,7 +836,7 @@ function removePOLineItem(itemId) {
   // Show "no items" message if no items left
   const tbody = document.getElementById('poLineItems');
   if (tbody.children.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No items added. Click "Add Item" to add products.</td></tr>';
   }
 }
 
@@ -761,6 +846,7 @@ function updateLineItemCost(itemId) {
   const quantityInput = document.getElementById(`quantity${itemId}`);
   const unitCostInput = document.getElementById(`unitCost${itemId}`);
   const lineTotalInput = document.getElementById(`lineTotal${itemId}`);
+  const costCodeInput = document.getElementById(`costCode${itemId}`);
 
   // Auto-fill net cost and show pack context when a product is selected
   if (productSelect.value) {
@@ -768,6 +854,10 @@ function updateLineItemCost(itemId) {
     if (!unitCostInput.value || unitCostInput.dataset.autoFilled) {
       unitCostInput.value = parseFloat(selectedOption.dataset.cost || 0).toFixed(2);
       unitCostInput.dataset.autoFilled = '1';
+    }
+    if (costCodeInput && (!costCodeInput.value || costCodeInput.dataset.autoFilled)) {
+      costCodeInput.value = selectedOption.dataset.costCode || '';
+      costCodeInput.dataset.autoFilled = '1';
     }
     const packSize = parseInt(selectedOption.dataset.pack || 1);
     const packUom  = selectedOption.dataset.packUom || 'EA';
@@ -820,6 +910,7 @@ async function savePurchaseOrder() {
         const quantity = document.getElementById(`quantity${itemId}`).value;
         const unitCost = document.getElementById(`unitCost${itemId}`).value;
         const location = document.getElementById(`location${itemId}`).value;
+        const costCode = document.getElementById(`costCode${itemId}`)?.value || '';
 
         if (productId && quantity && unitCost) {
           items.push({
@@ -827,6 +918,7 @@ async function savePurchaseOrder() {
             quantity: parseInt(quantity),
             unit_cost: parseFloat(unitCost),
             destination_location: location || null,
+            cost_code: costCode || null,
           });
         }
       }
@@ -878,6 +970,8 @@ async function viewPODetails(poId) {
     document.getElementById('viewPOTotal').textContent = formatCurrency(po.total_amount);
     document.getElementById('viewPOCreator').textContent = po.creator ? po.creator.name : '-';
     document.getElementById('viewPOApprover').textContent = po.approver ? po.approver.name : '-';
+    document.getElementById('viewPOAssignedApprover').textContent = po.assigned_approver ? po.assigned_approver.name : '-';
+    document.getElementById('viewPOJobInput').value = po.job_name || '';
 
     // Notes
     if (po.notes) {
@@ -915,11 +1009,18 @@ async function viewPODetails(poId) {
         : `${formatCurrency(item.unit_cost)}
            ${item.product.pack_size > 1 ? `<br><small class="text-muted">/pack</small>` : ''}`;
 
+      const costCodeCell = rowEditable
+        ? `<input type="text" class="form-control form-control-sm" id="editCostCode${item.id}"
+                  value="${escapeHtml(item.cost_code || '')}" placeholder="Cost code" style="width:120px"
+                  onchange="updateDraftLineItem(${po.id}, ${item.id})">`
+        : (item.cost_code ? `<small class="text-muted">${escapeHtml(item.cost_code)}</small>` : '');
+
       return `
         <tr>
           <td>
             <strong>${escapeHtml(item.product.sku)}</strong><br>
-            <small class="text-muted">${escapeHtml(item.product.description)}</small>
+            <small class="text-muted">${escapeHtml(item.product.description)}</small><br>
+            ${costCodeCell}
           </td>
           <td class="text-end">${qtyCell}</td>
           <td class="text-end text-success">${item.quantity_received}</td>
@@ -948,6 +1049,7 @@ async function viewPODetails(poId) {
             <div id="newItemProductResults" class="list-group shadow-sm mt-1"
                  style="display:none; position:absolute; z-index:1050; width:100%; max-height:220px; overflow-y:auto;"></div>
             <input type="hidden" id="newItemProduct">
+            <input type="text" class="form-control form-control-sm mt-1" id="newItemCostCode" placeholder="Cost code">
           </td>
           <td class="text-end" style="vertical-align:top; padding-top:8px;">
             <input type="number" class="form-control form-control-sm text-end" id="newItemQty" min="1" value="1" style="width:80px">
@@ -1042,13 +1144,52 @@ async function viewPODetails(poId) {
   }
 }
 
-// Submit PO
-async function submitPO(poId) {
-  if (!confirm('Submit this purchase order for approval?')) return;
+// Submit PO — opens an in-app modal instead of a browser confirm(); if no
+// approver is set yet, lets the user pick one right there before submitting.
+function submitPO(poId) {
+  const po = (currentPO && currentPO.id === poId) ? currentPO : null;
+  document.getElementById('submitApprovalPoId').value = poId;
+
+  const body = document.getElementById('submitApprovalBody');
+  const hasApprover = po && po.approver_id;
+
+  if (hasApprover) {
+    const approverName = po.assigned_approver ? po.assigned_approver.name : 'the assigned approver';
+    body.innerHTML = `
+      <p>Submit this purchase order for approval to <strong>${escapeHtml(approverName)}</strong>?</p>
+    `;
+  } else {
+    const options = (allApprovers || [])
+      .map(u => `<option value="${u.id}">${escapeHtml(u.name)}</option>`)
+      .join('');
+    body.innerHTML = `
+      <div class="alert alert-warning">No approver is set on this purchase order — no one will be notified unless you pick one now.</div>
+      <label class="form-label">Approver</label>
+      <select id="submitApprovalApproverSelect" class="form-select">
+        <option value="">No approver — submit anyway</option>
+        ${options}
+      </select>
+    `;
+  }
+
+  safeShowModal('submitApprovalModal');
+}
+
+async function confirmSubmitPO() {
+  const poId = parseInt(document.getElementById('submitApprovalPoId').value, 10);
+  const approverSelect = document.getElementById('submitApprovalApproverSelect');
 
   try {
+    if (approverSelect && approverSelect.value) {
+      await authenticatedFetch(`/purchase-orders/${poId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ approver_id: parseInt(approverSelect.value, 10) }),
+      });
+    }
+
     await authenticatedFetch(`/purchase-orders/${poId}/submit`, { method: 'POST' });
     showNotification('Purchase order submitted successfully', 'success');
+    safeHideModal('submitApprovalModal');
     safeHideModal('viewPOModal');
     loadPurchaseOrders();
     loadStatistics();
@@ -1074,13 +1215,29 @@ async function approvePO(poId) {
   }
 }
 
-// Cancel PO
-async function cancelPO(poId) {
-  if (!confirm('Cancel this purchase order? This will release any on-order quantities.')) return;
+// Cancel PO — opens a password-confirmation modal before the destructive call
+function cancelPO(poId) {
+  document.getElementById('cancelPOId').value = poId;
+  document.getElementById('cancelPOPassword').value = '';
+  safeShowModal('cancelPOModal');
+}
+
+async function confirmCancelPO() {
+  const poId = document.getElementById('cancelPOId').value;
+  const password = document.getElementById('cancelPOPassword').value;
+
+  if (!password) {
+    showNotification('Please enter your password to confirm', 'warning');
+    return;
+  }
 
   try {
-    await authenticatedFetch(`/purchase-orders/${poId}/cancel`, { method: 'POST' });
+    await authenticatedFetch(`/purchase-orders/${poId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ current_password: password }),
+    });
     showNotification('Purchase order cancelled successfully', 'success');
+    safeHideModal('cancelPOModal');
     safeHideModal('viewPOModal');
     loadPurchaseOrders();
     loadStatistics();
@@ -1151,7 +1308,8 @@ function initDraftProductSearch() {
                  data-desc="${escapeHtml(p.description)}"
                  data-cost="${netCost}"
                  data-pack="${packSize}"
-                 data-pack-uom="${escapeHtml(packUom)}">
+                 data-pack-uom="${escapeHtml(packUom)}"
+                 data-cost-code="${escapeHtml(p.cost_code || '')}">
                 <div class="d-flex justify-content-between align-items-center">
                   <div>
                     <strong class="small">${escapeHtml(p.sku)}</strong>
@@ -1171,6 +1329,10 @@ function initDraftProductSearch() {
             document.getElementById('newItemProduct').value = this.dataset.id;
             input.value = `${this.dataset.sku} — ${this.dataset.desc}`;
             document.getElementById('newItemCost').value = parseFloat(this.dataset.cost).toFixed(2);
+            const newItemCostCodeInput = document.getElementById('newItemCostCode');
+            if (newItemCostCodeInput && !newItemCostCodeInput.value) {
+              newItemCostCodeInput.value = this.dataset.costCode || '';
+            }
             results.style.display = 'none';
 
             // Show pack hint below qty input
@@ -1205,6 +1367,7 @@ async function addDraftLineItem(poId) {
   const productId = document.getElementById('newItemProduct').value;
   const qty       = parseInt(document.getElementById('newItemQty').value, 10);
   const cost      = parseFloat(document.getElementById('newItemCost').value);
+  const costCode  = document.getElementById('newItemCostCode').value || null;
 
   if (!productId) { showNotification('Please search and select a product', 'warning'); return; }
   if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
@@ -1213,7 +1376,7 @@ async function addDraftLineItem(poId) {
   try {
     await authenticatedFetch(`/purchase-orders/${poId}/items`, {
       method: 'POST',
-      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: qty, unit_cost: cost }),
+      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: qty, unit_cost: cost, cost_code: costCode }),
     });
     showNotification('Line item added', 'success');
     viewPODetails(poId);
@@ -1243,6 +1406,7 @@ async function removeDraftLineItem(poId, itemId) {
 async function updateDraftLineItem(poId, itemId) {
   const qty = parseInt(document.getElementById(`editQty${itemId}`)?.value, 10);
   const cost = parseFloat(document.getElementById(`editCost${itemId}`)?.value);
+  const costCode = document.getElementById(`editCostCode${itemId}`)?.value || null;
 
   if (!qty || qty < 1) { showNotification('Quantity must be at least 1', 'warning'); return; }
   if (isNaN(cost) || cost < 0) { showNotification('Invalid unit cost', 'warning'); return; }
@@ -1250,7 +1414,7 @@ async function updateDraftLineItem(poId, itemId) {
   try {
     await authenticatedFetch(`/purchase-orders/${poId}/items/${itemId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ quantity: qty, unit_cost: cost }),
+      body: JSON.stringify({ quantity: qty, unit_cost: cost, cost_code: costCode }),
     });
     showNotification('Line item updated', 'success');
     viewPODetails(poId);
@@ -1280,6 +1444,11 @@ function populatePOEditPanel(po) {
     .map(l => `<option value="${l.id}" ${l.id === po.ship_to_location_id ? 'selected' : ''}>${escapeHtml(l.name)}${l.is_primary ? ' (primary)' : ''}</option>`)
     .join('');
 
+  const approverSel = document.getElementById('editPOApprover');
+  approverSel.innerHTML = '<option value="">Not set</option>' + (allApprovers || [])
+    .map(u => `<option value="${u.id}" ${u.id === po.approver_id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`)
+    .join('');
+
   document.getElementById('editPOOrderDate').value = po.order_date ? po.order_date.split('T')[0] : '';
   document.getElementById('editPOExpectedDate').value = po.expected_date ? po.expected_date.split('T')[0] : '';
   document.getElementById('editPOShipTo').value = po.ship_to || '';
@@ -1297,6 +1466,7 @@ async function savePODetails() {
     expected_date: document.getElementById('editPOExpectedDate').value || null,
     ship_to_location_id: parseInt(document.getElementById('editPOShipToLocation').value, 10) || null,
     ship_to: document.getElementById('editPOShipTo').value || null,
+    approver_id: parseInt(document.getElementById('editPOApprover').value, 10) || null,
     contact_name: document.getElementById('editPOContactName').value || null,
     contact_email: document.getElementById('editPOContactEmail').value || null,
     contact_phone: document.getElementById('editPOContactPhone').value || null,
@@ -1313,6 +1483,24 @@ async function savePODetails() {
     loadPurchaseOrders();
   } catch (error) {
     showNotification(error.message || 'Error saving details', 'danger');
+  }
+}
+
+// Update the free-text job reference — allowed at any PO status, including after approval
+async function savePOJob() {
+  if (!currentPO) return;
+  const jobName = document.getElementById('viewPOJobInput').value || null;
+
+  try {
+    await authenticatedFetch(`/purchase-orders/${currentPO.id}/job`, {
+      method: 'PATCH',
+      body: JSON.stringify({ job_name: jobName }),
+    });
+    currentPO.job_name = jobName;
+    showNotification('Job updated', 'success');
+    loadPurchaseOrders();
+  } catch (error) {
+    showNotification(error.message || 'Error updating job', 'danger');
   }
 }
 

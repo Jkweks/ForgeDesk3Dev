@@ -1,0 +1,59 @@
+item_type,pn,description,system_series,role,stock_length,section_height,condition
+"extrusion","E14024","Tall Transom Gutter","catalog (products table)",,"288.00","1.2500",
+"extrusion","E14024","Tall Transom Gutter","Standard","Head Transom Gutter","288.00","1.2500","transom"
+"extrusion","E14025","Tall Transom Stop","catalog (products table)",,"288.00","1.2500",
+"extrusion","E14025","Tall Transom Stop","Standard","Head Transom Stop","288.00","1.2500","transom"
+"extrusion","E14144","Open Back Door Jamb","catalog (products table)",,"288.00","2.0000",
+"extrusion","E14144","Open Back Door Jamb","Standard","Hinge Jamb","288.00","2.0000","single"
+"extrusion","E14144","Open Back Door Jamb","Standard","LH Jamb","288.00","2.0000","pair"
+"extrusion","E14144","Open Back Door Jamb","Standard","Lock Jamb","288.00","2.0000","single"
+"extrusion","E14144","Open Back Door Jamb","Standard","RH Jamb","288.00","2.0000","pair"
+"extrusion","E15036","Reducer for 1/4"" Glass","catalog (products table)",,"288.00",,
+"extrusion","E15036","Reducer for 1/4"" Glass","Standard","Head Jamb Reducer","288.00","0.0000","transom"
+"extrusion","E15036","Reducer for 1/4"" Glass","Standard","LH Jamb Reducer","288.00","0.0000","transom"
+"extrusion","E15036","Reducer for 1/4"" Glass","Standard","RH Jamb Reducer","288.00","0.0000","transom"
+"extrusion","E15036","Reducer for 1/4"" Glass","Standard","Transom Head Reducer","288.00","0.0000","transom"
+"extrusion","E15061","Reducer for 1/2"" Glass","catalog (products table)",,"288.00",,
+"extrusion","E15124","Door Header with Dovetail","catalog (products table)",,"288.00","2.0000",
+"extrusion","E15124","Door Header with Dovetail","Standard","Door Head","288.00","2.0000",
+"extrusion","E2550","Standard Threshold","catalog (products table)",,"288.00","0.5000",
+"extrusion","E2550","Standard Threshold","Standard","Threshold","288.00","0.5000","threshold"
+"extrusion","E4013","Snap In Transom Gutter","catalog (products table)",,"288.00","1.0000",
+"extrusion","E4013","Snap In Transom Gutter","Standard","Vertical Transom Gutter","288.00","1.0000","transom"
+"extrusion","E4015","Transom Glass Top","catalog (products table)",,"288.00","1.0000",
+"extrusion","E4015","Transom Glass Top","Standard","Head Transom Stop","288.00","1.0000","transom"
+"extrusion","E4015","Transom Glass Top","Standard","Vertical Transom Stop","288.00","1.0000","transom"
+"extrusion","E4026","Dovetail Gutter - 1/4"" Glass","catalog (products table)",,"288.00","1.0000",
+"extrusion","E4026","Dovetail Gutter - 1/4"" Glass","Standard","Head Transom Gutter","288.00","1.0000","transom"
+"extrusion","E45124","Door Header with Dovetail","catalog (products table)",,"288.00","1.7500",
+"extrusion","E45124","Door Header with Dovetail","Standard","Door Head","288.00","1.7500",
+"extrusion","E4531","Standard Door Stop","catalog (products table)",,"288.00","0.5000",
+"extrusion","E4531","Standard Door Stop","Standard","Hinge Jamb Stop","288.00","0.5000","single"
+"extrusion","E4531","Standard Door Stop","Standard","LH Jamb Stop","288.00","0.5000","pair"
+"extrusion","E4531","Standard Door Stop","Standard","Lock Jamb Stop","288.00","0.5000","single"
+"extrusion","E4531","Standard Door Stop","Standard","RH Jamb Stop","288.00","0.5000","pair"
+"extrusion","E4541","Open Back Jamb","catalog (products table)",,"288.00","1.7500",
+"extrusion","E4541","Open Back Jamb","Standard","Transom Head","288.00","1.7500","transom"
+"extrusion","E4544","Open Back Door Jamb","catalog (products table)",,"288.00","1.7500",
+"extrusion","E4544","Open Back Door Jamb","Standard","Hinge Jamb","288.00","1.7500","single"
+"extrusion","E4544","Open Back Door Jamb","Standard","LH Jamb","288.00","1.7500","pair"
+"extrusion","E4544","Open Back Door Jamb","Standard","Lock Jamb","288.00","1.7500","single"
+"extrusion","E4544","Open Back Door Jamb","Standard","RH Jamb","288.00","1.7500","pair"
+"extrusion","E4546","Deep Door Stop","catalog (products table)",,"288.00","0.7500",
+"extrusion","E4546","Deep Door Stop","Standard","Door Head Stop","288.00","0.7500",
+"extrusion","T15141","14000 Open Back Head/Jamb","catalog (products table)",,"288.00","2.0000",
+"extrusion","T15141","14000 Open Back Head/Jamb","Standard","Transom Head","288.00","2.0000","transom"
+"part","P092","4 x 4 1/2 Butt Hinge","Butt Hinge",,,,
+"part","P1098A","Door Stop Felt Weatherstripping","catalog (products table)",,"30000.00",,
+"part","P1420","Adams Rite - MS1850 Deadlock","Mortise Lockset",,,,
+"part","P1421","Adams Rite - 4510 Deadlatch","Mortise Lockset",,,,
+"part","P1564","Tubelite - 8"" Pull Handle","Push-Pull",,,,
+"part","P1565E","Tubelite - Push Bar","Push-Pull",,,,
+"part","P1584","ABH 110HD - 83""","Continuous Hinge",,,,
+"part","P2474","PVC Perimeter Filler","catalog (products table)",,"120.00",,
+"part","P2728","Standard Storefront Gasket","catalog (products table)",,"3000.00",,
+"part","P3101","First Choice - EPT","EPT",,,,
+"part","P3692C-36","First Choice - 3690 CVR Panic","Panic",,,,
+"part","P3792C-36","First Choice - 3790 Rim Panic","Panic",,,,
+"part","P797","Threshold Clip","catalog (products table)",,,,
+"part","P797","Threshold Clip","Standard","Threshold",,,

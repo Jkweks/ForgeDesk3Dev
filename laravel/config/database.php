@@ -113,6 +113,26 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        // CutFlow (shop-floor cut list / stick planning / cut log), absorbed
+        // into this app but kept on its own database on the same Postgres
+        // instance — same server/role as the default `pgsql` connection
+        // above, just a different DB_DATABASE. Every App\Models\CutFlow\*
+        // model sets `protected $connection = 'cutflow';`.
+        'cutflow' => [
+            'driver' => 'pgsql',
+            'url' => env('CUTFLOW_DB_URL'),
+            'host' => env('CUTFLOW_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('CUTFLOW_DB_PORT', env('DB_PORT', '5432')),
+            'database' => env('CUTFLOW_DB_DATABASE', 'cutflow'),
+            'username' => env('CUTFLOW_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('CUTFLOW_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
     ],
 
     /*

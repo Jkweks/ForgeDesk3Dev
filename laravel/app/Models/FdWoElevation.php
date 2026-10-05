@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
+use App\Services\Configurator\ElevationConfigurationMatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Log;
 
 class FdWoElevation extends Model
 {
     protected $table = 'fd_wo_elevations';
 
     protected $fillable = [
-        'work_order_id', 'elevation_type_id', 'template_set_id', 'elevation_tag',
+        'work_order_id', 'elevation_type_id', 'template_set_id', 'door_frame_configuration_id', 'elevation_tag',
         'quantity', 'joint_qty', 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
     ];
 
@@ -20,6 +22,35 @@ class FdWoElevation extends Model
         'date_completed' => 'date',
         'joint_qty' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        // Every Door/Frame elevation should have a matching configurator
+        // record going forward. Best-effort: a failure here (e.g. the
+        // elevation type isn't Door/Frame, or the matcher errors) must never
+        // block creating the elevation itself, which is the primary,
+        // load-bearing action.
+        static::created(function (FdWoElevation $elevation) {
+            if (! in_array($elevation->elevationType?->name, ['Door', 'Frame'], true)) {
+                return;
+            }
+
+            // Created straight from a configuration (attach / sync): already linked, nothing to match. Matching
+            // would also mistake a pair's "-LH"/"-RH" leaf lines for unconfigured openings.
+            if ($elevation->door_frame_configuration_id) {
+                return;
+            }
+
+            try {
+                app(ElevationConfigurationMatcher::class)->syncWorkOrder($elevation->workOrder);
+            } catch (\Throwable $e) {
+                Log::error('Failed to auto-match configurator configuration for elevation', [
+                    'elevation_id' => $elevation->id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
 
     /**
      * The line's effective "minutes per joint": the sum of the per-step rates
@@ -102,6 +133,11 @@ class FdWoElevation extends Model
     public function elevationType(): BelongsTo
     {
         return $this->belongsTo(FdElevationType::class, 'elevation_type_id');
+    }
+
+    public function doorFrameConfiguration(): BelongsTo
+    {
+        return $this->belongsTo(DoorFrameConfiguration::class, 'door_frame_configuration_id');
     }
 
     public function templateSet(): BelongsTo

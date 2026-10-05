@@ -185,6 +185,7 @@
                   <label class="form-label small text-muted mb-1">Part Number</label>
                   <input type="text" class="form-control form-control-sm" name="part_number" id="productPartNumber" placeholder="e.g., ABC-123">
                   <small class="form-hint text-primary" id="skuPreview"></small>
+                  <small class="form-hint text-success" id="partLookupHint" style="display:none"></small>
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
@@ -1145,8 +1146,41 @@
       }
     }
 
+    // Autofill description/list price/net price from the EZ Estimate template
+    // (SL Formulas / P Formulas sheets) when the part number matches, so there's
+    // one source of pricing truth instead of a separate catalog going stale.
+    async function tryAutofillFromEzEstimate() {
+      const partNumber = document.getElementById('productPartNumber').value.trim();
+      const hint = document.getElementById('partLookupHint');
+      if (!partNumber) { hint.style.display = 'none'; return; }
+
+      try {
+        const res = await apiCall(`/ez-estimate/part-lookup?part_number=${encodeURIComponent(partNumber)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.found) { hint.style.display = 'none'; return; }
+
+        const descField = document.getElementById('productDescription');
+        const listField = document.getElementById('productUnitCost');
+        const netField  = document.getElementById('productNetCost');
+
+        const filled = [];
+        if (data.description && !descField.value) { descField.value = data.description; filled.push('description'); }
+        if (data.list_price != null && !listField.value) { listField.value = data.list_price; filled.push('list price'); }
+        if (data.net_price != null && !netField.value) { netField.value = data.net_price; filled.push('net price'); }
+
+        hint.style.display = '';
+        hint.textContent = filled.length
+          ? `Autofilled ${filled.join(', ')} from EZ Estimate catalog.`
+          : 'Matched EZ Estimate catalog (fields already filled).';
+      } catch (e) {
+        console.error('EZ Estimate lookup failed', e);
+      }
+    }
+
     // Add event listeners for auto-calculations
     document.getElementById('productPartNumber').addEventListener('input', updateSkuPreview);
+    document.getElementById('productPartNumber').addEventListener('blur', tryAutofillFromEzEstimate);
     document.getElementById('productFinish').addEventListener('change', updateSkuPreview);
     document.getElementById('productAvgDailyUse').addEventListener('input', updateReorderPointPreview);
     document.getElementById('productLeadTime').addEventListener('input', updateReorderPointPreview);
@@ -1158,6 +1192,9 @@
       document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
       document.getElementById('skuPreview').textContent = '';
       document.getElementById('reorderPreview').textContent = '';
+      const partLookupHint = document.getElementById('partLookupHint');
+      partLookupHint.textContent = '';
+      partLookupHint.style.display = 'none';
       lastGeneratedSku = '';
 
       // Wire toggle live-labels

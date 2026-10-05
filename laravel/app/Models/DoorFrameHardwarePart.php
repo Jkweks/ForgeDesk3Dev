@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class DoorFrameHardwarePart extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'configuration_id', 'part_label', 'manufacturer', 'model_number', 'product_id', 'quantity',
+        'source_type', 'hwlib_link_id', 'is_auto_generated', 'sort_order',
+    ];
+
+    protected $casts = [
+        'quantity' => 'decimal:3',
+        'is_auto_generated' => 'boolean',
+        'sort_order' => 'integer',
+    ];
+
+    public function configuration()
+    {
+        return $this->belongsTo(DoorFrameConfiguration::class, 'configuration_id');
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class, 'product_id');
+    }
+
+    public function hwlibLink()
+    {
+        return $this->belongsTo(ConfiguratorHwlibLink::class, 'hwlib_link_id');
+    }
+
+    /** No inventory product: a special-order item listed by name/model on the job's hardware list. */
+    public function isNonStock(): bool
+    {
+        return $this->product_id === null;
+    }
+
+    public function getFormattedLabelAttribute()
+    {
+        return ucwords(str_replace('_', ' ', $this->part_label));
+    }
+}

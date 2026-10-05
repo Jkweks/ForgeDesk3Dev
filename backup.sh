@@ -137,6 +137,28 @@ else
   FILES_FILE=""
 fi
 
+# --- cutflow DB dump (non-fatal) ---
+# CutFlow's data lives in its own "cutflow" database in the SAME postgres
+# container/instance as forgedesk (DB_CONTAINER above) — its own connection
+# (see laravel/config/database.php 'cutflow'), not a table inside forgedesk.
+# Dumped with the same DB_USER/DB_PASSWORD.
+CUTFLOW_DB_FILE="${BACKUP_DIR}/cutflow_${TIMESTAMP}.sql.gz"
+set +e
+docker exec -e PGPASSWORD="${DB_PASSWORD}" "${DB_CONTAINER}" \
+  pg_dump -U "${DB_USER}" -d cutflow | gzip > "${CUTFLOW_DB_FILE}"
+CUTFLOW_DUMP_RC=$?
+set -e
+if [ "${CUTFLOW_DUMP_RC}" -eq 0 ] && [ -s "${CUTFLOW_DB_FILE}" ]; then
+  echo "$(date): cutflow DB backup succeeded -> ${CUTFLOW_DB_FILE} ($(du -h "${CUTFLOW_DB_FILE}" | cut -f1))"
+  add_component "cutflow_db" 1 "OK -> $(basename "${CUTFLOW_DB_FILE}")"
+else
+  echo "$(date): WARNING - cutflow DB backup failed; other backups still OK" >&2
+  add_component "cutflow_db" 0 "pg_dump failed"
+  LOCAL_FAILURE=1
+  rm -f "${CUTFLOW_DB_FILE}"
+  CUTFLOW_DB_FILE=""
+fi
+
 # --- fab_utils DB dumps: shimshop + configurator (non-fatal) ---
 # Same postgres container/user/password as the main DB — just different
 # database names within that one instance.
@@ -205,7 +227,7 @@ rm -f "${PROBE_ERR}"
 
 REMOTE_OK_COUNT=0
 REMOTE_FAIL_COUNT=0
-for f in "${DB_FILE}" ${FILES_FILE:+"${FILES_FILE}"} ${FAB_UTILS_DB_FILES} ${FAB_UTILS_SHIM_FILE:+"${FAB_UTILS_SHIM_FILE}"}; do
+for f in "${DB_FILE}" ${FILES_FILE:+"${FILES_FILE}"} ${CUTFLOW_DB_FILE:+"${CUTFLOW_DB_FILE}"} ${FAB_UTILS_DB_FILES} ${FAB_UTILS_SHIM_FILE:+"${FAB_UTILS_SHIM_FILE}"}; do
   SCP_ERR=$(mktemp)
   if scp "${SSH_OPTS[@]}" \
       "${f}" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" >/dev/null 2>"${SCP_ERR}"; then
@@ -223,6 +245,7 @@ add_component "remote_copy" "$([ "${REMOTE_FAIL_COUNT}" -eq 0 ] && echo 1 || ech
 # --- Local retention: drop DB dumps and storage archives older than LOCAL_RETENTION_DAYS ---
 find "${BACKUP_DIR}" -name "forgedesk_*.sql.gz"          -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
 find "${BACKUP_DIR}" -name "forgedesk_*_storage.tar.gz"  -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
+find "${BACKUP_DIR}" -name "cutflow_*.sql.gz"            -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
 find "${BACKUP_DIR}" -name "fab_utils_*.sql.gz"          -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
 find "${BACKUP_DIR}" -name "fab_utils_shimfiles_*.tar.gz" -type f -mtime +${LOCAL_RETENTION_DAYS} -delete
 echo "$(date): Local cleanup complete (retention: ${LOCAL_RETENTION_DAYS} days)"
@@ -236,6 +259,7 @@ ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
   "find ${REMOTE_DIR} -type f \\( \
       -name 'forgedesk_*.sql.gz' -o \
       -name 'forgedesk_*_storage.tar.gz' -o \
+      -name 'cutflow_*.sql.gz' -o \
       -name 'fab_utils_*.sql.gz' -o \
       -name 'fab_utils_shimfiles_*.tar.gz' \
     \\) -mtime +${REMOTE_RETENTION_DAYS} -delete" >/dev/null 2>"${CLEANUP_ERR}"

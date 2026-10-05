@@ -69,8 +69,10 @@ Route::get('/fulfillment/job-reservations', function () {
 });
 
 // Reports & Maintenance
-Route::get('/reports', function () {
-    return view('reports');
+Route::get('/reports/{report?}', function (?string $report = null) {
+    abort_if($report !== null && ! collect(config('reports.reports'))->contains('key', $report), 404);
+
+    return view('reports', ['initialReport' => $report]);
 });
 
 Route::get('/maintenance', function () {
@@ -86,12 +88,33 @@ Route::get('/fabrication/work-orders', function () {
     return view('fabrication.work-orders');
 });
 
+Route::get('/fabrication/cut-lists', function () {
+    return view('fabrication.cut-lists');
+});
+
 Route::get('/fabrication/work-queue', function () {
     return view('fabrication.work-queue');
 });
 
 Route::get('/fabrication/quality', function () {
     return view('fabrication.quality');
+});
+
+// Configurator
+Route::get('/config', function () {
+    return view('configurator.frame');
+});
+
+Route::get('/config/package', function () {
+    return view('configurator.package');
+});
+
+Route::get('/config/labels', function () {
+    return view('configurator.labels');
+});
+
+Route::get('/config/admin', function () {
+    return view('configurator.admin');
 });
 
 // System Status
@@ -112,6 +135,15 @@ Route::get('/admin/location-assignment', function () {
 Route::get('/shop', function () {
     return view('shop-floor');
 });
+
+// CutFlow — cut-station kiosk, no ForgeDesk auth required (same as /shop
+// above). Operator identity is a fab_pin sign-in against FdUser inside the
+// Livewire component itself, not a route-level guard.
+Route::get('/cut-station', \App\Livewire\CutFlow\Dashboard::class)->name('cutflow.dashboard');
+Route::get('/cut-station/import', [\App\Http\Controllers\CutFlow\ImportController::class, 'show'])->name('cutflow.import.show');
+Route::post('/cut-station/import', [\App\Http\Controllers\CutFlow\ImportController::class, 'store'])->name('cutflow.import.store');
+Route::get('/cut-station/settings', \App\Livewire\CutFlow\Settings::class)->name('cutflow.settings');
+Route::get('/cut-station/cuts/{cutLogEntry:uuid}', [\App\Http\Controllers\CutFlow\CutController::class, 'show'])->name('cutflow.cuts.show');
 
 // Design-time preview of the maintenance page, so it can be checked without
 // actually toggling maintenance mode. Excluded entirely outside non-production

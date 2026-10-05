@@ -667,7 +667,7 @@ const QR_PRE_FORGE_OPTION = '<option value="pre-forge">Pre-Forge (pre-tracking)<
 
 /** Problem type options, verbatim as they appear on the source PDF form (see QualityReportPdfExtractor); "Other" reveals a free-text box since the form itself offers it as a catch-all. */
 const QR_PROBLEM_TYPES = [
-  'Extrusion Defect', 'Fitment Issue', 'Hardware Prep Issue', 'Missing Hardware',
+  'Extrusion Defect', 'Hardware Fitment Issue', 'Hardware Prep Issue', 'Missing Hardware',
   'Missing Vinyl', 'Missing Accessories (Setting blocks, screws, ect)', 'Missing Stops',
   'Length/Size Issue', 'Other',
 ];

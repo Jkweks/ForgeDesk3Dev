@@ -57,8 +57,24 @@
                     <a class="dropdown-item" href="/jobs">Jobs Dashboard</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="/fulfillment/material-check">Material Check</a>
+                    <a class="dropdown-item" href="/fulfillment/job-reservations" data-permission="reservations.dashboard.view">Reservations Dashboard</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="http://fab.vosglassintra.net/configurator" target="_blank" rel="noopener">Door Configurator <span class="badge bg-yellow-lt text-yellow ms-auto">Beta</span></a>
+                  </div>
+                </li>
+                <li class="nav-item dropdown {{ Request::is('config*') ? 'active' : '' }}" data-nav-permission="nav.configurator">
+                  <a class="nav-link dropdown-toggle" href="#navbar-configurator" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" /><path d="M4 12l16 0" /><path d="M12 4l0 16" /></svg>
+                    </span>
+                    <span class="nav-link-title">Configurator</span>
+                  </a>
+                  <div class="dropdown-menu">
+                    <a class="dropdown-item {{ Request::is('config') ? 'active' : '' }}" href="/config" data-permission="configurator.view">Frame Builder</a>
+                    <a class="dropdown-item {{ Request::is('config/package') ? 'active' : '' }}" href="/config/package" data-permission="configurator.view">Fabrication Package</a>
+                    <a class="dropdown-item {{ Request::is('config/labels') ? 'active' : '' }}" href="/config/labels" data-permission="configurator.view">Door Labels</a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item {{ Request::is('config/admin') ? 'active' : '' }}" href="/config/admin" data-permission="configurator.catalog.manage">Configurator Admin</a>
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('reports') ? 'active' : '' }}" data-nav-permission="nav.reports">
@@ -93,11 +109,14 @@
                     <span class="nav-link-title">Fabrication</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item {{ Request::is('fabrication/documents') ? 'active' : '' }}" href="/fabrication/documents">Documents</a>
                     <a class="dropdown-item {{ Request::is('fabrication/work-orders') ? 'active' : '' }}" href="/fabrication/work-orders">Work Orders</a>
                     <a class="dropdown-item {{ Request::is('fabrication/work-queue') ? 'active' : '' }}" href="/fabrication/work-queue" data-permission="fabrication.work-orders.view">Work Queue</a>
+                    <a class="dropdown-item {{ Request::is('fabrication/cut-lists') ? 'active' : '' }}" href="/fabrication/cut-lists" data-permission="fabrication.work-orders.view">Cut Lists</a>
                     <a class="dropdown-item {{ Request::is('fabrication/quality') ? 'active' : '' }}" href="/fabrication/quality" data-permission="quality.view">Quality Reports</a>
                     <a class="dropdown-item" href="/shop" target="_blank" rel="noopener">Shop Floor Display <i class="ti ti-external-link ms-1" style="font-size:.75rem;vertical-align:middle"></i></a>
+                    @if(Auth::user() && Auth::user()->isAdmin())
+                    <a class="dropdown-item" href="/cut-station" target="_blank" rel="noopener">Cut Station <i class="ti ti-external-link ms-1" style="font-size:.75rem;vertical-align:middle"></i></a>
+                    @endif
                   </div>
                 </li>
                 <li class="nav-item {{ Request::is('admin*') ? 'active' : '' }}" data-nav-permission="nav.admin">

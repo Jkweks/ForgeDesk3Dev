@@ -1,10 +1,12 @@
 FROM php:8.4-fpm-alpine
 
 RUN apk add --no-cache \
-    git curl libpng-dev libzip-dev zip unzip \
+    git curl libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev zip unzip \
     postgresql-dev oniguruma-dev nodejs npm
 
-RUN docker-php-ext-install \
+# JPEG/WebP support: product photos are rendered to bitmaps for drop-rack labels
+RUN docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install \
     pdo pdo_pgsql pgsql mbstring zip exif pcntl bcmath gd
 
 RUN apk add --no-cache $PHPIZE_DEPS \

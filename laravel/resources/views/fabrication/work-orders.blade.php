@@ -196,6 +196,9 @@
               <button class="btn btn-ghost-secondary" onclick="openDoorSchedule()" title="Batch add doors &amp; frames">
                 <i class="ti ti-door me-1"></i>Door Schedule
               </button>
+              <button class="btn btn-ghost-secondary" onclick="openCutlistUpload()" title="Send a cut list not sourced from the configurator (e.g. curtainwall) to CutFlow">
+                <i class="ti ti-cut me-1"></i>Upload Cutlist
+              </button>
               <button class="btn btn-ghost-primary" onclick="openBulkElev()">
                 <i class="ti ti-plus me-1"></i>Add Elevation
               </button>
@@ -518,6 +521,16 @@
 
         <!-- ── Step 3: Door / Frame Schedule ── -->
         <div id="wiz-step-3" style="display:none">
+          <div id="wiz-configs-wrap" class="mb-4 d-none">
+            <h6 class="mb-1">Existing Configurator Openings</h6>
+            <p class="text-muted small mb-2">
+              Openings already built in the Configurator for this job and not on a work order.
+              Tick the ones this work order will produce, then click <strong>Finish</strong> to attach them.
+              Unticked openings can be attached or moved later from the Door Schedule.
+            </p>
+            <div id="wiz-configs-body"></div>
+            <hr class="my-3">
+          </div>
           <p class="text-muted small mb-2">
             Each row creates Door and/or Frame elevations with <strong>Programmed → CNC → Assembled</strong> stages.
             Leave the table empty and click Skip to finish without doors or frames.
@@ -679,6 +692,27 @@
         <button type="button" class="btn-close" onclick="hideModal(document.getElementById('doorScheduleModal'))"></button>
       </div>
       <div class="modal-body">
+        <div id="door-schedule-configs-wrap" class="mb-4 d-none">
+          <h6 class="mb-1">Configurator Openings</h6>
+          <div id="door-schedule-linked-wrap" class="mb-3 d-none">
+            <p class="text-muted small mb-1">
+              Linked to this work order. Detach one to move it to another work order
+              (not possible once production has started on it).
+            </p>
+            <div id="door-schedule-linked-body"></div>
+          </div>
+          <div id="door-schedule-available-wrap" class="d-none">
+            <p class="text-muted small mb-2">
+              Openings already built in the Configurator for this job and not on a work order.
+              Attach one to create its elevations here — no need to re-enter the tag.
+            </p>
+            <div id="door-schedule-configs-body" class="mb-2"></div>
+            <button class="btn btn-sm btn-outline-primary" onclick="attachSelectedConfigurations()" id="door-schedule-attach-btn">
+              <i class="ti ti-link me-1"></i>Attach Selected
+            </button>
+          </div>
+          <hr class="my-3">
+        </div>
         <p class="text-muted small mb-3">
           Each row creates Door and/or Frame elevations with
           <strong>Programmed → CNC → Assembled</strong> stages.
@@ -706,6 +740,35 @@
         <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('doorScheduleModal'))">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveDoorSchedule()" id="door-schedule-save">
           Create Elevations
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="cutlistUploadModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload Cutlist</h5>
+        <button type="button" class="btn-close" onclick="hideModal(document.getElementById('cutlistUploadModal'))"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          For lineal cut-list lines not sourced from the door/frame configurator
+          (e.g. curtainwall/storefront). Merges into this work order's CutFlow job
+          alongside anything already released from the configurator.
+        </p>
+        <div class="mb-3">
+          <label class="form-label">CSV File</label>
+          <input type="file" class="form-control" id="cutlist-upload-file" accept=".csv,.txt">
+          <div class="form-hint">Columns: part_id (or name), finish, dimension_in, qty, and optionally phase, description, row, column, leftcutangle, rightcutangle.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="hideModal(document.getElementById('cutlistUploadModal'))">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveCutlistUpload()" id="cutlist-upload-save">
+          Send to CutFlow
         </button>
       </div>
     </div>
@@ -921,11 +984,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================================
-// Column visibility — persisted to the signed-in user's account
+// Column order + visibility — persisted to the signed-in user's account
 // ============================================================
 const WO_COLUMNS = [
     { key: 'priority',        label: '#' },
     { key: 'job_name',        label: 'Job Name' },
+    { key: 'release',         label: 'Release' },
     { key: 'pm',               label: 'PM' },
     { key: 'due',              label: 'Due' },
     { key: 'est_start',        label: 'Est. Start' },
@@ -937,7 +1001,9 @@ const WO_COLUMNS = [
     { key: 'material',         label: 'Material' },
     { key: 'elevations',       label: 'Elevations' },
 ];
+let woColumnOrder = WO_COLUMNS.map(c => c.key);
 let woHiddenColumns = new Set();
+let _woColDragKey = null;
 
 // Uses locally-cached prefs immediately (avoids a flash of every column),
 // then reconciles against the server's copy once the session refresh
@@ -951,25 +1017,65 @@ function initWoColumnPrefs() {
         window.sessionReady.then(() => {
             applyStoredWoColumnPrefs(currentUser?.wo_column_prefs);
             renderWoColumnsMenu();
-            applyWoColumnVisibility();
+            applyWoColumnOrder();
         });
     }
 }
 
-function applyStoredWoColumnPrefs(hidden) {
-    woHiddenColumns = new Set(Array.isArray(hidden) ? hidden : []);
+// Accepts either the current { order, hidden } shape or a legacy bare
+// hidden-column array from before ordering existed.
+function applyStoredWoColumnPrefs(prefs) {
+    const validKeys = WO_COLUMNS.map(c => c.key);
+    const isLegacyArray = Array.isArray(prefs);
+    const storedOrder = !isLegacyArray && Array.isArray(prefs?.order) ? prefs.order.filter(k => validKeys.includes(k)) : [];
+    validKeys.forEach(k => { if (!storedOrder.includes(k)) storedOrder.push(k); });
+    woColumnOrder = storedOrder;
+    woHiddenColumns = new Set(isLegacyArray ? prefs : (Array.isArray(prefs?.hidden) ? prefs.hidden : []));
 }
 
 function renderWoColumnsMenu() {
     const menu = document.getElementById('wo-columns-menu');
     if (!menu) return;
-    menu.innerHTML = WO_COLUMNS.map(c => `
-        <label class="form-check">
-            <input class="form-check-input" type="checkbox" ${woHiddenColumns.has(c.key) ? '' : 'checked'}
-                onchange="toggleWoColumn('${c.key}', this.checked)">
-            <span class="form-check-label">${esc(c.label)}</span>
-        </label>
+    const cols = woColumnOrder.map(key => WO_COLUMNS.find(c => c.key === key)).filter(Boolean);
+    menu.innerHTML = cols.map(c => `
+        <div class="d-flex align-items-center gap-2 py-1 wo-col-row" draggable="true" data-col-key="${c.key}"
+            ondragstart="woColDragStart(event)" ondragover="woColDragOver(event)" ondrop="woColDrop(event)" ondragend="woColDragEnd(event)">
+            <i class="ti ti-grip-vertical text-muted" style="cursor:grab"></i>
+            <label class="form-check mb-0 flex-fill">
+                <input class="form-check-input" type="checkbox" ${woHiddenColumns.has(c.key) ? '' : 'checked'}
+                    onchange="toggleWoColumn('${c.key}', this.checked)">
+                <span class="form-check-label">${esc(c.label)}</span>
+            </label>
+        </div>
     `).join('');
+}
+
+function woColDragStart(e) {
+    _woColDragKey = e.currentTarget.dataset.colKey;
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function woColDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function woColDrop(e) {
+    e.preventDefault();
+    const targetKey = e.currentTarget.dataset.colKey;
+    if (!_woColDragKey || _woColDragKey === targetKey) return;
+    const from = woColumnOrder.indexOf(_woColDragKey);
+    const to = woColumnOrder.indexOf(targetKey);
+    if (from === -1 || to === -1) return;
+    woColumnOrder.splice(from, 1);
+    woColumnOrder.splice(to, 0, _woColDragKey);
+    renderWoColumnsMenu();
+    applyWoColumnOrder();
+    saveWoColumnPrefs();
+}
+
+function woColDragEnd() {
+    _woColDragKey = null;
 }
 
 function toggleWoColumn(key, visible) {
@@ -988,12 +1094,35 @@ function applyWoColumnVisibility() {
     });
 }
 
+// Reorders a row's <td>/<th> children to match woColumnOrder. Cells with no
+// data-col (the trailing chevron/actions column) are left exactly where
+// they are.
+function reorderWoRowCells(row) {
+    const cells = Array.from(row.children);
+    const colIndices = [];
+    cells.forEach((cell, idx) => { if (cell.dataset.col) colIndices.push(idx); });
+    if (!colIndices.length) return;
+
+    const sorted = colIndices
+        .map(idx => cells[idx])
+        .sort((a, b) => woColumnOrder.indexOf(a.dataset.col) - woColumnOrder.indexOf(b.dataset.col));
+    colIndices.forEach((idx, i) => { cells[idx] = sorted[i]; });
+    cells.forEach(cell => row.appendChild(cell));
+}
+
+function applyWoColumnOrder() {
+    const headRow = document.querySelector('#wo-thead tr');
+    if (headRow) reorderWoRowCells(headRow);
+    document.querySelectorAll('#wo-tbody > tr').forEach(reorderWoRowCells);
+    applyWoColumnVisibility();
+}
+
 let _woColumnSaveTimeout = null;
 function saveWoColumnPrefs() {
     // currentUser stays in sync locally so a re-render (e.g. reopening the
     // dropdown) reflects the latest choice even before the save resolves.
     if (currentUser) {
-        currentUser.wo_column_prefs = [...woHiddenColumns];
+        currentUser.wo_column_prefs = { order: [...woColumnOrder], hidden: [...woHiddenColumns] };
         try { localStorage.setItem('userData', JSON.stringify(currentUser)); } catch (e) { /* best-effort */ }
     }
     clearTimeout(_woColumnSaveTimeout);
@@ -1002,7 +1131,7 @@ function saveWoColumnPrefs() {
             await API('/user/wo-column-prefs', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hidden: [...woHiddenColumns] }),
+                body: JSON.stringify({ order: [...woColumnOrder], hidden: [...woHiddenColumns] }),
             });
         } catch (e) { console.error('Failed to save column preferences:', e); }
     }, 400);
@@ -1075,7 +1204,7 @@ function renderWOTableHead() {
     if (!thead) return;
     thead.innerHTML = `<tr>
         ${woSortTh('#', 'priority', 'priority', 'width:4.5rem')}
-        ${woSortTh('Release', 'release')}
+        ${woSortTh('Release', 'release', 'release')}
         ${woSortTh('Job Name', 'job_name', 'job_name')}
         ${woSortTh('PM', 'pm', 'pm')}
         ${woSortTh('Due', 'due', 'due')}
@@ -1089,7 +1218,7 @@ function renderWOTableHead() {
         ${woSortTh('Elevations', 'elevations', 'elevations')}
         <th class="w-1"></th>
     </tr>`;
-    applyWoColumnVisibility();
+    applyWoColumnOrder();
 }
 
 function sortWOColumn(col) {
@@ -1204,7 +1333,7 @@ function renderWOList(wos) {
                 : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
             <td data-col="priority"><span class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</span></td>
-            <td><strong>${esc(releaseNumberOnly(wo))}</strong>${statusBadge}</td>
+            <td data-col="release"><strong>${esc(releaseNumberOnly(wo))}</strong>${statusBadge}</td>
             <td data-col="job_name">${esc(wo.job?.job_name || '—')}</td>
             <td data-col="pm">${pmPill(wo.job?.project_manager)}</td>
             <td data-col="due">${dueCell}</td>
@@ -1227,7 +1356,7 @@ function renderWOList(wos) {
             </td>
         </tr>`;
     }).join('');
-    applyWoColumnVisibility();
+    applyWoColumnOrder();
 }
 
 // ============================================================
@@ -1462,6 +1591,13 @@ let woJobDocsLoaded = false;
 function woJobDocCanManage() {
     if (typeof isAdmin === 'function' && isAdmin()) return true;
     return typeof hasPermission === 'function' && hasPermission('jobs.documents.manage');
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function woFmtFileSize(bytes) {
@@ -2835,13 +2971,19 @@ function openBulkCompletePrompt({ title, message, allowUser, stageNames }) {
 
     const userWrap = document.getElementById('bcp-user-wrap');
     const userSel  = document.getElementById('bcp-user');
+    const dateWrap = document.getElementById('bcp-date-wrap');
+    const dateInp  = document.getElementById('bcp-date');
     if (allowUser) {
         userWrap.style.display = '';
         userSel.innerHTML = '<option value="">— none —</option>' +
             fabUsers.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+        dateWrap.style.display = '';
+        dateInp.value = new Date().toISOString().slice(0, 10);
     } else {
         userWrap.style.display = 'none';
         userSel.innerHTML = '';
+        dateWrap.style.display = 'none';
+        dateInp.value = '';
     }
 
     document.getElementById('bulk-complete-prompt').style.display = 'flex';
@@ -2851,11 +2993,12 @@ function openBulkCompletePrompt({ title, message, allowUser, stageNames }) {
 function _bcpDone(confirmed) {
     const stageSel = document.getElementById('bcp-stage');
     const userSel  = document.getElementById('bcp-user');
+    const dateInp  = document.getElementById('bcp-date');
     document.getElementById('bulk-complete-prompt').style.display = 'none';
     const res = _bcpResolve; _bcpResolve = null;
     if (!res) return;
     res(confirmed
-        ? { stageName: stageSel.value || null, fabUserId: userSel.value || null }
+        ? { stageName: stageSel.value || null, fabUserId: userSel.value || null, completedAt: dateInp.value || null }
         : null);
 }
 
@@ -2895,7 +3038,7 @@ async function openBulkCompleteStage() {
     try {
         const data = await sendBulkComplete(
             `/work-orders/${currentWO.id}/stages/bulk-complete`,
-            { stage_name: res.stageName, fab_user_id: res.fabUserId },
+            { stage_name: res.stageName, fab_user_id: res.fabUserId, completed_at: res.completedAt },
             'Failed to complete stages.',
         );
         if (!data) return;
@@ -2926,7 +3069,7 @@ async function openBulkCompleteWO() {
     try {
         const data = await sendBulkComplete(
             `/work-orders/${currentWO.id}/stages/bulk-complete`,
-            { fab_user_id: res.fabUserId },
+            { fab_user_id: res.fabUserId, completed_at: res.completedAt },
             'Failed to complete the work order.',
         );
         if (!data) return;
@@ -2954,7 +3097,7 @@ async function bulkCompleteElevation(elevId) {
     try {
         const data = await sendBulkComplete(
             `/elevations/${elevId}/complete-all-stages`,
-            { fab_user_id: res.fabUserId },
+            { fab_user_id: res.fabUserId, completed_at: res.completedAt },
             'Failed to complete the elevation.',
         );
         if (!data) return;
@@ -3544,7 +3687,7 @@ function showWizardStep(step) {
     skipBtn.textContent   = 'Skip this step';
     if (step === 1) { nextBtn.textContent = 'Create Work Order →'; }
     else if (step === 2) { nextBtn.textContent = 'Save Elevations →'; }
-    else { nextBtn.textContent = 'Finish'; }
+    else { nextBtn.textContent = 'Finish'; loadWizardConfigurations(); }
 
     document.getElementById('wo-wizard-status').textContent = wizardWoLabel
         ? `Work order ${wizardWoLabel} created`
@@ -3719,6 +3862,8 @@ function buildDoorCreates(tag, leaves, frameChk, doorTypeId, frameTypeId, dateRe
 async function wizardFinishDoors() {
     const doorTypeId  = elevTypes.find(t => t.name === 'Door')?.id;
     const frameTypeId = elevTypes.find(t => t.name === 'Frame')?.id;
+
+    await wizardAttachConfigurations();
 
     const creates = [];
     document.querySelectorAll('#wiz-door-body tr').forEach(row => {
@@ -4171,6 +4316,150 @@ function openDoorSchedule() {
     doorRowId = 0;
     addDoorRow();   // start with one empty row
     showModal(document.getElementById('doorScheduleModal'));
+    loadAvailableConfigurations();
+}
+
+function configRowLabel(c) {
+    return `<strong>${esc((c.door_tags || []).join(', ') || ('Opening #' + c.id))}</strong>
+            <span class="text-muted small ms-1">${esc(c.job_scope)} · ${esc(c.status_label)} · qty ${c.quantity}</span>`;
+}
+
+async function loadAvailableConfigurations() {
+    const linkedWrap = document.getElementById('door-schedule-linked-wrap');
+    const linkedBody = document.getElementById('door-schedule-linked-body');
+    const availWrap = document.getElementById('door-schedule-available-wrap');
+    const body = document.getElementById('door-schedule-configs-body');
+    const wrap = document.getElementById('door-schedule-configs-wrap');
+    wrap.classList.add('d-none');
+    linkedWrap.classList.add('d-none');
+    availWrap.classList.add('d-none');
+    body.innerHTML = '';
+    linkedBody.innerHTML = '';
+    if (!currentWO) return;
+
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/available-configurations`);
+        const data = await r.json();
+        const configs = data.configurations || [];
+        const linked = data.linked || [];
+
+        if (linked.length) {
+            linkedBody.innerHTML = linked.map(c => `
+                <div class="d-flex align-items-center gap-2 py-1 border-bottom">
+                    <span class="flex-grow-1">${configRowLabel(c)}${c.archived ? ' <span class="badge bg-secondary-lt ms-1">Archived</span>' : ''}</span>
+                    <button class="btn btn-sm btn-ghost-danger" onclick="detachConfiguration(${c.id})">
+                        <i class="ti ti-unlink me-1"></i>Detach
+                    </button>
+                </div>`).join('');
+            linkedWrap.classList.remove('d-none');
+        }
+        if (configs.length) {
+            body.innerHTML = configs.map(c => `
+                <label class="d-flex align-items-start gap-2 py-1 border-bottom">
+                    <input type="checkbox" class="form-check-input mt-1 door-schedule-config-pick" value="${c.id}">
+                    <span>${configRowLabel(c)}</span>
+                </label>`).join('');
+            availWrap.classList.remove('d-none');
+        }
+        if (linked.length || configs.length) wrap.classList.remove('d-none');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function detachConfiguration(configId) {
+    if (!currentWO) return;
+    if (!confirm('Detach this opening from the work order? Its door/frame rows here will be removed.')) return;
+    try {
+        const r = await API(`/work-orders/${currentWO.id}/detach-configuration/${configId}`, { method: 'POST' });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            fabToast(err.error || 'Failed to detach opening.', 'error');
+            return;
+        }
+        fabToast('Opening detached.', 'success');
+        const wr = await API(`/work-orders/${currentWO.id}`);
+        currentWO = await wr.json();
+        renderElevations(currentWO.elevations || []);
+        loadWorkOrders();
+        loadAvailableConfigurations();
+    } catch (e) {
+        console.error(e);
+        fabToast('Failed to detach opening.', 'error');
+    }
+}
+
+// Wizard step 3: the same unlinked openings, picked here and attached on Finish.
+async function loadWizardConfigurations() {
+    const wrap = document.getElementById('wiz-configs-wrap');
+    const body = document.getElementById('wiz-configs-body');
+    wrap.classList.add('d-none');
+    body.innerHTML = '';
+    if (!wizardWoId) return;
+    try {
+        const r = await API(`/work-orders/${wizardWoId}/available-configurations`);
+        const configs = (await r.json()).configurations || [];
+        if (!configs.length) return;
+        body.innerHTML = configs.map(c => `
+            <label class="d-flex align-items-start gap-2 py-1 border-bottom">
+                <input type="checkbox" class="form-check-input mt-1 wiz-config-pick" value="${c.id}">
+                <span>${configRowLabel(c)}</span>
+            </label>`).join('');
+        wrap.classList.remove('d-none');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function wizardAttachConfigurations() {
+    const ids = Array.from(document.querySelectorAll('.wiz-config-pick:checked')).map(el => el.value);
+    let failures = 0;
+    for (const id of ids) {
+        try {
+            const r = await API(`/work-orders/${wizardWoId}/attach-configuration/${id}`, { method: 'POST' });
+            if (!r.ok) failures++;
+        } catch (e) {
+            console.error(e);
+            failures++;
+        }
+    }
+    if (failures) fabToast(`Attached ${ids.length - failures} of ${ids.length} openings; ${failures} failed.`, 'error');
+}
+
+async function attachSelectedConfigurations() {
+    if (!currentWO) return;
+    const ids = Array.from(document.querySelectorAll('.door-schedule-config-pick:checked')).map(el => el.value);
+    if (!ids.length) return;
+
+    const btn = document.getElementById('door-schedule-attach-btn');
+    btn.disabled = true;
+    btn.textContent = 'Attaching…';
+
+    let failures = 0;
+    for (const id of ids) {
+        try {
+            await API(`/work-orders/${currentWO.id}/attach-configuration/${id}`, { method: 'POST' });
+        } catch (e) {
+            console.error(e);
+            failures++;
+        }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-link me-1"></i>Attach Selected';
+
+    if (failures) {
+        fabToast(`Attached ${ids.length - failures} of ${ids.length} openings; ${failures} failed.`, 'error');
+    } else {
+        fabToast(`Attached ${ids.length} opening${ids.length > 1 ? 's' : ''}.`, 'success');
+    }
+
+    const r = await API(`/work-orders/${currentWO.id}`);
+    const wo = await r.json();
+    currentWO = wo;
+    renderElevations(wo.elevations || []);
+    loadWorkOrders();
+    loadAvailableConfigurations();
 }
 
 function addDoorRow() {
@@ -4267,6 +4556,40 @@ async function saveDoorSchedule() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Create Elevations';
+    }
+}
+
+function openCutlistUpload() {
+    if (!currentWO) return;
+    document.getElementById('cutlist-upload-file').value = '';
+    showModal(document.getElementById('cutlistUploadModal'));
+}
+
+async function saveCutlistUpload() {
+    if (!currentWO) return;
+    const fileInput = document.getElementById('cutlist-upload-file');
+    const file = fileInput.files[0];
+    if (!file) { fabToast('Choose a CSV file first.', 'warning'); return; }
+
+    const btn = document.getElementById('cutlist-upload-save');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    const fd = new FormData();
+    fd.append('csv', file);
+
+    try {
+        const r = await authenticatedUpload(`/work-orders/${currentWO.id}/cutlist-upload`, fd);
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.message || body.error || `HTTP ${r.status}`);
+        hideModal(document.getElementById('cutlistUploadModal'));
+        fabToast(body.message || 'Sent to CutFlow.', 'success');
+    } catch (e) {
+        console.error(e);
+        fabToast(`Failed to send cutlist: ${e.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send to CutFlow';
     }
 }
 
@@ -4456,11 +4779,15 @@ async function saveQuickJob() {
         <label class="form-label form-label-sm mb-1">Stage</label>
         <select class="form-select form-select-sm" id="bcp-stage"></select>
       </div>
-      <div class="mb-0" id="bcp-user-wrap" style="display:none">
+      <div class="mb-3" id="bcp-user-wrap" style="display:none">
         <label class="form-label form-label-sm mb-1">Completed by</label>
         <select class="form-select form-select-sm" id="bcp-user">
           <option value="">— none —</option>
         </select>
+      </div>
+      <div class="mb-0" id="bcp-date-wrap" style="display:none">
+        <label class="form-label form-label-sm mb-1">Completed on</label>
+        <input type="date" class="form-control form-control-sm" id="bcp-date">
       </div>
     </div>
     <div class="card-footer d-flex justify-content-end gap-2">

@@ -110,6 +110,7 @@ class ProductController extends Controller
             'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
+            'cost_code' => 'nullable|max:255',
 
             // Manufacturer
             'manufacturer' => 'nullable|max:255',
@@ -229,6 +230,7 @@ class ProductController extends Controller
             'supplier_id' => 'required|exists:suppliers,id',
             'supplier_sku' => 'nullable|max:255',
             'lead_time_days' => 'nullable|integer|min:0',
+            'cost_code' => 'nullable|max:255',
 
             // Manufacturer
             'manufacturer' => 'nullable|max:255',
@@ -302,6 +304,58 @@ class ProductController extends Controller
         $product->load('categories');
 
         return response()->json($product);
+    }
+
+    /**
+     * Update physical properties used by the configurator (stock length,
+     * weight per inch). These don't vary by finish, so the values are
+     * propagated to every product sharing this part_number, not just the
+     * row being edited from.
+     */
+    public function updateConfiguratorSpecs(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'configurator_length' => 'nullable|numeric|min:0',
+            'configurator_weight_per_inch' => 'nullable|numeric|min:0',
+            'is_length_based' => 'nullable|boolean',
+            'minimum_drop_length' => 'nullable|numeric|min:0',
+            'drop_rack_enabled' => 'nullable|boolean',
+            'drop_min_split' => 'nullable|numeric|min:0',
+            'drop_max_length' => 'nullable|numeric|min:0',
+        ]);
+
+        if (! empty($validated['drop_rack_enabled'])) {
+            $min = (float) ($validated['minimum_drop_length'] ?? 0);
+            $split = (float) ($validated['drop_min_split'] ?? 0);
+            $max = (float) ($validated['drop_max_length'] ?? 0);
+
+            if ($min <= 0) {
+                abort(422, 'Min Drop is required when Drop Rack is on.');
+            }
+
+            if (($split > 0) !== ($max > 0)) {
+                abort(422, 'Set both Min Split and Max Drop to split oversized drops, or leave both blank.');
+            }
+
+            if ($split > 0 && ! ($min <= $split && $split <= $max)) {
+                abort(422, 'Lengths must satisfy Min Drop ≤ Min Split ≤ Max Drop.');
+            }
+        }
+
+        if (! $product->part_number) {
+            $product->update($validated);
+
+            return response()->json(['product' => $product->fresh(), 'linked_products' => []]);
+        }
+
+        Product::where('part_number', $product->part_number)->update($validated);
+
+        $linked = Product::where('part_number', $product->part_number)->get(['id', 'sku', 'part_number', 'finish', 'description']);
+
+        return response()->json([
+            'product' => $product->fresh(),
+            'linked_products' => $linked,
+        ]);
     }
 
     public function destroy(Product $product)

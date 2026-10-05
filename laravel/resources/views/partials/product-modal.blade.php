@@ -446,31 +446,66 @@
 
             <!-- Configurator Tab -->
             <div class="tab-pane fade" id="configurator" role="tabpanel">
-              <!-- Configurator Settings -->
+              <!-- Physical Specs (shared across finish variants) -->
               <div class="mb-4">
-                <h4 class="mb-3"><i class="ti ti-settings me-2"></i>Configurator Settings</h4>
-                <div class="row">
+                <h4 class="mb-1"><i class="ti ti-ruler-3 me-2"></i>Physical Specs</h4>
+                <p class="text-muted mb-3">Stock length and weight don't change with finish/color — saving here updates every product sharing this part number.</p>
+                <div class="row g-2 align-items-end">
                   <div class="col-md-3">
-                    <div class="form-check form-switch mb-2">
-                      <input class="form-check-input" type="checkbox" id="configuratorAvailable" disabled>
-                      <label class="form-check-label" for="configuratorAvailable">
-                        <strong>Configurator Available</strong>
-                      </label>
-                    </div>
+                    <label class="form-label">Stock Length (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorLength">
                   </div>
                   <div class="col-md-3">
-                    <label class="form-label"><strong>Type</strong></label>
-                    <div id="configuratorType" class="text-muted">-</div>
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label"><strong>Use Path</strong></label>
-                    <div id="configuratorUsePath" class="text-muted">-</div>
+                    <label class="form-label">Weight per Inch (lb)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorWeightPerInch">
                   </div>
                   <div class="col-md-3">
                     <label class="form-label"><strong>Dimensions</strong></label>
                     <div id="configuratorDimensions" class="text-muted">-</div>
                   </div>
+                  <div class="col-auto">
+                    <button type="button" class="btn btn-primary" onclick="saveConfiguratorSpecs()" data-permission="inventory.edit">
+                      <i class="ti ti-device-floppy me-1"></i>Save
+                    </button>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-check">
+                      <input class="form-check-input" type="checkbox" id="configuratorIsLengthBased">
+                      <span class="form-check-label">Length-based (sold/stocked in fixed-length sticks) — when reserved from a cut length, rounds up to the next 1/10th of the Stock Length above.</span>
+                    </label>
+                  </div>
                 </div>
+                <div class="row g-2 align-items-end mt-2">
+                  <div class="col-12">
+                    <label class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="configuratorDropRack" onchange="toggleDropRackFields()">
+                      <span class="form-check-label"><strong>Drop Rack</strong> — Cut Flow racks the offcut from each stick (tagged to the nearest 5" below) instead of scrapping it.</span>
+                    </label>
+                  </div>
+                  <div class="col-md-3 drop-rack-field d-none">
+                    <label class="form-label">Min Drop (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorMinDropLength" placeholder="e.g. 72">
+                    <div class="form-hint">Shorter than this is scrapped.</div>
+                  </div>
+                  <div class="col-md-3 drop-rack-field d-none">
+                    <label class="form-label">Min Split (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMinSplit" placeholder="e.g. 120">
+                    <div class="form-hint">Piece cut off an oversized drop. Leave blank (with Max Drop) to never cut drops.</div>
+                  </div>
+                  <div class="col-md-3 drop-rack-field d-none">
+                    <label class="form-label">Max Drop (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMaxLength" placeholder="e.g. 144">
+                    <div class="form-hint">Longer than this gets split.</div>
+                  </div>
+                </div>
+                <div class="mt-2 small text-muted" id="configuratorLinkedVariants"></div>
+              </div>
+
+              <!-- Door/Frame Catalog usage (reverse lookup by part_number) -->
+              <div class="mb-4">
+                <h4 class="mb-1"><i class="ti ti-door me-2"></i>Used in Door/Frame Catalog</h4>
+                <p class="text-muted mb-2">Configurator catalog rows referencing this part number.</p>
+                <div id="doorCatalogUsage" class="small text-muted">-</div>
               </div>
 
               <hr>
@@ -918,6 +953,10 @@
                       <div class="text-muted small">Lead Time</div>
                       <div>${product.lead_time_days ? product.lead_time_days + 'd' : '-'}</div>
                     </div>
+                    <div class="col-12">
+                      <div class="text-muted small">Cost Code</div>
+                      <div>${product.cost_code || '-'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1004,13 +1043,23 @@
         await loadProductBOM(id);
 
         // Populate configurator settings
-        document.getElementById('configuratorAvailable').checked = product.configurator_available || false;
-        document.getElementById('configuratorType').textContent = product.configurator_type || '-';
-        document.getElementById('configuratorUsePath').textContent = product.configurator_use_path || '-';
         const dimensions = [];
         if (product.dimension_height) dimensions.push(`H: ${product.dimension_height}`);
         if (product.dimension_depth) dimensions.push(`D: ${product.dimension_depth}`);
         document.getElementById('configuratorDimensions').textContent = dimensions.length > 0 ? dimensions.join(', ') : '-';
+        document.getElementById('configuratorLength').value = product.configurator_length ?? '';
+        document.getElementById('configuratorWeightPerInch').value = product.configurator_weight_per_inch ?? '';
+        document.getElementById('configuratorMinDropLength').value = product.minimum_drop_length ?? '';
+        document.getElementById('configuratorDropRack').checked = !!product.drop_rack_enabled;
+        document.getElementById('configuratorDropMinSplit').value = product.drop_min_split ?? '';
+        document.getElementById('configuratorDropMaxLength').value = product.drop_max_length ?? '';
+        toggleDropRackFields();
+        document.getElementById('configuratorIsLengthBased').checked = !!product.is_length_based;
+        document.getElementById('configuratorLinkedVariants').textContent = '';
+        if (product.part_number) {
+          loadConfiguratorLinkedVariants(product.part_number, product.id);
+        }
+        loadDoorCatalogUsage(product.part_number);
 
         // Show modal
         showModal(document.getElementById('viewProductModal'));
@@ -1228,6 +1277,10 @@
                       <label class="form-label small text-muted mb-1">Lead Time (d)</label>
                       <input type="number" class="form-control form-control-sm" name="lead_time_days" value="${product.lead_time_days || ''}" min="0">
                     </div>
+                    <div class="col-12">
+                      <label class="form-label small text-muted mb-1">Cost Code</label>
+                      <input type="text" class="form-control form-control-sm" name="cost_code" value="" placeholder="Auto-fills PO line items for this part">
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1330,6 +1383,7 @@
       editForm.querySelector('[name="description"]').value  = product.description || '';
       editForm.querySelector('[name="long_description"]').value = product.long_description || '';
       editForm.querySelector('[name="supplier_sku"]').value = product.supplier_sku || '';
+      editForm.querySelector('[name="cost_code"]').value = product.cost_code || '';
 
       const nonsofCb = editForm.querySelector('[name="nonsof"]');
       const nonsofLabel = document.getElementById('editNonsofLabel');
@@ -1500,6 +1554,105 @@
       } catch (error) {
         console.error('Error saving product:', error);
         showNotification('Failed to save changes: ' + error.message, 'danger');
+      }
+    }
+
+    // Shows door/frame catalog rows (rails, lugs, glass specs, etc.) whose
+    // plain PN string matches this product's part_number — those tables have
+    // no product_id FK, so this is a live lookup, not a stored link.
+    async function loadDoorCatalogUsage(partNumber) {
+      const el = document.getElementById('doorCatalogUsage');
+      if (!partNumber) {
+        el.textContent = 'This product has no part number.';
+        return;
+      }
+      el.textContent = 'Checking…';
+      try {
+        const response = await apiCall(`/config/part-number-usage?part_number=${encodeURIComponent(partNumber)}`);
+        if (!response.ok) {
+          el.textContent = '';
+          return;
+        }
+        const data = await response.json();
+        const usages = data.usages || [];
+        if (usages.length === 0) {
+          el.textContent = 'Not referenced by any door/frame catalog row.';
+          return;
+        }
+        el.innerHTML = usages.map(u =>
+          `<span class="badge text-bg-secondary me-1 mb-1">${u.entity}: ${u.label} (${u.field})</span>`
+        ).join('');
+      } catch (error) {
+        el.textContent = '';
+      }
+    }
+
+    // Shows the other finish variants (same part_number) that Save will also update.
+    async function loadConfiguratorLinkedVariants(partNumber, currentId) {
+      const el = document.getElementById('configuratorLinkedVariants');
+      try {
+        const response = await apiCall(`/products?search=${encodeURIComponent(partNumber)}&per_page=50`);
+        if (!response.ok) return;
+        const data = await response.json();
+        const matches = (data.data || []).filter(p => p.part_number === partNumber);
+        if (matches.length <= 1) {
+          el.textContent = 'No other finish variants share this part number.';
+          return;
+        }
+        const labels = matches.map(p => `${p.sku || p.part_number}${p.id == currentId ? ' (this one)' : ''}`);
+        el.innerHTML = `<strong>Linked finish variants (saved together):</strong> ${labels.join(', ')}`;
+      } catch (error) {
+        el.textContent = '';
+      }
+    }
+
+    function toggleDropRackFields() {
+      const on = document.getElementById('configuratorDropRack').checked;
+      document.querySelectorAll('.drop-rack-field').forEach(el => el.classList.toggle('d-none', !on));
+    }
+
+    async function saveConfiguratorSpecs() {
+      try {
+        const length = document.getElementById('configuratorLength').value;
+        const weightPerInch = document.getElementById('configuratorWeightPerInch').value;
+        const minDropLength = document.getElementById('configuratorMinDropLength').value;
+        const dropMinSplit = document.getElementById('configuratorDropMinSplit').value;
+        const dropMaxLength = document.getElementById('configuratorDropMaxLength').value;
+
+        const response = await apiCall(`/products/${currentProductId}/configurator-specs`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            configurator_length: length === '' ? null : length,
+            configurator_weight_per_inch: weightPerInch === '' ? null : weightPerInch,
+            minimum_drop_length: minDropLength === '' ? null : minDropLength,
+            drop_rack_enabled: document.getElementById('configuratorDropRack').checked,
+            drop_min_split: dropMinSplit === '' ? null : dropMinSplit,
+            drop_max_length: dropMaxLength === '' ? null : dropMaxLength,
+            is_length_based: document.getElementById('configuratorIsLengthBased').checked,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to save configurator specs');
+        }
+
+        const result = await response.json();
+        const linked = result.linked_products || [];
+        const el = document.getElementById('configuratorLinkedVariants');
+        if (linked.length <= 1) {
+          el.textContent = 'No other finish variants share this part number.';
+        } else {
+          const labels = linked.map(p => `${p.sku || p.part_number}${p.id == currentProductId ? ' (this one)' : ''}`);
+          el.innerHTML = `<strong>Updated ${linked.length} linked finish variant(s):</strong> ${labels.join(', ')}`;
+        }
+
+        showNotification(`Saved${linked.length > 1 ? ` — applied to ${linked.length} finish variants` : ''}`, 'success');
+        if (typeof refreshTable === 'function') refreshTable();
+      } catch (error) {
+        console.error('Error saving configurator specs:', error);
+        showNotification('Failed to save: ' + error.message, 'danger');
       }
     }
 

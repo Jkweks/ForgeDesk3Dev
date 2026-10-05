@@ -110,8 +110,11 @@ class QualityAnalyticsController extends Controller
             ->map(fn ($group) => (int) $group->sum('joint_qty'));
 
         // Pre-changeover months have a manual override that replaces (not
-        // adds to) whatever partial FdWoElevation data exists for them.
-        $jointOverrides = QualityJointHistory::pluck('joint_count', 'month');
+        // adds to) whatever partial FdWoElevation data exists for them. A
+        // row with as_of_date set (the changeover month itself) is instead
+        // a *partial*-month baseline — live joint_qty completed on/after
+        // that date is added on top of it, not replaced by it.
+        $jointOverrides = QualityJointHistory::all()->keyBy('month');
 
         $reports = $this->nonRejectedReportsForIncidentRate($start, $end, $basis);
         $casesByMonth = $reports->groupBy(fn ($r) => $r->anchor_date->format('Y-m'))
@@ -123,7 +126,17 @@ class QualityAnalyticsController extends Controller
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
             $key = $cursor->format('Y-m');
-            $joints = $jointOverrides->get($key) ?? $jointsByMonth->get($key, 0);
+            $override = $jointOverrides->get($key);
+
+            if ($override && $override->as_of_date) {
+                $liveSinceCutoff = $elevations
+                    ->filter(fn ($e) => $e->date_completed->format('Y-m') === $key && $e->date_completed->gte($override->as_of_date))
+                    ->sum('joint_qty');
+                $joints = $override->joint_count + $liveSinceCutoff;
+            } else {
+                $joints = $override ? $override->joint_count : $jointsByMonth->get($key, 0);
+            }
+
             $cases = $casesByMonth->get($key, 0);
 
             $result[] = [

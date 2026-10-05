@@ -21,16 +21,18 @@ class Product extends Model
         'minimum_quantity', 'reorder_point', 'safety_stock', 'nonsof', 'cp_part', 'is_shared', 'is_special_order', 'average_daily_use',
         'on_order_qty', 'maximum_quantity', 'unit_of_measure',
         'pack_size', 'purchase_uom', 'stock_uom', 'min_order_qty', 'order_multiple',
-        'supplier_id', 'supplier_sku', 'supplier_contact', 'lead_time_days',
+        'supplier_id', 'supplier_sku', 'supplier_contact', 'lead_time_days', 'cost_code',
         'manufacturer', 'manufacturer_part_number',
         'is_active', 'is_discontinued', 'status',
-        'configurator_available', 'configurator_type', 'configurator_use_path',
+        'configurator_length', 'configurator_weight_per_inch', 'is_length_based', 'minimum_drop_length',
+        'drop_rack_enabled', 'drop_min_split', 'drop_max_length',
         'dimension_height', 'dimension_depth',
         'tool_type', 'tool_life_max', 'tool_life_unit', 'tool_life_warning_threshold',
         'compatible_machine_types', 'tool_specifications',
     ];
 
     protected $casts = [
+        'quantity_on_hand' => 'decimal:1',
         'quantity_committed' => 'decimal:1',
         'unit_cost' => 'decimal:2',
         'net_cost' => 'decimal:2',
@@ -47,7 +49,13 @@ class Product extends Model
         'cp_part' => 'boolean',
         'is_shared' => 'boolean',
         'is_special_order' => 'boolean',
-        'configurator_available' => 'boolean',
+        'configurator_length' => 'decimal:4',
+        'configurator_weight_per_inch' => 'decimal:4',
+        'is_length_based' => 'boolean',
+        'minimum_drop_length' => 'decimal:4',
+        'drop_rack_enabled' => 'boolean',
+        'drop_min_split' => 'decimal:4',
+        'drop_max_length' => 'decimal:4',
         'tool_life_max' => 'decimal:2',
         'compatible_machine_types' => 'array',
         'tool_specifications' => 'array',
@@ -323,8 +331,22 @@ class Product extends Model
         return $this->machineTooling()->whereIn('status', ['active', 'warning', 'needs_replacement']);
     }
 
+    /**
+     * `quantity_available` isn't a real column — it's computed here from a
+     * per-product reservation query (JobReservationItem::binAwareCommitted()),
+     * which makes it expensive across a list of products. Callers that
+     * already know the answer more cheaply (e.g. DashboardController's
+     * single aggregate query across the whole page) assign it directly via
+     * `$product->quantity_available = ...`; without this check, Eloquent
+     * would still call this accessor on every read/serialization and
+     * silently discard that value, re-running the expensive query anyway.
+     */
     public function getQuantityAvailableAttribute()
     {
+        if (array_key_exists('quantity_available', $this->attributes)) {
+            return (int) $this->attributes['quantity_available'];
+        }
+
         return (int) floor($this->quantity_on_hand - $this->committed_from_reservations);
     }
 
@@ -642,6 +664,10 @@ class Product extends Model
      */
     public function getQuantityAvailablePacksAttribute()
     {
+        if (array_key_exists('quantity_available_packs', $this->attributes)) {
+            return (int) $this->attributes['quantity_available_packs'];
+        }
+
         $onHandPacks = $this->quantity_on_hand_packs;
         $committedPacks = $this->committed_packs_from_reservations;
 

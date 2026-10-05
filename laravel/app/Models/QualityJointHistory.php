@@ -8,5 +8,9 @@ class QualityJointHistory extends Model
 {
     protected $table = 'quality_joint_history';
 
-    protected $fillable = ['month', 'joint_count', 'note'];
+    protected $fillable = ['month', 'joint_count', 'as_of_date', 'note'];
+
+    protected $casts = [
+        'as_of_date' => 'date',
+    ];
 }

@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\StageGatedException;
 use App\Http\Controllers\Controller;
-use App\Models\FdElevationType;
 use App\Models\FdStageTemplate;
 use App\Models\FdStageTemplateSet;
 use App\Models\FdWoElevation;
 use App\Models\FdWorkOrder;
 use App\Models\FdWoStage;
+use App\Models\DoorFrameConfiguration;
+use App\Services\Configurator\ElevationConfigurationMatcher;
 use App\Services\StageGateService;
 use App\Services\StageOverrideResolver;
 use Illuminate\Http\Request;
@@ -21,17 +22,122 @@ class ElevationController extends Controller
     public function __construct(
         private StageGateService $gate,
         private StageOverrideResolver $overrides,
+        private ElevationConfigurationMatcher $matcher,
     ) {}
 
     public function index(int $workOrderId)
     {
         $wo = FdWorkOrder::findOrFail($workOrderId);
         $elevations = $wo->elevations()
-            ->with(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo'])
+            ->with(['elevationType', 'doorFrameConfiguration', 'completedBy', 'templateSet', 'stages.assignedTo'])
             ->get()
             ->map(fn ($e) => $this->formatElevation($e));
 
         return response()->json(['elevations' => $elevations]);
+    }
+
+    /**
+     * Draft configurator openings for this work order's job that aren't tied
+     * to any work order yet — candidates the Door Schedule can pull in as-is
+     * instead of re-creating the same opening as bare elevation rows.
+     */
+    public function availableConfigurations(int $workOrderId)
+    {
+        $wo = FdWorkOrder::findOrFail($workOrderId);
+
+        $configurations = DoorFrameConfiguration::where('business_job_id', $wo->business_job_id)
+            ->whereNull('work_order_id')
+            ->with('doors')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'job_scope' => $c->job_scope,
+                'status' => $c->status,
+                'status_label' => $c->status_label,
+                'quantity' => $c->quantity,
+                'door_tags' => $c->doors->pluck('door_tag')->values(),
+            ]);
+
+        $linked = DoorFrameConfiguration::where('work_order_id', $wo->id)
+            ->with('doors')
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'job_scope' => $c->job_scope,
+                'status' => $c->status,
+                'status_label' => $c->status_label,
+                'quantity' => $c->quantity,
+                'archived' => (bool) $c->archived,
+                'door_tags' => $c->doors->pluck('door_tag')->values(),
+            ]);
+
+        return response()->json(['configurations' => $configurations, 'linked' => $linked]);
+    }
+
+    /** Unlink a configuration from this work order so it can be attached elsewhere. */
+    public function detachConfiguration(int $workOrderId, int $configId)
+    {
+        $wo = FdWorkOrder::findOrFail($workOrderId);
+        $config = DoorFrameConfiguration::findOrFail($configId);
+
+        if ($config->work_order_id !== $wo->id) {
+            return response()->json(['error' => 'This configuration is not linked to this work order.'], 422);
+        }
+
+        try {
+            $this->matcher->detachConfigurationFromWorkOrder($config);
+
+            $wo->recalcDueDateFromElevations();
+            FdWorkOrder::resequencePriorities();
+
+            return response()->json(['detached' => $configId]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            Log::error('ElevationController@detachConfiguration failed', ['config_id' => $configId, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to detach configuration'], 500);
+        }
+    }
+
+    /**
+     * Pull an existing, unlinked configurator opening into this work order's
+     * Door Schedule — creates its Door/Frame elevation rows the same way
+     * ElevationConfigurationMatcher::createElevationRow() always does, then
+     * stamps the configuration as belonging to this work order.
+     */
+    public function attachConfiguration(int $workOrderId, int $configId)
+    {
+        $wo = FdWorkOrder::findOrFail($workOrderId);
+        $config = DoorFrameConfiguration::with('doors')->findOrFail($configId);
+
+        if ($config->work_order_id) {
+            return response()->json(['error' => 'This configuration is already tied to a work order.'], 422);
+        }
+        if ($config->business_job_id !== $wo->business_job_id) {
+            return response()->json(['error' => 'This configuration belongs to a different job.'], 422);
+        }
+
+        try {
+            $created = $this->matcher->attachConfigurationToWorkOrder($config, $wo);
+
+            $wo->recalcDueDateFromElevations();
+            FdWorkOrder::resequencePriorities();
+
+            $created->each->load(['elevationType', 'doorFrameConfiguration', 'completedBy', 'templateSet', 'stages.assignedTo']);
+
+            return response()->json([
+                'elevations' => $created->map(fn ($e) => $this->formatElevation($e)),
+            ], 201);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            Log::error('ElevationController@attachConfiguration failed', ['config_id' => $configId, 'message' => $e->getMessage()]);
+
+            return response()->json(['error' => 'Failed to attach configuration'], 500);
+        }
     }
 
     public function store(Request $request, int $workOrderId)
@@ -43,94 +149,36 @@ class ElevationController extends Controller
             'joint_qty' => 'sometimes|nullable|integer|min:0',
         ]);
 
-        FdWorkOrder::findOrFail($workOrderId);
+        $workOrder = FdWorkOrder::findOrFail($workOrderId);
 
         try {
-            DB::beginTransaction();
-
-            // Resolve which complexity tier to seed from.
-            $setId = null;
-            if ($request->elevation_type_id) {
-                $setId = $request->template_set_id
-                    ?? FdStageTemplateSet::where('elevation_type_id', $request->elevation_type_id)
-                        ->where('is_default', true)->value('id')
-                    ?? FdStageTemplateSet::where('elevation_type_id', $request->elevation_type_id)
-                        ->orderBy('sort_order')->value('id');
-            }
-
-            $quantity = $request->quantity ?? 1;
-
-            // joint_qty defaults from the type's standard joint count (e.g. a
-            // door is 6 joints, a frame is 3) x quantity, unless the caller
-            // sent an explicit value — it stays freely editable afterward.
-            $joinQty = $request->filled('joint_qty')
-                ? (int) $request->joint_qty
-                : $this->defaultJointQty($request->elevation_type_id, $quantity);
-
-            $elevation = FdWoElevation::create([
-                'work_order_id' => $workOrderId,
-                'elevation_type_id' => $request->elevation_type_id,
-                'template_set_id' => $setId,
+            // Shared with the configurator integration (attaching/syncing an
+            // opening's elevations) so both paths create production-ready
+            // rows the same way — template-set resolution, joint_qty
+            // defaulting, and stage seeding all live in one place.
+            $elevation = $this->matcher->createElevationRow($workOrder, [
                 'elevation_tag' => $request->elevation_tag,
-                'quantity' => $quantity,
-                'joint_qty' => $joinQty,
+                'elevation_type_id' => $request->elevation_type_id,
+                'template_set_id' => $request->template_set_id,
+                'quantity' => $request->quantity ?? 1,
+                'joint_qty' => $request->filled('joint_qty') ? (int) $request->joint_qty : null,
                 'date_requested' => $request->date_requested,
                 'notes' => $request->notes,
                 'scope' => $request->scope ?? 'assemble',
             ]);
 
-            // Auto-seed stages from the chosen tier's templates
-            if ($setId) {
-                $templates = FdStageTemplate::where('template_set_id', $setId)
-                    ->orderBy('sort_order')
-                    ->get();
-
-                foreach ($templates as $tpl) {
-                    FdWoStage::create([
-                        'elevation_id' => $elevation->id,
-                        'work_order_id' => null,
-                        'template_id' => $tpl->id,
-                        'name' => $tpl->name,
-                        'description' => $tpl->description,
-                        'sort_order' => $tpl->sort_order,
-                        'phase' => $tpl->phase,
-                        'blocks_next' => $tpl->blocks_next ?? true,
-                        'minutes_per_joint' => $tpl->minutes_per_joint,
-                        'status' => 'pending',
-                        'assigned_to_id' => $tpl->default_user_id,
-                    ]);
-                }
-            }
-
-            DB::commit();
-
             // Elevation dates drive the work order's due date + ranking.
-            if ($wo = FdWorkOrder::find($workOrderId)) {
-                $wo->recalcDueDateFromElevations();
-                FdWorkOrder::resequencePriorities();
-            }
+            $workOrder->recalcDueDateFromElevations();
+            FdWorkOrder::resequencePriorities();
 
-            $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo']);
+            $elevation->load(['elevationType', 'doorFrameConfiguration', 'completedBy', 'templateSet', 'stages.assignedTo']);
 
             return response()->json($this->formatElevation($elevation), 201);
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('ElevationController@store failed', ['message' => $e->getMessage()]);
 
             return response()->json(['error' => 'Failed to create elevation'], 500);
         }
-    }
-
-    /** quantity x the elevation type's standard_joint_count (e.g. 6 per door, 3 per frame), or null when the type has no standard set. */
-    private function defaultJointQty(?int $elevationTypeId, int $quantity): ?int
-    {
-        if (! $elevationTypeId) {
-            return null;
-        }
-
-        $standard = FdElevationType::find($elevationTypeId)?->standard_joint_count;
-
-        return $standard !== null ? $quantity * $standard : null;
     }
 
     public function update(Request $request, int $id)
@@ -180,7 +228,7 @@ class ElevationController extends Controller
                 FdWorkOrder::resequencePriorities();
             }
 
-            $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo', 'stages.completedBy']);
+            $elevation->load(['elevationType', 'doorFrameConfiguration', 'completedBy', 'templateSet', 'stages.assignedTo', 'stages.completedBy']);
             $payload = $this->formatElevation($elevation);
             if ($resyncSummary !== null) {
                 $payload['resync_summary'] = $resyncSummary;
@@ -332,26 +380,32 @@ class ElevationController extends Controller
      * stages are terminal. Stages on hold / blocked / not-required are left as
      * they are; a lingering gate can be pushed past with `override`.
      *
-     * Body: { fab_user_id?, override? }
+     * Body: { fab_user_id?, completed_at?, override? }
      * `fab_user_id` is credited on both the stages and the elevation, and is
      * honoured only for manager / admin app users.
+     * `completed_at` lets a manager / admin backdate the completion; everyone
+     * else completes with the current timestamp.
      */
     public function completeAllStages(Request $request, int $id)
     {
         $data = $request->validate([
             'fab_user_id' => 'nullable|integer|exists:fd_users,id',
+            'completed_at' => 'nullable|date',
             'override' => 'sometimes|boolean',
         ]);
 
         $elevation = FdWoElevation::with('stages')->findOrFail($id);
         $isManager = in_array($request->user()?->role, ['admin', 'manager'], true);
         $fabUserId = $isManager ? ($data['fab_user_id'] ?? null) : null;
+        $completedAt = ($isManager && ! empty($data['completed_at']))
+            ? \Carbon\Carbon::parse($data['completed_at'])
+            : now();
         $resolution = $this->overrides->resolve($request);
 
         try {
             $updated = 0;
 
-            DB::transaction(function () use ($elevation, $fabUserId, $resolution, &$updated) {
+            DB::transaction(function () use ($elevation, $fabUserId, $completedAt, $resolution, &$updated) {
                 $stages = $elevation->stages
                     ->whereIn('status', ['pending', 'in_progress'])
                     ->sortBy('sort_order');
@@ -365,7 +419,7 @@ class ElevationController extends Controller
                     );
 
                     $stage->status = 'complete';
-                    $stage->completed_at = now();
+                    $stage->completed_at = $completedAt;
                     $stage->completed_by_id = $fabUserId;
                     $stage->save();
                     $updated++;
@@ -377,7 +431,7 @@ class ElevationController extends Controller
                     fn ($s) => in_array($s->status, ['complete', 'not_required'], true)
                 );
                 if ($allTerminal && ! $elevation->date_completed) {
-                    $elevation->date_completed = now()->toDateString();
+                    $elevation->date_completed = $completedAt->toDateString();
                     $elevation->completed_by_id = $fabUserId;
                     $elevation->save();
                 }
@@ -388,7 +442,7 @@ class ElevationController extends Controller
                 FdWorkOrder::resequencePriorities();
             }
 
-            $elevation->load(['elevationType', 'completedBy', 'templateSet', 'stages.assignedTo', 'stages.completedBy']);
+            $elevation->load(['elevationType', 'doorFrameConfiguration', 'completedBy', 'templateSet', 'stages.assignedTo', 'stages.completedBy']);
 
             return response()->json($this->formatElevation($elevation));
         } catch (StageGatedException $e) {
@@ -435,6 +489,12 @@ class ElevationController extends Controller
                 'color' => $e->elevationType->color,
             ] : null,
             'elevation_tag' => $e->elevation_tag,
+            'door_frame_configuration_id' => $e->door_frame_configuration_id,
+            'door_frame_configuration' => $e->doorFrameConfiguration ? [
+                'id' => $e->doorFrameConfiguration->id,
+                'status' => $e->doorFrameConfiguration->status,
+                'status_label' => $e->doorFrameConfiguration->status_label,
+            ] : null,
             'quantity' => $e->quantity,
             'joint_qty' => $e->joint_qty,
             'minutes_per_joint' => round($estimate['rate'], 2),

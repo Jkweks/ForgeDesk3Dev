@@ -19,6 +19,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // CutFlow's migrations live on the 'cutflow' DB connection (each sets
+        // protected $connection = 'cutflow'), separate from this app's own
+        // migrations directory so `php artisan migrate` still runs both in
+        // one command.
+        $this->loadMigrationsFrom(database_path('migrations/cutflow'));
     }
 }

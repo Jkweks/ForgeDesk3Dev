@@ -21,6 +21,8 @@ class InventoryLocation extends Model
 
     protected $casts = [
         'is_primary' => 'boolean',
+        'quantity' => 'decimal:1',
+        'quantity_committed' => 'decimal:1',
     ];
 
     protected $appends = ['quantity_available'];

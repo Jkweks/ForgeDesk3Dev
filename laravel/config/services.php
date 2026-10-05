@@ -35,4 +35,26 @@ return [
         ],
     ],
 
+    'tiger_bridge' => [
+        // The small Node service (separate repo, not part of this app) that
+        // owns the TigerStop's serial port and the Zebra printer's socket —
+        // runs on the shop tablet itself.
+        'url' => env('TIGER_BRIDGE_URL', 'http://127.0.0.1:9111'),
+
+        // Shared secret the bridge requires on every request (see
+        // tiger-bridge/.env.example's BRIDGE_TOKEN) so only ForgeDesk can
+        // move the saw or trigger the printer — not just anyone on the LAN.
+        'token' => env('TIGER_BRIDGE_TOKEN'),
+
+        // No tiger-bridge reachable from here (e.g. local dev away from the
+        // shop). When true, App\Services\CutFlow\TigerBridgeClient simulates
+        // every response instead of making an HTTP call.
+        'fake' => env('TIGER_BRIDGE_FAKE', false),
+
+        // Fake mode only: simulated TigerStop travel limits in inches, so the
+        // out-of-range handling can be exercised without a bridge. Null = none.
+        'fake_limit_min' => env('TIGER_BRIDGE_FAKE_LIMIT_MIN') !== null ? (float) env('TIGER_BRIDGE_FAKE_LIMIT_MIN') : null,
+        'fake_limit_max' => env('TIGER_BRIDGE_FAKE_LIMIT_MAX') !== null ? (float) env('TIGER_BRIDGE_FAKE_LIMIT_MAX') : null,
+    ],
+
 ];

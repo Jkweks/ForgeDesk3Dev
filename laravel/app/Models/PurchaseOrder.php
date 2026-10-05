@@ -21,12 +21,15 @@ class PurchaseOrder extends Model
         'notes',
         'ship_to',
         'ship_to_location_id',
+        'job_name',
+        'cost_code',
         'contact_name',
         'contact_email',
         'contact_phone',
         'created_by',
         'approved_by',
         'approved_at',
+        'approver_id',
     ];
 
     protected $casts = [
@@ -61,6 +64,12 @@ class PurchaseOrder extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /** Who this PO should be routed to for approval — a per-PO choice, distinct from `approver()` (who actually approved it). */
+    public function assignedApprover()
+    {
+        return $this->belongsTo(User::class, 'approver_id');
     }
 
     // Computed properties

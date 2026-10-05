@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -764,5 +765,168 @@ class EzEstimateController extends Controller
                 'message' => 'Failed to get stats',
             ], 500);
         }
+    }
+
+    /**
+     * Look up a part number against the EZ Estimate template (storage/app/templates/
+     * ez_estimate_template.xlsm) so the "new part" form can autofill description,
+     * list price and net price. This is the same SL Formulas / P Formulas data the
+     * upload flow uses to price products — reading it directly from the template
+     * avoids keeping a separate catalog that could drift out of sync.
+     */
+    public function lookupPart(Request $request)
+    {
+        $request->validate([
+            'part_number' => 'required|string|max:255',
+        ]);
+
+        $partNumber = strtoupper(trim($request->input('part_number')));
+        if ($partNumber === '') {
+            return response()->json(['found' => false]);
+        }
+
+        try {
+            $catalog = $this->buildTemplateCatalog();
+        } catch (\Exception $e) {
+            Log::error('EZ Estimate template catalog lookup failed', ['message' => $e->getMessage()]);
+
+            return response()->json(['found' => false, 'message' => 'EZ Estimate template unavailable']);
+        }
+
+        $match = $catalog['sl'][$partNumber] ?? $catalog['p'][$partNumber] ?? null;
+
+        if (! $match) {
+            return response()->json(['found' => false]);
+        }
+
+        return response()->json([
+            'found' => true,
+            'description' => $match['description'],
+            'list_price' => $match['list_price'],
+            'net_price' => $match['net_price'],
+        ]);
+    }
+
+    /**
+     * Build a part_number => {description, list_price, net_price} catalog from the
+     * SL Formulas / P Formulas sheets of the EZ Estimate export template, cached
+     * against the template file's mtime so edits to the template bust the cache.
+     */
+    private function buildTemplateCatalog(): array
+    {
+        $path = storage_path('app/templates/ez_estimate_template.xlsm');
+        if (! file_exists($path)) {
+            return ['sl' => [], 'p' => []];
+        }
+
+        $cacheKey = 'ez_estimate_template_catalog_'.filemtime($path);
+
+        return Cache::remember($cacheKey, 3600, function () use ($path) {
+            $oldMemoryLimit = ini_get('memory_limit');
+            ini_set('memory_limit', '1024M');
+
+            try {
+                $reader = IOFactory::createReader('Xlsx');
+                $reader->setReadDataOnly(false);
+                $reader->setReadEmptyCells(false);
+                $spreadsheet = $reader->load($path);
+
+                $multipliers = $this->parseMultipliers($spreadsheet);
+
+                return [
+                    'sl' => $this->buildSLCatalog($spreadsheet),
+                    'p' => $this->buildPCatalog($spreadsheet, $multipliers),
+                ];
+            } finally {
+                ini_set('memory_limit', $oldMemoryLimit);
+            }
+        });
+    }
+
+    /**
+     * SL Formulas: C=Item Number, D=Description, G=List Per Length, I=Net Sell
+     * Per Length (both formula-calculated; read via getOldCalculatedValue()).
+     */
+    private function buildSLCatalog($spreadsheet): array
+    {
+        $worksheet = $spreadsheet->getSheetByName('SL Formulas');
+        if (! $worksheet) {
+            return [];
+        }
+
+        $catalog = [];
+        $highestRow = $worksheet->getHighestRow();
+
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $partNumber = trim((string) $worksheet->getCell("C{$row}")->getValue());
+            if ($partNumber === '') {
+                continue;
+            }
+
+            $listCell = $worksheet->getCell("G{$row}");
+            $listPrice = $listCell->getOldCalculatedValue() ?? $listCell->getValue();
+            if (! is_numeric($listPrice) || (float) $listPrice == 0) {
+                continue;
+            }
+
+            $descCell = $worksheet->getCell("D{$row}");
+            $description = $descCell->getOldCalculatedValue() ?? $descCell->getValue();
+
+            $netCell = $worksheet->getCell("I{$row}");
+            $netPrice = $netCell->getOldCalculatedValue() ?? $netCell->getValue();
+
+            $catalog[strtoupper($partNumber)] = [
+                'description' => is_string($description) ? trim($description) : null,
+                'list_price' => round((float) $listPrice, 2),
+                'net_price' => is_numeric($netPrice) ? round((float) $netPrice, 2) : null,
+            ];
+        }
+
+        return $catalog;
+    }
+
+    /**
+     * P Formulas: C=ItemNumber, D=Description, H=List Price Each. There is no net
+     * price column on this sheet, so net is derived the same way the import flow
+     * derives it for accessories: list price × the category multiplier from the
+     * Multipliers sheet (with the "F" → "F1" special case).
+     */
+    private function buildPCatalog($spreadsheet, array $multipliers): array
+    {
+        $worksheet = $spreadsheet->getSheetByName('P Formulas');
+        if (! $worksheet) {
+            return [];
+        }
+
+        $catalog = [];
+        $highestRow = $worksheet->getHighestRow();
+
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $partNumber = trim((string) $worksheet->getCell("C{$row}")->getValue());
+            if ($partNumber === '') {
+                continue;
+            }
+
+            $listCell = $worksheet->getCell("H{$row}");
+            $listPrice = $listCell->getOldCalculatedValue() ?? $listCell->getValue();
+            if (! is_numeric($listPrice) || (float) $listPrice == 0) {
+                continue;
+            }
+
+            $descCell = $worksheet->getCell("D{$row}");
+            $description = $descCell->getOldCalculatedValue() ?? $descCell->getValue();
+
+            $pricingCategory = $worksheet->getCell("A{$row}")->getValue();
+            $categoryKey = $pricingCategory === 'F' ? 'F1' : $pricingCategory;
+            $categoryMultiplier = $multipliers[$categoryKey] ?? 1.0;
+
+            $catalog[strtoupper($partNumber)] = [
+                'description' => is_string($description) ? trim($description) : null,
+                'list_price' => round((float) $listPrice, 2),
+                'net_price' => round((float) $listPrice * $categoryMultiplier, 2),
+            ];
+        }
+
+        return $catalog;
     }
 }

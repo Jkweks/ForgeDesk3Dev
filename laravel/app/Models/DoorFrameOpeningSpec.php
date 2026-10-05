@@ -17,12 +17,15 @@ class DoorFrameOpeningSpec extends Model
         'door_opening_width',
         'door_opening_height',
         'hinging',
+        'butt_hinge_count',
+        'hinge_spacing_standard_id',
         'finish',
+        'glazing',
     ];
 
     protected $casts = [
-        'door_opening_width' => 'decimal:2',
-        'door_opening_height' => 'decimal:2',
+        'door_opening_width' => 'decimal:4',
+        'door_opening_height' => 'decimal:4',
     ];
 
     protected $appends = [
@@ -71,6 +74,33 @@ class DoorFrameOpeningSpec extends Model
         return $this->belongsTo(DoorFrameConfiguration::class, 'configuration_id');
     }
 
+    public function hingeSpacingStandard()
+    {
+        return $this->belongsTo(ConfiguratorHingeSpacingStandard::class, 'hinge_spacing_standard_id');
+    }
+
+    /**
+     * Computed hinge prep locations for the Opening tab preview and cut-sheet
+     * PDF — only meaningful for butt hinges with a count + standard set.
+     *
+     * @return array<int, array{index: int, distance_from_top: float, label: string}>
+     */
+    public function hingeLocations(): array
+    {
+        if ($this->hinging !== 'butt' || ! $this->butt_hinge_count || ! $this->hinge_spacing_standard_id) {
+            return [];
+        }
+
+        $standard = $this->hingeSpacingStandard ?? $this->hingeSpacingStandard()->first();
+        if (! $standard) {
+            return [];
+        }
+
+        $bottomGap = (float) ConfiguratorSetting::current()->bottom_gap;
+
+        return $standard->locations((float) $this->door_opening_height, (int) $this->butt_hinge_count, $bottomGap);
+    }
+
     /**
      * Get formatted opening type label
      */
@@ -107,6 +137,46 @@ class DoorFrameOpeningSpec extends Model
         }
 
         return null;
+    }
+
+    /**
+     * The door config's `handing` value (LH (INSWING)/RH (INSWING)/LHR/RHR/
+     * CP SINGLE/PAIR-RHRA/PAIR-LHRA/CP PAIR), derived from opening type +
+     * hand + hinging so it never needs entering a second time on the Door
+     * tab. Center-pivot hinging takes priority over hand, matching the old
+     * per-door "CP SINGLE"/"CP PAIR" handing values, which carried no
+     * separate hand information of their own.
+     */
+    public function deriveDoorHanding(): string
+    {
+        $isPair = $this->opening_type === 'pair';
+        if ($this->hinging === 'pivot_center') {
+            return $isPair ? 'CP PAIR' : 'CP SINGLE';
+        }
+        if ($isPair) {
+            return $this->hand_pair === 'lhra_active' ? 'PAIR-LHRA' : 'PAIR-RHRA';
+        }
+
+        return match ($this->hand_single) {
+            'rh_inswing' => 'RH (INSWING)',
+            'lhr' => 'LHR',
+            'rhr' => 'RHR',
+            default => 'LH (INSWING)',
+        };
+    }
+
+    /**
+     * The door config's `hinge_type` value, derived from opening hinging so
+     * it never needs entering a second time on the Door tab.
+     */
+    public function deriveHingeType(): string
+    {
+        return match ($this->hinging) {
+            'butt' => 'BUTT HINGES',
+            'pivot_offset' => 'OFFSET PIVOTS',
+            'pivot_center' => 'CENTER PIVOTS',
+            default => 'CONTINUOUS HINGE',
+        };
     }
 
     /**

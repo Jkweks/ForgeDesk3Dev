@@ -1,0 +1,23 @@
+sku,description,roll_feet,confidence,used_by_configurator,note
+P1098A-0R,Door Stop Pile,2000,confirmed,frame weatherstrip,"You said 2000'. Length (24000"") is already on the product - only the length-based flag is missing."
+027851-0R,Kawneer Wedge Gasket - 500',500,confirmed,no,You said 500'.
+P1221-0R,Storefront Expansion Gasket - 500',500,from description,no,
+P2183-0R,Standard VersaTherm Gasket - 500',500,from description,no,
+P2901-0R,Storefront Subsill Gasket - 500',500,from description,no,
+P4606-500-0R,400T Glass Gasket - 500',500,from description,no,
+P4631-0R,CW SSG/Perimeter Gasket - 500',500,from description,no,
+P6587-0R,Storefront SSG Gasket - 500',500,from description,no,
+027074-0R,Kawneer Storefront Gasket - 500',500,from description,no,
+027850-0R,Kawneer Fixed Gasket - 250',250,from description,no,
+PTB33-0R,CW Perimeter Gasket - 250',250,from description,no,
+P4500-0R,"Gasket for 1/2"" Glass - 400'",400,from description,no,"400', not 500' - please confirm"
+162310-0R,Kawneer Tongue Gasket - 400',400,from description,no,
+P487-0R,"Gasket for 3/8"" Glass - 500",500,confirmed,no,Confirmed by user (500')
+027857-0R,Kawneer SSG/Perimeter Gasket - 500,500,confirmed,no,Confirmed by user (500')
+PTB28-0R,400CW Glass Gasket,500,confirmed,no,Confirmed by user (500')
+P912-0R,Glazing Gasket (see chart),250,confirmed,DOORS (3/16 3/8 7/16 1/2 9/16 3/4 7/8 glass),Confirmed by user (250')
+P1477-0R,Glazing Gasket (see chart),500,confirmed,DOORS (second gasket for 3/16 5/16 9/16 glass),Confirmed by user (500')
+P1431-0R,"Glass Gasket - 5/16""",500,confirmed,DOORS (5/16 glass),Confirmed by user (500')
+P2728-0R,Standard Storefront Gasket,,substituted,FRAMES (every storefront gasket),Frame catalog now reserves against P2728-250-0R (250' rolls; the 500' is being phased out)
+PTB148-0R,400T Tongue Gasket,400,confirmed,no,Confirmed by user (400')
+PTB94-0R,400CW Tonge Gasket,400,confirmed,no,Confirmed by user (400')

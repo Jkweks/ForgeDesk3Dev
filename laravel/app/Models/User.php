@@ -33,6 +33,7 @@ class User extends Authenticatable
         'welcome_email_sent_at',
         'theme_preferences',
         'wo_column_prefs',
+        'jobs_column_prefs',
         'quality_report_prefs',
     ];
 
@@ -63,6 +64,7 @@ class User extends Authenticatable
             'welcome_email_sent_at' => 'datetime',
             'theme_preferences' => 'array',
             'wo_column_prefs' => 'array',
+            'jobs_column_prefs' => 'array',
             'quality_report_prefs' => 'array',
         ];
     }
@@ -240,5 +242,18 @@ class User extends Authenticatable
     public function scopeRole($query, $role)
     {
         return $query->where('role', $role);
+    }
+
+    /**
+     * Scope to users who can perform a given permission — either via their
+     * role's granted permissions, or because they're an admin (who implicitly
+     * has every permission; see hasPermission()).
+     */
+    public function scopeWithPermission($query, string $permission)
+    {
+        return $query->where(function ($q) use ($permission) {
+            $q->where('role', 'admin')
+                ->orWhereHas('roleModel.permissions', fn ($p) => $p->where('name', $permission));
+        });
     }
 }

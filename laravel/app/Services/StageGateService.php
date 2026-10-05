@@ -65,6 +65,27 @@ class StageGateService
         return $this->firstNonTerminal($candidates);
     }
 
+    /**
+     * A second, independent gate alongside the phase-based one above: an
+     * elevation tied to a configurator opening (DoorFrameConfiguration)
+     * can't start production until that opening is released. No linked
+     * configuration at all (an elevation predating this feature, or one
+     * never configurator-tracked) is never gated by this check.
+     */
+    public function blockingConfigurationReasonFor(FdWoStage $stage): ?string
+    {
+        $config = $stage->elevation?->doorFrameConfiguration;
+        if (! $config) {
+            return null;
+        }
+
+        if (in_array($config->status, ['released', 'in_progress', 'completed'], true)) {
+            return null;
+        }
+
+        return "Configurator: opening is still {$config->status_label} — release it before starting production.";
+    }
+
     public function blockingJobStepFor(FdJobStep $step): ?FdJobStep
     {
         $earlier = FdJobStep::query()
@@ -86,6 +107,18 @@ class StageGateService
     {
         if (! $this->isActivation($stage->status, $toStatus)) {
             return;
+        }
+
+        // Sentinel id 0 stands in for "the configurator" as the blocker —
+        // reuses StageGatedException's existing shape (id/name) so the
+        // frontend's error handling renders it with no changes.
+        if ($reason = $this->blockingConfigurationReasonFor($stage)) {
+            if (! $override) {
+                throw new StageGatedException(0, 'Configurator', $reason);
+            }
+            if ($logOverride) {
+                $logOverride((object) ['id' => 0, 'name' => 'Configurator']);
+            }
         }
 
         $blocking = $this->blockingStageFor($stage);

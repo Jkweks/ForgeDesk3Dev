@@ -252,6 +252,51 @@
                           </div>
                         </div>
                       </div>
+
+                      <div class="row mt-3">
+                        <div class="col-12">
+                          <div class="card">
+                            <div class="card-header">
+                              <h4 class="card-title mb-0">CutFlow Bridge</h4>
+                            </div>
+                            <div class="card-body">
+                              <p class="text-muted">
+                                Connection details for the tiger-bridge service that talks to the TigerStop saw
+                                and the cut-station's Zebra printer, and the IP allowlist for the shop-floor
+                                tablet allowed to actually move the saw. These used to live in the server's
+                                <code>.env</code> file; changes here take effect immediately, no restart needed.
+                              </p>
+                              <div class="row">
+                                <div class="col-md-6 mb-3">
+                                  <label class="form-label">Bridge URL</label>
+                                  <input type="text" class="form-control" id="cfBridgeUrl" placeholder="http://192.168.1.50:9111">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                  <label class="form-label">Bridge Token</label>
+                                  <input type="password" class="form-control" id="cfBridgeToken" placeholder="Leave blank to keep the current token" autocomplete="new-password">
+                                  <small class="form-hint" id="cfBridgeTokenHint"></small>
+                                </div>
+                              </div>
+                              <div class="row">
+                                <div class="col-md-6 mb-3">
+                                  <label class="form-check form-switch mt-2">
+                                    <input class="form-check-input" type="checkbox" id="cfBridgeFake">
+                                    <span class="form-check-label">Fake mode (simulate the bridge — no hardware calls)</span>
+                                  </label>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                  <label class="form-label">Tablet IP Allowlist</label>
+                                  <input type="text" class="form-control" id="cfTabletAllowedIps" placeholder="192.168.1.60, 192.168.1.0/24">
+                                  <small class="form-hint">Comma-separated IPs / IPv4 CIDR ranges. Blank = unrestricted.</small>
+                                </div>
+                              </div>
+                              <button class="btn btn-primary" onclick="saveCutFlowBridgeSettings()">
+                                <i class="ti ti-device-floppy me-1"></i>Save CutFlow Bridge Settings
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <!-- Company Location Modal -->
@@ -689,6 +734,7 @@
                       </div>
                     </div><!-- /tab-fab-users -->
 
+
                   </div>
                 </div>
               </div>
@@ -1023,6 +1069,7 @@
         </div>
       </div>
     </div>
+
 
     <script>
       // Placeholder data for demonstration
@@ -3115,12 +3162,59 @@
         }
       }
 
+      // ============================================================
+      // CutFlow Bridge settings
+      // ============================================================
+      async function loadCutFlowBridgeSettings() {
+        try {
+          const res = await authenticatedFetch('/cutflow-bridge-settings');
+          document.getElementById('cfBridgeUrl').value = res.bridge_url || '';
+          document.getElementById('cfBridgeFake').checked = !!res.bridge_fake;
+          document.getElementById('cfTabletAllowedIps').value = (res.tablet_allowed_ips || []).join(', ');
+          document.getElementById('cfBridgeTokenHint').textContent = res.bridge_token_set
+            ? 'A token is currently set. Leave blank to keep it.'
+            : 'No token is currently set.';
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function saveCutFlowBridgeSettings() {
+        const payload = {
+          bridge_url: document.getElementById('cfBridgeUrl').value.trim() || null,
+          bridge_fake: document.getElementById('cfBridgeFake').checked,
+          tablet_allowed_ips: document.getElementById('cfTabletAllowedIps').value.trim() || null,
+        };
+        const token = document.getElementById('cfBridgeToken').value;
+        if (token) payload.bridge_token = token;
+
+        try {
+          await authenticatedFetch('/cutflow-bridge-settings', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          });
+          document.getElementById('cfBridgeToken').value = '';
+          showNotification('CutFlow bridge settings saved', 'success');
+          loadCutFlowBridgeSettings();
+        } catch (e) {
+          showNotification(e.message || 'Failed to save CutFlow bridge settings', 'danger');
+        }
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
         const tab = document.querySelector('a[href="#tab-settings"]');
         if (tab) tab.addEventListener('shown.bs.tab', () => {
           loadCompanyLocations();
           loadCompanySettings();
+          loadCutFlowBridgeSettings();
         }, { once: false });
+
+        // Deep link support, e.g. /admin#tab-settings
+        if (location.hash && document.querySelector(`a[href="${location.hash}"]`)) {
+          try {
+            new bootstrap.Tab(document.querySelector(`a[href="${location.hash}"]`)).show();
+          } catch (e) { /* bootstrap not ready yet — tab still reachable by click */ }
+        }
       });
 
     </script>

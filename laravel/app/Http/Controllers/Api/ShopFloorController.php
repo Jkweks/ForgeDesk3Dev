@@ -349,7 +349,7 @@ class ShopFloorController extends Controller
                             });
                     });
             })
-            ->with(['elevation.stages', 'elevation.workOrder.businessJob', 'assignedTo', 'assignees'])
+            ->with(['elevation.stages', 'elevation.workOrder.businessJob', 'elevation.doorFrameConfiguration', 'assignedTo', 'assignees'])
             ->orderByRaw("CASE WHEN fd_wo_stages.status = 'in_progress' THEN 0 ELSE 1 END")
             ->orderByRaw('w.priority IS NULL, w.priority ASC')
             ->orderByRaw('e.date_requested IS NULL, e.date_requested ASC')
@@ -360,7 +360,8 @@ class ShopFloorController extends Controller
         $gate = app(StageGateService::class);
 
         $queue = $stages
-            ->reject(fn ($s) => $gate->blockingStageForLoaded($s, $s->elevation->stages) !== null)
+            ->reject(fn ($s) => $gate->blockingStageForLoaded($s, $s->elevation->stages) !== null
+                || $gate->blockingConfigurationReasonFor($s) !== null)
             ->map(function ($s) {
                 $wo = $s->elevation->workOrder;
                 $job = $wo?->businessJob;
