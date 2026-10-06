@@ -438,7 +438,7 @@ function renderUnassignedTable() {
       <tr id="urow-${row.product_id}" class="${state.status === 'saved' ? 'table-success' : state.status === 'error' ? 'table-danger' : ''}">
         <td><code>${escHtml(row.sku)}</code></td>
         <td class="small">${escHtml(row.description || '')}</td>
-        <td class="text-end">${(row.quantity_on_hand || 0).toLocaleString()}</td>
+        <td class="text-end">${Math.floor(Number(row.quantity_on_hand) || 0).toLocaleString()}</td>
         <td class="text-end">${(row.quantity_committed || 0).toLocaleString()}</td>
         <td>
           <select class="form-select form-select-sm" id="uprimary-${row.product_id}" ${disabled}

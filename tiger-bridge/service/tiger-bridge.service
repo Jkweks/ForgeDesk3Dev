@@ -1,0 +1,22 @@
+# systemd unit for running tiger-bridge on a Linux host.
+# Install:
+#   sudo cp tiger-bridge.service /etc/systemd/system/
+#   edit User= and the two paths below, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tiger-bridge
+# The user needs access to the serial device:  sudo usermod -aG dialout <user>
+[Unit]
+Description=tiger-bridge (TigerStop serial + Zebra printer bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=CHANGE_ME
+WorkingDirectory=/opt/tiger-bridge
+# server.js loads .env from the working directory
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

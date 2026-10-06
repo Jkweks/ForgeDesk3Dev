@@ -384,7 +384,7 @@ function formatPackCommitted(item) {
  * Format on-hand quantity showing packs if applicable
  */
 function formatPackOnHand(item) {
-  const onHand = item.on_hand || 0;
+  const onHand = Math.floor(Number(item.on_hand) || 0);
   const onHandPacks = item.on_hand_packs || onHand;
   const packSize = item.pack_size || 1;
   const hasPackSize = packSize > 1;

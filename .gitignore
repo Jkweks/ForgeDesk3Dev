@@ -14,3 +14,6 @@ docs/Quality Defects Database.xlsx
 
 # tiger-bridge (Node service)
 tiger-bridge/node_modules
+
+# tiger-bridge service logs
+tiger-bridge/logs/

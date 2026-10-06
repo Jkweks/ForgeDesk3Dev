@@ -707,7 +707,7 @@ function renderItemRow(p, sid) {
       <td>
         <span title="${escapeHtml(p.description || '')}">${escapeHtml((p.description || '').substring(0, 55))}${(p.description || '').length > 55 ? '…' : ''}</span>
       </td>
-      <td class="text-end text-muted">${onHand.toLocaleString()}</td>
+      <td class="text-end text-muted">${Math.floor(Number(onHand) || 0).toLocaleString()}</td>
       <td class="text-end">
         ${(onHand - available) > 0
           ? `<a href="#" class="text-warning fw-bold text-decoration-none" onclick="viewProductReservations(${p.id}, '${escapeHtml(p.sku || '')}'); return false;" title="View reservations">${(onHand - available).toLocaleString()} <i class="ti ti-eye" style="font-size:.75rem"></i></a>`

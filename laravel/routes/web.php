@@ -139,11 +139,19 @@ Route::get('/shop', function () {
 // CutFlow — cut-station kiosk, no ForgeDesk auth required (same as /shop
 // above). Operator identity is a fab_pin sign-in against FdUser inside the
 // Livewire component itself, not a route-level guard.
+// PWA plumbing (installable kiosk) — served by Laravel so the worker and
+// manifest are scoped to /cut-station and never touch the rest of ForgeDesk.
+Route::get('/cut-station/manifest.webmanifest', [\App\Http\Controllers\CutFlow\PwaController::class, 'manifest'])->name('cutflow.pwa.manifest');
+Route::get('/cut-station/sw.js', [\App\Http\Controllers\CutFlow\PwaController::class, 'serviceWorker'])->name('cutflow.pwa.sw');
+Route::get('/cut-station/offline', [\App\Http\Controllers\CutFlow\PwaController::class, 'offline'])->name('cutflow.pwa.offline');
 Route::get('/cut-station', \App\Livewire\CutFlow\Dashboard::class)->name('cutflow.dashboard');
 Route::get('/cut-station/import', [\App\Http\Controllers\CutFlow\ImportController::class, 'show'])->name('cutflow.import.show');
 Route::post('/cut-station/import', [\App\Http\Controllers\CutFlow\ImportController::class, 'store'])->name('cutflow.import.store');
 Route::get('/cut-station/settings', \App\Livewire\CutFlow\Settings::class)->name('cutflow.settings');
-Route::get('/cut-station/cuts/{cutLogEntry:uuid}', [\App\Http\Controllers\CutFlow\CutController::class, 'show'])->name('cutflow.cuts.show');
+// The QR-scan cut record lives outside /cut-station so an installed kiosk app
+// never captures it. Labels already printed point at the old path: redirect.
+Route::get('/cut-record/{cutLogEntry:uuid}', [\App\Http\Controllers\CutFlow\CutController::class, 'show'])->name('cutflow.cuts.show');
+Route::get('/cut-station/cuts/{uuid}', fn (string $uuid) => redirect()->route('cutflow.cuts.show', $uuid, 301))->name('cutflow.cuts.legacy');
 
 // Design-time preview of the maintenance page, so it can be checked without
 // actually toggling maintenance mode. Excluded entirely outside non-production

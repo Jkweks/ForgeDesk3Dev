@@ -111,12 +111,12 @@ class DashboardController extends Controller
         // ONE query for all count stats + on-hand sum (replaces 4 separate queries)
         $statRow = (clone $statsQuery)->selectRaw("
             COUNT(*) as skus_tracked,
-            SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
+            SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE FLOOR(COALESCE(quantity_on_hand, 0)) END) as units_on_hand,
             SUM(CASE WHEN status IN ('low', 'very_low', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
             SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
         ")->first();
 
-        $unitsOnHand = (float) ($statRow->units_on_hand ?? 0);
+        $unitsOnHand = (int) ($statRow->units_on_hand ?? 0); // whole units, summed per product like the rows
         $unitsCommitted = $this->calcUnitsCommitted($categoryId);
 
         $stats = [
@@ -291,12 +291,12 @@ class DashboardController extends Controller
     {
         $statRow = Product::where('is_active', true)->excludeMaintenanceConsumables()->selectRaw("
             COUNT(*) as skus_tracked,
-            SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE COALESCE(quantity_on_hand, 0) END) as units_on_hand,
+            SUM(CASE WHEN pack_size > 1 THEN FLOOR(quantity_on_hand / pack_size) ELSE FLOOR(COALESCE(quantity_on_hand, 0)) END) as units_on_hand,
             SUM(CASE WHEN status IN ('low', 'very_low', 'critical') THEN 1 ELSE 0 END) as low_stock_alerts,
             SUM(CASE WHEN status = 'critical' THEN 1 ELSE 0 END) as critical_count
         ")->first();
 
-        $unitsOnHand = (float) ($statRow->units_on_hand ?? 0);
+        $unitsOnHand = (int) ($statRow->units_on_hand ?? 0); // whole units, summed per product like the rows
         $unitsCommitted = $this->calcUnitsCommitted();
 
         return response()->json([

@@ -3018,7 +3018,7 @@
                     <td class="text-end">${fmtQty(item.committed_qty)}</td>
                     <td class="text-end">${fmtQty(item.consumed_qty)}</td>
                     <td class="text-end">${item.released_qty}</td>
-                    <td class="text-end">${item.product.quantity_on_hand}</td>
+                    <td class="text-end">${Math.floor(Number(item.product.quantity_on_hand) || 0)}</td>
                     <td class="text-end">${item.product.quantity_available}</td>
                     <td>${escapeHtml(item.product.location || '-')}</td>
                 </tr>
@@ -3335,7 +3335,7 @@
                                style="width: 80px;">
                     </td>
                     <td class="text-end">${fmtQty(item.consumed_qty)}</td>
-                    <td class="text-end">${item.product.quantity_on_hand}</td>
+                    <td class="text-end">${Math.floor(Number(item.product.quantity_on_hand) || 0)}</td>
                     <td class="text-center">
                         ${item.consumed_qty === 0 ? `
                             <div class="btn-group">
@@ -3572,7 +3572,7 @@
                     </div>
                     <div class="col-md-6">
                         <strong>Description:</strong> ${escapeHtml(description)}<br>
-                        <strong>On Hand:</strong> ${onHand}<br>
+                        <strong>On Hand:</strong> ${Math.floor(Number(onHand) || 0)}<br>
                         <strong>Available:</strong> <span class="badge bg-${available > 0 ? 'success' : 'danger'}">${available}</span>
                     </div>
                 </div>

@@ -232,7 +232,7 @@
                             <td>{{ $p['part_number'] ?? '—' }}</td>
                             <td>{{ $p['description'] }}</td>
                             <td>{{ $p['sku'] }}</td>
-                            <td class="text-right">{{ number_format($p['quantity_on_hand']) }}</td>
+                            <td class="text-right">{{ number_format(floor((float) $p['quantity_on_hand'])) }}</td>
                             <td class="text-right">{{ number_format($p['quantity_committed']) }}</td>
                             <td class="text-center">{{ $p['uom'] }}</td>
                         </tr>

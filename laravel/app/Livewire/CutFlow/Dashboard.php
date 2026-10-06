@@ -202,9 +202,20 @@ class Dashboard extends Component
 
     protected function filteredJobs()
     {
-        return CutJob::when($this->jobSearch !== '', function ($query) {
-            $query->whereRaw('LOWER(name) LIKE ?', ['%'.strtolower($this->jobSearch).'%']);
-        })->orderBy('name')->get();
+        $jobs = CutJob::withDisplayLabels(CutJob::all());
+
+        if ($this->jobSearch === '') {
+            return $jobs;
+        }
+
+        // Matches the job name, the release code, or the raw cut-job name
+        // (job number + release for work-order jobs, e.g. "3260901-WO1").
+        $needle = strtolower($this->jobSearch);
+
+        return $jobs->filter(fn ($job) => str_contains(
+            strtolower("{$job->job_title} {$job->release_label} {$job->name}"),
+            $needle
+        ))->values();
     }
 
     /**
@@ -1396,7 +1407,7 @@ class Dashboard extends Component
             'signedIn' => $signedIn,
             'tigerPollIntervalMs' => $this->bridgePollIntervalMs(),
             'jobs' => $this->modal === 'jobs' ? $this->filteredJobs() : collect(),
-            'selectedJobs' => $signedIn ? CutJob::whereIn('id', $this->activeJobIds)->orderBy('name')->get() : collect(),
+            'selectedJobs' => $signedIn ? CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get()) : collect(),
             'totalJobCount' => CutJob::count(),
             'profiles' => $signedIn ? $planner->activeProfiles($this->activeJobIds) : collect(),
             'parts' => $parts,

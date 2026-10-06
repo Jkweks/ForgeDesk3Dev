@@ -3,6 +3,7 @@
 namespace App\Services\Configurator;
 
 use App\Models\ConfiguratorHwlibItemBacker;
+use App\Models\ConfiguratorHwlibLink;
 use App\Models\DoorFrameConfiguration;
 use App\Models\Product;
 use RuntimeException;
@@ -30,6 +31,30 @@ class HwlibBomGenerator
             : $config->hardwareLinks()->with('item')->get();
         if ($links->isEmpty()) {
             throw new RuntimeException('No hardware items are linked to this configuration yet.');
+        }
+
+        // An item's default strike/cover is auto-linked when the item is added (see addHardwareLink),
+        // but configurations linked before it was wired — or whose link was removed by mistake —
+        // would silently ship without it. Synthesize any missing one here.
+        $links = $links->values(); // copy, so pushes don't leak into the config's loaded relation
+        $linkedItemIds = $links->pluck('item_id')->all();
+        foreach ($links->all() as $link) {
+            foreach (['default_strike_item_id' => 'defaultStrikeItem', 'default_cover_item_id' => 'defaultCoverItem'] as $field => $relation) {
+                $defaultId = $link->item->{$field};
+                if (! $defaultId || in_array($defaultId, $linkedItemIds, true) || ! ($default = $link->item->{$relation})) {
+                    continue;
+                }
+                $defaultLink = new ConfiguratorHwlibLink([
+                    'configuration_id' => $config->id,
+                    'item_id' => $defaultId,
+                    'quantity' => 1,
+                    'series' => $link->series,
+                    'leaf' => $link->leaf,
+                ]);
+                $defaultLink->setRelation('item', $default);
+                $links->push($defaultLink);
+                $linkedItemIds[] = $defaultId;
+            }
         }
 
         $finish = strtoupper($config->openingSpecs->finish ?? '');
@@ -171,11 +196,20 @@ class HwlibBomGenerator
 
         $product = $this->finishResolver->resolve($pn, $wantFinish);
 
-        if ($product && $product->finish !== strtoupper($wantFinish)) {
+        // A part stocked only in mill finish (e.g. a lock body, which is never anodized) has no
+        // finish choice to fall short of, so substituting 0R isn't worth a warning.
+        if ($product && $product->finish !== strtoupper($wantFinish) && ! $this->isMillOnly($pn)) {
             $this->warnings[] = "Hardware item PN \"{$pn}\" not available in {$wantFinish} — substituted {$product->finish}.";
         }
 
         return $product?->id;
+    }
+
+    private function isMillOnly(string $pn): bool
+    {
+        return ! Product::where('part_number', $pn)
+            ->where(fn ($q) => $q->whereNull('finish')->orWhereNotIn('finish', ['0R']))
+            ->exists();
     }
 
     /**

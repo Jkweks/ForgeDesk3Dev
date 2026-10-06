@@ -20,9 +20,10 @@ use Illuminate\Support\Facades\DB;
  * of that job that is reserved, released or in progress. It is recomputed from the whole job each
  * time — never patched per opening — because quantities don't add up per opening:
  *
- *  - Extrusions are stocked in whole sticks. The job's cuts for a part number are bin-packed together
- *    (StickYield: the same number the stock-length page prints), so 5 openings sharing offcuts need
- *    fewer sticks than 5 x "one stick per opening".
+ *  - Extrusions are committed as fractions of a stick, to the next 1/10 (as the old configurator did,
+ *    and as CutFlow consumes them): the job's total cut inches for a part number over the stick length,
+ *    rounded up once for the whole job — so 5 openings sharing offcuts don't each round up to a tenth.
+ *    The stock-length page still prints whole sticks (StickYield); that is paper, not the reservation.
  *  - Roll/length stock (gasket, weatherstrip) is the job's total inches over the roll length, to the
  *    next 1/10.
  *  - Everything else is the summed quantity.
@@ -195,7 +196,16 @@ class ConfigurationReservationBridge
 
         $desired = collect();
         foreach ($cuts as $pid => $lengths) {
-            $desired[$pid] = (float) StickYield::sticks($lengths, StickYield::stockLengthFor($products[$pid]));
+            // Fractions of a stick to the next 1/10 — the old configurator's precision, and the same
+            // unit CutFlow draws the reservation down in (cut shares of a stick, to 1/10). Offcuts
+            // are shared across the whole job's cuts, so the job's total inches over the stick length
+            // is rounded up once, not per line. A cut longer than the stick still costs whole sticks.
+            $stock = StickYield::stockLengthFor($products[$pid]);
+            $total = 0.0;
+            foreach ($lengths as $length) {
+                $total += $length > $stock ? ceil($length / $stock) * $stock : $length;
+            }
+            $desired[$pid] = ceil(round($total / $stock * 10, 6)) / 10;
         }
         foreach ($inches as $pid => $total) {
             // 1/10th-of-a-roll granularity, the same unit JobReservationItem::binAwareCommitted() packs in.

@@ -34,7 +34,9 @@ return new class extends Migration
 
         // Recreate the view for SQLite
         if ($driver === 'sqlite') {
-            DB::statement("
+            // Views block sqlite's table-rebuild ALTERs, and only Postgres reads them.
+            if (DB::getDriverName() !== 'sqlite') {
+                DB::statement("
                 CREATE VIEW inventory_commitments AS
                 SELECT
                     p.id AS product_id,
@@ -62,6 +64,7 @@ return new class extends Migration
                 LEFT JOIN job_reservations r ON ri.reservation_id = r.id AND r.deleted_at IS NULL
                 GROUP BY p.id
             ");
+            }
         }
     }
 

@@ -34,8 +34,10 @@
     #app { display: none; }
     #app.active { display: flex; flex-direction: column; }
 
-    /* Prevent layout shift when scrollbar appears (fixes top-left gap on data load) */
-    html { scrollbar-gutter: stable; }
+    /* Tabler (>=992px) sets :root { margin-left: calc(100vw - 100%) } to offset the scrollbar, which
+       inset the header/nav from the left edge and made pages scroll sideways by a scrollbar width.
+       The header/nav should run the full width of the page, so cancel it. */
+    :root { margin-left: 0 !important; margin-right: 0 !important; }
     #loginPage { display: none; }
     #loginPage.active { display: flex; }
     .loading { text-align: center; padding: 2rem; }

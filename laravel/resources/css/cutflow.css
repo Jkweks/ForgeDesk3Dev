@@ -108,7 +108,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .topbar a { color: #EDEEF0; text-decoration: none; font-weight: 600; font-size: 13px; padding: 8px 14px; border: 1px solid #3A3F45; border-radius: 8px; }
 
-.layout { display: flex; height: calc(100vh - 60px); }
+.layout { display: flex; height: calc(100vh - 60px); height: calc(100dvh - 60px); }
 
 .sidebar { width: 427px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 18px; overflow-y: auto; }
 .sidebar h2 { font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin: 0 0 2px; }

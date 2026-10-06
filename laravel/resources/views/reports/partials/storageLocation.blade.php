@@ -233,7 +233,7 @@ function renderStorageLocationUnassigned(products) {
       <td class="text-muted">${escapeHtml(p.part_number || '—')}</td>
       <td>${escapeHtml(p.description || '')}</td>
       <td><code>${escapeHtml(p.sku)}</code></td>
-      <td class="text-end">${(p.quantity_on_hand || 0).toLocaleString()}</td>
+      <td class="text-end">${Math.floor(Number(p.quantity_on_hand) || 0).toLocaleString()}</td>
       <td class="text-end">${(p.quantity_committed || 0).toLocaleString()}</td>
       <td class="text-center">${escapeHtml(p.uom || '')}</td>
     </tr>`).join('');
