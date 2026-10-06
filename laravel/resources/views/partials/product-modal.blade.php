@@ -2228,7 +2228,7 @@
             <td class="text-end">${transaction.quantity_before}</td>
             <td class="text-end">${transaction.quantity_after}</td>
             <td>${transaction.reference_number ? escapeHtml(transaction.reference_number) : '-'}</td>
-            <td><small>${transaction.user ? escapeHtml(transaction.user.name) : '-'}</small></td>
+            <td><small>${transaction.user_display_name ? escapeHtml(transaction.user_display_name) : '-'}</small></td>
             <td><small>${transaction.notes ? escapeHtml(transaction.notes) : '-'}</small></td>
           </tr>
         `;

@@ -45,3 +45,10 @@ test('scrap tag says SCRAP with the real length as detail', () => {
   assert.match(zpl, /\^FDSCRAP\^FS/);
   assert.match(zpl, /too short - 71"/);
 });
+
+test('label text is reduced to printable ASCII (printer has no ^CI, UTF-8 would print as garbage)', () => {
+  const zpl = buildZpl({ job: 'Café – Job', workOrder: '24-123-R1', part: 'AB123 · C2', partUse: 'Frame “head”', elevation: 'A1', size: '12 1/2', uuid: 'u' });
+  assert.ok(!/[^\x00-\x7f]/.test(zpl));
+  assert.match(zpl, /Cafe - Job/);
+  assert.match(zpl, /AB123 - C2/);
+});

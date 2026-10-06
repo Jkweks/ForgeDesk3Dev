@@ -104,7 +104,8 @@ this, same as before.
   ForgeDesk compares it to `TigerBridgeClient::MIN_BRIDGE_VERSION` and warns
   on the cut station when the bridge is older. Bump it on every change here
   (and raise the minimum in ForgeDesk when Laravel starts relying on it).
-  Changelog: 0.2.0 — read travel limits (D10/D11) on connect, reject
+  Changelog: 0.3.0 — job label prints job name, then `WO# <workOrder>` on
+  the next line (new optional `workOrder` field on `/print`). 0.2.0 — read travel limits (D10/D11) on connect, reject
   out-of-range `/move`, report `version`/`limitMin`/`limitMax` in `/status`.
   0.1.0 — initial.
 - **Travel limits:** on connect the bridge reads the amp's `D10` (max) and

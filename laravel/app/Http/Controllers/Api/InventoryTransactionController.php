@@ -283,7 +283,7 @@ class InventoryTransactionController extends Controller
                     $transaction->quantity_before,
                     $transaction->quantity_after,
                     $transaction->reference_number ?? '',
-                    $transaction->user->name ?? '',
+                    $transaction->user_display_name ?? '',
                     $transaction->notes ?? '',
                 ]);
             }

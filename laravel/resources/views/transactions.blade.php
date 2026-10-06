@@ -406,7 +406,7 @@
             trans.product?.description,
             trans.reference_number,
             trans.notes,
-            trans.user?.name
+            trans.user_display_name
           ].filter(Boolean).join(' ').toLowerCase();
 
           if (!searchableText.includes(search)) return false;
@@ -472,7 +472,7 @@
               <div class="small">${trans.reference_number || '-'}</div>
             </td>
             <td>
-              <div class="small">${trans.user?.name || '-'}</div>
+              <div class="small">${trans.user_display_name || '-'}</div>
             </td>
             <td class="table-actions">
               <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="viewTransaction(${trans.id})" title="View Details">
@@ -625,7 +625,7 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label fw-bold">Performed By</label>
-              <p>${trans.user?.name || '-'}</p>
+              <p>${trans.user_display_name || '-'}</p>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-bold">Created At</label>

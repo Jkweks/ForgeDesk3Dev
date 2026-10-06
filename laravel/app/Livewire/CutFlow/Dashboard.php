@@ -756,8 +756,9 @@ class Dashboard extends Component
         ]);
 
         $result = $bridge->printLabel([
-            'job' => $part->cutJob?->name,
-            'part' => $part->finish ? "{$part->name} · {$part->finish}" : $part->name,
+            'job' => $part->cutJob?->labelJobName(),
+            'workOrder' => $part->cutJob?->name,
+            'part' => $part->finish ? "{$part->name} - {$part->finish}" : $part->name,
             'partUse' => $part->description,
             'elevation' => $part->phase,
             'size' => Dimension::toFraction((float) $item->dimension_inches),
@@ -1196,8 +1197,9 @@ class Dashboard extends Component
     protected function printLabelForEntry(TigerBridgeClient $bridge, CutLogEntry $entry): void
     {
         $result = $bridge->printLabel([
-            'job' => $entry->job_name,
-            'part' => $entry->finish ? "{$entry->part_name} · {$entry->finish}" : $entry->part_name,
+            'job' => $entry->cutJob?->labelJobName() ?? $entry->job_name,
+            'workOrder' => $entry->cutJob?->name ?? $entry->job_name,
+            'part' => $entry->finish ? "{$entry->part_name} - {$entry->finish}" : $entry->part_name,
             'partUse' => $entry->description,
             'elevation' => $entry->phase,
             'size' => Dimension::toFraction((float) $entry->dimension_inches),

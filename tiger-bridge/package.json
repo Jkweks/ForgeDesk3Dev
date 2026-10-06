@@ -1,6 +1,6 @@
 {
   "name": "tiger-bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Local service that owns the TigerStop serial port and the Zebra printer socket. Laravel talks to this over localhost HTTP; it never touches the hardware directly.",
   "main": "server.js",

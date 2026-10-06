@@ -40,7 +40,11 @@ use Illuminate\Support\Facades\Log;
  */
 class CutConsumptionService
 {
+    /** Legacy reference on every cut-station deduction; now only the fallback when a cut job has no name. */
     public const REFERENCE = 'CUT-STATION';
+
+    /** Every cut-station ledger row's notes start with this — how earlier deductions are found now that the reference is the job name. */
+    public const NOTES_PREFIX = 'Cut station';
 
     public function __construct(private InventoryDeductor $inventory) {}
 
@@ -74,7 +78,7 @@ class CutConsumptionService
                 if (! self::drawsFromInventory((int) $entry->cut_job_id)) {
                     return; // job-specific material: logged above, nothing to deduct or reserve against
                 }
-                $this->syncInventory($product);
+                $this->syncInventory($product, $entry);
                 $this->syncReservationItem((int) $entry->cut_job_id, $product->id);
             });
         });
@@ -100,16 +104,28 @@ class CutConsumptionService
     }
 
     /** On hand falls to (total consumed, to 1/10) — deducting only what earlier cuts haven't already. */
-    private function syncInventory(Product $product): void
+    private function syncInventory(Product $product, CutLogEntry $entry): void
     {
         $drawingJobIds = CutConsumption::where('product_id', $product->id)->distinct()->pluck('cut_job_id')
             ->filter(fn ($id) => self::drawsFromInventory((int) $id));
         $total = round((float) CutConsumption::where('product_id', $product->id)->whereIn('cut_job_id', $drawingJobIds)->sum('stock_fraction'), 1);
-        $already = round(-1 * (float) InventoryTransaction::where('product_id', $product->id)->where('reference_number', self::REFERENCE)->sum('quantity'), 1);
+        $already = round(-1 * (float) InventoryTransaction::where('product_id', $product->id)
+            ->where('type', 'fulfillment')
+            ->where(fn ($q) => $q->where('reference_number', self::REFERENCE)->orWhere('notes', 'like', self::NOTES_PREFIX.'%'))
+            ->sum('quantity'), 1);
         $delta = round($total - $already, 1);
 
         if ($delta > 0) {
-            $this->inventory->deduct($product, $delta, self::REFERENCE, "Cut station: {$delta} stock length(s) of {$product->sku} (cut length / stock length)");
+            $reference = trim((string) CutJob::find($entry->cut_job_id)?->labelJobName()) ?: self::REFERENCE;
+            $operator = trim((string) $entry->operator_name);
+            $by = $operator !== '' && $operator !== 'Unknown' ? " ({$operator})" : '';
+
+            $this->inventory->deduct(
+                $product,
+                $delta,
+                $reference,
+                self::NOTES_PREFIX."{$by}: {$delta} stock length(s) of {$product->sku} (cut length / stock length)",
+            ); // no user_id: the log shows these as fulfilled by CutFlow (InventoryTransaction::user_display_name)
         }
     }
 
