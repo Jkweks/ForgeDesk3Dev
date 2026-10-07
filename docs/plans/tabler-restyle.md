@@ -1,5 +1,10 @@
 # Tabler 1.6 restyle (feature/tabler-update)
 
+## Status (2026-10-06)
+Done and committed (not pushed, **not yet viewed in a browser**): Step 0 (1.6.1 swap, icons pinned), Step 1 (override cleanup), Step 2 (switchable nav, new Customize panel, theme-preferences validation, login restyle, `tabler-theme.js` in `<head>`), Step 3 (`--fd-nav-offset` replaces hard-coded sticky offsets), plus the mechanical Step 4 renames (`.form-hint` -> `.form-text`, `--tblr-*-rgb` -> `color-mix`). 205 tests pass (new: `ShellAndThemeTest`).
+Deviations from the plan below: the layout does NOT own `.page-wrapper` (21 views already supply it; the 6 that did not now do); user/notification elements are `js-*` classes instead of ids because both navs render them; nav icons are webfont `ti ti-*` classes; the stray duplicate theme panel in the old products view was removed.
+Next: browser review of the shell (matrix at the bottom), then the Step 4 page-by-page design sweeps (A-D), each reviewed visually. Merge `feature/dashboard_ui` first (see Merge ordering) or expect conflicts in `config/navigation.php` ("All Products" href) / `dashboard.blade.php`.
+
 ## Context
 ForgeDesk's vendored Tabler is now 1.6.1 (swapped from 1.4.0, uncommitted on `feature/tabler-update`, branched from `develop`). The user finds the tabler.io demo crisper and more modern than our UI (tighter card fit, better theme preferences) and wants the demo as the starting point. Findings:
 - The demo's look comes from `@tabler/core` CSS alone (demo-only SCSS is just helper classes). Defaults that make it tight: 14px body, 6/8px radii, neutral gray, system font stack (the demo does NOT load Inter), `row-deck row-cards` grids.
