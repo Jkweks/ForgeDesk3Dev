@@ -284,12 +284,58 @@ class WidgetRegistry
         ));
     }
 
-    /** Layout shipped in code: the inventory summary row that replaced the old home page's stat cards. */
-    public static function builtInLayout(): array
+    /**
+     * The layout shipped in code, for users with no saved layout and no company default.
+     * [widget key, w, h] entries; 'break' starts a new block on a fresh row.
+     */
+    private const DEFAULT_LAYOUT = [
+        // At-a-glance numbers: shop floor, quality, stock, purchasing, maintenance.
+        ['wo_open', 3, 2], ['wo_overdue', 3, 2], ['wo_due_week', 3, 2], ['quality_pending', 3, 2],
+        ['inventory_low_stock', 3, 2], ['inventory_critical', 3, 2], ['po_overdue', 3, 2], ['maintenance_overdue', 3, 2],
+        'break',
+        ['wo_table', 8, 6], ['low_stock_list', 4, 6],
+        'break',
+        ['po_due_list', 4, 5], ['maintenance_upcoming', 4, 5], ['jobs_due_list', 4, 5],
+        'break',
+        ['wo_stage_wip', 6, 5], ['quality_incident_rate', 6, 5],
+    ];
+
+    /**
+     * The built-in layout. With a $user, widgets they cannot see are left out and the rest are
+     * re-packed left to right, so a limited role gets a tidy dashboard instead of one with holes.
+     */
+    public static function builtInLayout(?User $user = null): array
     {
+        $catalog = static::all();
+        $blocks = [[]];
+        foreach (static::DEFAULT_LAYOUT as $entry) {
+            if ($entry === 'break') {
+                $blocks[] = [];
+
+                continue;
+            }
+            [$key, $w, $h] = $entry;
+            if (isset($catalog[$key]) && (! $user || static::canSee($user, $catalog[$key]))) {
+                $blocks[array_key_last($blocks)][] = [$key, $w, $h];
+            }
+        }
+
         $widgets = [];
-        foreach (['inventory_skus', 'inventory_on_hand', 'inventory_available', 'inventory_low_stock'] as $i => $key) {
-            $widgets[] = ['id' => $key, 'key' => $key, 'x' => $i * 3, 'y' => 0, 'w' => 3, 'h' => 2, 'settings' => (object) []];
+        $y = 0;
+        foreach ($blocks as $block) {
+            $x = 0;
+            $rowHeight = 0;
+            foreach ($block as [$key, $w, $h]) {
+                if ($x + $w > static::GRID_COLUMNS) {
+                    $y += $rowHeight;
+                    $x = 0;
+                    $rowHeight = 0;
+                }
+                $widgets[] = ['id' => $key, 'key' => $key, 'x' => $x, 'y' => $y, 'w' => $w, 'h' => $h, 'settings' => (object) []];
+                $x += $w;
+                $rowHeight = max($rowHeight, $h);
+            }
+            $y += $rowHeight;
         }
 
         return ['version' => static::LAYOUT_VERSION, 'widgets' => $widgets];
@@ -309,7 +355,7 @@ class WidgetRegistry
             $layout = $default;
             $source = 'default';
         } else {
-            $layout = static::builtInLayout();
+            $layout = static::builtInLayout($user);
             $source = 'built-in';
         }
 

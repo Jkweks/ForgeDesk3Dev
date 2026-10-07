@@ -53,10 +53,55 @@ class DashboardLayoutTest extends TestCase
     {
         $this->actingAsRole('admin');
 
-        $this->getJson('/api/v1/dashboard/layout')
-            ->assertOk()
-            ->assertJsonPath('source', 'built-in')
-            ->assertJsonCount(4, 'layout.widgets');
+        $response = $this->getJson('/api/v1/dashboard/layout')->assertOk()->assertJsonPath('source', 'built-in');
+        $widgets = $response->json('layout.widgets');
+
+        $this->assertCount(15, $widgets);
+        $this->assertSame('wo_open', $widgets[0]['key']);
+        $this->assertSame([0, 0], [$widgets[0]['x'], $widgets[0]['y']]);
+    }
+
+    public function test_built_in_layout_fits_the_grid_without_overlaps_and_only_uses_real_widgets(): void
+    {
+        $widgets = WidgetRegistry::builtInLayout()['widgets']; // no user: everything
+        $catalog = WidgetRegistry::all();
+
+        foreach ($widgets as $w) {
+            $this->assertArrayHasKey($w['key'], $catalog);
+            $this->assertLessThanOrEqual(WidgetRegistry::GRID_COLUMNS, $w['x'] + $w['w'], "{$w['key']} runs off the grid");
+            $this->assertGreaterThanOrEqual($catalog[$w['key']]['min_size']['w'], $w['w'], "{$w['key']} narrower than its minimum");
+            $this->assertGreaterThanOrEqual($catalog[$w['key']]['min_size']['h'], $w['h'], "{$w['key']} shorter than its minimum");
+        }
+        foreach ($widgets as $i => $a) {
+            foreach (array_slice($widgets, $i + 1) as $b) {
+                $overlap = $a['x'] < $b['x'] + $b['w'] && $b['x'] < $a['x'] + $a['w'] && $a['y'] < $b['y'] + $b['h'] && $b['y'] < $a['y'] + $a['h'];
+                $this->assertFalse($overlap, "{$a['key']} overlaps {$b['key']}");
+            }
+        }
+        $this->assertCount(count($widgets), array_unique(array_column($widgets, 'id')), 'widget ids must be unique');
+    }
+
+    public function test_built_in_layout_for_a_limited_role_is_repacked_without_holes(): void
+    {
+        $user = $this->actingAsRole('viewer');
+        $visible = array_column(WidgetRegistry::forUser($user), 'key');
+
+        $widgets = $this->getJson('/api/v1/dashboard/layout')->assertOk()->json('layout.widgets');
+
+        foreach ($widgets as $w) {
+            $this->assertContains($w['key'], $visible, "{$w['key']} is not visible to this role");
+        }
+        $this->assertLessThan(15, count($widgets));
+        if ($widgets) {
+            // Repacked: the first widget sits at the origin and each row starts at x=0 (no gap left by a hidden widget).
+            $this->assertSame([0, 0], [$widgets[0]['x'], $widgets[0]['y']]);
+            $rowStarts = collect($widgets)->groupBy('y')->map(fn ($row) => $row->min('x'));
+            $this->assertSame([0], $rowStarts->unique()->values()->all());
+        }
+
+        // A role that sees nothing gets an empty (not broken) dashboard.
+        $this->actingAsRole('no-such-role');
+        $this->getJson('/api/v1/dashboard/layout')->assertOk()->assertJsonCount(0, 'layout.widgets');
     }
 
     public function test_user_can_save_and_reset_their_layout(): void

@@ -56,7 +56,7 @@ class DashboardLayoutController extends Controller
         if ($request->input('widgets') === null) {
             $setting->update(['dashboard_default_layout' => null]);
 
-            return response()->json(['layout' => WidgetRegistry::builtInLayout(), 'source' => 'built-in']);
+            return response()->json(['layout' => WidgetRegistry::builtInLayout(auth()->user()), 'source' => 'built-in']);
         }
 
         $layout = $this->validatedLayout($request);
