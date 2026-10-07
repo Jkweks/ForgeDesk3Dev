@@ -168,7 +168,11 @@
     grid: null,
     catalog: {},          // key -> catalog entry
     items: new Map(),     // widget instance id -> {def, settings, loadedAt, bodyEl}
-    savedLayout: null,    // last layout from the server (for Cancel)
+    savedLayout: null,    // last layout confirmed saved by the server
+    dirty: false,         // edits not yet saved
+    inflight: null,       // the save currently in flight
+    saveTimer: null,
+    suppress: 0,          // >0 while the grid is being rebuilt (never autosave those events)
     source: 'built-in',
     editing: false,
   };
@@ -266,15 +270,21 @@
     if (node) state.grid.removeWidget(node.el);
     destroyItem(id);
     updateEmptyState();
+    scheduleSave();
   }
 
   function renderLayout(layout) {
-    state.grid.removeAll();
-    [...state.items.keys()].forEach(destroyItem);
-    // Batch so GridStack doesn't re-flow on every add.
-    state.grid.batchUpdate();
-    (layout.widgets || []).forEach(addToGrid);
-    state.grid.commit();
+    state.suppress++;
+    try {
+      state.grid.removeAll();
+      [...state.items.keys()].forEach(destroyItem);
+      // Batch so GridStack doesn't re-flow on every add.
+      state.grid.batchUpdate();
+      (layout.widgets || []).forEach(addToGrid);
+      state.grid.commit();
+    } finally {
+      state.suppress--;
+    }
     updateEmptyState();
   }
 
@@ -307,6 +317,7 @@
     $('dashViewButtons').classList.toggle('d-none', on);
     $('dashEditButtons').classList.toggle('d-none', !on);
     $('dashSaveDefault').classList.toggle('d-none', !hasPermission('settings.edit'));
+    if (on) setSaveStatus('idle');
   }
 
   async function sendLayout(url, method, body) {
@@ -323,24 +334,73 @@
     else if (!ok) alert(message);
   }
 
-  async function save() {
-    try {
-      const result = await sendLayout('/dashboard/layout', 'PUT', currentLayout());
-      state.savedLayout = result.layout;
-      state.source = result.source;
-      setEditing(false);
-      notify('Dashboard saved');
-    } catch (e) { notify(e.message, false); }
+  // ---- Autosave -----------------------------------------------------------
+  // Every change made in edit mode (drag, resize, add, remove, widget settings) is saved shortly
+  // after, so there is no Save button. Saves are serialized; "Done" waits for any pending one.
+  const SAVE_DELAY_MS = 700;
+
+  function setSaveStatus(kind, detail) {
+    const el = $('dashSaveStatus');
+    const text = { idle: 'Changes save automatically', saving: 'Saving…', saved: 'All changes saved', error: 'Could not save. Click to retry' }[kind];
+    el.textContent = text;
+    el.title = kind === 'error' && detail ? detail : '';
+    el.classList.toggle('text-danger', kind === 'error');
+    el.classList.toggle('text-success', kind === 'saved');
+    el.classList.toggle('text-secondary', kind !== 'error' && kind !== 'saved');
+    el.style.cursor = kind === 'error' ? 'pointer' : '';
+    el.dataset.state = kind;
   }
 
-  function cancel() {
-    renderLayout(state.savedLayout);
+  function scheduleSave() {
+    if (!state.editing || state.suppress || !state.grid) return;
+    // A narrow window collapses the grid to one column; never save that arrangement over the real layout.
+    if (state.grid.getColumn() !== COLUMNS) return;
+    state.dirty = true;
+    setSaveStatus('saving');
+    clearTimeout(state.saveTimer);
+    state.saveTimer = setTimeout(() => { flushSave(); }, SAVE_DELAY_MS);
+  }
+
+  // Resolves true once everything is saved, false if a save failed (the edits stay marked unsaved).
+  async function flushSave() {
+    clearTimeout(state.saveTimer);
+    while (state.dirty || state.inflight) {
+      if (state.inflight) {
+        try { await state.inflight; } catch (e) { return false; }
+        continue;
+      }
+      state.dirty = false;
+      setSaveStatus('saving');
+      state.inflight = sendLayout('/dashboard/layout', 'PUT', currentLayout())
+        .then((result) => {
+          state.savedLayout = result.layout;
+          state.source = result.source;
+          setSaveStatus(state.dirty ? 'saving' : 'saved');
+        })
+        .catch((e) => { state.dirty = true; setSaveStatus('error', e.message); throw e; })
+        .finally(() => { state.inflight = null; });
+      try { await state.inflight; } catch (e) { return false; }
+    }
+    return true;
+  }
+
+  async function done() {
+    const ok = await flushSave();
+    if (!ok) { notify('Your latest changes could not be saved. Try again.', false); return; }
     setEditing(false);
+  }
+
+  // Leaving the page mid-edit: send the pending layout with keepalive so it survives the unload.
+  function saveOnLeave() {
+    if (!state.editing || !state.dirty || state.grid.getColumn() !== COLUMNS) return;
+    apiCall('/dashboard/layout', { method: 'PUT', body: JSON.stringify(currentLayout()), keepalive: true }).catch(() => {});
   }
 
   async function reset() {
     if (!confirm('Reset your dashboard to the default layout?')) return;
     try {
+      clearTimeout(state.saveTimer);
+      state.dirty = false;
       const result = await sendLayout('/dashboard/layout', 'DELETE');
       state.savedLayout = result.layout;
       state.source = result.source;
@@ -426,6 +486,7 @@
     });
     item.settings = values;
     item.loadedAt = 0;
+    scheduleSave();
     bootstrap.Modal.getOrCreateInstance($('dashSettingsModal')).hide();
     loadWidget(settingsTarget);
   }
@@ -441,6 +502,7 @@
     const def = state.catalog[key];
     addToGrid({ id: uniqueId(key), key, x: 0, y: 0, w: def.default_size.w, h: def.default_size.h, settings: {} });
     updateEmptyState();
+    scheduleSave();
   }
 
   function renderCatalog() {
@@ -491,12 +553,15 @@
     }, $('dashboardGrid'));
 
     renderLayout(layout);
+    state.grid.on('change', scheduleSave); // drag / resize (and the re-flow they cause)
 
     $('dashCustomize').addEventListener('click', () => setEditing(true));
-    $('dashSave').addEventListener('click', save);
+    $('dashDone').addEventListener('click', done);
+    $('dashSaveStatus').addEventListener('click', () => { if ($('dashSaveStatus').dataset.state === 'error') flushSave(); });
+    window.addEventListener('pagehide', saveOnLeave);
+    document.addEventListener('visibilitychange', () => { if (document.hidden && state.dirty) flushSave(); });
     $('dashSettingsApply').addEventListener('click', applySettings);
     $('dashSettingsBody').addEventListener('change', () => applyShowIf($('dashSettingsBody')));
-    $('dashCancel').addEventListener('click', cancel);
     $('dashReset').addEventListener('click', reset);
     $('dashSaveDefault').addEventListener('click', saveAsDefault);
     $('dashCatalogSearch').addEventListener('input', renderCatalog);

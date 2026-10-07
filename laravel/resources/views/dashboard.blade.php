@@ -34,10 +34,10 @@
               </div>
               <div id="dashEditButtons" class="btn-list d-none">
                 <button type="button" class="btn" id="dashAddWidget"><i class="ti ti-plus me-1"></i>Add widget</button>
+                <span class="small text-secondary me-1" id="dashSaveStatus" role="status" aria-live="polite">Changes save automatically</span>
                 <button type="button" class="btn btn-outline-secondary" id="dashReset">Reset</button>
                 <button type="button" class="btn btn-outline-secondary d-none" id="dashSaveDefault">Save as default</button>
-                <button type="button" class="btn" id="dashCancel">Cancel</button>
-                <button type="button" class="btn btn-primary" id="dashSave">Save</button>
+                <button type="button" class="btn btn-primary" id="dashDone">Done</button>
               </div>
             </div>
           </div>

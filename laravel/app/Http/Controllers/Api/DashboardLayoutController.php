@@ -69,7 +69,8 @@ class DashboardLayoutController extends Controller
     {
         $columns = WidgetRegistry::GRID_COLUMNS;
         $data = $request->validate([
-            'widgets' => 'required|array|max:50',
+            // present, not required: removing the last widget is a legitimate (empty) layout, and autosave will send it.
+            'widgets' => 'present|array|max:50',
             'widgets.*.id' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/', 'distinct'],
             'widgets.*.key' => 'required|string|in:'.implode(',', array_keys(WidgetRegistry::all())),
             'widgets.*.x' => "required|integer|min:0|max:{$columns}",

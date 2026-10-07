@@ -168,4 +168,40 @@ class DashboardLayoutTest extends TestCase
         $this->actingAsRole('admin');
         $this->getJson('/api/v1/dashboard/stats')->assertOk()->assertJsonStructure(['skus_tracked', 'units_on_hand', 'low_stock_alerts']);
     }
+
+    public function test_removing_every_widget_saves_an_empty_dashboard_instead_of_reverting_to_the_default(): void
+    {
+        $this->actingAsRole('admin');
+
+        $this->putJson('/api/v1/dashboard/layout', ['widgets' => []])->assertOk()->assertJsonPath('source', 'user')->assertJsonCount(0, 'layout.widgets');
+
+        // The empty layout is the user's choice: it is not replaced by the built-in default on the next load.
+        $this->getJson('/api/v1/dashboard/layout')->assertOk()->assertJsonPath('source', 'user')->assertJsonCount(0, 'layout.widgets');
+
+        // A missing `widgets` field is still a bad request, and Reset still brings the default back.
+        $this->putJson('/api/v1/dashboard/layout', [])->assertStatus(422);
+        $this->deleteJson('/api/v1/dashboard/layout')->assertOk()->assertJsonPath('source', 'built-in');
+    }
+
+    public function test_the_dashboard_autosaves_edits_instead_of_asking_for_a_save_click(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('id="dashSaveStatus"', $html);
+        $this->assertStringContainsString('id="dashDone"', $html);
+        $this->assertStringNotContainsString('id="dashSave"', $html, 'no explicit Save button');
+        $this->assertStringNotContainsString('id="dashCancel"', $html, 'edits are saved as they are made, so there is nothing to cancel');
+
+        $js = file_get_contents(public_path('js/dashboard-widgets.js'));
+        // Every kind of edit triggers a (debounced) save...
+        $this->assertStringContainsString("state.grid.on('change', scheduleSave)", $js);
+        foreach (['removeWidget', 'addWidgetFromCatalog', 'applySettings'] as $fn) {
+            $this->assertMatchesRegularExpression('/function '.$fn.'\(.*?scheduleSave\(\);/s', $js, "{$fn} should schedule a save");
+        }
+        // ...never while the grid is being rebuilt or collapsed to one column...
+        $this->assertStringContainsString('state.suppress', $js);
+        $this->assertStringContainsString('state.grid.getColumn() !== COLUMNS', $js);
+        // ...and a pending edit is not lost when leaving the page.
+        $this->assertStringContainsString('keepalive: true', $js);
+        $this->assertStringContainsString("addEventListener('pagehide', saveOnLeave)", $js);
+    }
 }
