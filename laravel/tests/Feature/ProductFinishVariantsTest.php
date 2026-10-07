@@ -29,7 +29,7 @@ class ProductFinishVariantsTest extends TestCase
             'part_number' => 'A646060', 'finish' => 'C2', 'description' => 'Test extrusion',
             'long_description' => 'Longer text', 'unit_cost' => 12.5, 'net_cost' => 9.75,
             'supplier_id' => $this->supplier->id, 'supplier_sku' => 'SUP-1', 'lead_time_days' => 14,
-            'quantity_on_hand' => 40, 'on_order_qty' => 10, 'location' => 'Rack A',
+            'quantity_on_hand' => 40, 'on_order_qty' => 10,
             'minimum_quantity' => 5, 'reorder_point' => 8, 'safety_stock' => 2, 'unit_of_measure' => 'EA',
             'pack_size' => 1, 'nonsof' => true, 'cp_part' => true, 'is_shared' => true, 'is_special_order' => false,
         ];
@@ -126,6 +126,7 @@ class ProductFinishVariantsTest extends TestCase
         $this->assertStringContainsString('<div class="col-lg-5">', $html);
         $this->assertStringContainsString('<div class="col-lg-8">', $html);
         $this->assertStringContainsString('finish_variants = variantFinishes', $html);
+        $this->assertStringNotContainsString('name="location"', $html, 'the Storage Location field was never saved, so it is gone from the form');
 
         // Regression guard: a <form> between .modal-content and .modal-body must still let the body scroll.
         $this->assertStringContainsString('.modal-content > form { display: flex; flex-direction: column;', $html);

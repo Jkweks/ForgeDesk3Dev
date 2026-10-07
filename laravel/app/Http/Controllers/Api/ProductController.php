@@ -244,7 +244,6 @@ class ProductController extends Controller
             if (! $copyStock) {
                 $row['quantity_on_hand'] = 0;
                 $row['on_order_qty'] = 0;
-                $row['location'] = null;
             }
             $rows[] = $row;
         }
