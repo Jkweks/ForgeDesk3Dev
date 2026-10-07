@@ -9,6 +9,7 @@ use App\Models\ConfiguratorFrameProfile;
 use App\Models\ConfiguratorFrameSeries;
 use App\Models\ConfiguratorFrameSystem;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ConfiguratorCatalogController extends Controller
@@ -119,6 +120,73 @@ class ConfiguratorCatalogController extends Controller
         ConfiguratorFrameSeries::findOrFail($id)->delete();
 
         return response()->json(['message' => 'Frame series deleted']);
+    }
+
+    /**
+     * Duplicate a series within its frame system: a deep copy of its profiles, their components and
+     * the components' fasteners (products, formulas, conditions, quantities and glass ranges kept).
+     * Formulas refer to other profiles by role label, so the copy is self-contained. Existing
+     * configurations keep pointing at the original series.
+     */
+    public function duplicateSeries(Request $request, $id)
+    {
+        $source = ConfiguratorFrameSeries::with('profiles.components.fasteners')->findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:100',
+            'code' => 'required|string|max:30',
+            'sort_order' => 'nullable|integer',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+        $data = $validator->validated();
+
+        if (ConfiguratorFrameSeries::where('frame_system_id', $source->frame_system_id)->where('code', $data['code'])->exists()) {
+            $reason = "A series with code {$data['code']} already exists in this frame system. Choose a different code.";
+
+            return response()->json(['message' => $reason, 'errors' => ['code' => [$reason]]], 422);
+        }
+
+        $counts = ['profiles' => 0, 'components' => 0, 'fasteners' => 0];
+
+        $copy = DB::transaction(function () use ($source, $data, &$counts) {
+            $copy = $source->replicate();
+            $copy->name = $data['name'];
+            $copy->code = $data['code'];
+            $copy->sort_order = $data['sort_order']
+                ?? ((int) ConfiguratorFrameSeries::where('frame_system_id', $source->frame_system_id)->max('sort_order') + 1);
+            $copy->save();
+
+            foreach ($source->profiles as $profile) {
+                $newProfile = $profile->replicate();
+                $newProfile->frame_series_id = $copy->id;
+                $newProfile->save();
+                $counts['profiles']++;
+
+                foreach ($profile->components as $component) {
+                    $newComponent = $component->replicate();
+                    $newComponent->frame_profile_id = $newProfile->id;
+                    $newComponent->save();
+                    $counts['components']++;
+
+                    foreach ($component->fasteners as $fastener) {
+                        $newFastener = $fastener->replicate();
+                        $newFastener->frame_component_id = $newComponent->id;
+                        $newFastener->save();
+                        $counts['fasteners']++;
+                    }
+                }
+            }
+
+            return $copy;
+        });
+
+        return response()->json([
+            'message' => "Series duplicated ({$counts['profiles']} profiles, {$counts['components']} components, {$counts['fasteners']} fasteners).",
+            'frame_series' => $copy->load('profiles.components.fasteners'),
+            'copied' => $counts,
+        ], 201);
     }
 
     // ---- Frame Profiles (extrusions) ----

@@ -344,9 +344,11 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <form id="cfg-series-form">
-        <div class="modal-header"><h5 class="modal-title">Frame Series</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><h5 class="modal-title" id="cfg-series-modal-title">Frame Series</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <input type="hidden" id="cfg-series-id">
+          <input type="hidden" id="cfg-series-dup-from">
+          <div class="alert alert-info py-2 d-none" id="cfg-series-dup-hint"></div>
           <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="cfg-series-name" required></div>
           <div class="mb-3"><label class="form-label">Code</label><input type="text" class="form-control" id="cfg-series-code" required></div>
           <div class="mb-3"><label class="form-label">Sort Order</label><input type="number" class="form-control" id="cfg-series-sort" value="0"></div>
@@ -851,7 +853,8 @@
       <tr class="${s.id == cfgSelectedSeriesId ? 'table-active' : ''}" style="cursor:pointer" onclick="cfgSelectSeries(${s.id})">
         <td>${esc(s.name)}</td><td><span class="badge bg-azure-lt">${esc(s.code)}</span></td>
         <td class="text-end">
-          <button type="button" class="btn btn-sm btn-icon" onclick="event.stopPropagation(); cfgOpenSeriesModal(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
+          <button type="button" class="btn btn-sm btn-icon" title="Duplicate this series (with its profiles, components and fasteners)" onclick="event.stopPropagation(); cfgOpenDuplicateSeriesModal(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-icon" title="Edit" onclick="event.stopPropagation(); cfgOpenSeriesModal(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="event.stopPropagation(); cfgDeleteSeries(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
       </tr>`).join('');
@@ -1039,8 +1042,29 @@
   }
 
   // ---- Frame Series CRUD ----
+  // Duplicate: the same modal, prefilled from the source series; saving copies it (and its whole
+  // profile / component / fastener tree) into this frame system under the new name and code.
+  function cfgOpenDuplicateSeriesModal(id) {
+    const s = cfgFindSeries(id);
+    if (!s) return;
+    cfgOpenSeriesModal(null);
+    document.getElementById('cfg-series-dup-from').value = id;
+    document.getElementById('cfg-series-modal-title').textContent = 'Duplicate Frame Series';
+    document.getElementById('cfg-series-name').value = `${s.name} (copy)`.slice(0, 100);
+    document.getElementById('cfg-series-code').value = `${s.code}-COPY`.slice(0, 30);
+    document.getElementById('cfg-series-sort').value = (s.sort_order ?? 0) + 1;
+    const hint = document.getElementById('cfg-series-dup-hint');
+    const profiles = s.profiles || [];
+    const components = profiles.reduce((n, p) => n + (p.components || []).length, 0);
+    hint.textContent = `Copies "${s.name}" with its ${profiles.length} profile(s) and ${components} component(s) (and their fasteners) into this frame system. Existing configurations stay on the original series.`;
+    hint.classList.remove('d-none');
+  }
+
   function cfgOpenSeriesModal(id) {
     const s = id ? cfgFindSeries(id) : null;
+    document.getElementById('cfg-series-dup-from').value = '';
+    document.getElementById('cfg-series-dup-hint').classList.add('d-none');
+    document.getElementById('cfg-series-modal-title').textContent = 'Frame Series';
     document.getElementById('cfg-series-id').value = id || '';
     document.getElementById('cfg-series-name').value = s?.name || '';
     document.getElementById('cfg-series-code').value = s?.code || '';
@@ -1056,7 +1080,18 @@
       code: document.getElementById('cfg-series-code').value,
       sort_order: parseInt(document.getElementById('cfg-series-sort').value || 0, 10),
     };
+    const dupFrom = document.getElementById('cfg-series-dup-from').value;
     try {
+      if (dupFrom) {
+        const res = await authenticatedFetch(`/config/frame-series/${dupFrom}/duplicate`, {
+          method: 'POST', body: JSON.stringify({ name: payload.name, code: payload.code, sort_order: payload.sort_order }),
+        });
+        hideModal(document.getElementById('cfg-series-modal'));
+        await cfgLoadTree();
+        cfgSelectSeries(res.frame_series.id);
+        showNotification(res.message, 'success');
+        return;
+      }
       await authenticatedFetch(id ? `/config/frame-series/${id}` : '/config/frame-series', {
         method: id ? 'PUT' : 'POST', body: JSON.stringify(payload),
       });

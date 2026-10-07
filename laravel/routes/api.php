@@ -606,6 +606,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/config/frame-series', [ConfiguratorCatalogController::class, 'storeSeries'])->middleware('permission:configurator.catalog.manage');
         Route::put('/config/frame-series/{id}', [ConfiguratorCatalogController::class, 'updateSeries'])->middleware('permission:configurator.catalog.manage');
+        Route::post('/config/frame-series/{id}/duplicate', [ConfiguratorCatalogController::class, 'duplicateSeries'])->middleware('permission:configurator.catalog.manage');
         Route::delete('/config/frame-series/{id}', [ConfiguratorCatalogController::class, 'destroySeries'])->middleware('permission:configurator.catalog.manage');
 
         Route::post('/config/frame-profiles', [ConfiguratorCatalogController::class, 'storeProfile'])->middleware('permission:configurator.catalog.manage');
