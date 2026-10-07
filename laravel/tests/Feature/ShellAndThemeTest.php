@@ -18,12 +18,21 @@ class ShellAndThemeTest extends TestCase
         $this->assertStringContainsString('navbar-vertical', $html);
         $this->assertStringContainsString('id="navbar-menu"', $html);
 
-        foreach (config('navigation') as $section) {
-            $this->assertSame(
-                2,
-                substr_count($html, 'data-nav-permission="'.$section['permission'].'"'),
-                "{$section['label']} should render once in the top bar and once in the sidebar"
-            );
+        // Both menu structures are rendered (CSS shows the chosen one). Within each, every section
+        // appears once in the top bar and once in the sidebar.
+        foreach (['new' => 'navigation', 'classic' => 'navigation_classic'] as $set => $configKey) {
+            preg_match_all('#<div data-nav-set="'.$set.'">.*?</ul>#s', $html, $blocks);
+            $this->assertCount(2, $blocks[0], "the {$set} menu renders in the top bar and the sidebar");
+            $joined = implode("\n", $blocks[0]);
+
+            foreach (config($configKey) as $section) {
+                $attr = preg_quote(implode(' ', (array) $section['permission']), '/');
+                $this->assertSame(
+                    2,
+                    preg_match_all('/<li class="nav-item[^"]*" data-nav-permission="'.$attr.'"/', $joined),
+                    "{$section['label']} ({$set}) should render once in the top bar and once in the sidebar"
+                );
+            }
         }
 
         // Sidebar user text must live in .nav-link-title so Tabler collapses it when the sidebar folds.
@@ -87,6 +96,7 @@ class ShellAndThemeTest extends TestCase
             'layout' => 'boxed',
             'navbar' => 'sticky',
             'navbar-theme' => 'dark',
+            'nav-menu' => 'classic',
             'theme-base' => 'gray',
         ])->assertOk()->assertJsonPath('theme_preferences.navbar-position', 'vertical');
 
@@ -114,7 +124,7 @@ class ShellAndThemeTest extends TestCase
     {
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
 
-        foreach ([['navbar-position' => 'left'], ['sidebar' => 'huge'], ['layout' => 'wide'], ['theme' => 'sepia'], ['navbar-theme' => 'neon']] as $payload) {
+        foreach ([['navbar-position' => 'left'], ['sidebar' => 'huge'], ['layout' => 'wide'], ['theme' => 'sepia'], ['navbar-theme' => 'neon'], ['nav-menu' => 'compact']] as $payload) {
             $this->putJson('/api/v1/user/theme-preferences', $payload)->assertStatus(422);
         }
     }

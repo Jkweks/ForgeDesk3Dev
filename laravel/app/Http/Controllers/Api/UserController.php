@@ -555,6 +555,7 @@ class UserController extends Controller
             'navbar-position' => 'sometimes|nullable|in:horizontal,vertical',
             'navbar' => 'sometimes|nullable|in:default,sticky',
             'navbar-theme' => 'sometimes|nullable|in:default,dark,primary',
+            'nav-menu' => 'sometimes|nullable|in:default,classic',
             'sidebar' => 'sometimes|nullable|in:default,folded,folded-hover',
         ]);
 

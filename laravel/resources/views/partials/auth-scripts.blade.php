@@ -118,16 +118,46 @@
     const navItems = document.querySelectorAll('[data-nav-permission]');
 
     navItems.forEach(item => {
-      const requiredPermission = item.getAttribute('data-nav-permission');
+      // A space-separated list means "any of these" (sections that absorbed items from another section).
+      const required = item.getAttribute('data-nav-permission').split(/\s+/).filter(Boolean);
 
       // Check if user has the required permission
-      if (!hasPermission(requiredPermission)) {
+      if (!required.some(p => hasPermission(p))) {
         // Hide the entire nav item
         item.style.display = 'none';
       } else {
         // Ensure it's visible (in case it was previously hidden)
         item.style.display = '';
       }
+    });
+
+    tidyNavMenus();
+  }
+
+  // Hide dropdown group headings and dividers that would be left with nothing visible under them
+  // (every item hidden by permissions), and dividers with nothing visible above them.
+  function tidyNavMenus() {
+    const hidden = el => el.style.display === 'none';
+    document.querySelectorAll('.navbar .dropdown-menu').forEach(menu => {
+      const kids = [...menu.children];
+      let seenItem = false;
+      kids.forEach((el, i) => {
+        if (el.classList.contains('dropdown-item')) {
+          if (!hidden(el)) seenItem = true;
+          return;
+        }
+        const isHeader = el.classList.contains('dropdown-header');
+        const isDivider = el.classList.contains('dropdown-divider');
+        if (!isHeader && !isDivider) return;
+        // Visible items between this separator and the next one.
+        let hasItem = false;
+        for (let j = i + 1; j < kids.length; j++) {
+          const next = kids[j];
+          if (next.classList.contains('dropdown-header') || next.classList.contains('dropdown-divider')) break;
+          if (next.classList.contains('dropdown-item') && !hidden(next)) { hasItem = true; break; }
+        }
+        el.style.display = (hasItem && (isHeader || seenItem)) ? '' : 'none';
+      });
     });
   }
 
@@ -177,6 +207,9 @@
         }
       }
     });
+
+    // Action permissions can hide dropdown items too, which may empty a group.
+    tidyNavMenus();
   }
 
   // Helper functions for common permission checks

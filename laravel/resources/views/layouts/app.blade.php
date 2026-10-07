@@ -7,6 +7,8 @@
   <title>@yield('title', 'ForgeDesk')</title>
   {{-- Applies the saved theme/layout attributes to <html> before first paint (no flash). --}}
   <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
+  {{-- tabler-theme.js only knows Tabler's own settings; apply our menu-organization choice before first paint too. --}}
+  <script>try { if (localStorage.getItem('tabler-nav-menu') === 'classic') document.documentElement.setAttribute('data-bs-nav-menu', 'classic'); } catch (e) {}</script>
   <link href="{{ asset('assets/tabler/css/tabler.min.css') }}" rel="stylesheet">
   <link href="{{ asset('assets/tabler/css/tabler-flags.min.css') }}" rel="stylesheet">
   <link href="{{ asset('assets/tabler/css/tabler-socials.min.css') }}" rel="stylesheet">
@@ -34,6 +36,11 @@
        height when the user chose a sticky top bar (Tabler makes only the header row sticky). */
     :root { --fd-nav-offset: 0px; }
     html[data-bs-navbar=sticky]:not([data-bs-navbar-position=vertical]) { --fd-nav-offset: 3.5rem; }
+
+    /* Menu organization: both menu structures are rendered, the user's choice (Customize) shows one. */
+    [data-nav-set] { display: contents; }
+    html:not([data-bs-nav-menu=classic]) [data-nav-set=classic],
+    html[data-bs-nav-menu=classic] [data-nav-set=new] { display: none; }
 
     #app { display: none; }
     #app.active { display: flex; flex-direction: column; }

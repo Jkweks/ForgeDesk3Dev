@@ -33,6 +33,8 @@
         'options' => ['default' => 'Scrolls with page', 'sticky' => 'Sticky']],
       ['key' => 'navbar-theme', 'legend' => 'Navigation color', 'hint' => 'Light, dark or accent-colored navigation.', 'default' => 'default', 'control' => 'tile',
         'options' => ['default' => 'Default', 'dark' => 'Dark', 'primary' => 'Accent']],
+      ['key' => 'nav-menu', 'legend' => 'Menu organization', 'hint' => 'New regroups the menu (Inventory now includes purchasing). Original keeps the earlier layout.', 'default' => 'default', 'control' => 'pill',
+        'options' => ['default' => 'New', 'classic' => 'Original']],
       ['key' => 'layout', 'legend' => 'Container width', 'hint' => 'How wide page content may grow.', 'default' => 'default', 'control' => 'tile',
         'options' => ['default' => 'Default', 'fluid' => 'Full width', 'boxed' => 'Boxed']],
     ]],
@@ -77,6 +79,15 @@
                         </span>
                       </label>
                     </div>
+                  @endforeach
+                </div>
+              @elseif ($setting['control'] === 'pill')
+                <div class="form-selectgroup">
+                  @foreach ($setting['options'] as $value => $label)
+                    <label class="form-selectgroup-item">
+                      <input type="radio" name="{{ $setting['key'] }}" value="{{ $value }}" class="form-selectgroup-input">
+                      <span class="form-selectgroup-label">{{ $label }}</span>
+                    </label>
                   @endforeach
                 </div>
               @else

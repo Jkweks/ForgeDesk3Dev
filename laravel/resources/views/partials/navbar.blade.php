@@ -27,7 +27,8 @@
         <div class="row flex-column flex-md-row flex-fill align-items-center">
           <div class="col">
             <nav aria-label="Primary">
-              @include('partials.nav-menu', ['mode' => 'top'])
+              @include('partials.nav-menu', ['mode' => 'top', 'set' => 'new'])
+              @include('partials.nav-menu', ['mode' => 'top', 'set' => 'classic'])
             </nav>
           </div>
           <div class="col col-md-auto d-md-none">

@@ -18,7 +18,8 @@
       </ul>
     </div>
     <div class="collapse navbar-collapse" id="sidebar-menu">
-      @include('partials.nav-menu', ['mode' => 'side'])
+      @include('partials.nav-menu', ['mode' => 'side', 'set' => 'new'])
+              @include('partials.nav-menu', ['mode' => 'side', 'set' => 'classic'])
       <div class="navbar-side">
         <ul class="navbar-nav">
           <li class="nav-item">
