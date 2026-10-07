@@ -719,25 +719,76 @@
 
   // ==================== Configurator: Frame Catalog ====================
   let cfgTree = [];
-  let cfgProducts = [];
   let cfgSelectedSystemId = null;
   let cfgSelectedSeriesId = null;
   let cfgSelectedProfileId = null;
   let cfgSelectedComponentId = null;
 
-  async function cfgLoadProducts() {
-    if (cfgProducts.length) return cfgProducts;
-    try {
-      const data = await authenticatedFetch('/products?per_page=1000');
-      cfgProducts = data.data || data.products || data || [];
-    } catch (e) { cfgProducts = []; }
-    return cfgProducts;
+  // Product picker: type-ahead against /products?search= (server-side) so
+  // we never preload the whole catalog. Replaces a <select> with a hidden
+  // input carrying the same id (so `.value` reads keep working) plus a text
+  // box and result list.
+  function cfgProductLabel(p) {
+    return `${p.part_number || p.sku || ''}${p.description ? ' — ' + p.description : ''}`;
   }
 
-  function cfgProductOptions(selectedId) {
-    return cfgProducts.map(p =>
-      `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${esc(p.part_number || p.sku)} — ${esc(p.description || '')}</option>`
-    ).join('');
+  function cfgInitProductPicker(selectId) {
+    const el = document.getElementById(selectId);
+    if (!el || el.dataset.picker) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'position-relative';
+    wrap.innerHTML = `
+      <input type="hidden" id="${selectId}">
+      <input type="text" class="form-control" autocomplete="off" placeholder="Search part number, SKU or description…" required>
+      <div class="list-group position-absolute w-100 shadow" style="z-index:2000;max-height:260px;overflow-y:auto;display:none"></div>`;
+    el.replaceWith(wrap);
+    const hidden = wrap.children[0], text = wrap.children[1], list = wrap.children[2];
+    hidden.dataset.picker = '1';
+
+    let timer = null, seq = 0;
+    const validity = () => text.setCustomValidity(hidden.value ? '' : 'Pick a product from the list');
+    const close = () => { list.style.display = 'none'; };
+
+    async function run() {
+      const q = text.value.trim();
+      const mine = ++seq;
+      if (q.length < 2) { list.innerHTML = '<div class="list-group-item text-muted small">Type at least 2 characters</div>'; list.style.display = ''; return; }
+      let rows = [];
+      try {
+        const data = await authenticatedFetch(`/products?search=${encodeURIComponent(q)}&per_page=20`);
+        rows = data.data || [];
+      } catch (e) { /* leave empty */ }
+      if (mine !== seq) return;
+      list.innerHTML = rows.length
+        ? rows.map(p => `<button type="button" class="list-group-item list-group-item-action" data-id="${p.id}" data-label="${esc(cfgProductLabel(p))}">${esc(cfgProductLabel(p))}</button>`).join('')
+        : '<div class="list-group-item text-muted small">No matches</div>';
+      list.style.display = '';
+    }
+
+    text.addEventListener('input', () => {
+      hidden.value = ''; validity();
+      clearTimeout(timer); timer = setTimeout(run, 250);
+    });
+    text.addEventListener('focus', () => { if (!hidden.value && text.value.trim().length >= 2) run(); });
+    list.addEventListener('mousedown', (e) => {
+      const btn = e.target.closest('button[data-id]');
+      if (!btn) return;
+      e.preventDefault();
+      hidden.value = btn.dataset.id; text.value = btn.dataset.label; validity(); close();
+    });
+    text.addEventListener('blur', close);
+    validity();
+  }
+
+  // Set the picker to an existing product (edit) or clear it (new). The
+  // row's eager-loaded `product` supplies the label; no extra fetch.
+  function cfgSetProductPicker(selectId, productId, product) {
+    cfgInitProductPicker(selectId);
+    const hidden = document.getElementById(selectId);
+    const text = hidden.nextElementSibling;
+    hidden.value = productId || '';
+    text.value = productId && product ? cfgProductLabel(product) : '';
+    text.setCustomValidity(hidden.value ? '' : 'Pick a product from the list');
   }
 
   async function cfgLoadTree() {
@@ -1073,11 +1124,10 @@
   }
 
   async function cfgOpenProfileModal(id) {
-    await cfgLoadProducts();
     const p = id ? cfgFindProfile(id) : null;
     document.getElementById('cfg-profile-id').value = id || '';
     document.getElementById('cfg-profile-label').value = p?.role_label || '';
-    document.getElementById('cfg-profile-product').innerHTML = cfgProductOptions(p?.product_id);
+    cfgSetProductPicker('cfg-profile-product', p?.product_id, p?.product);
     document.getElementById('cfg-profile-condition').value = p?.condition || '';
     document.getElementById('cfg-profile-glassthicknesses').value = (p?.glass_thicknesses || []).join(', ');
     document.getElementById('cfg-profile-sectionheight').value = p?.section_height ?? 0;
@@ -1116,11 +1166,10 @@
 
   // ---- Component CRUD ----
   async function cfgOpenComponentModal(id) {
-    await cfgLoadProducts();
     const c = id ? cfgFindComponent(id) : null;
     document.getElementById('cfg-component-id').value = id || '';
     document.getElementById('cfg-component-label').value = c?.label || '';
-    document.getElementById('cfg-component-product').innerHTML = cfgProductOptions(c?.product_id);
+    cfgSetProductPicker('cfg-component-product', c?.product_id, c?.product);
     document.getElementById('cfg-component-qtytype').value = c?.qty_type || 'per_opening';
     document.getElementById('cfg-component-qtyper').value = c?.qty_per ?? 1;
     showModal(document.getElementById('cfg-component-modal'));
@@ -1151,13 +1200,12 @@
 
   // ---- Fastener CRUD ----
   async function cfgOpenFastenerModal(id) {
-    await cfgLoadProducts();
     let f = null;
     const component = cfgFindComponent(cfgSelectedComponentId);
     if (id) f = (component?.fasteners || []).find(x => x.id == id);
     document.getElementById('cfg-fastener-id').value = id || '';
     document.getElementById('cfg-fastener-label').value = f?.label || '';
-    document.getElementById('cfg-fastener-product').innerHTML = cfgProductOptions(f?.product_id);
+    cfgSetProductPicker('cfg-fastener-product', f?.product_id, f?.product);
     document.getElementById('cfg-fastener-qtyper').value = f?.qty_per ?? 1;
     showModal(document.getElementById('cfg-fastener-modal'));
   }

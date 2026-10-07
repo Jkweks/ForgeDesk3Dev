@@ -690,7 +690,7 @@
                     <td>${escapeHtml(product.sku)}</td>
                     <td>${escapeHtml(product.description)}</td>
                     <td>${product.category ? escapeHtml(product.category.name) : '-'}</td>
-                    <td class="text-end">${product.quantity_on_hand}</td>
+                    <td class="text-end">${Math.floor(Number(product.quantity_on_hand) || 0)}</td>
                     <td>${getStatusBadge(product.status)}</td>
                   </tr>
                 `).join('')}

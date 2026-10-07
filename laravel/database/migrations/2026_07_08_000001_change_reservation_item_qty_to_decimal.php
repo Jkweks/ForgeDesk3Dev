@@ -21,7 +21,9 @@ return new class extends Migration
             $table->decimal('quantity_committed', 10, 1)->default(0)->change();
         });
 
-        DB::statement("
+        // Views block sqlite's table-rebuild ALTERs, and only Postgres reads them.
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("
             CREATE VIEW inventory_commitments AS
             SELECT
                 p.id AS product_id,
@@ -49,6 +51,7 @@ return new class extends Migration
             LEFT JOIN job_reservations r ON ri.reservation_id = r.id AND r.deleted_at IS NULL
             GROUP BY p.id
         ");
+        }
     }
 
     public function down(): void
@@ -65,7 +68,9 @@ return new class extends Migration
             $table->integer('quantity_committed')->default(0)->change();
         });
 
-        DB::statement("
+        // Views block sqlite's table-rebuild ALTERs, and only Postgres reads them.
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("
             CREATE VIEW inventory_commitments AS
             SELECT
                 p.id AS product_id,
@@ -93,5 +98,6 @@ return new class extends Migration
             LEFT JOIN job_reservations r ON ri.reservation_id = r.id AND r.deleted_at IS NULL
             GROUP BY p.id
         ");
+        }
     }
 };

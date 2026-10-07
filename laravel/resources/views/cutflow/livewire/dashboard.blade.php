@@ -80,7 +80,7 @@
                 @elseif ($selectedJobs->isEmpty())
                     Select jobs&hellip;
                 @elseif ($selectedJobs->count() <= 3)
-                    {{ $selectedJobs->pluck('name')->join(', ') }}
+                    {{ $selectedJobs->map(fn ($j) => $j->release_label ? "{$j->job_title} · {$j->release_label}" : $j->job_title)->join(', ') }}
                 @else
                     {{ $selectedJobs->count() }} of {{ $totalJobCount }} jobs selected
                 @endif
@@ -481,7 +481,10 @@
                                          background: {{ $isSelected ? 'var(--accent)' : 'var(--panel)' }};
                                          border: 1.5px solid {{ $isSelected ? 'var(--accent)' : 'var(--border)' }};
                                          color:#fff;font-size:12px;">{{ $isSelected ? '✓' : '' }}</span>
-                            <span style="font-size:13.5px;font-weight:600;">{{ $job->name }}</span>
+                            <span style="font-size:13.5px;font-weight:600;flex-grow:1;">{{ $job->job_title }}</span>
+                            @if ($job->release_label)
+                                <span class="mono" style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--panel);border:1px solid var(--border);color:var(--muted-2);">{{ $job->release_label }}</span>
+                            @endif
                         </div>
                     @empty
                         <div style="font-size:12.5px;color:var(--muted);padding:10px 2px;">No jobs match "{{ $jobSearch }}".</div>

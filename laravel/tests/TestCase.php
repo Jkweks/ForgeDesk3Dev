@@ -38,6 +38,11 @@ abstract class TestCase extends BaseTestCase
             exit(1);
         }
 
+        // CutFlow's migrations/models use their own 'cutflow' Postgres connection, which the
+        // guard above doesn't cover — RefreshDatabase would migrate it for real. Alias it to
+        // its own in-memory sqlite so the suite can never touch the live cutflow DB.
+        $app['config']->set('database.connections.cutflow', $app['config']['database.connections.sqlite']);
+
         return $app;
     }
 }

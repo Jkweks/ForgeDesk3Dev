@@ -195,3 +195,25 @@ Untouched: `layouts/app.blade.php`, every non-CutFlow page, nginx, docker.
 Small: ~1 day including icons and on-device testing. The code is a controller,
 a ~40-line service worker, an offline page, layout tags and CSS tweaks; most
 of the time is verifying on the real tablet.
+
+## Implementation notes (2026-10-05)
+
+Built as planned, with these deviations/decisions:
+
+- **Scope is `/cut-station` (no trailing slash)**, not `/cut-station/`: the
+  dashboard route has no trailing slash and would otherwise fall outside the
+  scope. The worker lives at `/cut-station/sw.js`, so the response sends
+  `Service-Worker-Allowed: /cut-station`.
+- **Offline page CSS is inline** (Vite CSS filename is content-hashed per
+  build, so it can't be precached by name).
+- **QR record moved** to `/cut-record/{uuid}` (route name `cutflow.cuts.show`
+  unchanged, so label generation needed no edits); `/cut-station/cuts/{uuid}`
+  301-redirects for already-printed labels. `cuts-show` renders the layout with
+  `:pwa="false"` so it carries no manifest/worker wiring.
+- Wake lock and the 419 reload prompt are included (layout script). Orientation
+  is not locked; icons are generated placeholders ("CF" on the topbar color) in
+  `public/cutflow-pwa/` — swap in real artwork any time.
+- Tests: `tests/Feature/CutFlowPwaTest.php`. After changing routes, the
+  container needs `route:clear` before tests and `route:cache` after.
+- Still to do: rebuild assets (`100dvh` CSS change) and the on-tablet checks
+  in Verification above.

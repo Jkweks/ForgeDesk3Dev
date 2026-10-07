@@ -56,6 +56,30 @@ alone gates access. This is a network check on the raw TCP peer address
 nothing is proxying in front of this service — if one ever is added, this
 check and `trust proxy` need to be revisited together.
 
+## Running it as a service (start automatically)
+
+**Windows shop PC** (Scheduled Task, restarts itself on crash, logs to
+`logs\bridge.log`). From an *Administrator* PowerShell in this folder, after
+`.env` is filled in (including `BRIDGE_TOKEN`):
+
+```powershell
+# start when the current user logs in (default — the hardware is only
+# needed once someone is logged in at the PC)
+powershell -ExecutionPolicy Bypass -File .\service\install-windows.ps1
+
+# or start at boot, before login, as SYSTEM
+powershell -ExecutionPolicy Bypass -File .\service\install-windows.ps1 -Trigger Startup
+
+# optionally open the firewall to just the ForgeDesk server
+... -OpenFirewall -AllowedFrom 192.168.1.10
+```
+
+Remove with `.\service\uninstall-windows.ps1`. Re-running the installer
+replaces the task. After updating the bridge code, restart it with
+`Stop-ScheduledTask TigerBridge; Start-ScheduledTask TigerBridge`.
+
+**Linux host:** see `service/tiger-bridge.service` (systemd) for install steps.
+
 ## Stopping it
 
 Stop with Ctrl+C in the console it's running in (`SIGINT`), or `pm2 stop
@@ -104,7 +128,8 @@ this, same as before.
   ForgeDesk compares it to `TigerBridgeClient::MIN_BRIDGE_VERSION` and warns
   on the cut station when the bridge is older. Bump it on every change here
   (and raise the minimum in ForgeDesk when Laravel starts relying on it).
-  Changelog: 0.2.0 — read travel limits (D10/D11) on connect, reject
+  Changelog: 0.3.0 — job label prints job name, then `WO# <workOrder>` on
+  the next line (new optional `workOrder` field on `/print`). 0.2.0 — read travel limits (D10/D11) on connect, reject
   out-of-range `/move`, report `version`/`limitMin`/`limitMax` in `/status`.
   0.1.0 — initial.
 - **Travel limits:** on connect the bridge reads the amp's `D10` (max) and

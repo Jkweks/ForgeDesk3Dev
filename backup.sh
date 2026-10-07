@@ -42,8 +42,21 @@ FAB_UTILS_SHIM_PATH="${FAB_UTILS_SHIM_PATH:-$(dirname "${COMPOSE_ENV_FILE}")/shi
 RUN_DATE=$(date +"%Y-%m-%d")
 STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
-DB_FILE="${BACKUP_DIR}/forgedesk_${TIMESTAMP}.sql.gz"
-FILES_FILE="${BACKUP_DIR}/forgedesk_${TIMESTAMP}_storage.tar.gz"
+
+# Version tag baked into every backup filename (forgedesk_<ts>_<version>.sql.gz),
+# so a restore knows which release's schema the dump belongs to. Taken from the
+# git checkout next to COMPOSE_ENV_FILE (`git describe --tags`, e.g. v3.26.10.01
+# or v3.26.10.01-4-g918fd64 when ahead of the tag), else a VERSION file there,
+# else "unknown". Sanitised for filesystem/glob safety; the timestamp stays first
+# so files still sort chronologically and the retention globs below still match.
+COMPOSE_DIR="$(dirname "${COMPOSE_ENV_FILE}")"
+APP_VERSION=$(git -C "${COMPOSE_DIR}" describe --tags --always 2>/dev/null || cat "${COMPOSE_DIR}/VERSION" 2>/dev/null || true)
+APP_VERSION=$(printf '%s' "${APP_VERSION}" | tr -c 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')
+APP_VERSION="${APP_VERSION:-unknown}"
+FILE_TAG="${TIMESTAMP}_${APP_VERSION}"
+echo "$(date): app version tag: ${APP_VERSION}"
+DB_FILE="${BACKUP_DIR}/forgedesk_${FILE_TAG}.sql.gz"
+FILES_FILE="${BACKUP_DIR}/forgedesk_${FILE_TAG}_storage.tar.gz"
 mkdir -p "${BACKUP_DIR}"
 
 # --- Status page reporting ---
@@ -111,7 +124,7 @@ fi
 # Tarred from inside the app container (no host bind-mount in prod). Paths inside
 # the archive are relative to storage/ ("app/public/...", "app/..."), so restore
 # with:
-#   docker cp forgedesk_<ts>_storage.tar.gz forgedesk_app:/tmp/s.tar.gz
+#   docker cp forgedesk_<ts>_<version>_storage.tar.gz forgedesk_app:/tmp/s.tar.gz
 #   docker exec forgedesk_app sh -c 'cd /var/www/html/storage && tar xzf /tmp/s.tar.gz && rm /tmp/s.tar.gz'
 STORAGE_PARENT="$(dirname "${STORAGE_PATH}")"
 STORAGE_LEAF="$(basename "${STORAGE_PATH}")"
@@ -142,7 +155,7 @@ fi
 # container/instance as forgedesk (DB_CONTAINER above) — its own connection
 # (see laravel/config/database.php 'cutflow'), not a table inside forgedesk.
 # Dumped with the same DB_USER/DB_PASSWORD.
-CUTFLOW_DB_FILE="${BACKUP_DIR}/cutflow_${TIMESTAMP}.sql.gz"
+CUTFLOW_DB_FILE="${BACKUP_DIR}/cutflow_${FILE_TAG}.sql.gz"
 set +e
 docker exec -e PGPASSWORD="${DB_PASSWORD}" "${DB_CONTAINER}" \
   pg_dump -U "${DB_USER}" -d cutflow | gzip > "${CUTFLOW_DB_FILE}"
@@ -164,7 +177,7 @@ fi
 # database names within that one instance.
 FAB_UTILS_DB_FILES=""
 for db in ${FAB_UTILS_DBS}; do
-  fab_db_file="${BACKUP_DIR}/fab_utils_${db}_${TIMESTAMP}.sql.gz"
+  fab_db_file="${BACKUP_DIR}/fab_utils_${db}_${FILE_TAG}.sql.gz"
   set +e
   docker exec -e PGPASSWORD="${DB_PASSWORD}" "${DB_CONTAINER}" \
     pg_dump -U "${DB_USER}" -d "${db}" | gzip > "${fab_db_file}"
@@ -187,7 +200,7 @@ done
 # forgedesk_app), so this needs `tar` on the host itself, not inside a container.
 FAB_UTILS_SHIM_FILE=""
 if [ -d "${FAB_UTILS_SHIM_PATH}" ]; then
-  FAB_UTILS_SHIM_FILE="${BACKUP_DIR}/fab_utils_shimfiles_${TIMESTAMP}.tar.gz"
+  FAB_UTILS_SHIM_FILE="${BACKUP_DIR}/fab_utils_shimfiles_${FILE_TAG}.tar.gz"
   set +e
   tar czf "${FAB_UTILS_SHIM_FILE}" -C "$(dirname "${FAB_UTILS_SHIM_PATH}")" "$(basename "${FAB_UTILS_SHIM_PATH}")"
   SHIM_TAR_RC=$?

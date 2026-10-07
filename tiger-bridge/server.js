@@ -386,8 +386,23 @@ app.post('/move', async (req, res) => {
 // size + operator/timestamp + QR, per the same spec ("Manual size entry
 // print sticker with only size and cut record data").
 
+// The label has no ^CI, so the printer reads ^FD text as single-byte CP850 —
+// but Node sends UTF-8, so any non-ASCII character comes out as 2+ garbage
+// glyphs (e.g. "·" U+00B7 = C2 B7 prints as "┬À"). Everything is reduced to
+// printable ASCII here instead: common punctuation is mapped to a plain
+// equivalent, accents are stripped, and anything else is dropped.
+const ZPL_ASCII_MAP = {
+  '·': '-', '•': '-', '‐': '-', '‑': '-', '‒': '-', '–': '-', '—': '-', '−': '-',
+  '‘': "'", '’': "'", '“': '"', '”': '"', '″': '"', '′': "'",
+  '×': 'x', '\u00a0': ' ', '…': '...',
+};
+
 function escapeZpl(value) {
-  return String(value ?? '').replace(/[\^~]/g, '');
+  return String(value ?? '')
+    .replace(/[^\x00-\x7f]/g, (c) => ZPL_ASCII_MAP[c] ?? c)
+    .normalize('NFD')
+    .replace(/[^\x20-\x7e]/g, '')
+    .replace(/[\^~]/g, '');
 }
 
 // The label is only 1" tall (203 dots), so the QR code has to be sized to
@@ -464,7 +479,7 @@ function buildDropZpl({ kind, sku, size, detail, image }) {
   return lines.join('\n');
 }
 
-function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image }) {
+function buildZpl({ job, workOrder, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image }) {
   if (kind === 'drop' || kind === 'scrap') {
     return buildDropZpl({ kind, sku, size, detail, image });
   }
@@ -472,11 +487,20 @@ function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uu
   const lines = ['^XA'];
 
   if (part) {
-    // top-left: job name / part number - finish / part use
+    // top-left: job name / WO# / part number - finish / part use
+    // (older ForgeDesk builds send no workOrder — then the WO line is skipped
+    // and the rest keeps its original spacing)
     lines.push('^CF0,26');
-    lines.push(`^FO20,15^FD${escapeZpl(job)}^FS`);
-    lines.push(`^FO20,45^FD${escapeZpl(part)}^FS`);
-    lines.push(`^FO20,75^FD${escapeZpl(partUse)}^FS`);
+    let y = 15;
+    lines.push(`^FO20,${y}^FD${escapeZpl(job)}^FS`);
+    y += 30;
+    if (workOrder) {
+      lines.push(`^FO20,${y}^FDWO# ${escapeZpl(workOrder)}^FS`);
+      y += 30;
+    }
+    lines.push(`^FO20,${y}^FD${escapeZpl(part)}^FS`);
+    y += 30;
+    lines.push(`^FO20,${y}^FD${escapeZpl(partUse)}^FS`);
 
     // bottom-left: elevation - length
     lines.push('^CF0,34');
@@ -507,8 +531,8 @@ function buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uu
 }
 
 app.post('/print', (req, res) => {
-  const { job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image } = req.body;
-  const zpl = buildZpl({ job, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image });
+  const { job, workOrder, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image } = req.body;
+  const zpl = buildZpl({ job, workOrder, part, partUse, elevation, size, operator, timestamp, uuid, qrUrl, kind, sku, detail, image });
 
   if (MOCK_SERIAL) {
     // No real Zebra printer either in this mode — same spirit as the

@@ -2139,7 +2139,7 @@
             <tr id="loc-urow-${row.product_id}" class="${state.status === 'saved' ? 'table-success' : state.status === 'error' ? 'table-danger' : ''}">
               <td><code>${locEscHtml(row.sku)}</code></td>
               <td class="small">${locEscHtml(row.description || '')}</td>
-              <td class="text-end">${(row.quantity_on_hand || 0).toLocaleString()}</td>
+              <td class="text-end">${Math.floor(Number(row.quantity_on_hand) || 0).toLocaleString()}</td>
               <td class="text-end">${(row.quantity_committed || 0).toLocaleString()}</td>
               <td>
                 <select class="form-select form-select-sm" id="loc-uprimary-${row.product_id}" ${disabled}

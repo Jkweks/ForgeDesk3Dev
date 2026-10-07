@@ -733,7 +733,7 @@
      * Shows full packs if product has pack_size > 1, with eaches in tooltip
      */
     function formatOnHandDisplay(product) {
-      const onHandEaches = product.quantity_on_hand || 0;
+      const onHandEaches = Math.floor(Number(product.quantity_on_hand) || 0); // whole units only; stored value keeps fractions
       const onHandPacks = product.quantity_on_hand_packs || onHandEaches;
       const packSize = product.pack_size || 1;
       const hasPackSize = packSize > 1;
@@ -867,7 +867,7 @@
                 <div class="card-body py-2 px-3">
                   <div class="subheader">On Hand${product.pack_size > 1 ? ' (packs)' : ''}</div>
                   <div class="h3 mb-0">${formatOnHandDisplay(product)}</div>
-                  ${product.pack_size > 1 ? `<div class="text-muted small">${(product.quantity_on_hand ?? 0).toLocaleString()} ea</div>` : ''}
+                  ${product.pack_size > 1 ? `<div class="text-muted small">${Math.floor(Number(product.quantity_on_hand) || 0).toLocaleString()} ea</div>` : ''}
                 </div>
               </div>
             </div>
@@ -2228,7 +2228,7 @@
             <td class="text-end">${transaction.quantity_before}</td>
             <td class="text-end">${transaction.quantity_after}</td>
             <td>${transaction.reference_number ? escapeHtml(transaction.reference_number) : '-'}</td>
-            <td><small>${transaction.user ? escapeHtml(transaction.user.name) : '-'}</small></td>
+            <td><small>${transaction.user_display_name ? escapeHtml(transaction.user_display_name) : '-'}</small></td>
             <td><small>${transaction.notes ? escapeHtml(transaction.notes) : '-'}</small></td>
           </tr>
         `;

@@ -20,7 +20,7 @@ class TigerBridgeClient
      * this app works properly with. Raise it whenever Laravel starts relying
      * on new bridge behaviour — 0.2.0 added travel limits and the version itself.
      */
-    public const MIN_BRIDGE_VERSION = '0.2.0';
+    public const MIN_BRIDGE_VERSION = '0.3.0';
 
     protected string $baseUrl;
 

@@ -320,15 +320,34 @@
                 </div>
 
                 <div class="tab-pane" id="fb-tab-hardware" role="tabpanel">
-                  <div class="row g-2 align-items-end mb-3">
-                    <div class="col-md-3">
-                      <label class="form-label">Hardware Set</label>
-                      <select class="form-select" id="fb-hw-scope" onchange="fbRenderHwCategorySelect()">
-                        <option value="standard">Standard (VOS)</option>
-                        <option value="custom">Custom (all)</option>
-                      </select>
+                  <ul class="nav nav-pills mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                      <a href="#fb-hw-sub-standard" class="nav-link active" data-bs-toggle="tab" role="tab"><i class="ti ti-checklist me-1"></i>Standard Hardware</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                      <a href="#fb-hw-sub-custom" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-tools me-1"></i>Custom Hardware</a>
+                    </li>
+                  </ul>
+                  <div class="tab-content">
+                  <div class="tab-pane active show" id="fb-hw-sub-standard" role="tabpanel">
+                    <div class="text-muted small mb-3">Tick the VOS Standard hardware this opening gets. Apply adds, updates and removes links to match; use Custom Hardware for anything not listed here.</div>
+                    <div class="row g-2 align-items-end mb-3">
+                      <div class="col-md-3">
+                        <label class="form-label">Series</label>
+                        <select class="form-select" id="fb-hws-series">
+                          <option value="Standard">Standard</option>
+                          <option value="Thermal">Thermal</option>
+                          <option value="Monumental">Monumental</option>
+                        </select>
+                      </div>
+                      <div class="col-auto">
+                        <button type="button" class="btn btn-primary" onclick="fbApplyStandardHardware()" data-permission="configurator.edit"><i class="ti ti-check me-1"></i>Apply Standard Hardware</button>
+                      </div>
                     </div>
+                    <div class="row g-3" id="fb-hws-sections"></div>
                   </div>
+                  <div class="tab-pane" id="fb-hw-sub-custom" role="tabpanel">
+                  <input type="hidden" id="fb-hw-scope" value="custom">
                   <form id="fb-hardware-add-form" class="row g-2 align-items-end mb-3">
                     <div class="col-md-3">
                       <label class="form-label">Category</label>
@@ -379,7 +398,10 @@
                       <div id="fb-hw-functions" class="d-flex flex-wrap gap-3"></div>
                     </div>
                   </form>
+                  </div><!-- /fb-hw-sub-custom -->
+                  </div><!-- /hw sub tab-content -->
 
+                  <h4 class="mt-3">Linked Hardware</h4>
                   <table class="table table-vcenter card-table">
                     <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
                     <tbody id="fb-hw-links-tbody"></tbody>
@@ -902,6 +924,111 @@ function fbSelectButtHingeCategory() {
   fbFilterHwItems();
 }
 
+// ---- Standard Hardware (VOS) ----
+// Simple checklist over vos_standard hwlib items, one card per category.
+// Writes the same hwlib links the Custom form does, so the linked-hardware
+// table and BOM below are shared.
+function fbStdItems(c) { return (c.items || []).filter(i => i.vos_standard); }
+
+function fbStdFunctionsHtml(item, link) {
+  const chosen = new Set((link?.functions || []).map(f => f.id));
+  const byGroup = {};
+  (item.functions || []).forEach(f => { (byGroup[f.group_name || ''] ||= []).push(f); });
+  return Object.keys(byGroup).sort().map(group => {
+    const fns = byGroup[group];
+    const lbl = f => `${esc(f.label)} <span class="text-muted small">(${esc(f.code)})</span>`;
+    if (group) {
+      const name = `fbs-fg-${item.id}-${group.replace(/[^a-z0-9]/gi, '_')}`;
+      return `<div class="small text-muted mt-1">${esc(group)}</div><div class="d-flex flex-wrap gap-2">
+        <label class="form-check form-check-inline"><input class="form-check-input fbs-fn-radio" type="radio" name="${name}" value="" ${fns.some(f => chosen.has(f.id)) ? '' : 'checked'}><span class="form-check-label text-muted">None</span></label>
+        ${fns.map(f => `<label class="form-check form-check-inline"><input class="form-check-input fbs-fn-radio" type="radio" name="${name}" value="${f.id}" ${chosen.has(f.id) ? 'checked' : ''}><span class="form-check-label">${lbl(f)}</span></label>`).join('')}</div>`;
+    }
+    return `<div class="d-flex flex-wrap gap-2 mt-1">${fns.map(f => `<label class="form-check form-check-inline"><input class="form-check-input fbs-fn-cb" type="checkbox" value="${f.id}" ${chosen.has(f.id) ? 'checked' : ''}><span class="form-check-label">${lbl(f)}</span></label>`).join('')}</div>`;
+  }).join('');
+}
+
+function fbRenderStdHardware(links) {
+  const wrap = document.getElementById('fb-hws-sections');
+  if (!wrap) return;
+  links = links || fbSelectedDetail?.hardware_links || [];
+  const isPair = fbSelectedDetail?.opening_specs?.opening_type === 'pair';
+  const buttCount = fbSelectedDetail?.opening_specs?.butt_hinge_count;
+  const linkFor = (itemId, leaf) => links.find(l => l.item.id == itemId && l.leaf === leaf);
+  const cats = fbHwCategories.filter(c => fbStdItems(c).length && fbHwCategoryAllowedForHinging(c.name));
+  if (!cats.length) { wrap.innerHTML = '<div class="text-muted">No VOS Standard hardware flagged in the library.</div>'; return; }
+  const firstSeries = links.find(l => fbFindHwItem(l.item.id)?.vos_standard)?.series;
+  if (firstSeries) document.getElementById('fb-hws-series').value = firstSeries;
+
+  wrap.innerHTML = cats.map(c => {
+    const rows = fbStdItems(c).map(item => {
+      const isButt = /butt hinge/i.test(c.name);
+      // A pair can carry one link per leaf; show both/active/inactive as the
+      // saved link says, defaulting to "both".
+      const link = links.find(l => l.item.id == item.id);
+      const on = !!link;
+      const qty = isButt && buttCount ? buttCount : (link?.quantity || 1);
+      const leaf = link?.leaf || 'both';
+      return `<div class="fbs-row mb-2" data-item-id="${item.id}">
+        <div class="d-flex align-items-center gap-2">
+          <label class="form-check mb-0 flex-fill"><input class="form-check-input fbs-on" type="checkbox" ${on ? 'checked' : ''} onchange="this.closest('.fbs-row').querySelector('.fbs-opts').style.display = this.checked ? '' : 'none'">
+            <span class="form-check-label">${esc(item.name)}${item.pn ? ` <span class="text-muted small">${esc(item.pn)}</span>` : ''}</span></label>
+        </div>
+        <div class="fbs-opts ps-4" style="display:${on ? '' : 'none'}">
+          <div class="d-flex gap-2 align-items-center">
+            <input type="number" class="form-control form-control-sm fbs-qty" style="width:80px" min="1" value="${qty}" ${isButt ? 'readonly title="Set on the Opening tab"' : ''}>
+            ${isPair ? `<select class="form-select form-select-sm fbs-leaf" style="width:110px">${['both','active','inactive'].map(v => `<option value="${v}" ${v === leaf ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select>` : ''}
+          </div>
+          ${fbStdFunctionsHtml(item, link)}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="col-md-6 col-xl-4"><div class="card card-sm h-100"><div class="card-header"><h4 class="card-title">${esc(c.name)}</h4></div><div class="card-body">${rows}</div></div></div>`;
+  }).join('');
+}
+
+async function fbApplyStandardHardware() {
+  const series = document.getElementById('fb-hws-series').value;
+  const links = fbSelectedDetail?.hardware_links || [];
+  const desired = new Map(); // itemId -> payload
+  document.querySelectorAll('#fb-hws-sections .fbs-row').forEach(row => {
+    if (!row.querySelector('.fbs-on').checked) return;
+    const fnIds = [
+      ...Array.from(row.querySelectorAll('.fbs-fn-radio:checked')).map(r => r.value).filter(Boolean),
+      ...Array.from(row.querySelectorAll('.fbs-fn-cb:checked')).map(c => c.value),
+    ].map(v => parseInt(v, 10));
+    desired.set(parseInt(row.dataset.itemId, 10), {
+      quantity: parseInt(row.querySelector('.fbs-qty').value || 1, 10),
+      leaf: row.querySelector('.fbs-leaf')?.value || 'both',
+      series, function_ids: fnIds,
+    });
+  });
+  // Only touch links for items the standard checklist actually shows, so
+  // custom-only links on the same opening are never removed from here.
+  const shown = new Set(Array.from(document.querySelectorAll('#fb-hws-sections .fbs-row')).map(r => parseInt(r.dataset.itemId, 10)));
+  const base = `/door-frame-configurations/${fbSelectedId}/hardware-links`;
+  try {
+    const kept = new Set();
+    for (const l of links.filter(l => shown.has(l.item.id))) {
+      const want = desired.get(l.item.id);
+      if (kept.has(l.item.id)) continue; // extra per-leaf link on the same item — leave as is
+      if (!want) {
+        await authenticatedFetch(`${base}/${l.id}`, { method: 'DELETE' });
+        continue;
+      }
+      kept.add(l.item.id);
+      // PUT without `values` so any per-link prep overrides survive.
+      await authenticatedFetch(`${base}/${l.id}`, { method: 'PUT', body: JSON.stringify(want) });
+    }
+    for (const [itemId, want] of desired) {
+      if (!kept.has(itemId)) await authenticatedFetch(base, { method: 'POST', body: JSON.stringify({ item_id: itemId, ...want }) });
+    }
+    await fbLoadDetail();
+    const genRes = await fbGenerateWithDiffPrompt('hardware');
+    if (genRes) showNotification('Standard hardware applied', 'success');
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
 function fbRenderHwLinks(links) {
   const tbody = document.getElementById('fb-hw-links-tbody');
   document.getElementById('fb-hw-links-empty').style.display = links.length ? 'none' : 'block';
@@ -1184,6 +1311,7 @@ function fbRenderDetail() {
   document.getElementById('fb-hw-leaf-wrap').style.display = c.opening_specs?.opening_type === 'pair' ? '' : 'none';
   fbRenderHwCategorySelect();
   fbRenderHwLinks(c.hardware_links || []);
+  fbRenderStdHardware(c.hardware_links || []);
   fbRenderHwParts(c.hardware_parts || []);
   if ((c.hardware_links || []).length) {
     fbLoadHwResolvedValues();

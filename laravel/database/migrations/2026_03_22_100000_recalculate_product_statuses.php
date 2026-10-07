@@ -38,7 +38,9 @@ return new class extends Migration
                 $table->enum('status', ['in_stock', 'low', 'very_low', 'critical', 'out_of_stock'])
                     ->default('in_stock')->change();
             });
-            DB::statement("
+            // Views block sqlite's table-rebuild ALTERs, and only Postgres reads them.
+            if (DB::getDriverName() !== 'sqlite') {
+                DB::statement("
                 CREATE VIEW inventory_commitments AS
                 SELECT
                     p.id AS product_id,
@@ -66,6 +68,7 @@ return new class extends Migration
                 LEFT JOIN job_reservations r ON ri.reservation_id = r.id AND r.deleted_at IS NULL
                 GROUP BY p.id
             ");
+            }
         } else {
             DB::statement("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check");
             DB::statement("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('in_stock', 'low', 'very_low', 'critical', 'out_of_stock'))");

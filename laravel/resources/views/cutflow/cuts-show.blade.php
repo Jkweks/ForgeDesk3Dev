@@ -1,4 +1,4 @@
-<x-cutflow.layout>
+<x-cutflow.layout :pwa="false">
     <div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;">
         <div class="card" style="width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px;">
 

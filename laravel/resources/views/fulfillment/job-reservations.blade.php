@@ -908,7 +908,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     </td>
                     <td>${fmtQty(item.consumed_qty)}</td>
                     <td>${fmtQty(item.released_qty)}</td>
-                    <td>${fmtQty(item.product.quantity_on_hand)}</td>
+                    <td>${Math.floor(Number(item.product.quantity_on_hand) || 0)}</td>
                     <td>${fmtQty(item.product.quantity_available)}</td>
                     <td>${item.product.location || '-'}</td>
                 </tr>
@@ -1428,7 +1428,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                                ${item.consumed_qty > 0 ? `min="${item.consumed_qty}"` : ''}>
                     </td>
                     <td class="text-end">${fmtQty(item.consumed_qty)}</td>
-                    <td class="text-end">${item.product.quantity_on_hand}</td>
+                    <td class="text-end">${Math.floor(Number(item.product.quantity_on_hand) || 0)}</td>
                     <td class="text-center">
                         ${item.consumed_qty === 0 ? `
                             <div class="btn-group">
@@ -1748,7 +1748,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     </div>
                     <div class="col-md-6">
                         <strong>Description:</strong> ${description}<br>
-                        <strong>On Hand:</strong> ${onHand}<br>
+                        <strong>On Hand:</strong> ${Math.floor(Number(onHand) || 0)}<br>
                         <strong>Available:</strong> <span class="badge bg-${available > 0 ? 'success' : 'danger'}">${available}</span>
                     </div>
                 </div>

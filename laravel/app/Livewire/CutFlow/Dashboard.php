@@ -202,9 +202,20 @@ class Dashboard extends Component
 
     protected function filteredJobs()
     {
-        return CutJob::when($this->jobSearch !== '', function ($query) {
-            $query->whereRaw('LOWER(name) LIKE ?', ['%'.strtolower($this->jobSearch).'%']);
-        })->orderBy('name')->get();
+        $jobs = CutJob::withDisplayLabels(CutJob::all());
+
+        if ($this->jobSearch === '') {
+            return $jobs;
+        }
+
+        // Matches the job name, the release code, or the raw cut-job name
+        // (job number + release for work-order jobs, e.g. "3260901-WO1").
+        $needle = strtolower($this->jobSearch);
+
+        return $jobs->filter(fn ($job) => str_contains(
+            strtolower("{$job->job_title} {$job->release_label} {$job->name}"),
+            $needle
+        ))->values();
     }
 
     /**
@@ -756,8 +767,9 @@ class Dashboard extends Component
         ]);
 
         $result = $bridge->printLabel([
-            'job' => $part->cutJob?->name,
-            'part' => $part->finish ? "{$part->name} · {$part->finish}" : $part->name,
+            'job' => $part->cutJob?->labelJobName(),
+            'workOrder' => $part->cutJob?->name,
+            'part' => $part->finish ? "{$part->name} - {$part->finish}" : $part->name,
             'partUse' => $part->description,
             'elevation' => $part->phase,
             'size' => Dimension::toFraction((float) $item->dimension_inches),
@@ -1196,8 +1208,9 @@ class Dashboard extends Component
     protected function printLabelForEntry(TigerBridgeClient $bridge, CutLogEntry $entry): void
     {
         $result = $bridge->printLabel([
-            'job' => $entry->job_name,
-            'part' => $entry->finish ? "{$entry->part_name} · {$entry->finish}" : $entry->part_name,
+            'job' => $entry->cutJob?->labelJobName() ?? $entry->job_name,
+            'workOrder' => $entry->cutJob?->name ?? $entry->job_name,
+            'part' => $entry->finish ? "{$entry->part_name} - {$entry->finish}" : $entry->part_name,
             'partUse' => $entry->description,
             'elevation' => $entry->phase,
             'size' => Dimension::toFraction((float) $entry->dimension_inches),
@@ -1394,7 +1407,7 @@ class Dashboard extends Component
             'signedIn' => $signedIn,
             'tigerPollIntervalMs' => $this->bridgePollIntervalMs(),
             'jobs' => $this->modal === 'jobs' ? $this->filteredJobs() : collect(),
-            'selectedJobs' => $signedIn ? CutJob::whereIn('id', $this->activeJobIds)->orderBy('name')->get() : collect(),
+            'selectedJobs' => $signedIn ? CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get()) : collect(),
             'totalJobCount' => CutJob::count(),
             'profiles' => $signedIn ? $planner->activeProfiles($this->activeJobIds) : collect(),
             'parts' => $parts,
