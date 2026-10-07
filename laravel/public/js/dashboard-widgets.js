@@ -27,8 +27,9 @@
     stat(body, def, data) {
       const raw = data ? data[def.field] : null;
       const value = typeof raw === 'number' ? raw.toLocaleString() : (raw ?? '-');
+      const shown = typeof raw === 'number' ? value + (def.suffix || '') : value;
       body.innerHTML = `
-        <div class="h1 mb-1">${esc(value)}</div>
+        <div class="h1 mb-1">${esc(shown)}</div>
         ${def.link ? `<a href="${esc(def.link)}" class="small text-secondary">View details</a>` : ''}`;
     },
 

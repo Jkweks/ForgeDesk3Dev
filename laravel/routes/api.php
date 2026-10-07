@@ -264,6 +264,14 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/widgets/work-orders/stages', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrderStages']);
         });
         Route::get('/dashboard/widgets/quality', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'quality'])->middleware('permission:quality.view');
+        Route::middleware('permission:maintenance.view')->group(function () {
+            Route::get('/dashboard/widgets/maintenance/upcoming', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'maintenanceUpcoming']);
+            Route::get('/dashboard/widgets/maintenance/recent', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'maintenanceRecent']);
+        });
+        Route::middleware('permission:cycle-count.view')->group(function () {
+            Route::get('/dashboard/widgets/cycle-counts', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cycleCounts']);
+            Route::get('/dashboard/widgets/cycle-counts/sessions', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cycleCountSessions']);
+        });
         Route::put('/dashboard/default-layout', [\App\Http\Controllers\Api\DashboardLayoutController::class, 'updateDefault'])->middleware('permission:settings.edit');
 
         // Categories

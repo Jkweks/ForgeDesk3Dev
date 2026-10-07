@@ -31,9 +31,9 @@ class WidgetRegistry
     /** @return array<string, array<string, mixed>> keyed by widget key */
     public static function all(): array
     {
-        $stat = fn (string $key, string $title, string $description, string $icon, string $field, string $link) => [
+        $stat = fn (string $key, string $title, string $description, string $icon, string $field, string $link, string $suffix = '') => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
-            'type' => 'stat', 'field' => $field, 'link' => $link,
+            'type' => 'stat', 'field' => $field, 'link' => $link, 'suffix' => $suffix,
             'default_size' => ['w' => 3, 'h' => 2], 'min_size' => ['w' => 2, 'h' => 2],
             'refresh_seconds' => 120,
         ];
@@ -78,6 +78,26 @@ class WidgetRegistry
             ]],
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/stages', [
                 $chart('wo_stage_wip', 'Work in Progress by Stage', 'Open pending and in-progress stages, grouped by stage name.', 'ti-chart-bar', 'stage_wip'),
+            ]],
+            ['Maintenance', ['maintenance.view'], '/maintenance/dashboard', [
+                $stat('maintenance_overdue', 'Overdue Maintenance', 'Active maintenance tasks past their due date.', 'ti-alarm', 'overdue_task_count', '/maintenance#tab-tasks'),
+                $stat('maintenance_due_soon', 'Maintenance Due Soon', 'Active maintenance tasks coming due.', 'ti-calendar-time', 'due_soon_task_count', '/maintenance#tab-tasks'),
+                $stat('maintenance_active_tasks', 'Active Maintenance Tasks', 'Recurring tasks currently scheduled.', 'ti-checklist', 'active_task_count', '/maintenance#tab-tasks'),
+                $stat('maintenance_downtime', 'Machine Downtime', 'Total recorded downtime across machines, in hours.', 'ti-clock-pause', 'total_downtime_hours', '/maintenance#tab-machines', ' h'),
+            ]],
+            ['Maintenance', ['maintenance.view'], '/dashboard/widgets/maintenance/upcoming', [
+                $list('maintenance_upcoming', 'Upcoming Maintenance', 'Overdue and soon-due maintenance tasks, earliest first.', 'ti-tool'),
+            ]],
+            ['Maintenance', ['maintenance.view'], '/dashboard/widgets/maintenance/recent', [
+                $list('maintenance_recent', 'Recent Service Log', 'The latest maintenance records.', 'ti-history'),
+            ]],
+            ['Cycle Counting', ['cycle-count.view'], '/dashboard/widgets/cycle-counts', [
+                $stat('cycle_active', 'Active Cycle Counts', 'Planned and in-progress counting sessions.', 'ti-clipboard-check', 'active_sessions', '/cycle-counting'),
+                $stat('cycle_in_progress', 'Counts In Progress', 'Sessions currently being counted.', 'ti-player-play', 'in_progress', '/cycle-counting'),
+                $stat('cycle_accuracy', 'Count Accuracy (Month)', 'Share of items counted with zero variance in sessions completed this month.', 'ti-target', 'accuracy_this_month', '/cycle-counting', '%'),
+            ]],
+            ['Cycle Counting', ['cycle-count.view'], '/dashboard/widgets/cycle-counts/sessions', [
+                $list('cycle_sessions', 'Cycle Count Sessions', 'Planned and in-progress sessions, soonest first.', 'ti-list-check'),
             ]],
             ['Quality', ['quality.view'], '/dashboard/widgets/quality', [
                 $stat('quality_pending', 'Reports Pending Verification', 'Quality reports waiting to be verified.', 'ti-file-search', 'pending_review', '/fabrication/quality'),

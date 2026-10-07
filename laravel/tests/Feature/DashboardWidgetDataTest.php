@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Dashboard\WidgetRegistry;
 use App\Models\BusinessJob;
+use App\Models\CycleCountSession;
 use App\Models\FdWoElevation;
 use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\Machine;
+use App\Models\MaintenanceRecord;
+use App\Models\MaintenanceTask;
 use App\Models\QualityReport;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -128,11 +132,78 @@ class DashboardWidgetDataTest extends TestCase
         ]);
     }
 
+    public function test_maintenance_upcoming_lists_overdue_then_due_soon_and_skips_the_rest(): void
+    {
+        $this->admin();
+        $machine = Machine::create(['name' => 'Saw 1', 'equipment_type' => 'machine']);
+        $task = fn (string $title, int $startedDaysAgo, array $extra = []) => MaintenanceTask::create($extra + [
+            'machine_id' => $machine->id, 'title' => $title, 'status' => 'active', 'priority' => 'high',
+            'start_date' => today()->subDays($startedDaysAgo), 'interval_count' => 30, 'interval_unit' => 'day',
+        ]);
+        $task('Blade change', 40);                       // due 10 days ago
+        $task('Lubricate rails', 25);                    // due in 5 days
+        $task('Annual service', 1);                      // due in 29 days: not due soon
+        $task('Paused task', 40, ['status' => 'paused']); // ignored
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/maintenance/upcoming')->assertOk()->json('items');
+
+        $this->assertSame(['Blade change', 'Lubricate rails'], array_column($items, 'label'));
+        $this->assertSame('10d overdue', $items[0]['meta']);
+        $this->assertSame('bg-red-lt', $items[0]['meta_class']);
+        $this->assertSame('Due in 5d', $items[1]['meta']);
+        $this->assertStringStartsWith('Saw 1', $items[0]['sub']);
+
+        // The existing gated counts endpoint that the stat widgets read agrees.
+        $this->getJson('/api/v1/maintenance/dashboard')->assertOk()->assertJson(['overdue_task_count' => 1, 'due_soon_task_count' => 1]);
+    }
+
+    public function test_maintenance_recent_lists_latest_service_records_first(): void
+    {
+        $this->admin();
+        $machine = Machine::create(['name' => 'Router 2', 'equipment_type' => 'machine']);
+        MaintenanceRecord::create(['machine_id' => $machine->id, 'performed_at' => today()->subDays(5), 'notes' => 'Older']);
+        MaintenanceRecord::create(['machine_id' => $machine->id, 'performed_at' => today()->subDay(), 'notes' => 'Replaced belt']);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/maintenance/recent')->assertOk()->json('items');
+
+        $this->assertCount(2, $items);
+        $this->assertSame('Router 2', $items[0]['label']);
+        $this->assertSame('Replaced belt', $items[0]['sub']);
+        $this->assertSame(today()->subDay()->format('M j'), $items[0]['meta']);
+    }
+
+    public function test_cycle_count_numbers_and_sessions(): void
+    {
+        $this->admin();
+        $before = $this->getJson('/api/v1/dashboard/widgets/cycle-counts')->assertOk()->json();
+        $this->assertNull($before['accuracy_this_month'], 'no completed sessions this month => no score, not a fake 100');
+
+        CycleCountSession::create(['session_number' => 'CC-1', 'status' => 'planned', 'scheduled_date' => today()->subDays(2)]);
+        CycleCountSession::create(['session_number' => 'CC-2', 'status' => 'in_progress', 'scheduled_date' => today()]);
+        CycleCountSession::create(['session_number' => 'CC-3', 'status' => 'planned', 'scheduled_date' => today()->addDays(3)]);
+        CycleCountSession::create(['session_number' => 'CC-4', 'status' => 'completed', 'scheduled_date' => today(), 'completed_at' => now()]);
+        CycleCountSession::create(['session_number' => 'CC-5', 'status' => 'cancelled', 'scheduled_date' => today()]);
+
+        $this->getJson('/api/v1/dashboard/widgets/cycle-counts')->assertOk()->assertJson([
+            'planned' => $before['planned'] + 2,
+            'in_progress' => $before['in_progress'] + 1,
+            'active_sessions' => $before['active_sessions'] + 3,
+        ])->assertJsonPath('accuracy_this_month', 100);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/cycle-counts/sessions')->assertOk()->json('items');
+        $byLabel = collect($items)->keyBy('label');
+        $this->assertSame('bg-red-lt', $byLabel['CC-1']['meta_class']);   // planned and past its date
+        $this->assertSame('In progress', $byLabel['CC-2']['meta']);
+        $this->assertSame('bg-secondary-lt', $byLabel['CC-3']['meta_class']);
+        $this->assertArrayNotHasKey('CC-4', $byLabel->all());
+        $this->assertArrayNotHasKey('CC-5', $byLabel->all());
+    }
+
     public function test_widget_data_endpoints_are_permission_gated(): void
     {
         $this->noPermissions();
 
-        foreach (['work-orders', 'work-orders/due', 'work-orders/table', 'work-orders/stages', 'quality'] as $path) {
+        foreach (['work-orders', 'work-orders/due', 'work-orders/table', 'work-orders/stages', 'quality', 'maintenance/upcoming', 'maintenance/recent', 'cycle-counts', 'cycle-counts/sessions'] as $path) {
             $this->getJson("/api/v1/dashboard/widgets/{$path}")->assertForbidden();
         }
     }

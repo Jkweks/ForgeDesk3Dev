@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CycleCountSession;
 use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\MaintenanceRecord;
+use App\Models\MaintenanceTask;
 use App\Models\QualityReport;
+use Carbon\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * Small, cheap aggregate endpoints that power dashboard widgets (see
@@ -157,5 +162,113 @@ class DashboardWidgetController extends Controller
             'pending_review' => (int) ($counts['pending_review'] ?? 0),
             'verified' => (int) ($counts['verified'] ?? 0),
         ]);
+    }
+
+    /** "Due in 3d" / "2d overdue" / "Due today" plus a badge class, for list rows keyed on a date. */
+    private function dueMeta(Carbon $due): array
+    {
+        $days = (int) today()->diffInDays($due->copy()->startOfDay(), false);
+
+        return [
+            match (true) {
+                $days < 0 => abs($days).'d overdue',
+                $days === 0 => 'Due today',
+                default => "Due in {$days}d",
+            },
+            $days < 0 ? 'bg-red-lt' : ($days <= 7 ? 'bg-yellow-lt' : 'bg-secondary-lt'),
+        ];
+    }
+
+    /** Active maintenance tasks that are overdue or due soon, earliest first. */
+    public function maintenanceUpcoming()
+    {
+        $items = MaintenanceTask::where('status', 'active')
+            ->with('machine:id,name')
+            ->get()
+            ->filter(fn (MaintenanceTask $t) => $t->is_overdue || $t->is_due_soon)
+            ->sortBy(fn (MaintenanceTask $t) => $t->next_due_date)
+            ->take(8)
+            ->map(function (MaintenanceTask $t) {
+                [$meta, $class] = $this->dueMeta(Carbon::parse($t->next_due_date));
+
+                return [
+                    'label' => $t->title,
+                    'sub' => trim(($t->machine?->name ?? 'Unassigned machine').' · '.ucfirst($t->priority)),
+                    'meta' => $meta,
+                    'meta_class' => $class,
+                    'link' => '/maintenance#tab-tasks',
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** The latest service records. */
+    public function maintenanceRecent()
+    {
+        $items = MaintenanceRecord::with(['machine:id,name', 'task:id,title'])
+            ->latest('performed_at')
+            ->limit(8)
+            ->get()
+            ->map(fn (MaintenanceRecord $r) => [
+                'label' => $r->machine?->name ?? 'Asset service',
+                'sub' => $r->task?->title ?? Str::limit((string) $r->notes, 60),
+                'meta' => $r->performed_at?->format('M j'),
+                'meta_class' => 'bg-secondary-lt',
+                'link' => '/maintenance#tab-records',
+            ])->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * Cycle count headline numbers. accuracy_this_month is null when nothing was
+     * completed this month (the page-level statistics endpoint reports 100 then,
+     * which reads as a real score on a dashboard).
+     */
+    public function cycleCounts()
+    {
+        $counts = CycleCountSession::query()
+            ->whereIn('status', ['planned', 'in_progress'])
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        $completed = CycleCountSession::with('items')
+            ->where('status', 'completed')
+            ->whereMonth('completed_at', now()->month)
+            ->whereYear('completed_at', now()->year)
+            ->get();
+
+        return response()->json([
+            'planned' => (int) ($counts['planned'] ?? 0),
+            'in_progress' => (int) ($counts['in_progress'] ?? 0),
+            'active_sessions' => (int) ($counts['planned'] ?? 0) + (int) ($counts['in_progress'] ?? 0),
+            'accuracy_this_month' => $completed->isEmpty() ? null : round($completed->avg('accuracy_percentage'), 1),
+        ]);
+    }
+
+    /** Planned and in-progress cycle count sessions, soonest first. */
+    public function cycleCountSessions()
+    {
+        $items = CycleCountSession::active()
+            ->with(['items', 'assignedUser:id,name'])
+            ->orderBy('scheduled_date')
+            ->limit(8)
+            ->get()
+            ->map(function (CycleCountSession $s) {
+                $inProgress = $s->status === 'in_progress';
+                $overdue = ! $inProgress && $s->scheduled_date && $s->scheduled_date->lt(today());
+
+                return [
+                    'label' => $s->session_number,
+                    'sub' => trim(($s->location ?: 'All locations').' · '.$s->progress_percentage.'% counted'.($s->assignedUser ? ' · '.$s->assignedUser->name : '')),
+                    'meta' => $inProgress ? 'In progress' : ($s->scheduled_date ? $s->scheduled_date->format('M j') : 'Unscheduled'),
+                    'meta_class' => $inProgress ? 'bg-blue-lt' : ($overdue ? 'bg-red-lt' : 'bg-secondary-lt'),
+                    'link' => '/cycle-counting',
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
     }
 }
