@@ -18,6 +18,10 @@ Route::get('/', function () {
 });
 
 // Inventory Management
+Route::get('/inventory/products', function () {
+    return view('inventory.products');
+});
+
 Route::get('/categories', function () {
     return view('categories');
 });

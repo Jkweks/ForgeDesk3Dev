@@ -35,6 +35,7 @@ class User extends Authenticatable
         'wo_column_prefs',
         'jobs_column_prefs',
         'quality_report_prefs',
+        'dashboard_prefs',
     ];
 
     /**
@@ -66,6 +67,7 @@ class User extends Authenticatable
             'wo_column_prefs' => 'array',
             'jobs_column_prefs' => 'array',
             'quality_report_prefs' => 'array',
+            'dashboard_prefs' => 'array',
         ];
     }
 

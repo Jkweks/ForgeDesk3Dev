@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 class CompanySetting extends Model
 {
-    protected $fillable = ['logo_path'];
+    protected $fillable = ['logo_path', 'dashboard_default_layout'];
+
+    protected $casts = ['dashboard_default_layout' => 'array'];
 
     protected $appends = ['logo_url'];
 

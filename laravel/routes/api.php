@@ -247,7 +247,24 @@ Route::middleware('auth:sanctum')->group(function () {
         // Dashboard
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/dashboard/inventory/{status}', [DashboardController::class, 'inventoryByStatus']);
-        Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+        Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->middleware('permission:inventory.view');
+
+        // Customizable dashboard layout + widget catalog (see App\Dashboard\WidgetRegistry).
+        // Widget data routes must carry the same permission the registry lists for the widget.
+        Route::get('/dashboard/widgets', [\App\Http\Controllers\Api\DashboardLayoutController::class, 'widgets']);
+        Route::get('/dashboard/layout', [\App\Http\Controllers\Api\DashboardLayoutController::class, 'show']);
+        Route::put('/dashboard/layout', [\App\Http\Controllers\Api\DashboardLayoutController::class, 'update']);
+        Route::delete('/dashboard/layout', [\App\Http\Controllers\Api\DashboardLayoutController::class, 'reset']);
+
+        // Widget data (each gated by the permission its WidgetRegistry entries declare).
+        Route::middleware('permission:fabrication.work-orders.view')->group(function () {
+            Route::get('/dashboard/widgets/work-orders', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrders']);
+            Route::get('/dashboard/widgets/work-orders/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrdersDue']);
+            Route::get('/dashboard/widgets/work-orders/table', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrdersTable']);
+            Route::get('/dashboard/widgets/work-orders/stages', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrderStages']);
+        });
+        Route::get('/dashboard/widgets/quality', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'quality'])->middleware('permission:quality.view');
+        Route::put('/dashboard/default-layout', [\App\Http\Controllers\Api\DashboardLayoutController::class, 'updateDefault'])->middleware('permission:settings.edit');
 
         // Categories
         Route::apiResource('categories', CategoryController::class)
