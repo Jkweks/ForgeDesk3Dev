@@ -432,8 +432,54 @@ async function qrSaveReportSettings() {
   }
 }
 
+/** Fills the canvas white behind everything — otherwise exported PNGs/PDF images are transparent (black in many viewers). */
+const qrBackgroundPlugin = {
+  id: 'qrBackground',
+  beforeDraw(chart) {
+    const { ctx, width, height } = chart;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  },
+};
+
+/** Draws values permanently on the incident rate chart (joint counts inside bars, rate % above points) so they show in exports, not just tooltips. */
+const qrValueLabelsPlugin = {
+  id: 'qrValueLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      const isBar = ds.type === 'bar';
+      const isRate = ds.label === 'Incident rate (%)';
+      if (!isBar && !isRate) return;
+      meta.data.forEach((el, i) => {
+        const v = ds.data[i];
+        if (v == null) return;
+        if (isBar) {
+          ctx.fillStyle = '#1b4f8f';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(String(v), el.x, el.base - 4);
+        } else {
+          ctx.fillStyle = '#d63939';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(Number(v).toFixed(1) + '%', el.x, el.y - 6);
+        }
+      });
+    });
+    ctx.restore();
+  },
+};
+
 function qrChart(canvasId, config) {
   if (qrCharts[canvasId]) qrCharts[canvasId].destroy();
+  config.plugins = [qrBackgroundPlugin, ...(config.plugins || [])];
   qrCharts[canvasId] = new Chart(document.getElementById(canvasId), config);
 }
 
@@ -452,6 +498,7 @@ function qrExpandChart(canvasId, title) {
   };
   if (source.config.type) config.type = source.config.type;
   config.options.maintainAspectRatio = false;
+  config.plugins = source.config.plugins || [];
 
   if (qrModalChart) qrModalChart.destroy();
   qrModalChart = new Chart(document.getElementById('qr-chart-modal-canvas'), config);
@@ -517,6 +564,7 @@ function qrRenderIncidentRateChart(rows) {
   }
 
   qrChart('qr-chart-incident-rate', {
+    plugins: [qrValueLabelsPlugin],
     data: {
       labels: rows.map(r => r.month_label),
       datasets,
