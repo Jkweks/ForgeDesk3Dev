@@ -19,6 +19,9 @@ use App\Models\User;
  *   list  — `endpoint` returns {items:[{label, sub, meta, meta_class, link}]}.
  *   table — `endpoint` returns {columns:[{key,label,align?}], rows:[{link, cells}], total};
  *           a cell is a string or {text, class} (rendered as a badge).
+ *   Every widget may declare `settings_schema` (fields: key, label, type select|multiselect|toggle,
+ *   options, default, show_if); values are saved in the layout, sent to the data endpoint as query
+ *   params, and validated server-side by sanitizeSettings()/resolveSettings().
  *   chart — Chart.js chart named by `chart`; the renderer in the JS knows each
  *           chart's endpoint shape.
  */
@@ -37,21 +40,25 @@ class WidgetRegistry
             'default_size' => ['w' => 3, 'h' => 2], 'min_size' => ['w' => 2, 'h' => 2],
             'refresh_seconds' => 120,
         ];
-        $chart = fn (string $key, string $title, string $description, string $icon, string $chart) => [
+        $chart = fn (string $key, string $title, string $description, string $icon, string $chart, array $schema = []) => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
-            'type' => 'chart', 'chart' => $chart,
+            'type' => 'chart', 'chart' => $chart, 'settings_schema' => $schema,
             'default_size' => ['w' => 6, 'h' => 5], 'min_size' => ['w' => 3, 'h' => 3],
             'refresh_seconds' => 600,
         ];
-        $table = fn (string $key, string $title, string $description, string $icon) => [
+        $table = fn (string $key, string $title, string $description, string $icon, array $schema = []) => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
-            'type' => 'table',
+            'type' => 'table', 'settings_schema' => $schema,
             'default_size' => ['w' => 8, 'h' => 6], 'min_size' => ['w' => 4, 'h' => 3],
             'refresh_seconds' => 120,
         ];
-        $list = fn (string $key, string $title, string $description, string $icon) => [
+        $limit = fn (int $default, array $options = [5, 8, 10, 15]) => [
+            'key' => 'limit', 'label' => 'Rows to show', 'type' => 'select',
+            'options' => array_combine($options, array_map('strval', $options)), 'default' => $default,
+        ];
+        $list = fn (string $key, string $title, string $description, string $icon, int $rows = 8, array $more = []) => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
-            'type' => 'list',
+            'type' => 'list', 'settings_schema' => array_merge([$limit($rows)], $more),
             'default_size' => ['w' => 4, 'h' => 5], 'min_size' => ['w' => 3, 'h' => 3],
             'refresh_seconds' => 120,
         ];
@@ -74,7 +81,15 @@ class WidgetRegistry
                 $list('wo_due_list', 'Work Orders Due Soon', 'Open work orders with the earliest due dates, overdue first.', 'ti-list-details'),
             ]],
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/table', [
-                $table('wo_table', 'Work Order Table', 'Open work orders in priority order, with job, status, due date and elevation progress.', 'ti-table'),
+                $table('wo_table', 'Work Order Table', 'Open work orders in priority order. Columns follow your Work Orders page by default.', 'ti-table', [
+                    ['key' => 'scope', 'label' => 'Show', 'type' => 'select', 'default' => 'open',
+                        'options' => ['open' => 'Active and on hold', 'active' => 'Active only', 'on_hold' => 'On hold only']],
+                    $limit(25, [10, 25, 50]),
+                    ['key' => 'columns_mode', 'label' => 'Columns', 'type' => 'select', 'default' => 'mine',
+                        'options' => ['mine' => 'Same as my Work Orders page', 'custom' => 'Choose columns for this widget']],
+                    ['key' => 'columns', 'label' => 'Visible columns', 'type' => 'multiselect', 'default' => [],
+                        'options' => WorkOrderColumns::options(), 'show_if' => ['columns_mode' => 'custom']],
+                ]),
             ]],
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/stages', [
                 $chart('wo_stage_wip', 'Work in Progress by Stage', 'Open pending and in-progress stages, grouped by stage name.', 'ti-chart-bar', 'stage_wip'),
@@ -114,10 +129,13 @@ class WidgetRegistry
                 $stat('transactions_today', 'Transactions Today', 'Inventory transactions recorded today.', 'ti-arrows-exchange', 'today', '/transactions'),
             ]],
             ['Inventory', ['inventory.view'], '/dashboard/widgets/transactions/recent', [
-                $list('transactions_recent', 'Recent Transactions', 'The latest inventory movements with the change in on-hand quantity.', 'ti-history'),
+                $list('transactions_recent', 'Recent Transactions', 'The latest inventory movements with the change in on-hand quantity.', 'ti-history', 10),
             ]],
             ['Inventory', ['inventory.view'], '/dashboard/widgets/low-stock', [
-                $list('low_stock_list', 'Lowest Stock Items', 'Critical and low products, most urgent first.', 'ti-alert-triangle'),
+                $list('low_stock_list', 'Lowest Stock Items', 'Critical and low products, most urgent first.', 'ti-alert-triangle', 8, [
+                    ['key' => 'level', 'label' => 'Show', 'type' => 'select', 'default' => 'all',
+                        'options' => ['all' => 'Critical, very low and low', 'critical' => 'Critical only']],
+                ]),
             ]],
             ['Fabrication', ['fabrication.view'], '/dashboard/widgets/fabrication-documents', [
                 $stat('fabdocs_total', 'Fabrication Documents', 'Fabrication, installation and maintenance documents on file.', 'ti-files', 'total', '/fabrication/documents'),
@@ -156,7 +174,10 @@ class WidgetRegistry
                 $stat('quality_awaiting_review', 'Reports Awaiting Review', 'Verified quality reports waiting for review.', 'ti-file-check', 'verified', '/fabrication/quality'),
             ]],
             ['Quality', ['quality.view'], '/quality-reports/analytics/incident-rate', [
-                $chart('quality_incident_rate', 'Incident Rate by Month', 'Joints completed and incident rate, with the 1.5% goal.', 'ti-chart-line', 'incident_rate'),
+                $chart('quality_incident_rate', 'Incident Rate by Month', 'Joints completed and incident rate, with the 1.5% goal.', 'ti-chart-line', 'incident_rate', [
+                    ['key' => 'months', 'label' => 'Months shown', 'type' => 'select', 'default' => 12,
+                        'options' => [6 => '6 months', 12 => '12 months', 18 => '18 months', 24 => '24 months']],
+                ]),
             ]],
             ['Quality', ['quality.view'], '/quality-reports/analytics/problem-types', [
                 $chart('quality_problem_types', 'Problem Types', 'Quality cases by problem type over the last 13 weeks.', 'ti-chart-bar', 'problem_types'),
@@ -169,11 +190,79 @@ class WidgetRegistry
         $catalog = [];
         foreach ($groups as [$category, $permission, $endpoint, $widgets]) {
             foreach ($widgets as $w) {
-                $catalog[$w['key']] = $w + ['category' => $category, 'permission' => $permission, 'endpoint' => $endpoint];
+                $catalog[$w['key']] = $w + ['category' => $category, 'permission' => $permission, 'endpoint' => $endpoint, 'settings_schema' => []];
             }
         }
 
         return $catalog;
+    }
+
+    /** The settings fields a widget declares (empty for widgets with none). */
+    public static function schema(string $key): array
+    {
+        return static::find($key)['settings_schema'] ?? [];
+    }
+
+    /**
+     * Keep only valid values for the widget's declared fields (unknown keys and out-of-range values
+     * are dropped, not errors, so a layout saved before a schema change still loads).
+     */
+    public static function sanitizeSettings(string $key, mixed $settings): array
+    {
+        $settings = is_array($settings) ? $settings : [];
+        $clean = [];
+
+        foreach (static::schema($key) as $field) {
+            $name = $field['key'];
+            if (! array_key_exists($name, $settings)) {
+                continue;
+            }
+            $value = $settings[$name];
+            $options = $field['options'] ?? [];
+
+            if ($field['type'] === 'select') {
+                $match = is_scalar($value) ? static::matchOption($options, $value) : null;
+                if ($match !== null) {
+                    $clean[$name] = $match;
+                }
+            } elseif ($field['type'] === 'multiselect') {
+                $picked = [];
+                foreach (is_array($value) ? $value : [] as $v) {
+                    $match = is_scalar($v) ? static::matchOption($options, $v) : null;
+                    if ($match !== null && ! in_array($match, $picked, true)) {
+                        $picked[] = $match;
+                    }
+                }
+                $clean[$name] = $picked;
+            } elseif ($field['type'] === 'toggle') {
+                $clean[$name] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+            }
+        }
+
+        return $clean;
+    }
+
+    /** Sanitized values with the schema's defaults filled in. */
+    public static function resolveSettings(string $key, mixed $settings): array
+    {
+        $values = static::sanitizeSettings($key, $settings);
+        foreach (static::schema($key) as $field) {
+            $values += [$field['key'] => $field['default'] ?? null];
+        }
+
+        return $values;
+    }
+
+    /** The canonical option key matching $value (so "12" matches the int key 12), else null. */
+    private static function matchOption(array $options, mixed $value): int|string|null
+    {
+        foreach (array_keys($options) as $optionKey) {
+            if ((string) $optionKey === (string) $value) {
+                return $optionKey;
+            }
+        }
+
+        return null;
     }
 
     public static function find(string $key): ?array

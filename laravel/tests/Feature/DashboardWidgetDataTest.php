@@ -89,7 +89,7 @@ class DashboardWidgetDataTest extends TestCase
         $this->assertStringStartsWith('J1-', $items[0]['label']);
     }
 
-    public function test_work_order_table_lists_open_orders_by_priority(): void
+    public function test_work_order_table_lists_open_orders_by_priority_with_all_page_columns_by_default(): void
     {
         $this->admin();
         $late = $this->workOrder(['due_date' => today()->subDay(), 'priority' => 2]);
@@ -102,11 +102,97 @@ class DashboardWidgetDataTest extends TestCase
         $json = $this->getJson('/api/v1/dashboard/widgets/work-orders/table')->assertOk()->json();
 
         $this->assertSame(3, $json['total']);
-        $this->assertSame(['1', '2', ''], array_map(fn ($r) => $r['cells']['priority'], $json['rows']));
-        $this->assertSame('On Hold', $json['rows'][0]['cells']['status']['text']);
+        // No saved preference: every column, in the Work Orders page's default order.
+        $this->assertSame(array_keys(\App\Dashboard\WorkOrderColumns::COLUMNS), array_column($json['columns'], 'key'));
+        $this->assertSame(['1', '2', '3'], array_map(fn ($r) => $r['cells']['priority'], $json['rows'])); // null priority falls back to list position
+        $this->assertSame('J1-R'.\App\Models\FdWorkOrder::find($late->id)->release_number, $json['rows'][1]['cells']['release']);
+        $this->assertSame('bg-orange-lt', $json['rows'][0]['cells']['release']['class']); // on hold
         $this->assertSame('bg-red-lt', $json['rows'][1]['cells']['due']['class']);
-        $this->assertSame('1/2', $json['rows'][1]['cells']['elevations']);
-        $this->assertSame(['release', 'job', 'status', 'priority', 'due', 'elevations'], array_column($json['columns'], 'key'));
+        $this->assertSame('1/2 done', $json['rows'][1]['cells']['elevations']);
+        $this->assertSame('Pending', $json['rows'][1]['cells']['material']['text']);
+        foreach (['work_content', 'est_remaining', 'work_combined'] as $k) {
+            $this->assertIsString($json['rows'][1]['cells'][$k], "estimate column {$k} renders without error");
+        }
+    }
+
+    public function test_work_order_table_mirrors_the_users_saved_column_order_and_hidden_columns(): void
+    {
+        $user = $this->admin();
+        $this->workOrder(['priority' => 1]);
+
+        $user->update(['wo_column_prefs' => ['order' => ['due', 'release', 'priority'], 'hidden' => ['priority', 'pm', 'work_combined']]]);
+        $keys = array_column($this->getJson('/api/v1/dashboard/widgets/work-orders/table')->assertOk()->json('columns'), 'key');
+
+        $this->assertSame(['due', 'release'], array_slice($keys, 0, 2));
+        $this->assertNotContains('priority', $keys);
+        $this->assertNotContains('pm', $keys);
+        $this->assertNotContains('work_combined', $keys);
+        $this->assertContains('elevations', $keys, 'columns missing from a saved order are appended, as on the page');
+
+        // Legacy preference shape: a bare list of hidden columns, default order.
+        $user->update(['wo_column_prefs' => ['elevations', 'assigned']]);
+        $keys = array_column($this->getJson('/api/v1/dashboard/widgets/work-orders/table')->json('columns'), 'key');
+        $this->assertNotContains('elevations', $keys);
+        $this->assertNotContains('assigned', $keys);
+        $this->assertSame('priority', $keys[0]);
+
+        // The page saves a change -> the widget follows on its next load, with no widget-side step.
+        $user->update(['wo_column_prefs' => ['order' => ['elevations'], 'hidden' => []]]);
+        $this->assertSame('elevations', $this->getJson('/api/v1/dashboard/widgets/work-orders/table')->json('columns.0.key'));
+    }
+
+    public function test_work_order_table_widget_settings_override_columns_scope_and_limit(): void
+    {
+        $user = $this->admin();
+        $user->update(['wo_column_prefs' => ['order' => ['job_name', 'release', 'due'], 'hidden' => []]]);
+        $this->workOrder(['priority' => 1]);
+        $this->workOrder(['priority' => 2, 'status' => 'on_hold']);
+        $this->workOrder(['priority' => 3]);
+
+        // Custom columns: only the picked ones, still in the user's saved order.
+        $custom = $this->getJson('/api/v1/dashboard/widgets/work-orders/table?columns_mode=custom&columns[]=due&columns[]=job_name');
+        $this->assertSame(['job_name', 'due'], array_column($custom->assertOk()->json('columns'), 'key'));
+
+        // Custom mode with nothing picked falls back to the user's own columns rather than an empty table.
+        $empty = $this->getJson('/api/v1/dashboard/widgets/work-orders/table?columns_mode=custom');
+        $this->assertSame('job_name', $empty->json('columns.0.key'));
+
+        $this->assertSame(1, $this->getJson('/api/v1/dashboard/widgets/work-orders/table?scope=on_hold')->json('total'));
+        $this->assertSame(2, $this->getJson('/api/v1/dashboard/widgets/work-orders/table?scope=active')->json('total'));
+
+        $limited = $this->getJson('/api/v1/dashboard/widgets/work-orders/table?limit=10')->json();
+        $this->assertCount(3, $limited['rows']);
+        // Out-of-range values fall back to the default instead of erroring.
+        $this->getJson('/api/v1/dashboard/widgets/work-orders/table?limit=9999&scope=bogus&columns_mode=nope')->assertOk()->assertJsonPath('total', 3);
+    }
+
+    public function test_list_widgets_honor_the_rows_setting_and_low_stock_level(): void
+    {
+        $this->admin();
+        foreach (range(1, 10) as $i) {
+            $this->product("LL-{$i}", ['status' => $i === 1 ? 'critical' : 'low', 'quantity_on_hand' => $i]);
+        }
+
+        $this->assertCount(8, $this->getJson('/api/v1/dashboard/widgets/low-stock')->json('items'));          // default 8
+        $this->assertCount(5, $this->getJson('/api/v1/dashboard/widgets/low-stock?limit=5')->json('items'));
+        $this->assertCount(8, $this->getJson('/api/v1/dashboard/widgets/low-stock?limit=7777')->json('items')); // invalid -> default
+        $this->assertCount(1, $this->getJson('/api/v1/dashboard/widgets/low-stock?level=critical')->json('items'));
+    }
+
+    public function test_layout_save_sanitizes_widget_settings_against_the_schema(): void
+    {
+        $this->admin();
+        $widget = ['id' => 'w1', 'key' => 'wo_table', 'x' => 0, 'y' => 0, 'w' => 8, 'h' => 6, 'settings' => [
+            'limit' => '25', 'scope' => 'active', 'columns_mode' => 'custom', 'columns' => ['due', 'bogus', 'release'],
+            'evil' => 'x', 'columns_extra' => 1,
+        ]];
+        $bad = ['id' => 'w2', 'key' => 'inventory_skus', 'x' => 0, 'y' => 6, 'w' => 3, 'h' => 2, 'settings' => ['limit' => 5]];
+
+        $saved = $this->putJson('/api/v1/dashboard/layout', ['widgets' => [$widget, $bad]])->assertOk()->json('layout.widgets');
+
+        $this->assertEquals(['limit' => 25, 'scope' => 'active', 'columns_mode' => 'custom', 'columns' => ['due', 'release']], $saved[0]['settings']);
+        $this->assertSame([], $saved[1]['settings'], 'a widget with no schema keeps no settings');
+        $this->assertTrue(collect($this->getJson('/api/v1/dashboard/widgets')->json('widgets'))->firstWhere('key', 'wo_table')['settings_schema'] !== []);
     }
 
     public function test_stage_wip_groups_open_stages_by_name(): void

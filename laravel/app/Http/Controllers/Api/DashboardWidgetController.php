@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Dashboard\WidgetRegistry;
+use App\Dashboard\WorkOrderColumns;
 use App\Models\BusinessJob;
 use App\Models\CutFlow\CutLogEntry;
 use App\Models\CutFlow\Part;
@@ -22,6 +24,7 @@ use App\Models\PurchaseOrder;
 use App\Models\QualityReport;
 use App\Models\StorageLocation;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 /**
@@ -31,6 +34,11 @@ use Illuminate\Support\Str;
  */
 class DashboardWidgetController extends Controller
 {
+    private function limitFor(Request $request, string $widgetKey): int
+    {
+        return (int) WidgetRegistry::resolveSettings($widgetKey, $request->query())['limit'];
+    }
+
     /** Open = live (non-archived) work orders that are active or on hold. */
     private function openWorkOrders()
     {
@@ -56,7 +64,7 @@ class DashboardWidgetController extends Controller
     }
 
     /** Open work orders with the earliest due dates (overdue first), as generic list items. */
-    public function workOrdersDue()
+    public function workOrdersDue(Request $request)
     {
         $today = today();
 
@@ -64,7 +72,7 @@ class DashboardWidgetController extends Controller
             ->whereNotNull('due_date')
             ->with('businessJob:id,job_number,job_name')
             ->orderBy('due_date')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'wo_due_list'))
             ->get()
             ->map(function (FdWorkOrder $wo) use ($today) {
                 $days = (int) $today->diffInDays($wo->due_date, false);
@@ -91,53 +99,50 @@ class DashboardWidgetController extends Controller
      * as a generic table: {columns:[{key,label,align?}], rows:[{link, cells}], total}.
      * A cell is a string, or {text, class} to render as a badge.
      */
-    public function workOrdersTable()
+    public function workOrdersTable(Request $request)
     {
-        $limit = 25;
-        $today = today();
+        $settings = WidgetRegistry::resolveSettings('wo_table', $request->query());
 
-        $total = $this->openWorkOrders()->count();
-        $workOrders = $this->openWorkOrders()
-            ->with('businessJob:id,job_number,job_name')
+        // Mirror the user's Work Orders page columns (order + hidden), unless this widget overrides them.
+        $keys = WorkOrderColumns::resolve($request->user(), (string) $settings['columns_mode'], (array) $settings['columns']);
+
+        $query = match ($settings['scope']) {
+            'active' => FdWorkOrder::where('archived', false)->where('status', 'active'),
+            'on_hold' => FdWorkOrder::where('archived', false)->where('status', 'on_hold'),
+            default => $this->openWorkOrders(),
+        };
+        $total = (clone $query)->count();
+
+        $query->with(['businessJob:id,job_number,job_name,project_manager', 'assignedUsers'])
             ->withCount([
                 'elevations',
                 'elevations as elevations_complete' => fn ($q) => $q->whereNotNull('date_completed'),
             ])
+            ->withMin('elevations as elevation_due_first', 'date_requested');
+
+        // The labour-estimate columns need elevations/stages/template sets (the heaviest part of the
+        // page's own list query), so only load them when one of those columns is showing.
+        if (WorkOrderColumns::needsEstimates($keys)) {
+            $query->with([
+                'elevations:id,work_order_id,joint_qty,template_set_id,date_completed',
+                'elevations.stages:id,elevation_id,minutes_per_joint,status',
+                'elevations.templateSet:id,minutes_per_joint',
+            ]);
+        }
+
+        $workOrders = $query
             ->orderByRaw('priority IS NULL, priority ASC')
             ->orderBy('due_date')
-            ->limit($limit)
+            ->limit((int) $settings['limit'])
             ->get();
 
-        $statusLabels = ['active' => 'Active', 'on_hold' => 'On Hold'];
-
-        $rows = $workOrders->map(function (FdWorkOrder $wo) use ($today, $statusLabels) {
-            $job = $wo->businessJob;
-            $overdue = $wo->due_date && $wo->due_date->lt($today);
-
-            return [
-                'link' => '/fabrication/work-orders',
-                'cells' => [
-                    'release' => $job ? "{$job->job_number}-{$wo->release_token}" : (string) $wo->release_token,
-                    'job' => (string) ($job?->job_name ?? ''),
-                    'status' => ['text' => $statusLabels[$wo->status] ?? $wo->status, 'class' => $wo->status === 'on_hold' ? 'bg-yellow-lt' : 'bg-green-lt'],
-                    'priority' => $wo->priority === null ? '' : (string) $wo->priority,
-                    'due' => $wo->due_date
-                        ? ['text' => $wo->due_date->format('M j'), 'class' => $overdue ? 'bg-red-lt' : 'bg-secondary-lt']
-                        : '',
-                    'elevations' => "{$wo->elevations_complete}/{$wo->elevations_count}",
-                ],
-            ];
-        })->values();
+        $rows = $workOrders->values()->map(fn (FdWorkOrder $wo, int $i) => [
+            'link' => '/fabrication/work-orders',
+            'cells' => collect($keys)->mapWithKeys(fn ($k) => [$k => WorkOrderColumns::cell($k, $wo, $i + 1)])->all(),
+        ]);
 
         return response()->json([
-            'columns' => [
-                ['key' => 'release', 'label' => 'Work Order'],
-                ['key' => 'job', 'label' => 'Job'],
-                ['key' => 'status', 'label' => 'Status'],
-                ['key' => 'priority', 'label' => 'Priority', 'align' => 'end'],
-                ['key' => 'due', 'label' => 'Due'],
-                ['key' => 'elevations', 'label' => 'Elevations', 'align' => 'end'],
-            ],
+            'columns' => WorkOrderColumns::definitions($keys),
             'rows' => $rows,
             'total' => $total,
         ]);
@@ -192,14 +197,14 @@ class DashboardWidgetController extends Controller
     }
 
     /** Active maintenance tasks that are overdue or due soon, earliest first. */
-    public function maintenanceUpcoming()
+    public function maintenanceUpcoming(Request $request)
     {
         $items = MaintenanceTask::where('status', 'active')
             ->with('machine:id,name')
             ->get()
             ->filter(fn (MaintenanceTask $t) => $t->is_overdue || $t->is_due_soon)
             ->sortBy(fn (MaintenanceTask $t) => $t->next_due_date)
-            ->take(8)
+            ->take($this->limitFor($request, 'maintenance_upcoming'))
             ->map(function (MaintenanceTask $t) {
                 [$meta, $class] = $this->dueMeta(Carbon::parse($t->next_due_date));
 
@@ -216,11 +221,11 @@ class DashboardWidgetController extends Controller
     }
 
     /** The latest service records. */
-    public function maintenanceRecent()
+    public function maintenanceRecent(Request $request)
     {
         $items = MaintenanceRecord::with(['machine:id,name', 'task:id,title'])
             ->latest('performed_at')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'maintenance_recent'))
             ->get()
             ->map(fn (MaintenanceRecord $r) => [
                 'label' => $r->machine?->name ?? 'Asset service',
@@ -261,12 +266,12 @@ class DashboardWidgetController extends Controller
     }
 
     /** Planned and in-progress cycle count sessions, soonest first. */
-    public function cycleCountSessions()
+    public function cycleCountSessions(Request $request)
     {
         $items = CycleCountSession::active()
             ->with(['items', 'assignedUser:id,name'])
             ->orderBy('scheduled_date')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'cycle_sessions'))
             ->get()
             ->map(function (CycleCountSession $s) {
                 $inProgress = $s->status === 'in_progress';
@@ -299,9 +304,9 @@ class DashboardWidgetController extends Controller
     }
 
     /** The most recently added fabrication documents. */
-    public function fabricationDocumentsRecent()
+    public function fabricationDocumentsRecent(Request $request)
     {
-        $items = FabricationDocument::latest()->limit(8)->get(['id', 'title', 'type', 'file_name', 'created_at'])
+        $items = FabricationDocument::latest()->limit($this->limitFor($request, 'fabdocs_recent'))->get(['id', 'title', 'type', 'file_name', 'created_at'])
             ->map(fn (FabricationDocument $d) => [
                 'label' => $d->title,
                 'sub' => ucfirst($d->type).($d->file_name ? ' · '.$d->file_name : ''),
@@ -328,7 +333,7 @@ class DashboardWidgetController extends Controller
     }
 
     /** Recently updated, non-archived configurations. */
-    public function configuratorRecent()
+    public function configuratorRecent(Request $request)
     {
         $badge = ['draft' => 'bg-secondary-lt', 'reserved' => 'bg-blue-lt', 'released' => 'bg-azure-lt', 'in_progress' => 'bg-yellow-lt',
             'completed' => 'bg-green-lt', 'on_hold' => 'bg-orange-lt', 'cancelled' => 'bg-red-lt'];
@@ -336,7 +341,7 @@ class DashboardWidgetController extends Controller
         $items = DoorFrameConfiguration::notArchived()
             ->with(['businessJob:id,job_number,job_name', 'doors:id,configuration_id,door_tag'])
             ->latest('updated_at')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'configurator_recent'))
             ->get()
             ->map(function (DoorFrameConfiguration $c) use ($badge) {
                 $tags = $c->doors->pluck('door_tag')->filter()->take(3)->implode(', ');
@@ -411,12 +416,12 @@ class DashboardWidgetController extends Controller
     }
 
     /** Open purchase orders, earliest expected date first (undated last). */
-    public function purchaseOrdersDue()
+    public function purchaseOrdersDue(Request $request)
     {
         $items = PurchaseOrder::open()
             ->with('supplier:id,name')
             ->orderByRaw('expected_date IS NULL, expected_date ASC')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'po_due_list'))
             ->get(['id', 'po_number', 'supplier_id', 'status', 'expected_date'])
             ->map(function (PurchaseOrder $po) {
                 [$meta, $class] = $po->expected_date
@@ -451,11 +456,11 @@ class DashboardWidgetController extends Controller
     }
 
     /** Live jobs ordered by target completion date, overdue first. */
-    public function jobsDue()
+    public function jobsDue(Request $request)
     {
         $items = BusinessJob::whereIn('status', ['active', 'on_hold'])
             ->orderByRaw('target_completion_date IS NULL, target_completion_date ASC')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'jobs_due_list'))
             ->get(['id', 'job_number', 'job_name', 'status', 'target_completion_date'])
             ->map(function (BusinessJob $j) {
                 [$meta, $class] = $j->target_completion_date
@@ -499,12 +504,12 @@ class DashboardWidgetController extends Controller
     }
 
     /** Latest transactions with the signed change in on-hand quantity. Narrow columns: no Product appends. */
-    public function transactionsRecent()
+    public function transactionsRecent(Request $request)
     {
         $items = InventoryTransaction::query()
             ->with(['product' => fn ($q) => $q->withTrashed()->select('id', 'sku'), 'user:id,name'])
             ->orderByDesc('transaction_date')->orderByDesc('id')
-            ->limit(10)
+            ->limit($this->limitFor($request, 'transactions_recent'))
             ->get(['id', 'product_id', 'user_id', 'type', 'quantity_before', 'quantity_after', 'transaction_date'])
             ->map(function (InventoryTransaction $t) {
                 $delta = round((float) $t->quantity_after - (float) $t->quantity_before, 1);
@@ -522,15 +527,15 @@ class DashboardWidgetController extends Controller
     }
 
     /** The lowest-stock products (critical first), straight from columns so Product's expensive appends never run. */
-    public function lowStock()
+    public function lowStock(Request $request)
     {
         $rows = Product::where('is_active', true)
             ->where(fn ($q) => $q->where('nonsof', false)->orWhereNull('nonsof'))
             ->excludeMaintenanceConsumables()
-            ->whereIn('status', ['critical', 'very_low', 'low'])
+            ->whereIn('status', WidgetRegistry::resolveSettings('low_stock_list', $request->query())['level'] === 'critical' ? ['critical'] : ['critical', 'very_low', 'low'])
             ->orderByRaw("CASE status WHEN 'critical' THEN 0 WHEN 'very_low' THEN 1 ELSE 2 END")
             ->orderBy('quantity_on_hand')
-            ->limit(8)
+            ->limit($this->limitFor($request, 'low_stock_list'))
             ->toBase()
             ->get(['id', 'sku', 'description', 'status', 'quantity_on_hand']);
 

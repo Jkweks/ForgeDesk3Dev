@@ -86,7 +86,7 @@ class DashboardLayoutController extends Controller
             'y' => (int) $w['y'],
             'w' => (int) $w['w'],
             'h' => (int) $w['h'],
-            'settings' => $w['settings'] ?? (object) [],
+            'settings' => WidgetRegistry::sanitizeSettings($w['key'], $w['settings'] ?? []) ?: (object) [],
         ], $data['widgets']);
 
         return ['version' => WidgetRegistry::LAYOUT_VERSION, 'widgets' => $widgets];
