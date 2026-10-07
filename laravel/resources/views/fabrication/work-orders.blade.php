@@ -2505,7 +2505,7 @@ function elevRow(e) {
     }).join('');
 
     const completedInfo = e.date_completed
-        ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-secondary">${esc(e.completed_by_name)}</small>` : ''}`
+        ? `<span class="badge bg-success-lt">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-secondary">${esc(e.completed_by_name)}</small>` : ''}`
         : `<span class="text-secondary small">—</span>`;
 
     const hasStages = stages.length > 0;

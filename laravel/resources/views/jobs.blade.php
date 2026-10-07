@@ -3206,7 +3206,7 @@
                                     style="width: 100px;">
                             </td>
                             <td>
-                                <span id="resRelease_${item.product_id}" class="badge bg-success">${fmtQty(toRelease)}</span>
+                                <span id="resRelease_${item.product_id}" class="badge bg-success-lt">${fmtQty(toRelease)}</span>
                             </td>
                         </tr>
                     `;
@@ -3234,10 +3234,10 @@
             const badge = document.getElementById(`resRelease_${productId}`);
             if (consumed > committed) {
                 badge.textContent = `-${fmtQty(Math.round((consumed - committed) * 10) / 10)}`;
-                badge.className = 'badge bg-warning';
+                badge.className = 'badge bg-warning-lt';
             } else {
                 badge.textContent = fmtQty(Math.round((committed - consumed) * 10) / 10);
-                badge.className = 'badge bg-success';
+                badge.className = 'badge bg-success-lt';
             }
         }
 
@@ -3711,14 +3711,14 @@
                 let canCommit = false;
 
                 if (item.status === 'available') {
-                    statusBadge = '<span class="badge bg-success">Available</span>';
+                    statusBadge = '<span class="badge bg-success-lt">Available</span>';
                     canCommit = true;
                 } else if (item.status === 'partial') {
-                    statusBadge = '<span class="badge bg-warning">Partial</span>';
+                    statusBadge = '<span class="badge bg-warning-lt">Partial</span>';
                     statusClass = 'table-warning';
                     canCommit = true;
                 } else if (item.status === 'unavailable') {
-                    statusBadge = '<span class="badge bg-danger">Out of Stock</span>';
+                    statusBadge = '<span class="badge bg-danger-lt">Out of Stock</span>';
                     statusClass = 'table-danger';
                     canCommit = true;
                 } else if (item.status === 'not_found') {

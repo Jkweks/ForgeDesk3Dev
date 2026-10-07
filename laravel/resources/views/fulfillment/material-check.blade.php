@@ -336,19 +336,19 @@
                 let canCommit = false;
 
                 if (item.status === 'available') {
-                    statusBadge = '<span class="badge bg-success">Available</span>';
+                    statusBadge = '<span class="badge bg-success-lt">Available</span>';
                     statusClass = '';
                     canCommit = true;
                 } else if (item.status === 'partial') {
-                    statusBadge = '<span class="badge bg-warning">Partial</span>';
+                    statusBadge = '<span class="badge bg-warning-lt">Partial</span>';
                     statusClass = 'table-warning';
                     canCommit = true;
                 } else if (item.status === 'unavailable') {
-                    statusBadge = '<span class="badge bg-danger">Out of Stock</span>';
+                    statusBadge = '<span class="badge bg-danger-lt">Out of Stock</span>';
                     statusClass = 'table-danger';
                     canCommit = true;
                 } else if (item.status === 'not_found') {
-                    statusBadge = '<span class="badge bg-secondary">Not Found</span>';
+                    statusBadge = '<span class="badge bg-secondary-lt">Not Found</span>';
                     statusClass = 'table-secondary';
                     canCommit = false;
                 }

@@ -260,7 +260,7 @@
       tbody.innerHTML = sorted.map((product, index) => {
         const priorityBadge = product.status === 'out_of_stock'
           ? '<span class="badge text-bg-dark">URGENT</span>'
-          : `<span class="badge bg-danger">${index + 1}</span>`;
+          : `<span class="badge bg-danger-lt">${index + 1}</span>`;
 
         return `
           <tr class="${product.status === 'out_of_stock' ? 'table-danger' : ''}" onclick="viewProduct(${product.id})" style="cursor:pointer;">

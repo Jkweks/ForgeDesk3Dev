@@ -281,9 +281,9 @@ function renderTable() {
 function statusBadge(status) {
   const map = {
     pending: '<span class="badge text-bg-secondary">Pending</span>',
-    saving:  '<span class="badge bg-azure">Saving…</span>',
-    saved:   '<span class="badge bg-success">Saved</span>',
-    error:   '<span class="badge bg-danger">Error</span>',
+    saving:  '<span class="badge bg-azure-lt">Saving…</span>',
+    saved:   '<span class="badge bg-success-lt">Saved</span>',
+    error:   '<span class="badge bg-danger-lt">Error</span>',
   };
   return map[status] || status;
 }

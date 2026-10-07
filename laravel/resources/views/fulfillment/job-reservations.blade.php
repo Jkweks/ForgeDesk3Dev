@@ -741,10 +741,10 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
         function getStatusBadge(status) {
             const badges = {
                 'draft': '<span class="badge text-bg-secondary">Draft</span>',
-                'active': '<span class="badge bg-primary">Active</span>',
-                'in_progress': '<span class="badge bg-info">In Progress</span>',
-                'fulfilled': '<span class="badge bg-success">Fulfilled</span>',
-                'on_hold': '<span class="badge bg-warning">On Hold</span>',
+                'active': '<span class="badge bg-primary-lt">Active</span>',
+                'in_progress': '<span class="badge bg-info-lt">In Progress</span>',
+                'fulfilled': '<span class="badge bg-success-lt">Fulfilled</span>',
+                'on_hold': '<span class="badge bg-warning-lt">On Hold</span>',
                 'cancelled': '<span class="badge text-bg-dark">Cancelled</span>',
             };
             return badges[status] || `<span class="badge">${status}</span>`;
@@ -1219,7 +1219,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                                         title="Can consume more than committed if needed">
                                 </td>
                                 <td>
-                                    <span id="release_${item.product_id}" class="badge bg-success" title="">${fmtQty(toRelease)}</span>
+                                    <span id="release_${item.product_id}" class="badge bg-success-lt" title="">${fmtQty(toRelease)}</span>
                                 </td>
                             </tr>
                         `;
@@ -1269,14 +1269,14 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                 const overConsumption = Math.round((consumed - committed) * 10) / 10;
                 const badge = document.getElementById(`release_${productId}`);
                 badge.textContent = `-${fmtQty(overConsumption)}`;
-                badge.className = 'badge bg-warning';
+                badge.className = 'badge bg-warning-lt';
                 badge.title = `Over-consuming by ${fmtQty(overConsumption)} units`;
             } else {
                 // Update to release badge
                 const toRelease = Math.round((committed - consumed) * 10) / 10;
                 const badge = document.getElementById(`release_${productId}`);
                 badge.textContent = fmtQty(toRelease);
-                badge.className = 'badge bg-success';
+                badge.className = 'badge bg-success-lt';
                 badge.title = '';
             }
         }

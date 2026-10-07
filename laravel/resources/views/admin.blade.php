@@ -1532,26 +1532,26 @@
         tbody.innerHTML = '';
 
         const roleBadges = {
-          admin: '<span class="badge bg-red">Admin</span>',
-          manager: '<span class="badge bg-blue">Manager</span>',
-          fabricator: '<span class="badge bg-green">Fabricator</span>',
-          viewer: '<span class="badge bg-gray">Viewer</span>'
+          admin: '<span class="badge bg-red-lt">Admin</span>',
+          manager: '<span class="badge bg-blue-lt">Manager</span>',
+          fabricator: '<span class="badge bg-green-lt">Fabricator</span>',
+          viewer: '<span class="badge bg-secondary-lt">Viewer</span>'
         };
 
         tbody.innerHTML = users.map(user => {
           let statusBadge = user.is_active
-            ? '<span class="badge bg-success">Active</span>'
+            ? '<span class="badge bg-success-lt">Active</span>'
             : '<span class="badge text-bg-secondary">Inactive</span>';
 
           if (user.invitation_pending) {
-            statusBadge += ' <span class="badge bg-azure" title="Account created — welcome email not sent yet">Not invited</span>';
+            statusBadge += ' <span class="badge bg-azure-lt" title="Account created — welcome email not sent yet">Not invited</span>';
           } else if (user.must_change_password) {
             statusBadge += user.temp_password_expired
-              ? ' <span class="badge bg-red" title="Temporary password expired">Invite expired</span>'
-              : ' <span class="badge bg-yellow" title="Waiting for the user to set a new password">Pending invite</span>';
+              ? ' <span class="badge bg-red-lt" title="Temporary password expired">Invite expired</span>'
+              : ' <span class="badge bg-yellow-lt" title="Waiting for the user to set a new password">Pending invite</span>';
           }
 
-          const roleBadge = roleBadges[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
+          const roleBadge = roleBadges[user.role] || '<span class="badge bg-secondary-lt">' + user.role + '</span>';
 
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
@@ -1666,7 +1666,7 @@
         container.innerHTML = '';
 
         container.innerHTML = roles.map(role => {
-          const systemBadge = role.is_system ? '<span class="badge bg-info ms-2">System</span>' : '';
+          const systemBadge = role.is_system ? '<span class="badge bg-info-lt ms-2">System</span>' : '';
           const deleteOption = role.is_system
             ? ''
             : `<a class="dropdown-item text-danger" href="#" onclick="deleteRole(${role.id}); return false;" data-permission="roles.delete">
@@ -2236,9 +2236,9 @@
       // ── Shared helpers ───────────────────────────────────────────────────────
       function locStatusBadge(status) {
         return { pending: '<span class="badge text-bg-secondary">Pending</span>',
-                 saving:  '<span class="badge bg-azure">Saving…</span>',
-                 saved:   '<span class="badge bg-success">Saved</span>',
-                 error:   '<span class="badge bg-danger">Error</span>' }[status] || status;
+                 saving:  '<span class="badge bg-azure-lt">Saving…</span>',
+                 saved:   '<span class="badge bg-success-lt">Saved</span>',
+                 error:   '<span class="badge bg-danger-lt">Error</span>' }[status] || status;
       }
 
       function adminCsrfToken() {
@@ -2307,7 +2307,7 @@
             </td>
             <td>${t.standard_joint_count != null ? `${t.standard_joint_count} / unit` : '<span class="text-muted">—</span>'}</td>
             <td>${t.sort_order}</td>
-            <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
+            <td>${t.active ? '<span class="badge bg-success-lt">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
             <td>
               <div class="btn-group btn-group-sm">
                 <button class="btn btn-ghost-secondary" onclick="openTypeTemplates(${t.id}, '${t.name.replace(/'/g, "\\'")}')" title="Stage defaults">
