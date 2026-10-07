@@ -619,6 +619,69 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Merge another configuration into this one as the second leaf of a pair. For the rare pair whose
+     * leaves carry unique tags (1403 + 1409) and so were imported as two configurations: the other
+     * configuration's door tag(s) and work-order elevations move here and it is deleted, leaving one
+     * configuration with both tags that hangs in one frame. Parts must be regenerated afterwards.
+     */
+    public function mergePair(Request $request, $id)
+    {
+        $data = $request->validate(['source_id' => 'required|integer|exists:door_frame_configurations,id']);
+
+        $target = DoorFrameConfiguration::with(['doors', 'openingSpecs'])->findOrFail($id);
+        $source = DoorFrameConfiguration::with(['doors', 'businessJob'])->findOrFail($data['source_id']);
+
+        $problem = match (true) {
+            $source->id === $target->id => 'Pick a different configuration to merge.',
+            $source->business_job_id !== $target->business_job_id => 'Both configurations must be on the same job.',
+            ! $target->canEdit() || ! $source->canEdit() => 'Both configurations must be editable (draft, reserved or on hold). Un-release first.',
+            ! $target->includesDoor() || ! $source->includesDoor() => 'Both configurations must include a door.',
+            ! $target->includesFrame() => 'This configuration has no frame to share. Merge into the one that has the frame.',
+            (bool) ($target->duplicate_group_id || $source->duplicate_group_id) => 'Unlink these from their duplicate group first.',
+            default => null,
+        };
+        if ($problem) {
+            return response()->json(['message' => $problem], 422);
+        }
+
+        $wasReserved = $source->status === 'reserved';
+
+        DB::transaction(function () use ($target, $source, $wasReserved) {
+            if ($wasReserved) {
+                $source->update(['status' => 'draft', 'job_reservation_id' => null]);
+            }
+
+            foreach ($source->doors as $door) {
+                $door->update(['configuration_id' => $target->id]);
+            }
+
+            \App\Models\FdWoElevation::where('door_frame_configuration_id', $source->id)
+                ->update(['door_frame_configuration_id' => $target->id]);
+
+            if (! $target->work_order_id && $source->work_order_id) {
+                $target->work_order_id = $source->work_order_id;
+            }
+            $target->quantity = $target->doors()->count();
+            $target->save();
+
+            if ($target->openingSpecs && $target->openingSpecs->opening_type !== 'pair') {
+                $target->openingSpecs->update(['opening_type' => 'pair']);
+            }
+
+            $source->unsetRelation('doors');
+            $source->delete();
+
+            if ($wasReserved || $target->status === 'reserved') {
+                app(\App\Services\Configurator\ConfigurationReservationBridge::class)->syncJob($target->businessJob, auth()->user());
+            }
+        });
+
+        Log::info('Configurations merged as pair', ['target_id' => $target->id, 'source_id' => $source->id, 'by' => auth()->id()]);
+
+        return response()->json(['message' => 'Merged as a pair. Regenerate the frame, door and hardware parts.']);
+    }
+
+    /**
      * Update opening specifications (Step 1)
      */
     public function updateOpeningSpecs(Request $request, $id, \App\Services\Configurator\ElevationConfigurationMatcher $matcher)

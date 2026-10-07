@@ -132,16 +132,8 @@ class CutFlowExportService
      */
     public function parseCsv(\Illuminate\Http\UploadedFile $file): array
     {
-        $handle = fopen($file->getRealPath(), 'r');
-        $header = array_map(fn ($h) => strtolower(trim($h)), fgetcsv($handle, escape: ''));
-
         $rows = [];
-        while (($row = fgetcsv($handle, escape: '')) !== false) {
-            if (count($row) !== count($header)) {
-                continue;
-            }
-            $data = array_combine($header, $row);
-
+        foreach ($this->ingest->parseCsv($file) as $data) {
             $name = trim((string) ($data['part_id'] ?? $data['name'] ?? ''));
             $qty = (int) ($data['qty'] ?? 0);
             $dimension = trim((string) ($data['dimension_in'] ?? $data['dimension'] ?? ''));
@@ -162,8 +154,6 @@ class CutFlowExportService
                 'rightcutangle' => is_numeric($data['rightcutangle'] ?? null) ? (float) $data['rightcutangle'] : null,
             ], fn ($v) => $v !== null);
         }
-
-        fclose($handle);
 
         return $rows;
     }

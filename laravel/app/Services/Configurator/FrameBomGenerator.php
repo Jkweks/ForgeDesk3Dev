@@ -49,7 +49,12 @@ class FrameBomGenerator
         $hasTransom = (bool) $frameConfig->has_transom;
         $hasThreshold = (bool) $frameConfig->has_threshold;
         $transomGlazing = $frameConfig->transom_glazing !== null ? (float) $frameConfig->transom_glazing : null;
+        // Quantity counts door tags, and a pair's two leaves are tagged separately (LH / RH) but hang
+        // in ONE frame — so a pair needs half as many frames as it has tags.
         $openingQty = max(1, (int) $config->quantity);
+        if ($openingType === 'pair') {
+            $openingQty = max(1, (int) ceil($openingQty / 2));
+        }
 
         // section_height is a fixed catalog dimension, known for every profile in
         // the series regardless of which ones end up in this config's BOM — so

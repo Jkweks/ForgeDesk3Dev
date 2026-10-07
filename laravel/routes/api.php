@@ -558,6 +558,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'destroy'])->middleware('permission:configurator.delete');
         Route::post('/door-frame-configurations/{id}/duplicate', [DoorFrameConfigurationController::class, 'duplicate'])->middleware('permission:configurator.edit');
         Route::post('/door-frame-configurations/{id}/unlink', [DoorFrameConfigurationController::class, 'unlink'])->middleware('permission:configurator.edit');
+        Route::post('/door-frame-configurations/{id}/merge-pair', [DoorFrameConfigurationController::class, 'mergePair'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/opening-specs', [DoorFrameConfigurationController::class, 'updateOpeningSpecs'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/frame-config', [DoorFrameConfigurationController::class, 'updateFrameConfig'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/frame-parts', [DoorFrameConfigurationController::class, 'updateFrameParts'])->middleware('permission:configurator.edit');
@@ -594,6 +595,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Fabricator package (door/frame sheets + cut list / stock / BOM / field-install) and its layout template
         Route::get('/config/package/sources', [\App\Http\Controllers\Api\PackageReportController::class, 'sources'])->middleware('permission:configurator.view');
         Route::get('/config/package', [\App\Http\Controllers\Api\PackageReportController::class, 'show'])->middleware('permission:configurator.view');
+        Route::get('/config/package/cut-list-csv', [\App\Http\Controllers\Api\PackageReportController::class, 'cutListCsv'])->middleware('permission:configurator.view');
         Route::get('/config/pdf-templates', [\App\Http\Controllers\Api\PackageReportController::class, 'templates'])->middleware('permission:configurator.view');
         Route::put('/config/pdf-templates/{type}', [\App\Http\Controllers\Api\PackageReportController::class, 'updateTemplate'])->middleware('permission:configurator.catalog.manage');
 

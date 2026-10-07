@@ -18,6 +18,9 @@ class ImportController extends Controller
      * part_id (or name), finish, dimension_in, qty, job, work_order, phase,
      * row, column, description, leftcutangle, rightcutangle
      *
+     * The ForgeDesk fabrication-package cut list is also accepted, with or without a header row:
+     * SKU, finish code, length, quantity, job, work order, door tag, 0, 0, part use, 0, 0.
+     *
      * All rows in one CSV are attached to a single job (the CSV's `job`
      * column, falling back to the uploaded filename) — one job per upload.
      * See CutlistIngestService::ingest() for the identity/merge rules.

@@ -99,6 +99,7 @@ class PackageReportService
         foreach ($sorted as $config) {
             $variables = $this->resolveVariables($config);
             $tags = $this->tags($config);
+            $framePerPair = $config->openingSpecs?->opening_type === 'pair' && count($tags) > 1;
             $openings += count($tags);
 
             foreach ($this->configExtrusions($config) as $e) {
@@ -111,9 +112,15 @@ class PackageReportService
                         $records[] = $this->sheet($config, 'door', $tag, count($tags), $leaf, $variables);
                     }
                 }
-                if ($config->includesFrame() && $sections['frames']) {
+                if ($config->includesFrame() && $sections['frames'] && ! $framePerPair) {
                     $records[] = $this->sheet($config, 'frame', $tag, count($tags), null, $variables);
                 }
+            }
+
+            // A pair is two doors in one frame: even when each leaf carries its own tag, print one frame
+            // sheet for the opening, tagged with both.
+            if ($framePerPair && $config->includesFrame() && $sections['frames']) {
+                $records[] = $this->sheet($config, 'frame', implode(' / ', $tags), 1, null, $variables);
             }
         }
 
@@ -139,6 +146,63 @@ class PackageReportService
                 'frame' => ConfiguratorPdfTemplate::layoutFor('frame'),
             ],
         ];
+    }
+
+    /**
+     * Saw-ready cut list, one row per extrusion cut per door tag. Columns: SKU, finish code, length, quantity,
+     * job, work order, door tag, 0, 0, part use, 0, 0. Quantities divide the same way the sheets do
+     * (a pair's frame prints once, tagged with both leaves).
+     *
+     * @param  Collection<int, DoorFrameConfiguration>  $configs
+     * @return array<int, array<int, string|int|float>>
+     */
+    public function cutListCsvRows(Collection $configs, array $sections = []): array
+    {
+        $sections = array_merge(['doors' => true, 'frames' => true], $sections);
+        $configs->loadMissing(['businessJob', 'workOrder', 'doors', 'openingSpecs', 'frameConfig.parts.product', 'doorConfigs.parts.product']);
+        $sorted = $configs->sortBy(fn ($c) => $this->tagLabel($c), SORT_NATURAL | SORT_FLAG_CASE)->values();
+
+        $rows = [];
+        $emit = function (DoorFrameConfiguration $config, $parts, string $tag, int $divisor) use (&$rows) {
+            foreach ($parts as $part) {
+                if (! in_array($part->source_type, ['extrusion', 'profile'], true) || $part->calculated_length === null || ! $part->product) {
+                    continue;
+                }
+                $qty = (float) $part->quantity / max(1, $divisor);
+                if ($qty <= 0.00001) {
+                    continue;
+                }
+                $rows[] = [
+                    $part->product->part_number, $part->product->finish ?? '', number_format((float) $part->calculated_length, 3, '.', ''),
+                    $this->fmtQty($qty), $config->businessJob?->job_number ?? '', $config->workOrder?->release_token ?? '',
+                    $tag, 0, 0, $part->part_label, 0, 0,
+                ];
+            }
+        };
+
+        foreach ($sorted as $config) {
+            $tags = $this->tags($config);
+            $framePerPair = $config->openingSpecs?->opening_type === 'pair' && count($tags) > 1;
+
+            if ($config->includesDoor() && $sections['doors']) {
+                $doorParts = $config->doorConfigs->first()?->parts ?? collect();
+                foreach ($tags as $tag) {
+                    $emit($config, $doorParts, $tag, count($tags));
+                }
+            }
+            if ($config->includesFrame() && $sections['frames']) {
+                $frameParts = $config->frameConfig?->parts ?? collect();
+                if ($framePerPair) {
+                    $emit($config, $frameParts, implode(' / ', $tags), 1);
+                } else {
+                    foreach ($tags as $tag) {
+                        $emit($config, $frameParts, $tag, count($tags));
+                    }
+                }
+            }
+        }
+
+        return $rows;
     }
 
     // ── Per-piece sheets ────────────────────────────────────────────────────────────────

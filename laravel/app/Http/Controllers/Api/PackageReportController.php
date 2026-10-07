@@ -43,6 +43,30 @@ class PackageReportController extends Controller
         return response()->json($service->build($configs, $sections));
     }
 
+    public function cutListCsv(Request $request, PackageReportService $service)
+    {
+        $data = $request->validate([
+            'configuration_ids' => 'required|array|min:1',
+            'configuration_ids.*' => 'integer|exists:door_frame_configurations,id',
+            'sections' => 'nullable|array',
+        ]);
+
+        $configs = DoorFrameConfiguration::whereIn('id', $data['configuration_ids'])->get();
+        $sections = collect($data['sections'] ?? [])->map(fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN))->all();
+        $rows = $service->cutListCsvRows($configs, $sections);
+
+        $job = $configs->first()?->businessJob?->job_number ?? 'job';
+        $filename = 'CutList_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $job).'.csv';
+
+        return response()->stream(function () use ($rows) {
+            $file = fopen('php://output', 'w');
+            foreach ($rows as $row) {
+                fputcsv($file, $row);
+            }
+            fclose($file);
+        }, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"{$filename}\""]);
+    }
+
     public function templates()
     {
         return response()->json([

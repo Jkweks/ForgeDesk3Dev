@@ -50,6 +50,7 @@
         </div>
         <div class="col-auto ms-auto btn-list">
           <button class="btn btn-outline-secondary" onclick="pkOpenEditor()" data-permission="configurator.catalog.manage"><i class="ti ti-layout me-1"></i>Edit layout</button>
+          <button class="btn btn-outline-primary" onclick="pkExportCutCsv()" data-permission="configurator.view"><i class="ti ti-file-spreadsheet me-1"></i>Cut list CSV</button>
           <button class="btn btn-primary" onclick="window.print()"><i class="ti ti-printer me-1"></i>Print / Save PDF</button>
         </div>
       </div>
@@ -218,6 +219,29 @@ function pkJobChanged() {
   document.getElementById('pk-wo').innerHTML = '<option value="">All work orders</option>'
     + (job ? job.work_orders.map((w, i) => `<option value="${i}">${pkEsc(w.name)} (${w.count})</option>`).join('') : '');
   pkLoad();
+}
+
+async function pkExportCutCsv() {
+  const job = pkJobs[document.getElementById('pk-job').value];
+  if (!job) { showNotification('Select a job first.', 'warning'); return; }
+  const woIdx = document.getElementById('pk-wo').value;
+  const ids = woIdx === '' ? job.work_orders.flatMap(w => w.configuration_ids) : job.work_orders[woIdx].configuration_ids;
+  if (!ids.length) { showNotification('No configurations.', 'warning'); return; }
+  const qs = new URLSearchParams();
+  ids.forEach(i => qs.append('configuration_ids[]', i));
+  // Door / frame checkboxes decide which cuts are included; the other sections don't apply to the CSV.
+  document.querySelectorAll('.pk-sec').forEach(b => { if (b.value === 'doors' || b.value === 'frames') qs.set(`sections[${b.value}]`, b.checked ? '1' : '0'); });
+  try {
+    const response = await apiCall(`/config/package/cut-list-csv?${qs.toString()}`);
+    if (!response.ok) { const err = await response.json().catch(() => ({})); showNotification(err.message || 'CSV export failed', 'danger'); return; }
+    const blob = await response.blob();
+    const match = (response.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = match ? match[1] : 'CutList.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  } catch (err) { showNotification('Failed to export cut list CSV', 'danger'); }
 }
 
 async function pkLoad() {

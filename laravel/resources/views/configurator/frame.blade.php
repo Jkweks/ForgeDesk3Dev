@@ -80,6 +80,7 @@
                 <div class="btn-group" role="group">
                   <button class="btn btn-outline-secondary" id="fb-edit-btn" onclick="fbOpenEditModal()" data-permission="configurator.edit"><i class="ti ti-pencil me-1"></i>Edit Details</button>
                   <button class="btn btn-outline-secondary" onclick="fbOpenDuplicateModal()" data-permission="configurator.edit"><i class="ti ti-copy me-1"></i>Duplicate</button>
+                  <button class="btn btn-outline-secondary" onclick="fbOpenMergeModal()" data-permission="configurator.edit" title="Join the other leaf of a pair that has its own tag"><i class="ti ti-arrows-join me-1"></i>Merge as Pair</button>
                   <button class="btn btn-outline-danger" id="fb-delete-btn" onclick="fbDeleteConfig()" data-permission="configurator.delete" title="Delete this configuration (admin)"><i class="ti ti-trash me-1"></i>Delete</button>
                   <button class="btn btn-outline-primary" onclick="fbExportPdf()" data-permission="configurator.view"><i class="ti ti-file-download me-1"></i>Export PDF</button>
                   <button class="btn btn-outline-primary" onclick="fbExportCsv()" data-permission="configurator.view"><i class="ti ti-file-spreadsheet me-1"></i>Export CSV</button>
@@ -197,11 +198,11 @@
 
                     <div class="col-md-4">
                       <label class="form-label">Door Opening Width (in)</label>
-                      <input type="number" step="0.01" class="form-control" id="fb-op-width" required>
+                      <input type="number" step="any" class="form-control" id="fb-op-width" required>
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Door Opening Height (in)</label>
-                      <input type="number" step="0.01" class="form-control" id="fb-op-height" required>
+                      <input type="number" step="any" class="form-control" id="fb-op-height" required>
                     </div>
 
                     <div class="col-12">
@@ -245,7 +246,7 @@
                         </div>
                         <div class="col-md-4" id="fb-frame-height-wrap" style="display:none">
                           <label class="form-label">Total Frame Height (in)</label>
-                          <input type="number" step="0.01" class="form-control" id="fb-frame-height">
+                          <input type="number" step="any" class="form-control" id="fb-frame-height">
                         </div>
                       </div>
                     </div>
@@ -311,11 +312,11 @@
                     </div>
                     <div class="col-md-4" id="fb-door-midloc1-wrap" style="display:none">
                       <label class="form-label">Mid Rail Location #1 (in from bottom)</label>
-                      <input type="number" step="0.0001" class="form-control" id="fb-door-midloc1">
+                      <input type="number" step="any" class="form-control" id="fb-door-midloc1">
                     </div>
                     <div class="col-md-4" id="fb-door-midloc2-wrap" style="display:none">
                       <label class="form-label">Mid Rail Location #2 (in from bottom)</label>
-                      <input type="number" step="0.0001" class="form-control" id="fb-door-midloc2">
+                      <input type="number" step="any" class="form-control" id="fb-door-midloc2">
                     </div>
                     <div class="col-12">
                       <button type="submit" class="btn btn-primary" data-permission="configurator.edit">Save Door Configuration</button>
@@ -669,6 +670,30 @@
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary" id="fb-duplicate-submit">Duplicate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="fb-merge-modal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="fb-merge-form">
+        <div class="modal-header"><h5 class="modal-title">Merge as Pair</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            For a pair whose leaves have different tags (e.g. 1403 and 1409). The configuration you pick is
+            folded into this one: its door tag and work-order rows move here, this opening becomes a pair
+            sharing one frame, and the picked configuration is deleted. Its own frame and hardware are
+            discarded. Regenerate the parts afterwards.
+          </p>
+          <label class="form-label">Other leaf's configuration</label>
+          <select class="form-select" id="fb-merge-source" required></select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="fb-merge-submit">Merge</button>
         </div>
       </form>
     </div>
@@ -1800,6 +1825,28 @@ document.getElementById('fb-duplicate-form').addEventListener('submit', async (e
     btn.disabled = false;
     btn.textContent = 'Duplicate';
   }
+});
+
+// ---- Merge as pair ----
+function fbOpenMergeModal() {
+  const c = fbSelectedDetail;
+  const others = fbConfigs.filter(o => o.id !== c.id && o.business_job_id === c.business_job.id && o.can_edit && o.job_scope !== 'frame_only');
+  if (!others.length) { showNotification('No other editable configuration on this job to merge.', 'warning'); return; }
+  document.getElementById('fb-merge-source').innerHTML = others.map(o => `<option value="${o.id}">${esc(fbEntryLabel(o, false))}</option>`).join('');
+  showModal(document.getElementById('fb-merge-modal'));
+}
+
+document.getElementById('fb-merge-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const sourceId = document.getElementById('fb-merge-source').value;
+  if (!confirm('Merge the selected configuration into this one? It will be deleted.')) return;
+  try {
+    const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/merge-pair`, { method: 'POST', body: JSON.stringify({ source_id: parseInt(sourceId, 10) }) });
+    hideModal(document.getElementById('fb-merge-modal'));
+    showNotification(res.message, 'success');
+    await fbLoadList();
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
 });
 
 // ---- Global settings ----

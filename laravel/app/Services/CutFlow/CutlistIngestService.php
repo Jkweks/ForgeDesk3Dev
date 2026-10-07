@@ -129,20 +129,81 @@ class CutlistIngestService
         return ['job' => $job, 'line_count' => $lines->count()];
     }
 
+    /** Header names CutFlow understands, once normalised (see normaliseHeader()). */
+    private const KNOWN_HEADERS = [
+        'part_id', 'name', 'finish', 'dimension_in', 'dimension', 'qty', 'job', 'work_order', 'phase',
+        'description', 'row', 'column', 'leftcutangle', 'rightcutangle',
+    ];
+
+    /** Header spellings of the ForgeDesk fabrication-package cut list, mapped onto CutFlow's names. */
+    private const HEADER_ALIASES = [
+        'sku' => 'part_id', 'finish_code' => 'finish', 'length' => 'dimension_in', 'quantity' => 'qty',
+        'workorder' => 'work_order', 'door_tag' => 'phase', 'part_use' => 'description',
+    ];
+
+    /**
+     * Column order of the ForgeDesk fabrication-package cut-list CSV, used when the file has no header
+     * row: SKU, finish code, length, quantity, job, work order, door tag, 0, 0, part use, 0, 0. The
+     * zero columns are not read.
+     */
+    private const FORGEDESK_COLUMNS = [
+        0 => 'part_id', 1 => 'finish', 2 => 'dimension_in', 3 => 'qty', 4 => 'job', 5 => 'work_order',
+        6 => 'phase', 9 => 'description',
+    ];
+
+    private function normaliseHeader(string $h): string
+    {
+        $h = strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $h)));
+        $h = preg_replace('/[\s\-]+/', '_', $h);
+
+        return self::HEADER_ALIASES[$h] ?? $h;
+    }
+
     /**
      * Parses an uploaded CSV file into the raw row-array shape ingest()
-     * expects. Shared by the browser upload path and can be reused wherever
-     * else a CutFlow-format CSV needs parsing.
+     * expects. Accepts either CutFlow's own header-row format (any column
+     * order) or the ForgeDesk fabrication-package cut list, with or without
+     * a header row: SKU, finish code, length, quantity, job, work order,
+     * door tag, 0, 0, part use, 0, 0. A first row with no recognised header
+     * name is treated as data and read by that fixed column order.
      *
      * @return array<int, array>
      */
     public function parseCsv(\Illuminate\Http\UploadedFile $file): array
     {
         $handle = fopen($file->getRealPath(), 'r');
-        $header = array_map(fn ($h) => strtolower(trim($h)), fgetcsv($handle, escape: ''));
+        $first = fgetcsv($handle, escape: '');
+        if ($first === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $header = array_map(fn ($h) => $this->normaliseHeader((string) $h), $first);
+        $hasHeader = count(array_intersect($header, self::KNOWN_HEADERS)) > 0;
 
         $rawRows = [];
+        $addPositional = function (array $row) use (&$rawRows) {
+            $data = [];
+            foreach (self::FORGEDESK_COLUMNS as $i => $key) {
+                $data[$key] = $row[$i] ?? '';
+            }
+            $rawRows[] = $data;
+        };
+
+        if (! $hasHeader) {
+            $addPositional($first);
+        }
+
         while (($row = fgetcsv($handle, escape: '')) !== false) {
+            if ($row === [null]) {
+                continue; // blank line
+            }
+            if (! $hasHeader) {
+                $addPositional($row);
+
+                continue;
+            }
             if (count($row) !== count($header)) {
                 continue;
             }
