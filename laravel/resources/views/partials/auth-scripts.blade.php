@@ -53,23 +53,16 @@
   // Update user badge in header
   function updateUserBadge() {
     if (currentUser) {
-      // Update avatar initial
-      const userAvatar = document.getElementById('userAvatar');
-      if (userAvatar && currentUser.name) {
-        userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
-      }
-
-      // Update user name
-      const userName = document.getElementById('userName');
-      if (userName) {
-        userName.textContent = currentUser.name || 'User';
-      }
-
-      // Update user email
-      const userEmail = document.getElementById('userEmail');
-      if (userEmail) {
-        userEmail.textContent = currentUser.email || '';
-      }
+      // Fill every copy of the user badge (top navbar and sidebar both render one)
+      document.querySelectorAll('.js-user-avatar').forEach((el) => {
+        if (currentUser.name) el.textContent = currentUser.name.charAt(0).toUpperCase();
+      });
+      document.querySelectorAll('.js-user-name').forEach((el) => {
+        el.textContent = currentUser.name || 'User';
+      });
+      document.querySelectorAll('.js-user-email').forEach((el) => {
+        el.textContent = currentUser.email || '';
+      });
 
       // Apply navigation permissions
       applyNavigationPermissions();
@@ -524,7 +517,7 @@
             <div class="mb-3">
               <label class="form-label">New password</label>
               <input type="password" class="form-control" id="forcePwNew" autocomplete="new-password" minlength="8" required>
-              <small class="form-hint">At least 8 characters.</small>
+              <small class="form-text">At least 8 characters.</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Confirm new password</label>
@@ -629,7 +622,7 @@
   });
 
   // Logout
-  document.getElementById('logoutBtn')?.addEventListener('click', async (e) => {
+  document.querySelectorAll('.js-logout').forEach((btn) => btn.addEventListener('click', async (e) => {
     e.preventDefault();
     try {
       await fetch('/api/logout', {
@@ -644,7 +637,7 @@
     localStorage.removeItem('userData');
     currentUser = null;
     location.reload();
-  });
+  }));
 
   // Validate session on page load
   async function validateSession() {

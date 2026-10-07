@@ -254,7 +254,7 @@
               <label class="form-label form-label-sm mb-1">Release #</label>
               <input type="text" class="form-control form-control-sm" id="d-release-code"
                 maxlength="50" onchange="saveReleaseCode(this.value)">
-              <div class="form-hint mt-1" id="d-release-code-hint"></div>
+              <div class="form-text mt-1" id="d-release-code-hint"></div>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label form-label-sm mb-1">Date Issued</label>
@@ -264,7 +264,7 @@
             <div class="col-6 col-md-3">
               <label class="form-label form-label-sm mb-1">Due Date</label>
               <div id="d-due-date">—</div>
-              <div class="form-hint mt-1">Auto-set from the earliest elevation date</div>
+              <div class="form-text mt-1">Auto-set from the earliest elevation date</div>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label form-label-sm mb-1">Est. Start</label>
@@ -278,7 +278,7 @@
               <label class="form-label form-label-sm mb-1">Priority</label>
               <input type="number" class="form-control form-control-sm" id="d-priority"
                 min="1" placeholder="—" onchange="patchWO('priority', this.value ? parseInt(this.value) : null)">
-              <div class="form-hint mt-1" id="d-priority-hint"></div>
+              <div class="form-text mt-1" id="d-priority-hint"></div>
             </div>
             <div class="col-12 col-md-4">
               <label class="form-label form-label-sm mb-1">Est. Time</label>
@@ -288,7 +288,7 @@
                   onchange="saveWOEstimate(this.value)">
                 <span class="input-group-text" id="d-est-hours">– h</span>
               </div>
-              <div class="form-hint mt-1" id="d-est-hint"></div>
+              <div class="form-text mt-1" id="d-est-hint"></div>
             </div>
             <div class="col-12 col-md-8">
               <label class="form-label form-label-sm mb-1">Material Delivery</label>
@@ -386,7 +386,7 @@
                 <label class="form-label form-label-sm mb-1">File</label>
                 <input type="file" class="form-control form-control-sm" id="wo-job-doc-file"
                   accept=".pdf,.xlsx,.xlsm,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif,.txt">
-                <div class="form-hint mt-1">PDF, Excel, Word, image or text — up to 25&nbsp;MB.</div>
+                <div class="form-text mt-1">PDF, Excel, Word, image or text — up to 25&nbsp;MB.</div>
               </div>
             </div>
             <div class="d-flex gap-2 mt-2">
@@ -469,7 +469,7 @@
               <div class="dropdown-menu w-100 p-0" id="wiz-job-results"
                 style="max-height:280px;overflow-y:auto;top:100%;left:0"></div>
             </div>
-            <div class="form-hint mt-1" id="wiz-job-hint"></div>
+            <div class="form-text mt-1" id="wiz-job-hint"></div>
             <div class="mt-1">
               <button type="button" class="btn btn-sm btn-ghost-primary" onclick="openQuickJobCreate()">
                 <i class="ti ti-plus me-1"></i>Create New Job
@@ -479,7 +479,7 @@
           <div class="mb-3">
             <label class="form-label">Custom Release #</label>
             <input type="text" class="form-control" id="new-wo-release-code" maxlength="50" placeholder="Leave blank for R1, R2, …">
-            <div class="form-hint">Optional — replaces the auto “R#” in the release label.</div>
+            <div class="form-text">Optional — replaces the auto “R#” in the release label.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Material Delivery</label>
@@ -594,7 +594,7 @@
           <div class="col-md-3">
             <label class="form-label" id="elev-tier-label">Complexity Tier</label>
             <select class="form-select" id="elev-tier"></select>
-            <small class="form-hint" id="elev-tier-hint"></small>
+            <small class="form-text" id="elev-tier-hint"></small>
           </div>
         </div>
         <div class="row mb-3">
@@ -762,7 +762,7 @@
         <div class="mb-3">
           <label class="form-label">CSV File</label>
           <input type="file" class="form-control" id="cutlist-upload-file" accept=".csv,.txt">
-          <div class="form-hint">Columns: part_id (or name), finish, dimension_in, qty, and optionally phase, description, row, column, leftcutangle, rightcutangle.</div>
+          <div class="form-text">Columns: part_id (or name), finish, dimension_in, qty, and optionally phase, description, row, column, leftcutangle, rightcutangle.</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -833,7 +833,7 @@
           <div class="col-md-6">
             <label class="form-label">Job Number</label>
             <input type="text" class="form-control" id="ej-number">
-            <div class="form-hint" id="ej-number-hint"></div>
+            <div class="form-text" id="ej-number-hint"></div>
           </div>
           <div class="col-md-6">
             <label class="form-label">Job Name</label>
@@ -2505,7 +2505,7 @@ function elevRow(e) {
     }).join('');
 
     const completedInfo = e.date_completed
-        ? `<span class="badge bg-success">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-secondary">${esc(e.completed_by_name)}</small>` : ''}`
+        ? `<span class="badge bg-success-lt">${e.date_completed}</span>${e.completed_by_name ? `<br><small class="text-secondary">${esc(e.completed_by_name)}</small>` : ''}`
         : `<span class="text-secondary small">—</span>`;
 
     const hasStages = stages.length > 0;

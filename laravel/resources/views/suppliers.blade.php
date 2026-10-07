@@ -148,12 +148,12 @@
                 <div class="col-md-6">
                   <label class="form-label required">Supplier Name</label>
                   <input type="text" class="form-control" id="supplierName" name="name" required>
-                  <small class="form-hint">Legal or trading name</small>
+                  <small class="form-text">Legal or trading name</small>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Code</label>
                   <input type="text" class="form-control" id="supplierCode" name="code">
-                  <small class="form-hint">Unique identifier (optional)</small>
+                  <small class="form-text">Unique identifier (optional)</small>
                 </div>
               </div>
 
@@ -224,7 +224,7 @@
                 <div class="col-md-6">
                   <label class="form-label">Default Lead Time (Days)</label>
                   <input type="number" class="form-control" id="supplierLeadTime" name="default_lead_time_days" min="0" placeholder="e.g., 7">
-                  <small class="form-hint">Typical delivery time in days</small>
+                  <small class="form-text">Typical delivery time in days</small>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Minimum Order Amount</label>
@@ -232,7 +232,7 @@
                     <span class="input-group-text">$</span>
                     <input type="number" class="form-control" id="supplierMinOrderAmount" name="minimum_order_amount" min="0" step="0.01" placeholder="0.00">
                   </div>
-                  <small class="form-hint">Minimum order value</small>
+                  <small class="form-text">Minimum order value</small>
                 </div>
               </div>
 
@@ -240,7 +240,7 @@
                 <div class="col-md-12">
                   <label class="form-label">Notes</label>
                   <textarea class="form-control" id="supplierNotes" name="notes" rows="3"></textarea>
-                  <small class="form-hint">Additional information about this supplier</small>
+                  <small class="form-text">Additional information about this supplier</small>
                 </div>
               </div>
 

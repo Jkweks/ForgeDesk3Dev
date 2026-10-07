@@ -1,347 +1,201 @@
-<!-- Theme Settings Offcanvas -->
-<form class="offcanvas offcanvas-start offcanvas-narrow" tabindex="-1" id="offcanvasTheme" role="dialog" aria-modal="true" aria-labelledby="offcanvasThemeLabel">
+{{--
+  Customize panel (colour mode, accent, navigation, layout, ...). Available on every page.
+
+  Every setting is a `data-bs-<key>` attribute on <html> plus a `tabler-<key>` localStorage
+  entry, written only when it differs from the default (same contract as Tabler's
+  tabler-theme.js, which applies the stored values on page load). Changes are also saved to
+  the user's profile (PUT /user/theme-preferences) so they follow them to other devices.
+--}}
+@php
+  use App\Support\ThemeTileSvg;
+
+  // control: tile (SVG preview), color (accent swatches), font ("Aa" sample), pill (text only)
+  $themeGroups = [
+    ['title' => 'Appearance', 'settings' => [
+      ['key' => 'theme', 'legend' => 'Color mode', 'hint' => 'Auto follows your device setting.', 'default' => 'auto', 'control' => 'tile',
+        'options' => ['auto' => 'Auto', 'light' => 'Light', 'dark' => 'Dark']],
+      ['key' => 'theme-primary', 'legend' => 'Accent color', 'hint' => 'Buttons, links and highlights.', 'default' => 'blue', 'control' => 'color',
+        'options' => ['blue' => 'Blue', 'azure' => 'Azure', 'indigo' => 'Indigo', 'purple' => 'Purple', 'pink' => 'Pink', 'red' => 'Red',
+          'orange' => 'Orange', 'yellow' => 'Yellow', 'lime' => 'Lime', 'green' => 'Green', 'teal' => 'Teal', 'cyan' => 'Cyan']],
+      ['key' => 'theme-base', 'legend' => 'Gray scale', 'hint' => 'The neutral tone behind backgrounds, borders and text.', 'default' => 'neutral', 'control' => 'tile',
+        'options' => ['slate' => 'Slate', 'gray' => 'Gray', 'zinc' => 'Zinc', 'neutral' => 'Neutral', 'stone' => 'Stone']],
+      ['key' => 'theme-font', 'legend' => 'Font', 'hint' => 'Typeface for the whole app.', 'default' => 'sans-serif', 'control' => 'font',
+        'options' => ['sans-serif' => 'Sans-serif', 'serif' => 'Serif', 'monospace' => 'Mono', 'comic' => 'Comic']],
+      ['key' => 'theme-radius', 'legend' => 'Corner radius', 'hint' => 'How rounded cards, buttons and inputs are.', 'default' => '1', 'control' => 'tile',
+        'options' => ['0' => 'None', '0.5' => 'Small', '1' => 'Default', '1.5' => 'Large', '2' => 'Round']],
+    ]],
+    ['title' => 'Layout', 'settings' => [
+      ['key' => 'navbar-position', 'legend' => 'Navigation', 'hint' => 'Menu across the top or down the side.', 'default' => 'horizontal', 'control' => 'tile',
+        'options' => ['horizontal' => 'Top bar', 'vertical' => 'Sidebar']],
+      ['key' => 'sidebar', 'legend' => 'Sidebar', 'hint' => 'Fold it to icons to make room.', 'default' => 'default', 'control' => 'tile', 'only' => 'vertical',
+        'options' => ['default' => 'Expanded', 'folded' => 'Folded', 'folded-hover' => 'Folded, opens on hover']],
+      ['key' => 'navbar', 'legend' => 'Top bar behavior', 'hint' => 'Keep the top bar in view while scrolling.', 'default' => 'default', 'control' => 'tile', 'only' => 'horizontal',
+        'options' => ['default' => 'Scrolls with page', 'sticky' => 'Sticky']],
+      ['key' => 'navbar-theme', 'legend' => 'Navigation color', 'hint' => 'Light, dark or accent-colored navigation.', 'default' => 'default', 'control' => 'tile',
+        'options' => ['default' => 'Default', 'dark' => 'Dark', 'primary' => 'Accent']],
+      ['key' => 'layout', 'legend' => 'Container width', 'hint' => 'How wide page content may grow.', 'default' => 'default', 'control' => 'tile',
+        'options' => ['default' => 'Default', 'fluid' => 'Full width', 'boxed' => 'Boxed']],
+    ]],
+  ];
+  $themeDefaults = collect($themeGroups)->flatMap(fn ($g) => $g['settings'])->mapWithKeys(fn ($s) => [$s['key'] => $s['default']])->all();
+@endphp
+<form class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasTheme" role="dialog" aria-modal="true" aria-labelledby="offcanvasThemeLabel">
   <div class="offcanvas-header">
-    <h2 class="offcanvas-title" id="offcanvasThemeLabel">Theme Settings</h2>
+    <h2 class="offcanvas-title" id="offcanvasThemeLabel"><i class="ti ti-palette me-2"></i>Customize</h2>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
   </div>
-  <div class="offcanvas-body d-flex flex-column">
-    <div>
-      <div class="mb-4">
-        <label class="form-label">Color mode</label>
-        <p class="form-hint">Choose the color mode for your app.</p>
-        <label class="form-check">
-          <div class="form-selectgroup-item">
-            <input type="radio" name="theme" value="light" class="form-check-input" checked />
-            <div class="form-check-label">Light</div>
-          </div>
-        </label>
-        <label class="form-check">
-          <div class="form-selectgroup-item">
-            <input type="radio" name="theme" value="dark" class="form-check-input" />
-            <div class="form-check-label">Dark</div>
-          </div>
-        </label>
-      </div>
-      <div class="mb-4">
-        <label class="form-label">Color scheme</label>
-        <p class="form-hint">The perfect color mode for your app.</p>
-        <div class="row g-2">
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="blue" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-blue"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="azure" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-azure"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="indigo" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-indigo"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="purple" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-purple"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="pink" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-pink"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="red" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-red"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="orange" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-orange"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="yellow" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-yellow"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="lime" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-lime"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="green" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-green"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="teal" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-teal"></span>
-            </label>
-          </div>
-          <div class="col-auto">
-            <label class="form-colorinput">
-              <input name="theme-primary" type="radio" value="cyan" class="form-colorinput-input" />
-              <span class="form-colorinput-color bg-cyan"></span>
-            </label>
-          </div>
+  <div class="offcanvas-body p-0">
+    @foreach ($themeGroups as $group)
+      <section class="p-4 {{ ! $loop->last ? 'border-bottom' : '' }}">
+        <h3 class="subheader mb-3">{{ $group['title'] }}</h3>
+        <div class="space-y-4">
+          @foreach ($group['settings'] as $setting)
+            <div role="group" aria-labelledby="theme-setting-{{ $setting['key'] }}" @if (! empty($setting['only'])) data-only="{{ $setting['only'] }}" @endif>
+              <div class="form-label mb-1" id="theme-setting-{{ $setting['key'] }}">{{ $setting['legend'] }}</div>
+              <div class="form-text mb-3 mt-0">{{ $setting['hint'] }}</div>
+
+              @if ($setting['control'] === 'color')
+                <div class="row g-2">
+                  @foreach ($setting['options'] as $value => $label)
+                    <div class="col-auto">
+                      <label class="form-colorinput">
+                        <input type="radio" name="{{ $setting['key'] }}" value="{{ $value }}" class="form-colorinput-input" aria-label="{{ $label }}">
+                        <span class="form-colorinput-color bg-{{ $value }}"></span>
+                      </label>
+                    </div>
+                  @endforeach
+                </div>
+              @elseif ($setting['control'] === 'font')
+                <div class="row g-3">
+                  @foreach ($setting['options'] as $value => $label)
+                    <div class="col-4">
+                      <label class="form-imagecheck d-block">
+                        <input type="radio" name="{{ $setting['key'] }}" value="{{ $value }}" class="form-imagecheck-input">
+                        <span class="form-imagecheck-figure p-1">
+                          <span class="form-imagecheck-image text-center py-2 display-5 fw-medium lh-1 font-{{ $value }}" aria-hidden="true">Aa</span>
+                          <span class="form-imagecheck-caption">{{ $label }}</span>
+                        </span>
+                      </label>
+                    </div>
+                  @endforeach
+                </div>
+              @else
+                <div class="row g-3">
+                  @foreach ($setting['options'] as $value => $label)
+                    <div class="col-4">
+                      <label class="form-imagecheck">
+                        <input type="radio" name="{{ $setting['key'] }}" value="{{ $value }}" class="form-imagecheck-input">
+                        <span class="form-imagecheck-figure p-1">
+                          {!! ThemeTileSvg::for($setting['key'], (string) $value) !!}
+                          <span class="form-imagecheck-caption">{{ $label }}</span>
+                        </span>
+                      </label>
+                    </div>
+                  @endforeach
+                </div>
+              @endif
+            </div>
+          @endforeach
         </div>
-      </div>
-      <div class="mb-4">
-        <label class="form-label">Font family</label>
-        <p class="form-hint">Choose the font family that fits your app.</p>
-        <div>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-font" value="sans-serif" class="form-check-input" checked />
-              <div class="form-check-label">Sans-serif</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-font" value="serif" class="form-check-input" />
-              <div class="form-check-label">Serif</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-font" value="monospace" class="form-check-input" />
-              <div class="form-check-label">Monospace</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-font" value="comic" class="form-check-input" />
-              <div class="form-check-label">Comic</div>
-            </div>
-          </label>
-        </div>
-      </div>
-      <div class="mb-4">
-        <label class="form-label">Theme base</label>
-        <p class="form-hint">Choose the gray shade for your app.</p>
-        <div>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-base" value="slate" class="form-check-input" />
-              <div class="form-check-label">Slate</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-base" value="gray" class="form-check-input" checked />
-              <div class="form-check-label">Gray</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-base" value="zinc" class="form-check-input" />
-              <div class="form-check-label">Zinc</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-base" value="neutral" class="form-check-input" />
-              <div class="form-check-label">Neutral</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-base" value="stone" class="form-check-input" />
-              <div class="form-check-label">Stone</div>
-            </div>
-          </label>
-        </div>
-      </div>
-      <div class="mb-4">
-        <label class="form-label">Corner Radius</label>
-        <p class="form-hint">Choose the border radius factor for your app.</p>
-        <div>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-radius" value="0" class="form-check-input" />
-              <div class="form-check-label">0</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-radius" value="0.5" class="form-check-input" />
-              <div class="form-check-label">0.5</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-radius" value="1" class="form-check-input" checked />
-              <div class="form-check-label">1</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-radius" value="1.5" class="form-check-input" />
-              <div class="form-check-label">1.5</div>
-            </div>
-          </label>
-          <label class="form-check">
-            <div class="form-selectgroup-item">
-              <input type="radio" name="theme-radius" value="2" class="form-check-input" />
-              <div class="form-check-label">2</div>
-            </div>
-          </label>
-        </div>
-      </div>
-    </div>
-    <div class="mt-auto space-y">
-      <button type="button" class="btn w-100" id="resetThemeBtn">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19.95 11a8 8 0 1 0 -.5 4m.5 5v-5h-5" /></svg>
-        Reset changes
-      </button>
-      <a href="#" class="btn btn-primary w-100" data-bs-dismiss="offcanvas">Save</a>
-    </div>
+      </section>
+    @endforeach
+  </div>
+  <div class="offcanvas-footer border-top p-3 space-y-2">
+    <button type="button" class="btn w-100" id="resetThemeBtn"><i class="ti ti-rotate me-1"></i>Reset changes</button>
+    <button type="button" class="btn btn-primary w-100" data-bs-dismiss="offcanvas">Done</button>
   </div>
 </form>
 
 <script>
-// Global theme manager - Initialize theme settings
-(function() {
-  var themeConfig = {
-    'theme': 'light',
-    'theme-base': 'gray',
-    'theme-font': 'sans-serif',
-    'theme-primary': 'blue',
-    'theme-radius': '1'
-  };
+(function () {
+  var DEFAULTS = @json($themeDefaults);
+  var html = document.documentElement;
+  var form = document.getElementById('offcanvasTheme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 
-  // Initialize theme from localStorage
-  function initTheme() {
-    for (var key in themeConfig) {
-      var value = localStorage.getItem('tabler-' + key) || themeConfig[key];
-      document.documentElement.setAttribute('data-bs-' + key, value);
+  function stored(key) {
+    try { return localStorage.getItem('tabler-' + key); } catch (e) { return null; }
+  }
+  function setStored(key, value) {
+    try {
+      if (value === null || value === DEFAULTS[key]) localStorage.removeItem('tabler-' + key);
+      else localStorage.setItem('tabler-' + key, value);
+    } catch (e) { /* private mode — the attribute below still applies for this page */ }
+  }
+  function current(key) {
+    var v = stored(key);
+    return v !== null ? v : DEFAULTS[key];
+  }
 
-      // Update form controls
-      var input = document.querySelector('input[name="' + key + '"][value="' + value + '"]');
-      if (input) {
-        input.checked = true;
-      }
+  // Mirror tabler-theme.js: default => attribute absent; "auto" resolves to light/dark.
+  function apply(key, value) {
+    setStored(key, value);
+    if (key === 'theme') {
+      html.setAttribute('data-bs-theme', value === 'auto' ? (prefersDark.matches ? 'dark' : 'light') : value);
+    } else if (value === DEFAULTS[key]) {
+      html.removeAttribute('data-bs-' + key);
+    } else {
+      html.setAttribute('data-bs-' + key, value);
     }
   }
 
-  // Handle theme changes
-  function handleThemeChange(e) {
-    if (e.target.type === 'radio') {
-      var name = e.target.name;
-      var value = e.target.value;
+  prefersDark.addEventListener('change', function () {
+    if (current('theme') === 'auto') apply('theme', 'auto');
+  });
 
-      localStorage.setItem('tabler-' + name, value);
-      document.documentElement.setAttribute('data-bs-' + name, value);
-      persistThemeToServer();
-    }
+  function syncForm() {
+    Object.keys(DEFAULTS).forEach(function (key) {
+      var input = form.querySelector('input[name="' + key + '"][value="' + current(key) + '"]');
+      if (input) input.checked = true;
+    });
+    var position = current('navbar-position');
+    form.querySelectorAll('[data-only]').forEach(function (el) {
+      el.hidden = el.dataset.only !== position;
+    });
   }
 
-  // Reset theme to defaults
-  function resetTheme() {
-    for (var key in themeConfig) {
-      localStorage.removeItem('tabler-' + key);
-      document.documentElement.setAttribute('data-bs-' + key, themeConfig[key]);
-
-      var input = document.querySelector('input[name="' + key + '"][value="' + themeConfig[key] + '"]');
-      if (input) {
-        input.checked = true;
-      }
-    }
-    persistThemeToServer();
-  }
-
-  // Save the full current config to the signed-in user's account so it
-  // follows them to any device on next login. `apiCall` is defined by
-  // partials.auth-scripts, included later in the layout but already
-  // executed by the time this fires (event handlers, or after
-  // window.sessionReady resolves on initial load).
-  function persistThemeToServer() {
-    if (typeof apiCall !== 'function' || typeof currentUser === 'undefined' || !currentUser) {
-      return;
-    }
+  // Non-default values only; the server stores exactly what is sent (full replace).
+  function persistToServer() {
+    if (typeof apiCall !== 'function' || typeof currentUser === 'undefined' || !currentUser) return;
     var payload = {};
-    for (var key in themeConfig) {
-      payload[key] = localStorage.getItem('tabler-' + key) || themeConfig[key];
-    }
-    apiCall('/user/theme-preferences', {
-      method: 'PUT',
-      body: JSON.stringify(payload)
-    }).catch(function () { /* best-effort — local state already applied */ });
+    Object.keys(DEFAULTS).forEach(function (key) {
+      var v = stored(key);
+      if (v !== null && v !== DEFAULTS[key]) payload[key] = v;
+    });
+    apiCall('/user/theme-preferences', { method: 'PUT', body: JSON.stringify(payload) })
+      .catch(function () { /* best-effort — local state already applied */ });
   }
 
-  // Pull the signed-in user's saved preferences down from the server and
-  // apply any that differ from what's cached locally — this is what makes
-  // the theme follow the user to a new device/browser.
-  function syncThemeFromServer() {
-    if (typeof window.sessionReady === 'undefined') {
-      return;
-    }
+  // Pull the signed-in user's saved preferences so the look follows them to a new device.
+  function syncFromServer() {
+    if (typeof window.sessionReady === 'undefined') return;
     window.sessionReady.then(function () {
       var prefs = typeof currentUser !== 'undefined' && currentUser ? currentUser.theme_preferences : null;
-      if (!prefs) {
-        return;
-      }
-      for (var key in themeConfig) {
+      if (!prefs) return;
+      Object.keys(DEFAULTS).forEach(function (key) {
         var value = prefs[key];
-        if (!value || localStorage.getItem('tabler-' + key) === value) {
-          continue;
-        }
-        localStorage.setItem('tabler-' + key, value);
-        document.documentElement.setAttribute('data-bs-' + key, value);
-
-        var input = document.querySelector('input[name="' + key + '"][value="' + value + '"]');
-        if (input) {
-          input.checked = true;
-        }
-      }
+        if (value && current(key) !== value) apply(key, value);
+      });
+      syncForm();
     }).catch(function () { /* offline / not logged in — keep local theme */ });
   }
 
-  // Initialize on DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-      initTheme();
+  form.addEventListener('change', function (e) {
+    if (e.target.type !== 'radio' || !(e.target.name in DEFAULTS)) return;
+    apply(e.target.name, e.target.value);
+    syncForm();
+    persistToServer();
+    window.dispatchEvent(new Event('resize')); // let sticky/scroll layouts re-measure
+  });
 
-      var themeForm = document.getElementById('offcanvasTheme');
-      if (themeForm) {
-        themeForm.addEventListener('change', handleThemeChange);
-      }
+  document.getElementById('resetThemeBtn').addEventListener('click', function () {
+    Object.keys(DEFAULTS).forEach(function (key) { apply(key, DEFAULTS[key]); });
+    syncForm();
+    persistToServer();
+  });
 
-      var resetBtn = document.getElementById('resetThemeBtn');
-      if (resetBtn) {
-        resetBtn.addEventListener('click', resetTheme);
-      }
-
-      syncThemeFromServer();
-    });
-  } else {
-    initTheme();
-
-    var themeForm = document.getElementById('offcanvasTheme');
-    if (themeForm) {
-      themeForm.addEventListener('change', handleThemeChange);
-    }
-
-    var resetBtn = document.getElementById('resetThemeBtn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', resetTheme);
-    }
-
-    syncThemeFromServer();
-  }
+  form.addEventListener('submit', function (e) { e.preventDefault(); });
+  syncForm();
+  syncFromServer();
 })();
 </script>

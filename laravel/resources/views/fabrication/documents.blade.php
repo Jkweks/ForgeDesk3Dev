@@ -27,14 +27,14 @@
   transition: background .12s, color .12s;
   user-select: none;
 }
-.fab-nav-item:hover { background: rgba(var(--tblr-primary-rgb), .06); color: var(--tblr-body-color); }
+.fab-nav-item:hover { background: color-mix(in oklab, var(--tblr-primary) 6%, transparent); color: var(--tblr-body-color); }
 .fab-nav-item.active { background: var(--tblr-primary-lt); color: var(--tblr-primary); font-weight: 500; }
 .fab-nav-count {
   font-size: 0.7rem;
   color: var(--tblr-secondary-color);
   background: var(--tblr-bg-surface-secondary, rgba(0,0,0,.04));
   padding: 1px 7px;
-  border-radius: 20px;
+  border-radius: var(--tblr-border-radius-pill);
 }
 
 /* ── Document cards ───────────────────────────────────────────── */
@@ -59,7 +59,7 @@
 }
 .fab-doc-card:hover {
   border-color: var(--tblr-primary);
-  box-shadow: 0 2px 12px rgba(var(--tblr-primary-rgb), .12);
+  box-shadow: 0 2px 12px color-mix(in oklab, var(--tblr-primary) 12%, transparent);
   transform: translateY(-1px);
 }
 .fab-doc-card.selected { border-color: var(--tblr-primary); background: var(--tblr-primary-lt); }
@@ -67,7 +67,7 @@
   position: absolute;
   top: 10px; right: 10px;
   width: 18px; height: 18px;
-  border-radius: 4px;
+  border-radius: var(--tblr-border-radius-sm);
   border: var(--tblr-border-width) solid var(--tblr-border-color);
   background: var(--tblr-card-bg);
   display: flex; align-items: center; justify-content: center;
@@ -100,7 +100,7 @@
 .fab-tag {
   font-size: 0.7rem;
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--tblr-border-radius-pill);
   background: var(--tblr-bg-surface-secondary, rgba(0,0,0,.05));
   color: var(--tblr-secondary-color);
   border: var(--tblr-border-width) solid var(--tblr-border-color);
@@ -172,7 +172,7 @@
   cursor: pointer;
   transition: background .1s;
 }
-.fab-tbl tbody tr:hover { background: rgba(var(--tblr-primary-rgb), .04); }
+.fab-tbl tbody tr:hover { background: color-mix(in oklab, var(--tblr-primary) 4%, transparent); }
 .fab-tbl tbody tr.selected { background: var(--tblr-primary-lt); }
 .fab-tbl tbody tr:last-child { border-bottom: none; }
 .fab-tbl td { padding: 9px 12px; vertical-align: middle; }
@@ -181,7 +181,7 @@
 .fab-tbl-check { width: 36px; padding-left: 12px; }
 .fab-tbl-cb {
   width: 16px; height: 16px;
-  border-radius: 3px;
+  border-radius: var(--tblr-border-radius-sm);
   border: var(--tblr-border-width) solid var(--tblr-border-color);
   background: var(--tblr-card-bg);
   display: flex; align-items: center; justify-content: center;
@@ -234,13 +234,13 @@
   background: var(--tblr-form-control-bg, var(--tblr-card-bg));
   cursor: text; min-height: 36px; align-items: center;
 }
-.fab-tag-wrap:focus-within { border-color: var(--tblr-primary); box-shadow: 0 0 0 .2rem rgba(var(--tblr-primary-rgb), .1); }
+.fab-tag-wrap:focus-within { border-color: var(--tblr-primary); box-shadow: 0 0 0 .2rem color-mix(in oklab, var(--tblr-primary) 10%, transparent); }
 .fab-tag-pill {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 0.7rem; padding: 2px 7px; border-radius: 20px;
+  font-size: 0.7rem; padding: 2px 7px; border-radius: var(--tblr-border-radius-pill);
   background: var(--tblr-primary-lt);
   color: var(--tblr-primary);
-  border: var(--tblr-border-width) solid rgba(var(--tblr-primary-rgb), .3);
+  border: var(--tblr-border-width) solid color-mix(in oklab, var(--tblr-primary) 30%, transparent);
   white-space: nowrap;
 }
 .fab-tag-pill-remove {
@@ -272,6 +272,7 @@
 @endsection
 
 @section('content')
+<div class="page-wrapper">
 <div class="container-xl">
 
   <!-- Page header -->
@@ -296,7 +297,7 @@
 
       <!-- ── Left: filter sidebar ──────────────────────────────── -->
       <div class="col-12 col-md-3">
-        <div class="card" style="position: sticky; top: 72px;">
+        <div class="card" style="position: sticky; top: calc(var(--fd-nav-offset) + 1rem);">
           <div class="card-body p-3">
 
             <div class="fab-nav-label">Document type</div>
@@ -506,6 +507,7 @@
       </div>
     </div>
   </div>
+</div>
 </div>
 @endsection
 

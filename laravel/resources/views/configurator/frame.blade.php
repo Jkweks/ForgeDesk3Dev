@@ -459,7 +459,7 @@
           <div class="mb-3">
             <label class="form-label">Door Tags (comma separated)</label>
             <input type="text" class="form-control" id="fb-new-tags" placeholder="D1, D2" required>
-            <div class="form-hint">One tag per physical opening — this also sets the quantity (2 tags = qty 2) and becomes this configuration's name.</div>
+            <div class="form-text">One tag per physical opening — this also sets the quantity (2 tags = qty 2) and becomes this configuration's name.</div>
           </div>
         </div>
         <div class="modal-footer">

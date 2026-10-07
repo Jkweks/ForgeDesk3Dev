@@ -125,7 +125,7 @@
                           <select class="form-select" id="storageLocationSelect" onchange="handleStorageLocationSelect()">
                             <option value="">Select a storage location...</option>
                           </select>
-                          <small class="form-hint">Select from configured storage locations</small>
+                          <small class="form-text">Select from configured storage locations</small>
                         </div>
                         <div class="col-md-3">
                           <label class="form-label required">Quantity</label>
@@ -485,17 +485,17 @@
                   <div class="col-md-3 drop-rack-field d-none">
                     <label class="form-label">Min Drop (in)</label>
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorMinDropLength" placeholder="e.g. 72">
-                    <div class="form-hint">Shorter than this is scrapped.</div>
+                    <div class="form-text">Shorter than this is scrapped.</div>
                   </div>
                   <div class="col-md-3 drop-rack-field d-none">
                     <label class="form-label">Min Split (in)</label>
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMinSplit" placeholder="e.g. 120">
-                    <div class="form-hint">Piece cut off an oversized drop. Leave blank (with Max Drop) to never cut drops.</div>
+                    <div class="form-text">Piece cut off an oversized drop. Leave blank (with Max Drop) to never cut drops.</div>
                   </div>
                   <div class="col-md-3 drop-rack-field d-none">
                     <label class="form-label">Max Drop (in)</label>
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorDropMaxLength" placeholder="e.g. 144">
-                    <div class="form-hint">Longer than this gets split.</div>
+                    <div class="form-text">Longer than this gets split.</div>
                   </div>
                 </div>
                 <div class="mt-2 small text-muted" id="configuratorLinkedVariants"></div>
@@ -545,12 +545,12 @@
                         <select class="form-select" id="requiredProductId" required>
                           <option value="">Search and select...</option>
                         </select>
-                        <small class="form-hint">Select the part needed</small>
+                        <small class="form-text">Select the part needed</small>
                       </div>
                       <div class="col-md-3">
                         <label class="form-label required">Quantity</label>
                         <input type="number" class="form-control" id="requiredQuantity" step="0.01" min="0" required>
-                        <small class="form-hint">Quantity per unit</small>
+                        <small class="form-text">Quantity per unit</small>
                       </div>
                       <div class="col-md-3">
                         <label class="form-label">Sort Order</label>
@@ -666,7 +666,7 @@
             <div class="mb-3">
               <label class="form-label required">Job Name</label>
               <input type="text" class="form-control" name="job_name" id="issueJobName" placeholder="Enter job name or number" required>
-              <small class="form-hint">Enter the job name or number this material is being issued to</small>
+              <small class="form-text">Enter the job name or number this material is being issued to</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Quantity to Issue</label>
@@ -1226,7 +1226,7 @@
                 <select class="form-select form-select-sm" name="category_ids" multiple size="4">
                   ${categoryOptions}
                 </select>
-                <small class="form-hint">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
+                <small class="form-text">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
               </div>
             </div>
           </div>

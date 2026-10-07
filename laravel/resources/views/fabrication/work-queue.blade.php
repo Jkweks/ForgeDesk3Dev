@@ -4,19 +4,19 @@
 
 @section('styles')
 .wq-board { display:flex; gap:.75rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start; }
-.wq-scroll-top { position:sticky; top:0; z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface); border-bottom:1px solid var(--tblr-border-color); }
+.wq-scroll-top { position:sticky; top:var(--fd-nav-offset); z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface); border-bottom:1px solid var(--tblr-border-color); }
 .wq-scroll-top-inner { height:1px; }
-.wq-col { min-width:280px; max-width:320px; flex:0 0 auto; background:var(--tblr-bg-surface-secondary); border-radius:8px; padding:.5rem; }
+.wq-col { min-width:280px; max-width:320px; flex:0 0 auto; background:var(--tblr-bg-surface-secondary); border-radius:var(--tblr-border-radius-lg); padding:.5rem; }
 .wq-col.drop-hover { outline:2px dashed var(--tblr-primary); outline-offset:-2px; }
 .wq-col-head { display:flex; align-items:center; gap:.4rem; font-weight:600; padding:.25rem .35rem .5rem; }
-.wq-card { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); border-radius:6px; padding:.5rem .6rem; margin-bottom:.4rem; cursor:grab; font-size:.85rem; }
+.wq-card { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); border-radius:var(--tblr-border-radius); padding:.5rem .6rem; margin-bottom:.4rem; cursor:grab; font-size:.85rem; }
 .wq-card:active { cursor:grabbing; }
 .wq-card.dragging { opacity:.4; }
 .wq-card.locked { opacity:.6; border-style:dashed; }
 .wq-card.locked .wq-lock { color:var(--tblr-danger); }
 .wq-meta { display:flex; flex-wrap:wrap; gap:.35rem .5rem; align-items:center; margin-top:.3rem; }
 .wq-inline { border:none; background:transparent; font:inherit; color:inherit; padding:0 .1rem; max-width:8.5rem; }
-.wq-inline:focus { outline:1px solid var(--tblr-primary); border-radius:3px; }
+.wq-inline:focus { outline:1px solid var(--tblr-primary); border-radius:var(--tblr-border-radius-sm); }
 .wq-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1060; align-items:center; justify-content:center; }
 .wq-overlay > .card { box-shadow:0 1rem 3rem rgba(0,0,0,.5); }
 @endsection
@@ -82,7 +82,7 @@
       <div class="mb-3">
         <label class="form-label">Work order</label>
         <select id="wq-bulk-wo" class="form-select" onchange="wqBulkRenderRows()"></select>
-        <div class="form-hint">
+        <div class="form-text">
           Tick a step to change it. Every non-complete step with that name — across all elevations
           of this work order — is set to the operator(s) you pick. Select more than one to have
           them share the step (it shows in each queue; whoever completes it clears it for all).
@@ -418,7 +418,7 @@ function wqBulkRenderRows() {
       <div class="col-7">
         <select multiple size="${Math.min(Math.max(users.length, 2), 5)}"
                 class="form-select form-select-sm" data-stage-name="${nm}" disabled>${opts}</select>
-        <div class="form-hint">Ctrl/Cmd-click for more than one. None selected = unassign.</div>
+        <div class="form-text">Ctrl/Cmd-click for more than one. None selected = unassign.</div>
       </div>
     </div>`;
   }).join('') || '<div class="text-muted">No steps found on this work order.</div>';

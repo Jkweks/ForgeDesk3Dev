@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="page-wrapper">
 <div class="container-xl">
   <!-- Page header -->
   <div class="page-header d-print-none">
@@ -424,16 +425,17 @@
     </div>
   </div>
 </div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
   function statusBadge(status) {
     const map = {
-      'operational': '<span class="badge bg-success">Operational</span>',
-      'connected': '<span class="badge bg-success">Connected</span>',
-      'degraded': '<span class="badge bg-warning">Degraded</span>',
-      'error': '<span class="badge bg-danger">Error</span>',
+      'operational': '<span class="badge bg-success-lt">Operational</span>',
+      'connected': '<span class="badge bg-success-lt">Connected</span>',
+      'degraded': '<span class="badge bg-warning-lt">Degraded</span>',
+      'error': '<span class="badge bg-danger-lt">Error</span>',
       'unknown': '<span class="badge text-bg-secondary">Unknown</span>',
     };
     return map[status] || '<span class="badge text-bg-secondary">' + status + '</span>';
@@ -503,7 +505,7 @@
     const rows = Object.keys(components).map(key => {
       const c = components[key];
       const ok = !!c.success;
-      const badge = ok ? '<span class="badge bg-success">OK</span>' : '<span class="badge bg-danger">Failed</span>';
+      const badge = ok ? '<span class="badge bg-success-lt">OK</span>' : '<span class="badge bg-danger-lt">Failed</span>';
       return '<tr><td>' + key.replace(/_/g, ' ') + '</td><td>' + badge + '</td><td class="text-muted">' + (c.message || '') + '</td></tr>';
     });
     compBody.innerHTML = rows.length
@@ -528,8 +530,8 @@
       document.getElementById('appTimezone').textContent = app.timezone;
       document.getElementById('appServerTime').textContent = new Date(app.server_time).toLocaleString();
       document.getElementById('appDebug').innerHTML = app.debug
-        ? '<span class="badge bg-warning">Enabled</span>'
-        : '<span class="badge bg-success">Disabled</span>';
+        ? '<span class="badge bg-warning-lt">Enabled</span>'
+        : '<span class="badge bg-success-lt">Disabled</span>';
 
       // Services
       const svc = data.services;

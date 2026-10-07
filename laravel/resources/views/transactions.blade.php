@@ -10,7 +10,7 @@
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--tblr-border-color, #dadce0);
-  border-radius: .375rem;
+  border-radius: var(--tblr-border-radius);
   margin-top: .25rem;
 }
 #addTransactionModal .product-search-results .list-group-item {
@@ -195,7 +195,7 @@
             <div class="mb-3">
               <label class="form-label required">Reference/Job Name</label>
               <input type="text" class="form-control" name="reference_number" id="manualTransactionReference" placeholder="e.g., Service Job #123" required>
-              <small class="form-hint">Enter the job name, service ticket, or other reference</small>
+              <small class="form-text">Enter the job name, service ticket, or other reference</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Notes</label>
@@ -269,7 +269,7 @@
               <div class="col-md-6">
                 <label class="form-label required">Quantity</label>
                 <input type="number" min="1" step="1" class="form-control" name="quantity" id="editTransactionQuantity" required>
-                <small class="form-hint">Magnitude only; the sign is derived from the type.</small>
+                <small class="form-text">Magnitude only; the sign is derived from the type.</small>
               </div>
             </div>
             <div class="mb-3">
@@ -813,7 +813,7 @@
                 </button>
               </div>
               <div class="col-12">
-                <div class="form-hint mt-1" id="productUnitHint${lineId}"></div>
+                <div class="form-text mt-1" id="productUnitHint${lineId}"></div>
               </div>
             </div>
           </div>

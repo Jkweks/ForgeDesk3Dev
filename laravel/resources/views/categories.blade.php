@@ -137,12 +137,12 @@
                 <div class="col-md-8">
                   <label class="form-label required">Name</label>
                   <input type="text" class="form-control" id="categoryName" name="name" required>
-                  <small class="form-hint">The display name of the category</small>
+                  <small class="form-text">The display name of the category</small>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label">Code</label>
                   <input type="text" class="form-control" id="categoryCode" name="code">
-                  <small class="form-hint">Unique identifier</small>
+                  <small class="form-text">Unique identifier</small>
                 </div>
               </div>
 
@@ -152,13 +152,13 @@
                   <select class="form-select" id="categoryParent" name="parent_id">
                     <option value="">None (Root Category)</option>
                   </select>
-                  <small class="form-hint">For creating subcategories</small>
+                  <small class="form-text">For creating subcategories</small>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">System Classification</label>
                   <input type="text" class="form-control" id="categorySystem" name="system" list="systemsList">
                   <datalist id="systemsList"></datalist>
-                  <small class="form-hint">Optional system grouping</small>
+                  <small class="form-text">Optional system grouping</small>
                 </div>
               </div>
 
@@ -173,7 +173,7 @@
                 <div class="col-md-6">
                   <label class="form-label">Sort Order</label>
                   <input type="number" class="form-control" id="categorySortOrder" name="sort_order" value="0">
-                  <small class="form-hint">Lower numbers appear first</small>
+                  <small class="form-text">Lower numbers appear first</small>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Status</label>

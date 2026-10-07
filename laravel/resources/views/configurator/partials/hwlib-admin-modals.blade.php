@@ -12,7 +12,7 @@
           </div>
           <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" id="hwlib-cat-description" rows="2"></textarea></div>
           <label class="form-label">Variables</label>
-          <div class="form-hint mb-2">Variables assigned here are the ones shown when editing an item in this category.</div>
+          <div class="form-text mb-2">Variables assigned here are the ones shown when editing an item in this category.</div>
           <div id="hwlib-cat-variables" class="border rounded p-2" style="max-height:320px; overflow-y:auto;"></div>
 
           <label class="form-label mt-3">Subcategories <span class="text-muted">(optional — items shown in hardware lists as "Category - Subcategory")</span></label>
@@ -21,7 +21,7 @@
             <input type="text" class="form-control" id="hwlib-cat-subcat-new" placeholder="New subcategory name">
             <button type="button" class="btn btn-outline-primary" onclick="hwSubcatAdd()">Add</button>
           </div>
-          <div class="form-hint" id="hwlib-cat-subcat-hint" style="display:none">Save the category first to add subcategories.</div>
+          <div class="form-text" id="hwlib-cat-subcat-hint" style="display:none">Save the category first to add subcategories.</div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>

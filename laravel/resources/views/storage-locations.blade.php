@@ -139,14 +139,14 @@
             <div class="mb-3">
               <label class="form-label required">Location Name</label>
               <input type="text" class="form-control" id="locationName" name="name" placeholder="e.g., Aisle A, Rack 1, Shelf 2, Bin 5" required>
-              <small class="form-hint">Enter a unique name for this storage location</small>
+              <small class="form-text">Enter a unique name for this storage location</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Parent Location</label>
               <select class="form-select" id="locationParent" name="parent_id">
                 <option value="">None (Root Level)</option>
               </select>
-              <small class="form-hint">Select a parent location to nest this location under</small>
+              <small class="form-text">Select a parent location to nest this location under</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Location Type</label>
@@ -159,7 +159,7 @@
                 <option value="zone">Zone</option>
                 <option value="other">Other</option>
               </select>
-              <small class="form-hint">Hierarchy: Aisle → Rack → Shelf → Bin</small>
+              <small class="form-text">Hierarchy: Aisle → Rack → Shelf → Bin</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Description</label>
@@ -258,7 +258,7 @@
       display: flex;
       align-items: center;
       padding: 4px 8px;
-      border-radius: 4px;
+      border-radius: var(--tblr-border-radius-sm);
       transition: background 0.2s;
       min-height: 36px;
     }
@@ -310,7 +310,7 @@
     .type-badge {
       font-size: 0.7rem;
       padding: 1px 4px;
-      border-radius: 3px;
+      border-radius: var(--tblr-border-radius-sm);
       margin-left: 6px;
     }
     .tree-node-info {

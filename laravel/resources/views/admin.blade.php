@@ -230,14 +230,14 @@
                               <div class="row align-items-center">
                                 <div class="col-md-4">
                                   <div id="companyLogoPreview" class="border rounded d-flex align-items-center justify-content-center p-3"
-                                       style="min-height:120px; background:#f8fafc;">
+                                       style="min-height:120px; background:var(--tblr-bg-surface-secondary);">
                                     <span class="text-muted">No logo uploaded</span>
                                   </div>
                                 </div>
                                 <div class="col-md-8">
                                   <label class="form-label">Company Logo</label>
                                   <input type="file" class="form-control" id="companyLogoInput" accept="image/png,image/jpeg,image/gif,image/webp">
-                                  <small class="form-hint">Printed on purchase order PDFs. PNG or JPG, up to 4&nbsp;MB.</small>
+                                  <small class="form-text">Printed on purchase order PDFs. PNG or JPG, up to 4&nbsp;MB.</small>
                                   <div class="mt-2">
                                     <button class="btn btn-primary btn-sm" onclick="uploadCompanyLogo()">
                                       <i class="ti ti-upload me-1"></i>Upload
@@ -274,7 +274,7 @@
                                 <div class="col-md-6 mb-3">
                                   <label class="form-label">Bridge Token</label>
                                   <input type="password" class="form-control" id="cfBridgeToken" placeholder="Leave blank to keep the current token" autocomplete="new-password">
-                                  <small class="form-hint" id="cfBridgeTokenHint"></small>
+                                  <small class="form-text" id="cfBridgeTokenHint"></small>
                                 </div>
                               </div>
                               <div class="row">
@@ -287,7 +287,7 @@
                                 <div class="col-md-6 mb-3">
                                   <label class="form-label">Tablet IP Allowlist</label>
                                   <input type="text" class="form-control" id="cfTabletAllowedIps" placeholder="192.168.1.60, 192.168.1.0/24">
-                                  <small class="form-hint">Comma-separated IPs / IPv4 CIDR ranges. Blank = unrestricted.</small>
+                                  <small class="form-text">Comma-separated IPs / IPv4 CIDR ranges. Blank = unrestricted.</small>
                                 </div>
                               </div>
                               <button class="btn btn-primary" onclick="saveCutFlowBridgeSettings()">
@@ -473,7 +473,7 @@
                               <div class="mb-3">
                                 <label class="form-label">Upload EZ Estimate File</label>
                                 <input type="file" class="form-control" id="ezEstimateFile" accept=".xlsx,.xls">
-                                <div class="form-hint">Accepted formats: .xlsx, .xls (Max 10MB)</div>
+                                <div class="form-text">Accepted formats: .xlsx, .xls (Max 10MB)</div>
                               </div>
 
                               <button type="button" class="btn btn-primary" onclick="uploadEzEstimate()">
@@ -900,7 +900,7 @@
             <div class="mb-3">
               <label class="form-label required">Email</label>
               <input type="email" class="form-control" id="addUserEmail" placeholder="user@example.com">
-              <small class="form-hint">The welcome email carries a temporary password the user must change within 7 days. A held invitation gets a fresh temporary password when you finally send it.</small>
+              <small class="form-text">The welcome email carries a temporary password the user must change within 7 days. A held invitation gets a fresh temporary password when you finally send it.</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
@@ -920,7 +920,7 @@
                 <input class="form-check-input" type="checkbox" id="addUserSendWelcome" checked>
                 <span class="form-check-label">Send welcome email now</span>
               </label>
-              <small class="form-hint">Uncheck to hold it — set up the profile, roles and permissions first, then send held invitations one by one or all at once from the Users list.</small>
+              <small class="form-text">Uncheck to hold it — set up the profile, roles and permissions first, then send held invitations one by one or all at once from the Users list.</small>
             </div>
           </div>
           <div class="modal-footer">
@@ -1532,26 +1532,26 @@
         tbody.innerHTML = '';
 
         const roleBadges = {
-          admin: '<span class="badge bg-red">Admin</span>',
-          manager: '<span class="badge bg-blue">Manager</span>',
-          fabricator: '<span class="badge bg-green">Fabricator</span>',
-          viewer: '<span class="badge bg-gray">Viewer</span>'
+          admin: '<span class="badge bg-red-lt">Admin</span>',
+          manager: '<span class="badge bg-blue-lt">Manager</span>',
+          fabricator: '<span class="badge bg-green-lt">Fabricator</span>',
+          viewer: '<span class="badge bg-secondary-lt">Viewer</span>'
         };
 
         tbody.innerHTML = users.map(user => {
           let statusBadge = user.is_active
-            ? '<span class="badge bg-success">Active</span>'
+            ? '<span class="badge bg-success-lt">Active</span>'
             : '<span class="badge text-bg-secondary">Inactive</span>';
 
           if (user.invitation_pending) {
-            statusBadge += ' <span class="badge bg-azure" title="Account created — welcome email not sent yet">Not invited</span>';
+            statusBadge += ' <span class="badge bg-azure-lt" title="Account created — welcome email not sent yet">Not invited</span>';
           } else if (user.must_change_password) {
             statusBadge += user.temp_password_expired
-              ? ' <span class="badge bg-red" title="Temporary password expired">Invite expired</span>'
-              : ' <span class="badge bg-yellow" title="Waiting for the user to set a new password">Pending invite</span>';
+              ? ' <span class="badge bg-red-lt" title="Temporary password expired">Invite expired</span>'
+              : ' <span class="badge bg-yellow-lt" title="Waiting for the user to set a new password">Pending invite</span>';
           }
 
-          const roleBadge = roleBadges[user.role] || '<span class="badge bg-gray">' + user.role + '</span>';
+          const roleBadge = roleBadges[user.role] || '<span class="badge bg-secondary-lt">' + user.role + '</span>';
 
           const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never';
           const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString() : '-';
@@ -1666,7 +1666,7 @@
         container.innerHTML = '';
 
         container.innerHTML = roles.map(role => {
-          const systemBadge = role.is_system ? '<span class="badge bg-info ms-2">System</span>' : '';
+          const systemBadge = role.is_system ? '<span class="badge bg-info-lt ms-2">System</span>' : '';
           const deleteOption = role.is_system
             ? ''
             : `<a class="dropdown-item text-danger" href="#" onclick="deleteRole(${role.id}); return false;" data-permission="roles.delete">
@@ -2236,9 +2236,9 @@
       // ── Shared helpers ───────────────────────────────────────────────────────
       function locStatusBadge(status) {
         return { pending: '<span class="badge text-bg-secondary">Pending</span>',
-                 saving:  '<span class="badge bg-azure">Saving…</span>',
-                 saved:   '<span class="badge bg-success">Saved</span>',
-                 error:   '<span class="badge bg-danger">Error</span>' }[status] || status;
+                 saving:  '<span class="badge bg-azure-lt">Saving…</span>',
+                 saved:   '<span class="badge bg-success-lt">Saved</span>',
+                 error:   '<span class="badge bg-danger-lt">Error</span>' }[status] || status;
       }
 
       function adminCsrfToken() {
@@ -2307,7 +2307,7 @@
             </td>
             <td>${t.standard_joint_count != null ? `${t.standard_joint_count} / unit` : '<span class="text-muted">—</span>'}</td>
             <td>${t.sort_order}</td>
-            <td>${t.active ? '<span class="badge bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
+            <td>${t.active ? '<span class="badge bg-success-lt">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td>
             <td>
               <div class="btn-group btn-group-sm">
                 <button class="btn btn-ghost-secondary" onclick="openTypeTemplates(${t.id}, '${t.name.replace(/'/g, "\\'")}')" title="Stage defaults">

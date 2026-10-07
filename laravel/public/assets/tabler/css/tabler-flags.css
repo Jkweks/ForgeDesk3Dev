@@ -1,7 +1,7 @@
 /*!
- * Tabler Flags v1.4.0 (https://tabler.io)
- * Copyright 2018-2025 The Tabler Authors
- * Copyright 2018-2025 codecalm.net Paweł Kuna
+ * Tabler Flags v1.6.1 (https://tabler.io)
+ * Copyright 2018-2026 The Tabler Authors
+ * Copyright 2018-2026 codecalm.net Paweł Kuna
  * Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
  */
 /**
@@ -16,20 +16,24 @@
  * @param {Color} $color - The base color to be made transparent.
  * @param {Number} $alpha - The level of transparency, ranging from 0 (fully transparent) to 1 (fully opaque). Default is 1.
  * @return {Color} - The resulting color with the specified transparency.
+ *
+ * Mixes in `oklab` so tints against an opaque background (e.g. alert backgrounds
+ * over `--bg-surface`) stay perceptually even; mixing with `transparent` gives
+ * the same result in every color space.
  */
 .flag {
   position: relative;
   display: inline-block;
-  height: 2.5rem;
+  width: 2.5rem;
   aspect-ratio: 1.33333;
+  vertical-align: bottom;
   background: no-repeat center/cover;
   box-shadow: var(--tblr-shadow-border);
-  border-radius: var(--tblr-border-radius);
-  vertical-align: bottom;
+  border-radius: var(--tblr-border-radius-sm);
 }
 .flag.flag-country-np {
-  box-shadow: none;
   border-radius: 0;
+  box-shadow: none;
 }
 
 .flag-country-ad {
@@ -1052,6 +1056,10 @@
   background-image: url("../img/flags/ye.svg");
 }
 
+.flag-country-yt {
+  background-image: url("../img/flags/yt.svg");
+}
+
 .flag-country-za {
   background-image: url("../img/flags/za.svg");
 }
@@ -1065,31 +1073,32 @@
 }
 
 .flag-xxs {
-  height: 1rem;
+  width: 1rem;
 }
 
 .flag-xs {
-  height: 1.25rem;
+  width: 1.25rem;
+  border-radius: 2px;
 }
 
 .flag-sm {
-  height: 2rem;
+  width: 2rem;
 }
 
 .flag-md {
-  height: 2.5rem;
+  width: 2.5rem;
 }
 
 .flag-lg {
-  height: 3rem;
+  width: 3rem;
 }
 
 .flag-xl {
-  height: 5rem;
+  width: 5rem;
 }
 
 .flag-2xl {
-  height: 7rem;
+  width: 7rem;
 }
 
 /*# sourceMappingURL=tabler-flags.css.map */

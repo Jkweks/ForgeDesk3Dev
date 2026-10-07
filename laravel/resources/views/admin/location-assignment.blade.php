@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="page-wrapper">
 <div class="container-xl">
 
   <div class="page-header d-print-none">
@@ -280,9 +281,9 @@ function renderTable() {
 function statusBadge(status) {
   const map = {
     pending: '<span class="badge text-bg-secondary">Pending</span>',
-    saving:  '<span class="badge bg-azure">Saving…</span>',
-    saved:   '<span class="badge bg-success">Saved</span>',
-    error:   '<span class="badge bg-danger">Error</span>',
+    saving:  '<span class="badge bg-azure-lt">Saving…</span>',
+    saved:   '<span class="badge bg-success-lt">Saved</span>',
+    error:   '<span class="badge bg-danger-lt">Error</span>',
   };
   return map[status] || status;
 }
@@ -578,4 +579,5 @@ function escHtml(str) {
   return d.innerHTML;
 }
 </script>
+</div>
 @endsection

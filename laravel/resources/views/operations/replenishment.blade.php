@@ -166,7 +166,7 @@
             <label class="form-label fw-bold">PO Number <span class="text-danger">*</span></label>
             <input type="text" class="form-control form-control-sm" id="confirmPONumber"
                    placeholder="e.g. PO-2024-1234" maxlength="50" autocomplete="off">
-            <div class="form-hint">Enter your external PO reference number</div>
+            <div class="form-text">Enter your external PO reference number</div>
           </div>
           <div class="col-md-2">
             <label class="form-label">Order Date</label>
