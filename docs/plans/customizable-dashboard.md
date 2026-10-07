@@ -22,19 +22,23 @@ Status as of 2026-10-06: **Phase 1 + work order / quality widgets done and commi
 ## Adding a widget (the recipe)
 1. Add data endpoint (reuse an existing one if it is cheap) behind `permission:<same as registry>`.
 2. Add entry in `WidgetRegistry::all()` group (`$stat`/`$list`/`$table`/`$chart` helpers).
-3. New chart? add a builder to `chartBuilders` in the JS. New type? add a renderer.
-4. Test the endpoint. `DashboardWidgetDataTest::test_every_widget_endpoint_is_gated_by_its_declared_permission` automatically checks every catalog entry returns 403 without its permission.
+3. Need user options? add `settings_schema` fields (select | multiselect | toggle, `show_if`) via the `$list`/`$table`/`$chart` helpers; the editor (gear in edit mode) renders them, values ride to the endpoint as query params, and the endpoint reads them with `WidgetRegistry::resolveSettings($key, $request->query())` (invalid values fall back to defaults; layout save runs `sanitizeSettings`).
+4. New chart? add a builder to `chartBuilders` in the JS. New type? add a renderer.
+5. Test the endpoint. `DashboardWidgetDataTest::test_every_widget_endpoint_is_gated_by_its_declared_permission` automatically checks every catalog entry returns 403 without its permission.
 
 ## Done
 - Page split, registry, layout storage, admin default, edit mode (drag/resize/add/remove/save/cancel/reset/save-as-default).
 - Inventory (5 stat widgets), Work Orders (open / overdue / due this week / on hold stats, due-soon list, WIP-by-stage chart, work order table), Quality (pending / awaiting review stats, incident rate, problem types, weekly trend charts).
+- Maintenance (overdue / due soon / active tasks / downtime stats reusing the gated `/maintenance/dashboard`, upcoming-tasks and recent-service lists) and Cycle Counting (active / in-progress / accuracy stats, session list) widgets, via lean gated endpoints (`/dashboard/widgets/maintenance/*`, `/dashboard/widgets/cycle-counts*`; the page-level `/cycle-counts-active|statistics` stay ungated and heavy, deliberately not used). Stat widgets accept a `suffix` (`%`, ` h`). Fixed `MaintenanceTask::getIsDueSoonAttribute` (Carbon 3 signed diff made every future task "due soon").
+- Purchase orders (open / awaiting approval / overdue stats, due list; overdue = open and past `expected_date`), jobs and reservations (active / past-target stats, jobs-by-target list, open / overdue reservations; reservation terminal state is `fulfilled`), transactions (today count, recent list with signed change), lowest-stock list (plain columns, no Product appends), fabrication documents, configurator (non-archived counts, recent list), storage health, and CutFlow (guarded: returns `available:false` + nulls if the cutflow DB is unreachable).
+- Per-widget settings framework (schema in the registry, gear editor, query-param transport, server-side sanitizing). The Work Order Table mirrors the user's saved Work Orders page columns: `App\Dashboard\WorkOrderColumns` reads `users.wo_column_prefs` (`{order, hidden}` or the legacy bare hidden list) on every load, so changes made on the page show up in the widget with no extra step; the widget can instead use its own column list (kept in the user's saved order). Labour-estimate columns load the heavy estimate relations only when shown.
 - `/dashboard/stats` now requires `inventory.view` (was auth-only; nothing called it).
 - Feature tests: `DashboardLayoutTest`, `DashboardWidgetDataTest` (15 passing).
 
 ## Remaining
 1. **Browser verification** of the whole flow (drag/resize, save + reload, reset, dark mode, phone width, a role without WO/quality permissions). Not done by Claude: no browser session was driven.
-2. More domains: purchase orders (open/due/overdue), jobs + reservations summary, maintenance (overdue tasks), cycle counts, recent transactions, fabrication documents, configurator, CutFlow summary (own `cutflow` connection; guard for DB unavailable).
-3. Per-widget settings UI (registry/layout already carry a `settings` object; no editor yet), e.g. list size, filters.
+2. Remaining domains: none planned. Not made into widgets on purpose: EZ Estimate stats (supplier catalog counts, not import activity) and the existing ungated `/transactions-*`, `/purchase-orders-open|statistics`, `/supplier-statistics` endpoints (widgets use new gated, lean endpoints instead).
+3. More per-widget settings where useful (the framework is done; today: rows on every list, Work Order Table scope/columns/rows, incident-rate months, low-stock level).
 4. Admin default-layout UX polish; consider a "default" indicator when a user is on the company default.
 5. Known gaps: the Work Order Table widget has no column picker/filters/assignee/estimates (the page version loads heavy estimates; kept cheap). Several other stat endpoints in the app are still auth-only and un-gated (`/transactions-*`, `/purchase-orders-open|statistics`, `/cycle-counts-active|statistics`, `/supplier-statistics`, `/jobs`, `/ez-estimate/stats`): gate them before exposing as widgets.
 6. Push / PR to `develop` when ready.

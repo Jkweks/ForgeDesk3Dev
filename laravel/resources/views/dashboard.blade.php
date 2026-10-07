@@ -12,8 +12,9 @@
       #dashboardGrid .dash-chart { position: absolute; inset: 0; }
       #dashboardGrid .dash-table thead th { position: sticky; top: 0; background: var(--tblr-bg-surface, #fff); z-index: 1; }
       #dashboardGrid .dash-table tbody tr[data-href] { cursor: pointer; }
-      #dashboardGrid .dash-remove { display: none; }
+      #dashboardGrid .dash-remove, #dashboardGrid .dash-settings { display: none; }
       #dashboardGrid.dash-editing .dash-remove { display: inline-block; }
+      #dashboardGrid.dash-editing .dash-settings { display: inline-flex; }
       #dashboardGrid.dash-editing .grid-stack-item-content { outline: 2px dashed var(--tblr-border-color, #ccc); outline-offset: -2px; cursor: move; }
     </style>
     <div class="page-wrapper">
@@ -48,6 +49,22 @@
           <div id="dashboardEmpty" class="empty d-none">
             <p class="empty-title">No widgets yet</p>
             <p class="empty-subtitle text-secondary">Click Customize, then Add widget to build your dashboard.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="dashSettingsModal" tabindex="-1" aria-labelledby="dashSettingsTitle" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="dashSettingsTitle">Widget settings</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="dashSettingsBody"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="dashSettingsApply">Apply</button>
           </div>
         </div>
       </div>

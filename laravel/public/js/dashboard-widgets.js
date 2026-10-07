@@ -27,8 +27,9 @@
     stat(body, def, data) {
       const raw = data ? data[def.field] : null;
       const value = typeof raw === 'number' ? raw.toLocaleString() : (raw ?? '-');
+      const shown = typeof raw === 'number' ? value + (def.suffix || '') : value;
       body.innerHTML = `
-        <div class="h1 mb-1">${esc(value)}</div>
+        <div class="h1 mb-1">${esc(shown)}</div>
         ${def.link ? `<a href="${esc(def.link)}" class="small text-secondary">View details</a>` : ''}`;
     },
 
@@ -177,14 +178,27 @@
   // ---- Data loading -------------------------------------------------------
   const inflight = new Map(); // endpoint -> Promise<json>, shared by widgets in one round
 
-  function fetchEndpoint(endpoint) {
-    if (!inflight.has(endpoint)) {
-      const p = apiCall(endpoint)
+  // Per-widget settings travel as query params (arrays as key[]); only keys the schema declares.
+  function settingsQuery(def, settings) {
+    const params = new URLSearchParams();
+    (def.settings_schema || []).forEach((f) => {
+      const v = settings ? settings[f.key] : undefined;
+      if (v === undefined || v === null) return;
+      if (Array.isArray(v)) v.forEach((x) => params.append(`${f.key}[]`, x));
+      else params.set(f.key, v === true ? '1' : v === false ? '0' : v);
+    });
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+  }
+
+  function fetchEndpoint(url) {
+    if (!inflight.has(url)) {
+      const p = apiCall(url)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .finally(() => setTimeout(() => inflight.delete(endpoint), 0));
-      inflight.set(endpoint, p);
+        .finally(() => setTimeout(() => inflight.delete(url), 0));
+      inflight.set(url, p);
     }
-    return inflight.get(endpoint);
+    return inflight.get(url);
   }
 
   async function loadWidget(id) {
@@ -192,7 +206,7 @@
     if (!item) return;
     const { def, bodyEl } = item;
     try {
-      const data = await fetchEndpoint(def.endpoint);
+      const data = await fetchEndpoint(def.endpoint + settingsQuery(def, item.settings));
       (renderers[def.type] || renderers.stat)(bodyEl, def, data, item);
       item.loadedAt = Date.now();
     } catch (e) {
@@ -215,6 +229,7 @@
         <div class="card-body d-flex flex-column">
           <div class="d-flex align-items-start mb-2">
             <div class="subheader flex-fill text-truncate"><i class="ti ${esc(def.icon)} me-1"></i>${esc(def.title)}</div>
+            ${(def.settings_schema || []).length ? '<button type="button" class="btn btn-sm btn-icon btn-ghost-secondary dash-settings me-1" aria-label="Widget settings" title="Widget settings"><i class="ti ti-settings"></i></button>' : ''}
             <button type="button" class="btn-close dash-remove" aria-label="Remove widget"></button>
           </div>
           <div class="dash-widget-body flex-fill"><div class="text-secondary small">Loading…</div></div>
@@ -234,6 +249,8 @@
     });
     const bodyEl = el.querySelector('.dash-widget-body');
     el.querySelector('.dash-remove').addEventListener('click', () => removeWidget(entry.id));
+    const gear = el.querySelector('.dash-settings');
+    if (gear) gear.addEventListener('click', () => openSettings(entry.id));
     state.items.set(entry.id, { def, settings: entry.settings || {}, loadedAt: 0, bodyEl });
     loadWidget(entry.id);
   }
@@ -341,6 +358,78 @@
     } catch (e) { notify(e.message, false); }
   }
 
+  // ---- Per-widget settings editor ----------------------------------------
+  let settingsTarget = null;
+
+  function fieldValue(item, f) {
+    const saved = item.settings ? item.settings[f.key] : undefined;
+    return saved !== undefined ? saved : f.default;
+  }
+
+  function renderSettingsForm(item) {
+    return (item.def.settings_schema || []).map((f) => {
+      const val = fieldValue(item, f);
+      const attrs = `data-field="${esc(f.key)}"${f.show_if ? ` data-show-if='${esc(JSON.stringify(f.show_if))}'` : ''}`;
+      if (f.type === 'select') {
+        return `<div class="mb-3" ${attrs}><label class="form-label">${esc(f.label)}</label>
+          <select class="form-select" name="${esc(f.key)}">${Object.entries(f.options).map(([k, label]) =>
+            `<option value="${esc(k)}" ${String(k) === String(val) ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></div>`;
+      }
+      if (f.type === 'multiselect') {
+        const picked = (Array.isArray(val) ? val : []).map(String);
+        return `<div class="mb-3" ${attrs}><label class="form-label">${esc(f.label)}</label>
+          <div class="form-selectgroup form-selectgroup-boxes d-flex flex-column">${Object.entries(f.options).map(([k, label]) =>
+            `<label class="form-selectgroup-item flex-fill"><input type="checkbox" name="${esc(f.key)}" value="${esc(k)}" class="form-selectgroup-input" ${picked.includes(String(k)) ? 'checked' : ''}>
+              <span class="form-selectgroup-label d-flex align-items-center py-1"><span class="me-2"><span class="form-selectgroup-check"></span></span>${esc(label)}</span></label>`).join('')}</div></div>`;
+      }
+      return `<div class="mb-3" ${attrs}><label class="form-check form-switch"><input class="form-check-input" type="checkbox" name="${esc(f.key)}" ${val ? 'checked' : ''}>
+        <span class="form-check-label">${esc(f.label)}</span></label></div>`;
+    }).join('');
+  }
+
+  // Hide fields whose show_if condition (another field's value) is not met.
+  function applyShowIf(form) {
+    form.querySelectorAll('[data-show-if]').forEach((el) => {
+      const cond = JSON.parse(el.dataset.showIf);
+      const ok = Object.entries(cond).every(([k, v]) => {
+        const input = form.querySelector(`[name="${k}"]`);
+        return input && String(input.value) === String(v);
+      });
+      el.classList.toggle('d-none', !ok);
+    });
+  }
+
+  function openSettings(id) {
+    const item = state.items.get(id);
+    if (!item) return;
+    settingsTarget = id;
+    $('dashSettingsTitle').textContent = `${item.def.title} settings`;
+    const body = $('dashSettingsBody');
+    body.innerHTML = renderSettingsForm(item);
+    applyShowIf(body);
+    bootstrap.Modal.getOrCreateInstance($('dashSettingsModal')).show();
+  }
+
+  function applySettings() {
+    const item = state.items.get(settingsTarget);
+    if (!item) return;
+    const body = $('dashSettingsBody');
+    const values = {};
+    (item.def.settings_schema || []).forEach((f) => {
+      if (f.type === 'multiselect') {
+        values[f.key] = [...body.querySelectorAll(`input[name="${f.key}"]:checked`)].map((i) => i.value);
+      } else if (f.type === 'toggle') {
+        values[f.key] = body.querySelector(`input[name="${f.key}"]`).checked;
+      } else {
+        values[f.key] = body.querySelector(`[name="${f.key}"]`).value;
+      }
+    });
+    item.settings = values;
+    item.loadedAt = 0;
+    bootstrap.Modal.getOrCreateInstance($('dashSettingsModal')).hide();
+    loadWidget(settingsTarget);
+  }
+
   // ---- Add-widget panel ---------------------------------------------------
   function uniqueId(key) {
     let id = key;
@@ -405,6 +494,8 @@
 
     $('dashCustomize').addEventListener('click', () => setEditing(true));
     $('dashSave').addEventListener('click', save);
+    $('dashSettingsApply').addEventListener('click', applySettings);
+    $('dashSettingsBody').addEventListener('change', () => applyShowIf($('dashSettingsBody')));
     $('dashCancel').addEventListener('click', cancel);
     $('dashReset').addEventListener('click', reset);
     $('dashSaveDefault').addEventListener('click', saveAsDefault);

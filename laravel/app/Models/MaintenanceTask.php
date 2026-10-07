@@ -81,6 +81,7 @@ class MaintenanceTask extends Model
         $dueDate = Carbon::parse($nextDue);
         $now = Carbon::now();
 
-        return $dueDate->isFuture() && $dueDate->diffInDays($now) <= 14;
+        // Carbon 3 diffs are signed (later - earlier); $now -> future due date is positive.
+        return $dueDate->isFuture() && $now->diffInDays($dueDate) <= 14;
     }
 }
