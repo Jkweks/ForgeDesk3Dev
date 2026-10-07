@@ -14,7 +14,7 @@
                     <span class="nav-link-title">Dashboard</span>
                   </a>
                 </li>
-                <li class="nav-item dropdown" data-nav-permission="nav.inventory">
+                <li class="nav-item dropdown {{ Request::is('inventory/*') ? 'active' : '' }}" data-nav-permission="nav.inventory">
                   <a class="nav-link dropdown-toggle" href="#navbar-inventory" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
                     <span class="nav-link-icon d-md-none d-lg-inline-block">
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /><path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" /></svg>
@@ -22,7 +22,7 @@
                     <span class="nav-link-title">Inventory</span>
                   </a>
                   <div class="dropdown-menu">
-                    <a class="dropdown-item" href="/">All Products</a>
+                    <a class="dropdown-item {{ Request::is('inventory/products') ? 'active' : '' }}" href="/inventory/products">All Products</a>
                     <a class="dropdown-item" href="/low-stock">Low Stock</a>
                     <a class="dropdown-item" href="/critical-stock">Critical Stock</a>
                     <div class="dropdown-divider"></div>
