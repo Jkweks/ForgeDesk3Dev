@@ -393,7 +393,7 @@
   .guided-location-banner {
     background: var(--tblr-purple);
     color: #fff;
-    border-radius: 12px;
+    border-radius: var(--tblr-border-radius-lg);
     padding: 0.9rem 1.25rem;
     margin-bottom: 1rem;
     display: flex;
@@ -403,7 +403,7 @@
 
   /* ── Product card ──────────────────────────────────────────── */
   .guided-product-card {
-    border-radius: 12px;
+    border-radius: var(--tblr-border-radius-lg);
     overflow: hidden;
     margin-bottom: 1rem;
   }
@@ -430,7 +430,7 @@
 
   /* ── Count input ───────────────────────────────────────────── */
   .guided-count-card {
-    border-radius: 12px;
+    border-radius: var(--tblr-border-radius-lg);
     margin-bottom: 1rem;
   }
   /* Extend Bootstrap's .form-control — only non-colour properties here */
@@ -440,7 +440,7 @@
     height: 84px;
     text-align: center;
     border-width: 2px;
-    border-radius: 10px;
+    border-radius: var(--tblr-border-radius-lg);
     transition: border-color .15s, box-shadow .15s;
     flex: 1;
   }
@@ -457,7 +457,7 @@
     justify-content: center;
     background: var(--tblr-bg-surface-secondary, var(--tblr-light));
     border: 2px solid var(--tblr-border-color);
-    border-radius: 10px;
+    border-radius: var(--tblr-border-radius-lg);
     min-width: 70px;
     font-weight: 600;
     font-size: 0.9rem;
@@ -470,20 +470,20 @@
     height: 64px;
     font-size: 1.2rem;
     font-weight: 700;
-    border-radius: 10px;
+    border-radius: var(--tblr-border-radius-lg);
     letter-spacing: 0.03em;
     width: 100%;
   }
   .guided-nav-btn {
     height: 52px;
-    border-radius: 8px;
+    border-radius: var(--tblr-border-radius);
     flex: 1;
     font-size: 0.95rem;
   }
 
   /* ── All-items panel ───────────────────────────────────────── */
   .guided-items-card {
-    border-radius: 12px;
+    border-radius: var(--tblr-border-radius-lg);
     overflow: hidden;
     margin-bottom: 2rem;
   }
@@ -604,7 +604,7 @@
                id="guidedNotes"
                class="form-control"
                placeholder="Notes (optional)"
-               style="border-radius:8px; height:44px;">
+               style="border-radius: var(--tblr-border-radius); height:44px;">
       </div>
     </div>
 
@@ -1841,7 +1841,7 @@ function renderGuidedItem() {
   // Photo
   const photoWrap = document.getElementById('guidedPhotoWrap');
   if (product.photo_url) {
-    photoWrap.innerHTML = `<img src="${escapeHtml(product.photo_url)}" alt="Product" style="max-height:170px; max-width:100%; object-fit:contain; border-radius:8px; display:block;">`;
+    photoWrap.innerHTML = `<img src="${escapeHtml(product.photo_url)}" alt="Product" style="max-height:170px; max-width:100%; object-fit:contain; border-radius: var(--tblr-border-radius); display:block;">`;
   } else {
     photoWrap.innerHTML = `<div class="text-muted text-center"><i class="ti ti-photo" style="font-size:3.5rem; opacity:.2;"></i><div class="small mt-2" style="font-size:0.78rem;">No photo</div></div>`;
   }

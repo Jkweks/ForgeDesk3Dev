@@ -10,7 +10,7 @@
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--tblr-border-color, #dadce0);
-  border-radius: .375rem;
+  border-radius: var(--tblr-border-radius);
   margin-top: .25rem;
 }
 #addTransactionModal .product-search-results .list-group-item {

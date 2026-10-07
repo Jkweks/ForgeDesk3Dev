@@ -258,7 +258,7 @@
       display: flex;
       align-items: center;
       padding: 4px 8px;
-      border-radius: 4px;
+      border-radius: var(--tblr-border-radius-sm);
       transition: background 0.2s;
       min-height: 36px;
     }
@@ -310,7 +310,7 @@
     .type-badge {
       font-size: 0.7rem;
       padding: 1px 4px;
-      border-radius: 3px;
+      border-radius: var(--tblr-border-radius-sm);
       margin-left: 6px;
     }
     .tree-node-info {

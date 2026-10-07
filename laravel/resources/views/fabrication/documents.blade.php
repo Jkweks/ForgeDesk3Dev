@@ -34,7 +34,7 @@
   color: var(--tblr-secondary-color);
   background: var(--tblr-bg-surface-secondary, rgba(0,0,0,.04));
   padding: 1px 7px;
-  border-radius: 20px;
+  border-radius: var(--tblr-border-radius-pill);
 }
 
 /* ── Document cards ───────────────────────────────────────────── */
@@ -67,7 +67,7 @@
   position: absolute;
   top: 10px; right: 10px;
   width: 18px; height: 18px;
-  border-radius: 4px;
+  border-radius: var(--tblr-border-radius-sm);
   border: var(--tblr-border-width) solid var(--tblr-border-color);
   background: var(--tblr-card-bg);
   display: flex; align-items: center; justify-content: center;
@@ -100,7 +100,7 @@
 .fab-tag {
   font-size: 0.7rem;
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--tblr-border-radius-pill);
   background: var(--tblr-bg-surface-secondary, rgba(0,0,0,.05));
   color: var(--tblr-secondary-color);
   border: var(--tblr-border-width) solid var(--tblr-border-color);
@@ -181,7 +181,7 @@
 .fab-tbl-check { width: 36px; padding-left: 12px; }
 .fab-tbl-cb {
   width: 16px; height: 16px;
-  border-radius: 3px;
+  border-radius: var(--tblr-border-radius-sm);
   border: var(--tblr-border-width) solid var(--tblr-border-color);
   background: var(--tblr-card-bg);
   display: flex; align-items: center; justify-content: center;
@@ -237,7 +237,7 @@
 .fab-tag-wrap:focus-within { border-color: var(--tblr-primary); box-shadow: 0 0 0 .2rem color-mix(in oklab, var(--tblr-primary) 10%, transparent); }
 .fab-tag-pill {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 0.7rem; padding: 2px 7px; border-radius: 20px;
+  font-size: 0.7rem; padding: 2px 7px; border-radius: var(--tblr-border-radius-pill);
   background: var(--tblr-primary-lt);
   color: var(--tblr-primary);
   border: var(--tblr-border-width) solid color-mix(in oklab, var(--tblr-primary) 30%, transparent);

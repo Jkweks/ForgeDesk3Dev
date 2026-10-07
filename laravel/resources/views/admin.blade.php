@@ -230,7 +230,7 @@
                               <div class="row align-items-center">
                                 <div class="col-md-4">
                                   <div id="companyLogoPreview" class="border rounded d-flex align-items-center justify-content-center p-3"
-                                       style="min-height:120px; background:#f8fafc;">
+                                       style="min-height:120px; background:var(--tblr-bg-surface-secondary);">
                                     <span class="text-muted">No logo uploaded</span>
                                   </div>
                                 </div>
