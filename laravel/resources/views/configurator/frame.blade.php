@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Frame Builder')
+@section('title', 'Entry Builder')
 
 @section('content')
 <div class="page-wrapper">
@@ -9,7 +9,7 @@
       <div class="row g-2 align-items-center">
         <div class="col">
           <div class="page-pretitle">Configurator</div>
-          <h1 class="page-title">Frame Builder</h1>
+          <h1 class="page-title">Entry Builder</h1>
           <p class="text-muted">Configure an opening and generate its frame extrusion / hardware BOM from the catalog</p>
         </div>
         <div class="col-auto ms-auto d-print-none">

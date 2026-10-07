@@ -77,7 +77,7 @@ return [
             ['label' => 'Documents', 'href' => '/fabrication/documents', 'permission' => 'fabrication.view', 'active' => ['fabrication/documents']],
             ['header' => 'Displays'],
             ['label' => 'Shop Floor Display', 'href' => '/shop', 'target' => '_blank', 'external' => true],
-            ['label' => 'Cut Station', 'href' => '/cut-station', 'target' => '_blank', 'external' => true, 'admin_only' => true],
+            ['label' => 'Cut Flow', 'href' => '/cut-station', 'target' => '_blank', 'external' => true, 'admin_only' => true],
         ],
     ],
     [

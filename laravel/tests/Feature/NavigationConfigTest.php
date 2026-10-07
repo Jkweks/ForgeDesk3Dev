@@ -132,4 +132,19 @@ class NavigationConfigTest extends TestCase
         $this->assertStringContainsString('html[data-bs-nav-menu=classic] [data-nav-set=new]', $html);
         $this->assertStringContainsString("localStorage.getItem('tabler-nav-menu')", $html);
     }
+
+    public function test_renamed_links_use_their_new_names_in_both_menus(): void
+    {
+        foreach (['navigation', 'navigation_classic'] as $configKey) {
+            $labels = collect(config($configKey))->flatMap(fn ($s) => array_column($s['items'] ?? [], 'label'))->all();
+            foreach (['Entry Builder', 'Cut Flow'] as $name) {
+                $this->assertContains($name, $labels, "{$name} missing from {$configKey}");
+            }
+            foreach (['Frame Builder', 'Cut Station'] as $old) {
+                $this->assertNotContains($old, $labels, "{$old} should have been renamed in {$configKey}");
+            }
+        }
+
+        $this->get('/config')->assertOk()->assertSee('<h1 class="page-title">Entry Builder</h1>', false);
+    }
 }

@@ -104,7 +104,7 @@ return [
             ['label' => 'Cut Lists', 'href' => '/fabrication/cut-lists', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/cut-lists']],
             ['label' => 'Quality Reports', 'href' => '/fabrication/quality', 'permission' => 'quality.view', 'active' => ['fabrication/quality']],
             ['label' => 'Shop Floor Display', 'href' => '/shop', 'target' => '_blank', 'external' => true],
-            ['label' => 'Cut Station', 'href' => '/cut-station', 'target' => '_blank', 'external' => true, 'admin_only' => true],
+            ['label' => 'Cut Flow', 'href' => '/cut-station', 'target' => '_blank', 'external' => true, 'admin_only' => true],
         ],
     ],
     [
