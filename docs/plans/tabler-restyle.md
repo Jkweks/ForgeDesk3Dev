@@ -1,0 +1,47 @@
+# Tabler 1.6 restyle (feature/tabler-update)
+
+## Context
+ForgeDesk's vendored Tabler is now 1.6.1 (swapped from 1.4.0, uncommitted on `feature/tabler-update`, branched from `develop`). The user finds the tabler.io demo crisper and more modern than our UI (tighter card fit, better theme preferences) and wants the demo as the starting point. Findings:
+- The demo's look comes from `@tabler/core` CSS alone (demo-only SCSS is just helper classes). Defaults that make it tight: 14px body, 6/8px radii, neutral gray, system font stack (the demo does NOT load Inter), `row-deck row-cards` grids.
+- Our look is held back by hand-written overrides in `layouts/app.blade.php`: global `!important` badge + dark-mode tint rules (l.131-237, ignore `theme-primary`/`theme-base`), global modal sizing + iPad device sniffing (l.60-129), `.page-header{margin-top}` and `:root{margin-left:0 !important}` hacks, plus `partials/fab-status-styles` hard-coded hexes and ~1100 inline styles.
+- The demo renders a top navbar AND a vertical sidebar and CSS (`html[data-bs-navbar-position]`) shows one; its settings offcanvas persists to localStorage `tabler-<key>` + `data-bs-<key>` on `<html>`. Published 1.6.1 has the vertical/folded sidebar, navbar-position CSS and theme-script support but NOT `nav-overflow` ("More" collapse).
+
+Decisions (user): switchable navigation (top bar default, sidebar optional, saved to profile); demo defaults for users who haven't customized (neutral gray, system font, auto light/dark); shell first, then page-by-page sweeps.
+
+## Step 0 — Land the version bump
+Commit the 1.6.1 swap (40 files in `laravel/public/assets/tabler/`) as its own commit. Pin the icons CDN (`@tabler/icons-webfont@latest` -> `@3.49.0`) in `layouts/app.blade.php` and `shop-floor.blade.php`.
+
+## Step 1 — Remove what fights Tabler (layouts/app.blade.php, partials/fab-status-styles)
+- Delete global badge colour + dark badge/table-tint overrides; let Tabler's `bg-*`/`bg-*-lt` + theme tokens drive colour. Replace `.fab-stage` hex pairs with Tabler colour vars (`--tblr-*-lt`, `color-mix`) so they follow dark mode/primary.
+- Modals: drop the global `max-height:90vh` / `calc(90vh - 120px)` and `!important` widths; use Tabler's `modal-dialog-scrollable`; keep the iPad widening only as a scoped, non-`!important` rule if still wanted.
+- Remove `.page-header{margin-top}` and `:root{margin-left:0 !important}` (re-test with sidebar). `#app` login gating (`display:none` until `.active`) stays, but `#app` must be Tabler's `.page`.
+
+## Step 2 — New shell
+- **Single nav definition** `config/navigation.php` (sections -> items: label, icon, href, `permission` (`nav.*` / `data-permission`), active patterns, `target`), rendered by two partials: top navbar (`partials/navbar.blade.php`, demo `Navbar.astro` structure: top bar + menu row, `navbar-expand-md`) and sidebar (`partials/sidebar.blade.php`, `aside.navbar.navbar-vertical.navbar-expand-lg`, `navbar-footer` user menu, fold toggle `data-bs-toggle="sidebar-folded"`). Keep `data-nav-permission` on each top-level `li` and `data-permission` on items so `applyNavigationPermissions()` / `applyActionPermissions()` in `partials/auth-scripts.blade.php` work unchanged (attribute-driven, layout independent). Replaces `partials/navigation.blade.php`; `partials/header.blade.php` keeps notification polling script + `#userAvatar/#userName/#userEmail/#logoutBtn` IDs.
+- Layout owns the wrapper: `.page > aside + header + div.page-wrapper > @yield('content')`; remove the stray `.page-wrapper` from views that add their own (dashboard, inventory/products, categories, admin, critical-stock).
+- Load `tabler-theme.min.js` in `<head>` (currently end of body -> theme flash); keep `tabler-themes.min.css` (required for base/primary/radius/font attrs).
+- **Settings panel** (`partials/theme-settings.blade.php`, rewrite from demo `ThemeSettings.astro`, `offcanvas-end` so it doesn't clash with a left sidebar): Colour mode (auto/light/dark), accent, font, base, radius, Navigation (horizontal/vertical), Container width (default/fluid/boxed), Navbar (default/sticky), Sidebar (default/folded/folded-hover). Opened from a "Customize" nav item in both navs. Reuse demo markup `form-imagecheck` / `form-colorinput` / `form-selectgroup`. Port the demo's inline script: change -> `localStorage['tabler-'+key]` + `data-bs-*` on `<html>`, writing only non-default values (default = attribute absent, as `tabler-theme.js` does); sidebar-only/navbar-only fieldsets toggled by position; reset button. Initial apply is left to `tabler-theme.js` (drop our duplicate `initTheme`).
+- **Server persistence**: keep `PUT /user/theme-preferences` full-replace semantics; extend `Api/UserController::updateThemePreferences` validation (l.545): `theme` adds `auto`; new keys `layout` (default,fluid,boxed), `navbar-position` (horizontal,vertical), `navbar` (default,sticky), `sidebar` (default,folded,folded-hover); `theme-primary` list stays. Client sends only non-default keys; `syncThemeFromServer()` applies them. Note: existing users who changed any setting already have all five old keys stored (incl. light/gray), so they keep their current look; only never-customized users get the new defaults.
+- New defaults in the panel/`themeConfig`: theme `auto`, base `neutral`, font `sans-serif` (system stack; Inter CDN links removed), radius 1, primary blue.
+- Login screen (`#loginPage`) and forgot/reset modals: restyle to demo sign-in look using Tabler classes; keep IDs/handlers.
+
+## Step 3 — Header-height/layout dependencies
+Fix hard-coded assumptions found in survey: `fabrication/documents.blade.php:299` (`top:72px` sticky card), `fabrication/work-orders.blade.php:29` (`calc(100vh - 260px)`), `fabrication/work-queue.blade.php:7` (`.wq-scroll-top{top:0}`), sticky `thead th{top:0}` rules (dashboard/products, quality, cycle-counting) so they work with sticky navbar and sidebar. Use CSS vars/`position: sticky` offsets rather than pixel guesses.
+
+## Step 4 — Page sweeps (separate reviewable commits)
+Pattern per page: demo page header (`page-pretitle` / `page-title` / `btn-list` actions), `row row-deck row-cards` grids, tables as `card > table-responsive > table.card-table.table-vcenter`, `badge bg-*-lt`, `empty` states, `.form-hint`->`.form-text` (23 files), `rgba(var(--tblr-primary-rgb), x)` -> `color-mix(in oklab, var(--tblr-primary) x%, transparent)` (documents, cycle-counting), hard-coded 6/8px radii and hex colours in `fab-*`/`wq-*` -> Tabler variables, trivial inline styles -> utility classes.
+- A: dashboard, inventory/products, low/critical stock, categories, suppliers, transactions
+- B: fabrication (work-orders, work-queue, documents, quality, cut-lists)
+- C: purchase-orders, cycle-counting, jobs, fulfillment, reports, maintenance, storage-locations, status
+- D: configurator (frame/admin/labels/package), admin
+Out of scope: CutFlow (Livewire + own CSS), PDFs/mail/error pages, shop-floor redesign (verify only that it still renders with 1.6.1 CSS).
+
+## Merge ordering
+`feature/dashboard_ui` also touches `partials/navigation.blade.php` (All Products link), `dashboard.blade.php`, `routes/web.php`. Merge dashboard_ui to develop first, then rebase this branch, to avoid conflicts in the nav rewrite.
+
+## Critical files
+`resources/views/layouts/app.blade.php`, `partials/{header,navigation,theme-settings,auth-scripts,fab-status-styles}.blade.php`, new `config/navigation.php`, `partials/navbar.blade.php`, `partials/sidebar.blade.php`, `app/Http/Controllers/Api/UserController.php` (updateThemePreferences), `shop-floor.blade.php`, the five page files in Step 3. Reference (read-only, not in repo): demo source clone at the session scratchpad `tabler-repo/src` (`shared/components/navbar/*`, `shared/components/demo/ThemeSettings.astro`, `shared/layouts/BaseLayout.astro`, `core/js/src/theme-config.ts`).
+
+## Verification
+- Tests (container procedure: `config:clear`, `route:clear`, `php artisan test --filter ...`, `config:cache`): theme-preferences endpoint accepts new values and rejects bad ones; replace semantics preserved; `GET /` renders 200 with both `navbar-vertical` and horizontal header present and every `nav.*` permission key appearing in each nav (guards against a menu item losing its permission attribute).
+- Manual matrix (browser; Claude can drive via Chrome if given a login): {top navbar, sidebar, folded} x {light, dark, auto} x pages (dashboard, All Products, work orders, work queue, documents, quality, configurator, admin); a limited-permission role (nav items hidden correctly in BOTH navs); notifications bell (admin); phone width (collapsed menu/sidebar); modals (scroll, widths, iPad widths); login + password reset; shop-floor still OK; settings persist across reload and across devices (server sync); reset button.

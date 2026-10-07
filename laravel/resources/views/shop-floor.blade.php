@@ -9,7 +9,7 @@
   {{-- Apply the persisted/OS theme before first paint to avoid a flash of light. --}}
   <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
   <link href="{{ asset('assets/tabler/css/tabler.min.css') }}" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.49.0/dist/tabler-icons.min.css" rel="stylesheet">
   <style>
     body { background: var(--tblr-bg-surface); color: var(--tblr-body-color); font-size: 16px; -webkit-tap-highlight-color: transparent; overflow-x: clip; }
 

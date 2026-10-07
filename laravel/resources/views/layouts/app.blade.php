@@ -12,7 +12,7 @@
   <link href="{{ asset('assets/tabler/css/tabler-vendors.min.css') }}" rel="stylesheet">
   <link href="{{ asset('assets/tabler/css/tabler-marketing.min.css') }}" rel="stylesheet">
   <link href="{{ asset('assets/tabler/css/tabler-themes.min.css') }}" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.49.0/dist/tabler-icons.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://rsms.me">
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://rsms.me/inter/inter.css"></noscript>
