@@ -350,6 +350,14 @@
                   </ul>
                   <div class="tab-content">
                   <div class="tab-pane active show" id="fb-hw-sub-standard" role="tabpanel">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                      <li class="nav-item" role="presentation"><a href="#fb-hws-selection" class="nav-link active" data-bs-toggle="tab" role="tab"><i class="ti ti-checklist me-1"></i>Hardware Selection</a></li>
+                      <li class="nav-item" role="presentation"><a href="#fb-hws-linked" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-link me-1"></i>Linked Hardware <span class="badge bg-secondary-lt ms-1" id="fb-hws-linked-count">0</span></a></li>
+                      <li class="nav-item" role="presentation"><a href="#fb-hws-values" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-adjustments-horizontal me-1"></i>Prep Values</a></li>
+                      <li class="nav-item" role="presentation"><a href="#fb-hws-bom" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-list-details me-1"></i>Hardware BOM <span class="badge bg-secondary-lt ms-1" id="fb-hws-bom-count">0</span></a></li>
+                    </ul>
+                    <div class="tab-content">
+                      <div class="tab-pane active show" id="fb-hws-selection" role="tabpanel">
                     <div class="text-muted small mb-3">Tick the VOS Standard hardware this opening gets. Apply adds, updates and removes links to match; use Custom Hardware for anything not listed here.</div>
                     <div class="row g-2 align-items-end mb-3">
                       <div class="col-md-3">
@@ -365,8 +373,46 @@
                       </div>
                     </div>
                     <div class="row g-3" id="fb-hws-sections"></div>
+                      </div>
+                      <div class="tab-pane" id="fb-hws-linked" role="tabpanel">
+                        <table class="table table-vcenter card-table">
+                          <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
+                          <tbody id="fb-hws-links-tbody"></tbody>
+                        </table>
+                        <div class="text-muted p-3" id="fb-hws-links-empty">No standard hardware linked yet.</div>
+                      </div>
+                      <div class="tab-pane" id="fb-hws-values" role="tabpanel">
+                        <div class="text-muted small mb-3">Prep values for this opening. They start from the hardware's catalog standard; change one here to override it for this configuration only (the catalog is not touched), or reset it to go back to the standard. Recalculate the Hardware BOM after changing values.</div>
+                        <div id="fb-hws-resolved"></div>
+                        <div class="text-muted p-3" id="fb-hws-resolved-empty">No prep values yet &mdash; link hardware first.</div>
+                      </div>
+                      <div class="tab-pane" id="fb-hws-bom" role="tabpanel">
+                        <div class="alert alert-warning py-2 d-none" id="fb-hws-bom-stale">
+                          <i class="ti ti-alert-triangle me-1"></i>A prep value changed since the BOM was last generated. Recalculate to apply it.
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                          <div class="text-muted small">Parts generated from the VOS Standard hardware on this opening. Generate / Recalculate rebuilds the whole hardware BOM, standard and custom.</div>
+                          <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-vcenter card-table">
+                            <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                            <tbody id="fb-hws-parts-tbody"></tbody>
+                          </table>
+                          <div class="text-muted p-3" id="fb-hws-parts-empty">No standard hardware parts yet &mdash; select hardware, then click Generate.</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="tab-pane" id="fb-hw-sub-custom" role="tabpanel">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                      <li class="nav-item" role="presentation"><a href="#fb-hwc-add" class="nav-link active" data-bs-toggle="tab" role="tab"><i class="ti ti-plus me-1"></i>Add Hardware</a></li>
+                      <li class="nav-item" role="presentation"><a href="#fb-hwc-linked" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-link me-1"></i>Linked Hardware <span class="badge bg-secondary-lt ms-1" id="fb-hwc-linked-count">0</span></a></li>
+                      <li class="nav-item" role="presentation"><a href="#fb-hwc-values" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-adjustments-horizontal me-1"></i>Prep Values</a></li>
+                      <li class="nav-item" role="presentation"><a href="#fb-hwc-bom" class="nav-link" data-bs-toggle="tab" role="tab"><i class="ti ti-list-details me-1"></i>Hardware BOM <span class="badge bg-secondary-lt ms-1" id="fb-hwc-bom-count">0</span></a></li>
+                    </ul>
+                    <div class="tab-content">
+                      <div class="tab-pane active show" id="fb-hwc-add" role="tabpanel">
                   <input type="hidden" id="fb-hw-scope" value="custom">
                   <form id="fb-hardware-add-form" class="row g-2 align-items-end mb-3">
                     <div class="col-md-3">
@@ -418,34 +464,38 @@
                       <div id="fb-hw-functions" class="d-flex flex-wrap gap-3"></div>
                     </div>
                   </form>
+                      </div>
+                      <div class="tab-pane" id="fb-hwc-linked" role="tabpanel">
+                        <table class="table table-vcenter card-table">
+                          <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
+                          <tbody id="fb-hwc-links-tbody"></tbody>
+                        </table>
+                        <div class="text-muted p-3" id="fb-hwc-links-empty">No custom hardware linked yet.</div>
+                      </div>
+                      <div class="tab-pane" id="fb-hwc-values" role="tabpanel">
+                        <div class="text-muted small mb-3">Prep values for this opening. They start from the hardware's catalog standard; change one here to override it for this configuration only (the catalog is not touched), or reset it to go back to the standard. Recalculate the Hardware BOM after changing values.</div>
+                        <div id="fb-hwc-resolved"></div>
+                        <div class="text-muted p-3" id="fb-hwc-resolved-empty">No prep values yet &mdash; link hardware first.</div>
+                      </div>
+                      <div class="tab-pane" id="fb-hwc-bom" role="tabpanel">
+                        <div class="alert alert-warning py-2 d-none" id="fb-hwc-bom-stale">
+                          <i class="ti ti-alert-triangle me-1"></i>A prep value changed since the BOM was last generated. Recalculate to apply it.
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                          <div class="text-muted small">Parts from custom (non-standard) hardware and any manually added parts. Generate / Recalculate rebuilds the whole hardware BOM, standard and custom.</div>
+                          <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-vcenter card-table">
+                            <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                            <tbody id="fb-hwc-parts-tbody"></tbody>
+                          </table>
+                          <div class="text-muted p-3" id="fb-hwc-parts-empty">No custom hardware parts yet &mdash; add hardware, then click Generate.</div>
+                        </div>
+                      </div>
+                    </div>
                   </div><!-- /fb-hw-sub-custom -->
                   </div><!-- /hw sub tab-content -->
-
-                  <h4 class="mt-3">Linked Hardware</h4>
-                  <table class="table table-vcenter card-table">
-                    <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
-                    <tbody id="fb-hw-links-tbody"></tbody>
-                  </table>
-                  <div class="text-muted p-3" id="fb-hw-links-empty">No hardware linked yet.</div>
-
-                  <div id="fb-hw-resolved-wrap" style="display:none">
-                    <hr>
-                    <h4>Resolved Prep Values</h4>
-                    <div id="fb-hw-resolved"></div>
-                  </div>
-
-                  <hr>
-                  <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h4 class="mb-0">Hardware BOM</h4>
-                    <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
-                  </div>
-                  <div class="table-responsive">
-                    <table class="table table-vcenter card-table">
-                      <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
-                      <tbody id="fb-hw-parts-tbody"></tbody>
-                    </table>
-                    <div class="text-muted p-3" id="fb-hw-parts-empty">No parts yet — link hardware above, then click Generate.</div>
-                  </div>
                 </div>
 
               </div>
@@ -1081,10 +1131,12 @@ async function fbApplyStandardHardware() {
   } catch (err) { showNotification(err.message, 'danger'); }
 }
 
-function fbRenderHwLinks(links) {
-  const tbody = document.getElementById('fb-hw-links-tbody');
-  document.getElementById('fb-hw-links-empty').style.display = links.length ? 'none' : 'block';
-  tbody.innerHTML = links.map(l => `
+// Standard = a VOS Standard catalog item; everything else is custom. The Standard and Custom
+// sections each show only their own links, prep values and BOM parts.
+const fbIsStdLink = (l) => !!(l.item && l.item.vos_standard);
+
+function fbHwLinkRowHtml(l) {
+  return `
     <tr>
       <td>${esc(l.item.name)}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
       <td>${esc(l.item.category.name)}${l.item.subcategory ? ' - ' + esc(l.item.subcategory.name) : ''}</td>
@@ -1094,7 +1146,15 @@ function fbRenderHwLinks(links) {
       <td class="text-end">
         <button type="button" class="btn btn-sm btn-icon text-danger" onclick="fbDeleteHwLink(${l.id})" data-permission="configurator.edit"><i class="ti ti-trash"></i></button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+}
+
+function fbRenderHwLinks(links) {
+  [['hws', links.filter(fbIsStdLink)], ['hwc', links.filter(l => !fbIsStdLink(l))]].forEach(([prefix, subset]) => {
+    document.getElementById(`fb-${prefix}-links-empty`).style.display = subset.length ? 'none' : 'block';
+    document.getElementById(`fb-${prefix}-links-tbody`).innerHTML = subset.map(fbHwLinkRowHtml).join('');
+    document.getElementById(`fb-${prefix}-linked-count`).textContent = subset.length;
+  });
   applyActionPermissions();
 }
 
@@ -1125,27 +1185,87 @@ async function fbDeleteHwLink(linkId) {
   } catch (err) { showNotification(err.message, 'danger'); }
 }
 
+// Prep values: the effective value for each variable (override -> catalog -> formula -> default), editable
+// per configuration. Editing writes this link's own override; clearing it falls back to the catalog value.
+let fbPrepStale = false;
+
+function fbPrepInputHtml(linkId, v, canEdit) {
+  const shown = v.value ?? '';
+  if (!canEdit) return `<strong>${esc(shown) || '—'}</strong>`;
+  const handler = `onchange="fbSavePrepValue(${linkId}, '${esc(v.code)}', this.value)"`;
+  const cls = 'form-control form-control-sm';
+  if (v.var_type === 'boolean') {
+    return `<select class="form-select form-select-sm" ${handler}>${shown === '' ? '<option value="" selected>—</option>' : ''}<option value="true" ${shown === 'true' ? 'selected' : ''}>Yes</option><option value="false" ${shown === 'false' ? 'selected' : ''}>No</option></select>`;
+  }
+  if (v.var_type === 'select') {
+    const opts = (v.options || []).map(o => `<option value="${esc(o)}" ${String(shown) === String(o) ? 'selected' : ''}>${esc(o)}</option>`).join('');
+    return `<select class="form-select form-select-sm" ${handler}>${shown === '' ? '<option value="" selected>—</option>' : ''}${opts}</select>`;
+  }
+  if (v.var_type === 'number' || v.var_type === 'degree_matrix') {
+    return `<input type="number" step="any" class="${cls}" value="${esc(shown)}" ${handler}>`;
+  }
+  return `<input type="text" class="${cls}" value="${esc(shown)}" ${handler}>`;
+}
+
+function fbPrepStatusHtml(linkId, v, canEdit) {
+  if (v.overridden) {
+    return `<span class="badge bg-yellow-lt">Override</span>${canEdit ? ` <button type="button" class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Reset to the catalog value" onclick="fbSavePrepValue(${linkId}, '${esc(v.code)}', '')"><i class="ti ti-restore"></i></button>` : ''}`;
+  }
+  return v.is_calculated ? '<span class="badge bg-secondary-lt">Calculated</span>' : '<span class="text-muted small">Catalog</span>';
+}
+
+function fbPrepLinkHtml(l, canEdit) {
+  return `<div class="card card-sm mb-3"><div class="card-header">
+      <h4 class="card-title mb-0">${esc(l.item_name)}</h4>
+      <div class="card-actions text-muted small">${esc(l.category || '')}${l.series ? ' · ' + esc(l.series) : ''}${l.leaf && l.leaf !== 'both' ? ' · ' + esc(l.leaf) : ''}</div>
+    </div>
+    <div class="table-responsive"><table class="table table-vcenter card-table table-sm mb-0"><tbody>
+      ${l.values.map(v => `<tr>
+        <td style="width:34%">${esc(v.label)}${v.group_name ? `<div class="text-muted small">${esc(v.group_name)}</div>` : ''}</td>
+        <td style="width:30%">${fbPrepInputHtml(l.link_id, v, canEdit)}</td>
+        <td style="width:8%" class="text-muted">${v.unit ? esc(v.unit) : ''}</td>
+        <td>${fbPrepStatusHtml(l.link_id, v, canEdit)}</td>
+      </tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
 async function fbLoadHwResolvedValues() {
   try {
     const data = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-values`);
-    const wrap = document.getElementById('fb-hw-resolved-wrap');
+    const canEdit = !!fbSelectedDetail?.can_edit && hasPermission('configurator.edit');
     const links = (data.links || []).filter(l => l.values.length);
-    wrap.style.display = links.length ? '' : 'none';
-    document.getElementById('fb-hw-resolved').innerHTML = links.map(l => `
-      <div class="mb-2">
-        <div class="fw-bold">${esc(l.item_name)}</div>
-        <div class="d-flex flex-wrap gap-3 small text-muted">
-          ${l.values.map(v => `<span>${esc(v.label)}: <strong class="text-body">${v.value ?? '—'}${v.unit ? esc(v.unit) : ''}</strong>${v.overridden ? ' <span class="badge bg-yellow-lt">override</span>' : ''}</span>`).join('')}
-        </div>
-      </div>`).join('');
-  } catch (err) { /* non-fatal — resolved values are a convenience display */ }
+    [['hws', links.filter(l => l.vos_standard)], ['hwc', links.filter(l => !l.vos_standard)]].forEach(([prefix, subset]) => {
+      document.getElementById(`fb-${prefix}-resolved`).innerHTML = subset.map(l => fbPrepLinkHtml(l, canEdit)).join('');
+      document.getElementById(`fb-${prefix}-resolved-empty`).style.display = subset.length ? 'none' : 'block';
+    });
+  } catch (err) { /* non-fatal: prep values are shown for convenience; the BOM does not depend on this call */ }
 }
 
+async function fbSavePrepValue(linkId, code, value) {
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}/values`, {
+      method: 'PUT', body: JSON.stringify({ values: { [code]: value } }),
+    });
+    fbPrepStale = true;
+    fbShowBomStale();
+    await fbLoadHwResolvedValues();
+  } catch (err) {
+    showNotification(err.message, 'danger');
+    await fbLoadHwResolvedValues(); // put the field back to what is actually saved
+  }
+}
+
+function fbShowBomStale() {
+  ['hws', 'hwc'].forEach(prefix => document.getElementById(`fb-${prefix}-bom-stale`).classList.toggle('d-none', !fbPrepStale));
+}
+
+// BOM parts: those generated from a standard link belong to Standard; custom links' parts and
+// manual/unlinked parts belong to Custom.
 function fbRenderHwParts(parts) {
-  const tbody = document.getElementById('fb-hw-parts-tbody');
-  document.getElementById('fb-hw-parts-empty').style.display = parts.length ? 'none' : 'block';
+  const stdLinkIds = new Set((fbSelectedDetail?.hardware_links || []).filter(fbIsStdLink).map(l => l.id));
+  const isStdPart = (p) => p.hwlib_link_id != null && stdLinkIds.has(p.hwlib_link_id);
   const sourceBadge = { item: 'bg-blue-lt', backer: 'bg-azure-lt', fastener: 'bg-purple-lt', manual: 'bg-secondary-lt' };
-  tbody.innerHTML = parts.map(p => `
+  const rowHtml = (p) => `
     <tr>
       <td>${esc(p.formatted_label)}</td>
       <td>${p.product
@@ -1156,13 +1276,20 @@ function fbRenderHwParts(parts) {
       <td class="text-end">
         ${!p.is_auto_generated ? `<button type="button" class="btn btn-sm btn-icon text-danger" onclick="fbDeleteHwPart(${p.id})" data-permission="configurator.edit"><i class="ti ti-trash"></i></button>` : ''}
       </td>
-    </tr>`).join('');
+    </tr>`;
+  [['hws', parts.filter(isStdPart)], ['hwc', parts.filter(p => !isStdPart(p))]].forEach(([prefix, subset]) => {
+    document.getElementById(`fb-${prefix}-parts-empty`).style.display = subset.length ? 'none' : 'block';
+    document.getElementById(`fb-${prefix}-parts-tbody`).innerHTML = subset.map(rowHtml).join('');
+    document.getElementById(`fb-${prefix}-bom-count`).textContent = subset.length;
+  });
   applyActionPermissions();
 }
 
 async function fbGenerateHardwareParts() {
   try {
     const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-parts/generate`, { method: 'POST' });
+    fbPrepStale = false;
+    fbShowBomStale();
     showNotification('Hardware parts generated', 'success');
     if (res.warnings && res.warnings.length) {
       showNotification(`${res.warnings.length} PN(s) could not be matched to a product — see console.`, 'warning');
@@ -1266,6 +1393,7 @@ function fbStep(delta) {
 
 async function fbSelect(id) {
   fbSelectedId = id;
+  fbPrepStale = false;
   fbRenderList();
   document.getElementById('fb-detail-col').style.display = '';
   document.getElementById('fb-empty').style.display = 'none';
@@ -1418,8 +1546,12 @@ function fbRenderDetail() {
   if ((c.hardware_links || []).length) {
     fbLoadHwResolvedValues();
   } else {
-    document.getElementById('fb-hw-resolved-wrap').style.display = 'none';
+    ['hws', 'hwc'].forEach(prefix => {
+      document.getElementById(`fb-${prefix}-resolved`).innerHTML = '';
+      document.getElementById(`fb-${prefix}-resolved-empty`).style.display = 'block';
+    });
   }
+  fbShowBomStale();
 }
 
 function fbCheckNonStandardPairHand(sel) {

@@ -1903,6 +1903,7 @@ class DoorFrameConfigurationController extends Controller
             'unit_type' => $part->unit_type,
             'source_type' => $part->source_type,
             'is_auto_generated' => $part->is_auto_generated,
+            'hwlib_link_id' => $part->hwlib_link_id ?? null,
             'sort_order' => $part->sort_order,
         ];
     }
@@ -1947,6 +1948,7 @@ class DoorFrameConfigurationController extends Controller
                 'manufacturer' => $link->item->manufacturer,
                 'model_number' => $link->item->model_number,
                 'pn' => $link->item->pn,
+                'vos_standard' => (bool) $link->item->vos_standard,
                 'category' => [
                     'id' => $link->item->category->id,
                     'name' => $link->item->category->name,
@@ -2127,6 +2129,88 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Set or clear this configuration's own prep-value overrides for one linked hardware item.
+     * `values` maps variable code => text; an empty value clears the override so the item's
+     * catalog value (or formula/default) applies again. Resolution order is in HwlibResolver.
+     * A degree-matrix variable stores a matrix, so an edit sets the cell at this opening's angle.
+     * The generated BOM is not recomputed here; the UI offers Recalculate.
+     */
+    public function updateHardwareLinkValues(Request $request, $id, $linkId)
+    {
+        $config = DoorFrameConfiguration::with('doorConfigs')->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $link = ConfiguratorHwlibLink::with('item.category.variables')->where('configuration_id', $config->id)->findOrFail($linkId);
+
+        $validator = Validator::make($request->all(), [
+            'values' => 'required|array|min:1',
+            'values.*' => 'nullable|string|max:500',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $variables = $link->item->category->variables->keyBy('code');
+        $angle = (string) ($config->doorConfigs->first()->opening_angle ?? 90);
+        $operations = [];
+
+        foreach ($request->input('values') as $code => $raw) {
+            $variable = $variables->get($code);
+            if (! $variable) {
+                return response()->json(['message' => "{$code} is not a prep value of this hardware item."], 422);
+            }
+            $text = trim((string) $raw);
+            if ($text === '') {
+                $operations[] = [$variable, null];
+
+                continue;
+            }
+            $problem = match ($variable->var_type) {
+                'number', 'degree_matrix' => is_numeric($text) ? null : "{$variable->label} must be a number.",
+                'boolean' => in_array($text, ['true', 'false'], true) ? null : "{$variable->label} must be Yes or No.",
+                'select' => in_array($text, $variable->options ?? [], true) ? null : "{$variable->label} must be one of its listed options.",
+                default => null,
+            };
+            if ($problem) {
+                return response()->json(['message' => $problem, 'errors' => ['values' => [$problem]]], 422);
+            }
+            $operations[] = [$variable, $text];
+        }
+
+        DB::transaction(function () use ($link, $operations, $angle) {
+            foreach ($operations as [$variable, $text]) {
+                $existing = ConfiguratorHwlibLinkValue::where('link_id', $link->id)->where('variable_id', $variable->id)->first();
+
+                if ($text === null) {
+                    $existing?->delete();
+
+                    continue;
+                }
+
+                if ($variable->var_type === 'degree_matrix') {
+                    $matrix = json_decode($existing?->value_text ?? '{}', true);
+                    $matrix = is_array($matrix) ? $matrix : [];
+                    $matrix[$angle] = $text;
+                    $text = json_encode($matrix);
+                }
+
+                ConfiguratorHwlibLinkValue::updateOrCreate(
+                    ['link_id' => $link->id, 'variable_id' => $variable->id],
+                    ['value_text' => $text]
+                );
+            }
+        });
+
+        return response()->json(['message' => 'Prep values saved', 'bom_stale' => true]);
+    }
+
+    /**
      * Remove a hardware item from a configuration.
      */
     public function destroyHardwareLink($id, $linkId)
@@ -2170,8 +2254,13 @@ class DoorFrameConfigurationController extends Controller
                     continue;
                 }
                 $rows[] = [
+                    'variable_id' => $variable->id,
                     'code' => $code,
                     'label' => $variable->label,
+                    'group_name' => $variable->group_name,
+                    'var_type' => $variable->var_type,
+                    'options' => $variable->options ?? [],
+                    'is_calculated' => (bool) $variable->is_calculated,
                     'value' => $result['value'],
                     'overridden' => $result['overridden'],
                     'unit' => $variable->unit,
@@ -2180,6 +2269,10 @@ class DoorFrameConfigurationController extends Controller
             $out[] = [
                 'link_id' => $link->id,
                 'item_name' => $link->item->name,
+                'category' => $link->item->category->name ?? null,
+                'series' => $link->series,
+                'leaf' => $link->leaf,
+                'vos_standard' => (bool) $link->item->vos_standard,
                 'values' => $rows,
             ];
         }

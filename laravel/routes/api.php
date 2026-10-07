@@ -572,6 +572,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Hardware library links + BOM
         Route::post('/door-frame-configurations/{id}/hardware-links', [DoorFrameConfigurationController::class, 'addHardwareLink'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/hardware-links/{linkId}', [DoorFrameConfigurationController::class, 'updateHardwareLink'])->middleware('permission:configurator.edit');
+        Route::put('/door-frame-configurations/{id}/hardware-links/{linkId}/values', [DoorFrameConfigurationController::class, 'updateHardwareLinkValues'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/hardware-links/{linkId}', [DoorFrameConfigurationController::class, 'destroyHardwareLink'])->middleware('permission:configurator.edit');
         Route::get('/door-frame-configurations/{id}/hardware-values', [DoorFrameConfigurationController::class, 'resolvedHardwareValues'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations/{id}/hardware-parts/generate', [DoorFrameConfigurationController::class, 'generateHardwareParts'])->middleware('permission:configurator.edit');

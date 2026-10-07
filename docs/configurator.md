@@ -225,3 +225,13 @@ Originally `configurator.txt` (plain notes). Converted to Markdown so progress
 can be tracked with checkboxes. When picking an item back up, re-verify its
 "done" status against the code before relying on this file — it reflects state
 as of 2026-09-21.
+
+## Entry Builder (`/config`) changes, 2026-10-07
+
+- **Selection bar.** Entries are chosen from a full-width bar (job dropdown, entry/door dropdown with prev/next, status + WO badges) instead of a left-hand list, so the working area has the full width. Changing the job clears the selection (and opens it if the job has one entry); opening an entry from elsewhere moves the bar to its job.
+- **One door tag per entry.** `POST /door-frame-configurations` and each `duplicates[]` copy take exactly one tag (`size:1`, no commas). More openings are made with Duplicate; a comma list in a Duplicate row creates one copy per tag. Older entries that already carry several tags still load, but their tag cannot be renamed.
+- **Edit Details** (`PUT /door-frame-configurations/{id}`, `configurator.edit`): notes in any editable status; door tag while draft or reserved; job only while draft and not linked to duplicates. Tags stay unique per job.
+- **Delete** (`DELETE /door-frame-configurations/{id}`, new `configurator.delete`, admin only): draft or reserved entries only (soft delete). A reserved entry first leaves the job's reservation, so its committed stock is released; a linked group left with one member is unlinked; the tag becomes reusable. Released and later entries must be un-released first.
+- **Hardware tab sections.** Standard Hardware: Hardware Selection, Linked Hardware, Prep Values, Hardware BOM. Custom Hardware: Add Hardware, Linked Hardware, Prep Values, Hardware BOM. Standard vs custom is the catalog item's `vos_standard` flag; a BOM part belongs to the section of the link it was generated from (`hwlib_link_id`), manual/unlinked parts to Custom.
+- **Prep Values are editable per configuration** (`PUT .../hardware-links/{linkId}/values`, body `{values: {CODE: text}}`): writes this link's own override (the catalog is untouched); an empty value clears it so the catalog value, formula or default applies again. A degree-matrix variable stores a matrix, so an edit sets the cell at the opening's angle and keeps other angles. Values are validated by variable type. The BOM is not recomputed automatically: a notice on both BOM tabs offers Generate / Recalculate.
+
