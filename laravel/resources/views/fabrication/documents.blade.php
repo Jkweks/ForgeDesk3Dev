@@ -272,6 +272,7 @@
 @endsection
 
 @section('content')
+<div class="page-wrapper">
 <div class="container-xl">
 
   <!-- Page header -->
@@ -296,7 +297,7 @@
 
       <!-- ── Left: filter sidebar ──────────────────────────────── -->
       <div class="col-12 col-md-3">
-        <div class="card" style="position: sticky; top: 72px;">
+        <div class="card" style="position: sticky; top: calc(var(--fd-nav-offset) + 1rem);">
           <div class="card-body p-3">
 
             <div class="fab-nav-label">Document type</div>
@@ -506,6 +507,7 @@
       </div>
     </div>
   </div>
+</div>
 </div>
 @endsection
 

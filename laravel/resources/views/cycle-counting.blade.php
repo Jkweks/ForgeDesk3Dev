@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="page-wrapper">
 <div class="container-xl">
   <!-- Page header -->
   <div class="page-header d-print-none">
@@ -2032,4 +2033,5 @@ async function completeSessionFromGuided() {
   }
 }
 </script>
+</div>
 @endsection

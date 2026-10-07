@@ -539,17 +539,22 @@ class UserController extends Controller
     }
 
     /**
-     * Persist the signed-in user's Tabler theme (color mode, scheme, font,
-     * base, radius) so it follows them to any device on next login.
+     * Persist the signed-in user's Tabler theme (color mode, accent, font,
+     * base, radius, layout and navigation position) so it follows them to any
+     * device on next login. Only non-default values are sent (default = absent).
      */
     public function updateThemePreferences(Request $request)
     {
         $validated = $request->validate([
-            'theme' => 'sometimes|nullable|in:light,dark',
+            'theme' => 'sometimes|nullable|in:auto,light,dark',
             'theme-base' => 'sometimes|nullable|in:slate,gray,zinc,neutral,stone',
             'theme-font' => 'sometimes|nullable|in:sans-serif,serif,monospace,comic',
             'theme-primary' => 'sometimes|nullable|in:blue,azure,indigo,purple,pink,red,orange,yellow,lime,green,teal,cyan',
             'theme-radius' => 'sometimes|nullable|in:0,0.5,1,1.5,2',
+            'layout' => 'sometimes|nullable|in:default,fluid,boxed',
+            'navbar-position' => 'sometimes|nullable|in:horizontal,vertical',
+            'navbar' => 'sometimes|nullable|in:default,sticky',
+            'sidebar' => 'sometimes|nullable|in:default,folded,folded-hover',
         ]);
 
         $user = auth()->user();

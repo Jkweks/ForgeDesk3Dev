@@ -4,7 +4,7 @@
 
 @section('styles')
 .wq-board { display:flex; gap:.75rem; overflow-x:auto; padding-bottom:1rem; align-items:flex-start; }
-.wq-scroll-top { position:sticky; top:0; z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface); border-bottom:1px solid var(--tblr-border-color); }
+.wq-scroll-top { position:sticky; top:var(--fd-nav-offset); z-index:6; overflow-x:auto; overflow-y:hidden; background:var(--tblr-bg-surface); border-bottom:1px solid var(--tblr-border-color); }
 .wq-scroll-top-inner { height:1px; }
 .wq-col { min-width:280px; max-width:320px; flex:0 0 auto; background:var(--tblr-bg-surface-secondary); border-radius:8px; padding:.5rem; }
 .wq-col.drop-hover { outline:2px dashed var(--tblr-primary); outline-offset:-2px; }

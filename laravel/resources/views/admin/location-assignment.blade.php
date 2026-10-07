@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+<div class="page-wrapper">
 <div class="container-xl">
 
   <div class="page-header d-print-none">
@@ -578,4 +579,5 @@ function escHtml(str) {
   return d.innerHTML;
 }
 </script>
+</div>
 @endsection
