@@ -249,14 +249,14 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     <div class="mb-3">
                       <label class="form-label">Job Number <span class="text-danger">*</span></label>
                       <input type="text" class="form-control" id="editJobNumber" readonly>
-                      <small class="form-hint">Job number cannot be changed</small>
+                      <small class="form-text">Job number cannot be changed</small>
                     </div>
                   </div>
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Release Number <span class="text-danger">*</span></label>
                       <input type="text" class="form-control" id="editReleaseNumber" readonly>
-                      <small class="form-hint">Release number cannot be changed</small>
+                      <small class="form-text">Release number cannot be changed</small>
                     </div>
                   </div>
                 </div>
@@ -285,7 +285,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     <div class="mb-3">
                       <label class="form-label">Status</label>
                       <input type="text" class="form-control" id="editStatus" readonly>
-                      <small class="form-hint">Use "Change Status" button to modify status</small>
+                      <small class="form-text">Use "Change Status" button to modify status</small>
                     </div>
                   </div>
                 </div>
@@ -515,7 +515,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                           <div class="mb-3">
                             <label class="form-label">Committed Qty</label>
                             <input type="number" class="form-control" id="manualItemCommittedQty" min="0" step="0.1" value="0">
-                            <small class="form-hint">Leave 0 for auto</small>
+                            <small class="form-text">Leave 0 for auto</small>
                           </div>
                         </div>
                       </div>

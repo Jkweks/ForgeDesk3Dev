@@ -517,7 +517,7 @@
             <div class="mb-3">
               <label class="form-label">New password</label>
               <input type="password" class="form-control" id="forcePwNew" autocomplete="new-password" minlength="8" required>
-              <small class="form-hint">At least 8 characters.</small>
+              <small class="form-text">At least 8 characters.</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Confirm new password</label>

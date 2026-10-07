@@ -237,7 +237,7 @@
                                 <div class="col-md-8">
                                   <label class="form-label">Company Logo</label>
                                   <input type="file" class="form-control" id="companyLogoInput" accept="image/png,image/jpeg,image/gif,image/webp">
-                                  <small class="form-hint">Printed on purchase order PDFs. PNG or JPG, up to 4&nbsp;MB.</small>
+                                  <small class="form-text">Printed on purchase order PDFs. PNG or JPG, up to 4&nbsp;MB.</small>
                                   <div class="mt-2">
                                     <button class="btn btn-primary btn-sm" onclick="uploadCompanyLogo()">
                                       <i class="ti ti-upload me-1"></i>Upload
@@ -274,7 +274,7 @@
                                 <div class="col-md-6 mb-3">
                                   <label class="form-label">Bridge Token</label>
                                   <input type="password" class="form-control" id="cfBridgeToken" placeholder="Leave blank to keep the current token" autocomplete="new-password">
-                                  <small class="form-hint" id="cfBridgeTokenHint"></small>
+                                  <small class="form-text" id="cfBridgeTokenHint"></small>
                                 </div>
                               </div>
                               <div class="row">
@@ -287,7 +287,7 @@
                                 <div class="col-md-6 mb-3">
                                   <label class="form-label">Tablet IP Allowlist</label>
                                   <input type="text" class="form-control" id="cfTabletAllowedIps" placeholder="192.168.1.60, 192.168.1.0/24">
-                                  <small class="form-hint">Comma-separated IPs / IPv4 CIDR ranges. Blank = unrestricted.</small>
+                                  <small class="form-text">Comma-separated IPs / IPv4 CIDR ranges. Blank = unrestricted.</small>
                                 </div>
                               </div>
                               <button class="btn btn-primary" onclick="saveCutFlowBridgeSettings()">
@@ -473,7 +473,7 @@
                               <div class="mb-3">
                                 <label class="form-label">Upload EZ Estimate File</label>
                                 <input type="file" class="form-control" id="ezEstimateFile" accept=".xlsx,.xls">
-                                <div class="form-hint">Accepted formats: .xlsx, .xls (Max 10MB)</div>
+                                <div class="form-text">Accepted formats: .xlsx, .xls (Max 10MB)</div>
                               </div>
 
                               <button type="button" class="btn btn-primary" onclick="uploadEzEstimate()">
@@ -900,7 +900,7 @@
             <div class="mb-3">
               <label class="form-label required">Email</label>
               <input type="email" class="form-control" id="addUserEmail" placeholder="user@example.com">
-              <small class="form-hint">The welcome email carries a temporary password the user must change within 7 days. A held invitation gets a fresh temporary password when you finally send it.</small>
+              <small class="form-text">The welcome email carries a temporary password the user must change within 7 days. A held invitation gets a fresh temporary password when you finally send it.</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
@@ -920,7 +920,7 @@
                 <input class="form-check-input" type="checkbox" id="addUserSendWelcome" checked>
                 <span class="form-check-label">Send welcome email now</span>
               </label>
-              <small class="form-hint">Uncheck to hold it — set up the profile, roles and permissions first, then send held invitations one by one or all at once from the Users list.</small>
+              <small class="form-text">Uncheck to hold it — set up the profile, roles and permissions first, then send held invitations one by one or all at once from the Users list.</small>
             </div>
           </div>
           <div class="modal-footer">

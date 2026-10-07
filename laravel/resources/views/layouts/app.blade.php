@@ -168,7 +168,7 @@
             <div class="mb-3">
               <label class="form-label">New Password</label>
               <input type="password" class="form-control" id="newPassword" minlength="8" autocomplete="new-password" required>
-              <small class="form-hint">Must be at least 8 characters long</small>
+              <small class="form-text">Must be at least 8 characters long</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Confirm Password</label>

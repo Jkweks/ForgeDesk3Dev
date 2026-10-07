@@ -184,8 +184,8 @@
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Part Number</label>
                   <input type="text" class="form-control form-control-sm" name="part_number" id="productPartNumber" placeholder="e.g., ABC-123">
-                  <small class="form-hint text-primary" id="skuPreview"></small>
-                  <small class="form-hint text-success" id="partLookupHint" style="display:none"></small>
+                  <small class="form-text text-primary" id="skuPreview"></small>
+                  <small class="form-text text-success" id="partLookupHint" style="display:none"></small>
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
@@ -218,7 +218,7 @@
                 <select class="form-select form-select-sm" name="category_ids" id="productCategoryIds" multiple size="4">
                   <!-- Options loaded dynamically -->
                 </select>
-                <small class="form-hint">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
+                <small class="form-text">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
               </div>
             </div>
 
@@ -312,7 +312,7 @@
                       <div class="col-3">
                         <label class="form-label small text-muted mb-1">Reorder Pt.</label>
                         <input type="number" class="form-control form-control-sm" name="reorder_point" id="productReorderPoint" placeholder="Auto" min="0">
-                        <small class="form-hint text-success" id="reorderPreview"></small>
+                        <small class="form-text text-success" id="reorderPreview"></small>
                       </div>
                       <div class="col-3">
                         <label class="form-label small text-muted mb-1">Safety Stock</label>
@@ -372,7 +372,7 @@
                       <div class="col-md-3">
                         <label class="form-label small text-muted mb-1">Pack Size</label>
                         <input type="number" class="form-control form-control-sm" name="pack_size" id="productPackSize" placeholder="1" min="1" value="1">
-                        <small class="form-hint">Units per pack</small>
+                        <small class="form-text">Units per pack</small>
                       </div>
                       <div class="col-md-3">
                         <label class="form-label small text-muted mb-1">Min Order Qty</label>

@@ -730,9 +730,9 @@
                   <option value="asset_tool" selected>Machine Assets (Reusable machine items - no life tracking)</option>
                 </select>
                 <div class="mt-2">
-                  <small class="form-hint d-block"><strong>Machine Tooling:</strong> End mills, drill bits, inserts, taps</small>
-                  <small class="form-hint d-block"><strong>Machine Assets:</strong> Collets, tool holders, fixtures, vises</small>
-                  <small class="form-hint d-block"><strong>Maintenance Assets:</strong> Bearings, seals, gaskets, belts, filters</small>
+                  <small class="form-text d-block"><strong>Machine Tooling:</strong> End mills, drill bits, inserts, taps</small>
+                  <small class="form-text d-block"><strong>Machine Assets:</strong> Collets, tool holders, fixtures, vises</small>
+                  <small class="form-text d-block"><strong>Maintenance Assets:</strong> Bearings, seals, gaskets, belts, filters</small>
                 </div>
               </div>
             </div>
@@ -747,7 +747,7 @@
               <div class="col-md-4 mb-3">
                 <label class="form-label">SKU</label>
                 <input type="text" class="form-control" id="newToolSKU" placeholder="Auto-generated if empty">
-                <small class="form-hint">Leave empty to auto-generate from part number</small>
+                <small class="form-text">Leave empty to auto-generate from part number</small>
               </div>
               <div class="col-md-4 mb-3">
                 <label class="form-label">Category</label>
@@ -845,7 +845,7 @@
                 <div class="col-md-4 mb-3">
                   <label class="form-label">Warning Threshold (%)</label>
                   <input type="number" class="form-control" id="newToolWarningThreshold" value="80" min="0" max="100">
-                  <small class="form-hint">Alert when tool reaches this % of life used</small>
+                  <small class="form-text">Alert when tool reaches this % of life used</small>
                 </div>
               </div>
             </div>
@@ -857,7 +857,7 @@
               <div id="newToolMachineTypes" class="d-flex flex-wrap gap-2">
                 <!-- Populated dynamically with checkboxes -->
               </div>
-              <small class="form-hint">Leave empty if compatible with all machines</small>
+              <small class="form-text">Leave empty if compatible with all machines</small>
             </div>
 
             <!-- Tool Specifications -->
@@ -885,7 +885,7 @@
               <div class="col-md-12 mb-3">
                 <label class="form-label">Additional Specifications (JSON format)</label>
                 <textarea class="form-control" id="newToolSpecOther" rows="2" placeholder='{"flutes": "4", "shank_diameter": "0.5 inch"}'></textarea>
-                <small class="form-hint">Optional: Add other specs in JSON format</small>
+                <small class="form-text">Optional: Add other specs in JSON format</small>
               </div>
             </div>
 
@@ -922,7 +922,7 @@
               <div class="col-md-4 mb-3">
                 <label class="form-label">SKU</label>
                 <input type="text" class="form-control" id="newConsumableSKU" placeholder="Auto-generated if empty">
-                <small class="form-hint">Leave empty to auto-generate from part number</small>
+                <small class="form-text">Leave empty to auto-generate from part number</small>
               </div>
               <div class="col-md-4 mb-3">
                 <label class="form-label required">Supplier</label>
@@ -1014,7 +1014,7 @@
               <select class="form-select" id="installToolProduct" required>
                 <option value="">Select Tool</option>
               </select>
-              <small class="form-hint">Only compatible tools for the selected machine are shown</small>
+              <small class="form-text">Only compatible tools for the selected machine are shown</small>
             </div>
             <div class="mb-3">
               <label class="form-label required">Location on Machine</label>
@@ -1066,7 +1066,7 @@
                 <input type="number" class="form-control" id="replaceToolLifeUsed" required min="0" step="0.01">
                 <span class="input-group-text" id="replaceToolLifeUnit">seconds</span>
               </div>
-              <small class="form-hint">Enter the tool life value shown on the machine controller</small>
+              <small class="form-text">Enter the tool life value shown on the machine controller</small>
             </div>
 
             <div class="mb-3">

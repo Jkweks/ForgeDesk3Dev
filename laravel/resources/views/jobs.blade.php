@@ -224,7 +224,7 @@
                     <div class="col-md-6">
                       <label class="form-label required">Job Number</label>
                       <input type="text" class="form-control" id="jobNumber" required>
-                      <small class="form-hint">Unique identifier for this job</small>
+                      <small class="form-text">Unique identifier for this job</small>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label required">Job Name</label>
@@ -416,7 +416,7 @@
             <div class="mb-3">
               <label class="form-label">Door Tags (comma separated)</label>
               <input type="text" class="form-control" id="job-doorcfg-tags" placeholder="D1, D2">
-              <div class="form-hint">One tag per physical opening — this also sets the quantity (2 tags = qty 2) and becomes this configuration's name.</div>
+              <div class="form-text">One tag per physical opening — this also sets the quantity (2 tags = qty 2) and becomes this configuration's name.</div>
             </div>
             <div class="mb-3">
               <label class="form-label">Notes</label>
@@ -427,7 +427,7 @@
               <select class="form-select" id="job-doorcfg-hwset">
                 <option value="">— none —</option>
               </select>
-              <div class="form-hint">Autofills this opening's hardware section from the selected set's items.</div>
+              <div class="form-text">Autofills this opening's hardware section from the selected set's items.</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -504,7 +504,7 @@
                             <div class="mb-3">
                               <label class="form-label">Committed Qty</label>
                               <input type="number" class="form-control" id="newResItemCommittedQty" min="0" step="0.1" value="0">
-                              <small class="form-hint">0 = auto</small>
+                              <small class="form-text">0 = auto</small>
                             </div>
                           </div>
                         </div>
@@ -549,7 +549,7 @@
                 <div class="mb-3">
                   <label class="form-label">Select File</label>
                   <input type="file" class="form-control" id="materialCheckFile" accept=".xlsx,.xlsm,.csv">
-                  <small class="form-hint">
+                  <small class="form-text">
                     <strong>EZ Estimate (.xlsx/.xlsm)</strong> — quantities in packs.<br>
                     <strong>CSV (.csv)</strong> — quantities in eaches; columns: <code>Qty</code>, <code>Part Number</code>, <code>Color Code</code> (optional).
                   </small>
@@ -1193,7 +1193,7 @@
                                                 <label class="form-label form-label-sm mb-1">File</label>
                                                 <input type="file" class="form-control form-control-sm" id="job-doc-file-${job.id}"
                                                     accept=".pdf,.xlsx,.xlsm,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif,.txt">
-                                                <div class="form-hint mt-1">PDF, Excel, Word, image or text — up to 25&nbsp;MB.</div>
+                                                <div class="form-text mt-1">PDF, Excel, Word, image or text — up to 25&nbsp;MB.</div>
                                             </div>
                                         </div>
                                         <div class="d-flex gap-2 mt-2">

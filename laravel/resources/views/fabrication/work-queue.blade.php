@@ -82,7 +82,7 @@
       <div class="mb-3">
         <label class="form-label">Work order</label>
         <select id="wq-bulk-wo" class="form-select" onchange="wqBulkRenderRows()"></select>
-        <div class="form-hint">
+        <div class="form-text">
           Tick a step to change it. Every non-complete step with that name — across all elevations
           of this work order — is set to the operator(s) you pick. Select more than one to have
           them share the step (it shows in each queue; whoever completes it clears it for all).
@@ -418,7 +418,7 @@ function wqBulkRenderRows() {
       <div class="col-7">
         <select multiple size="${Math.min(Math.max(users.length, 2), 5)}"
                 class="form-select form-select-sm" data-stage-name="${nm}" disabled>${opts}</select>
-        <div class="form-hint">Ctrl/Cmd-click for more than one. None selected = unassign.</div>
+        <div class="form-text">Ctrl/Cmd-click for more than one. None selected = unassign.</div>
       </div>
     </div>`;
   }).join('') || '<div class="text-muted">No steps found on this work order.</div>';

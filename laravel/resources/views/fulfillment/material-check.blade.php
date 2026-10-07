@@ -28,7 +28,7 @@
                   <div class="mb-3">
                     <label class="form-label">Select File</label>
                     <input type="file" class="form-control" id="estimateFile" accept=".xlsx,.xlsm,.csv">
-                    <small class="form-hint">
+                    <small class="form-text">
                       <strong>EZ Estimate (.xlsx/.xlsm)</strong> — quantities in packs; checks Stock Lengths &amp; Accessories sheets automatically.<br>
                       <strong>CSV (.csv)</strong> — quantities in eaches; columns: <code>Qty</code>, <code>Part Number</code>, <code>Color Code</code> (optional). SKU built as <code>PartNumber-ColorCode</code>.
                     </small>

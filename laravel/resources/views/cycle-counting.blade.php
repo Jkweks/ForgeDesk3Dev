@@ -164,14 +164,14 @@
               <select class="form-select" id="sessionStorageLocations" multiple size="8" style="font-family: monospace; font-size: 0.875rem;">
                 <option value="">Loading...</option>
               </select>
-              <small class="form-hint">Hold Ctrl/Cmd to select multiple. Leave empty to count all locations</small>
+              <small class="form-text">Hold Ctrl/Cmd to select multiple. Leave empty to count all locations</small>
             </div>
             <div class="col-md-6">
               <label class="form-label">Category (Optional)</label>
               <select class="form-select" id="sessionCategory">
                 <option value="">All Categories</option>
               </select>
-              <small class="form-hint">Filter products by category</small>
+              <small class="form-text">Filter products by category</small>
             </div>
           </div>
           <div class="row mb-3">
@@ -197,7 +197,7 @@
               <label class="form-label">Product Selection (Optional)</label>
               <select class="form-select" id="sessionProducts" multiple size="10">
               </select>
-              <small class="form-hint">Hold Ctrl/Cmd to select multiple products. Leave empty to count all products matching filters.</small>
+              <small class="form-text">Hold Ctrl/Cmd to select multiple products. Leave empty to count all products matching filters.</small>
             </div>
           </div>
         </form>
@@ -446,7 +446,7 @@
   }
   #guidedCountInput:focus {
     border-color: var(--tblr-purple) !important;
-    box-shadow: 0 0 0 0.25rem rgba(var(--tblr-purple-rgb, 111, 66, 193), .2) !important;
+    box-shadow: 0 0 0 0.25rem color-mix(in oklab, var(--tblr-purple) 20%, transparent) !important;
     outline: none;
   }
 

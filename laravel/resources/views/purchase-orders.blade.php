@@ -176,7 +176,7 @@
               <select class="form-select" id="poShipToLocation">
                 <option value="">Primary company location</option>
               </select>
-              <small class="form-hint">Company locations are managed in Admin &rarr; System Settings.</small>
+              <small class="form-text">Company locations are managed in Admin &rarr; System Settings.</small>
             </div>
             <div class="col-md-6">
               <label class="form-label">Ship To (free text)</label>

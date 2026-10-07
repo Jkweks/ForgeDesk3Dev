@@ -190,7 +190,7 @@
               <option value="report_date">Date Reported</option>
               <option value="completed_date">Date Completed</option>
             </select>
-            <div class="form-hint mt-1">
+            <div class="form-text mt-1">
               Which date drives the incident-rate line: when the issue was reported, or when the underlying job/elevation was completed.
               The two 13-week charts always use date reported.
             </div>
@@ -199,7 +199,7 @@
               <input class="form-check-input" type="checkbox" id="qr-settings-show-projection">
               <label class="form-check-label" for="qr-settings-show-projection">Show month-to-date projection on incident rate chart</label>
             </div>
-            <div class="form-hint mt-1">
+            <div class="form-text mt-1">
               A dashed run-rate estimate for the current, still-in-progress month. Off by default — early-month projections
               can swing wildly on a handful of cases.
             </div>
@@ -258,12 +258,12 @@
                   <div class="col-md-6 mb-3" id="qr-d-job-select-wrap">
                     <label class="form-label">Job</label>
                     <select class="form-select" id="qr-d-job" onchange="qrOnJobChange()"></select>
-                    <div class="form-hint mt-1" id="qr-d-job-source"></div>
+                    <div class="form-text mt-1" id="qr-d-job-source"></div>
                   </div>
                   <div class="col-md-6 mb-3" id="qr-d-job-text-wrap" style="display:none;">
                     <label class="form-label">Job name</label>
                     <input type="text" class="form-control" id="qr-d-job-text-guess" placeholder="Job name (parsed from the PDF)">
-                    <div class="form-hint mt-1">Pre-Forge — no tracked job. Pre-filled from the PDF; edit as needed.</div>
+                    <div class="form-text mt-1">Pre-Forge — no tracked job. Pre-filled from the PDF; edit as needed.</div>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label">Date issue discovered</label>
@@ -276,12 +276,12 @@
                   <div class="col-md-6 mb-3" id="qr-d-elevation-text-wrap" style="display:none;">
                     <label class="form-label">Elevation</label>
                     <input type="text" class="form-control" id="qr-d-elevation-text-guess" placeholder="Elevation (parsed from the PDF)">
-                    <div class="form-hint mt-1">Pre-filled from the PDF; edit as needed.</div>
+                    <div class="form-text mt-1">Pre-filled from the PDF; edit as needed.</div>
                   </div>
                   <div class="col-md-6 mb-3" id="qr-d-preforge-date-wrap" style="display:none;">
                     <label class="form-label">Completed date</label>
                     <input type="date" class="form-control" id="qr-d-preforge-date">
-                    <div class="form-hint mt-1">Drives the incident-rate trend in place of a tracked elevation's completion date.</div>
+                    <div class="form-text mt-1">Drives the incident-rate trend in place of a tracked elevation's completion date.</div>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label">Reported by</label>

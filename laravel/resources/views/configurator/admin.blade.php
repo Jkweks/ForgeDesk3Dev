@@ -393,7 +393,7 @@
             <div class="col-md-4 mb-3">
               <label class="form-label">Section height (in)</label>
               <input type="number" step="0.0001" class="form-control" id="cfg-profile-sectionheight" value="0">
-              <div class="form-hint">Fixed cross-section dimension (e.g. jamb depth) — referenced by other profiles' "Section" / "If Threshold" formula terms and by TH when there's no transom.</div>
+              <div class="form-text">Fixed cross-section dimension (e.g. jamb depth) — referenced by other profiles' "Section" / "If Threshold" formula terms and by TH when there's no transom.</div>
             </div>
             <div class="col-md-4 mb-3">
               <label class="form-label">Qty per opening</label>
@@ -405,7 +405,7 @@
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cfgAddFormulaTerm()"><i class="ti ti-plus"></i> Term</button>
           </div>
           <div id="cfg-formula-terms"></div>
-          <div class="form-hint">Length = sum of signed terms. "Section" references another profile's section height by role label (e.g. Door Head). "If Threshold" adds the series' Threshold profile's section height only when the opening has a threshold.</div>
+          <div class="form-text">Length = sum of signed terms. "Section" references another profile's section height by role label (e.g. Door Head). "If Threshold" adds the series' Threshold profile's section height only when the opening has a threshold.</div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
@@ -526,7 +526,7 @@
             <div class="col-md-4 mb-3"><label class="form-label">Thermal PN</label><input type="text" class="form-control" id="dc-rail-thermalPn"></div>
             <div class="col-md-4 mb-3"><label class="form-label">Monumental PN</label><input type="text" class="form-control" id="dc-rail-monPn"></div>
           </div>
-          <div class="form-hint mb-2">Stacked variants (bottom rails only — label should include "stacked", e.g. 12" (stacked))</div>
+          <div class="form-text mb-2">Stacked variants (bottom rails only — label should include "stacked", e.g. 12" (stacked))</div>
           <div class="row">
             <div class="col-md-4 mb-3"><label class="form-label">Stacked Standard PN</label><input type="text" class="form-control" id="dc-rail-stackedStdPn"></div>
             <div class="col-md-4 mb-3"><label class="form-label">Stacked Thermal PN</label><input type="text" class="form-control" id="dc-rail-stackedThermalPn"></div>
@@ -2350,7 +2350,7 @@
         input.dataset.pnHintWired = '1';
 
         const hint = document.createElement('div');
-        hint.className = 'form-hint pn-match-hint';
+        hint.className = 'form-text pn-match-hint';
         input.insertAdjacentElement('afterend', hint);
 
         let timer = null;
@@ -2371,20 +2371,20 @@
 
   async function checkPartNumberHint(input, hint) {
     const value = input.value.trim();
-    if (!value) { hint.textContent = ''; hint.className = 'form-hint pn-match-hint'; return; }
+    if (!value) { hint.textContent = ''; hint.className = 'form-text pn-match-hint'; return; }
     try {
       const data = await authenticatedFetch(`/config/products/search-by-part-number?q=${encodeURIComponent(value)}`);
       const matches = data.data || [];
       const exact = matches.find(p => (p.part_number || '').toLowerCase() === value.toLowerCase());
       if (exact) {
         hint.textContent = `Matches inventory part ${exact.part_number}${exact.description ? ' — '+exact.description : ''}`;
-        hint.className = 'form-hint pn-match-hint text-success';
+        hint.className = 'form-text pn-match-hint text-success';
       } else if (matches.length) {
         hint.textContent = `No exact match. Close matches: ${matches.slice(0, 3).map(p => p.part_number).join(', ')}`;
-        hint.className = 'form-hint pn-match-hint text-warning';
+        hint.className = 'form-text pn-match-hint text-warning';
       } else {
         hint.textContent = 'No matching part number in inventory yet.';
-        hint.className = 'form-hint pn-match-hint text-warning';
+        hint.className = 'form-text pn-match-hint text-warning';
       }
     } catch (err) { /* non-blocking — leave hint as-is */ }
   }
