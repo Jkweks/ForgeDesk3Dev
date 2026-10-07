@@ -48,6 +48,17 @@ class ShellAndThemeTest extends TestCase
         $this->assertSame(1, substr_count($products, 'id="offcanvasTheme"'));
     }
 
+    public function test_shop_floor_stage_colors_come_from_theme_tokens_not_hex_pairs(): void
+    {
+        $html = $this->get('/shop')->assertOk()->getContent();
+
+        $this->assertStringContainsString('--sf-c', $html);
+        $this->assertStringContainsString('tabler-themes.min.css', $html);
+        foreach (['#fff3cd', '#d1e7dd', '#f8d7da', '#3d2e00'] as $legacyHex) {
+            $this->assertStringNotContainsString($legacyHex, $html);
+        }
+    }
+
     public function test_every_page_view_that_extends_the_layout_provides_a_page_wrapper(): void
     {
         $missing = [];
