@@ -37,6 +37,7 @@ class PackageReportService
     public const BLOCKS = [
         'door' => [
             'summary' => ['Configuration Summary', false, null],
+            'hinge_prep' => ['Hinge Prep Locations', false, ['Hinge', 'From Door Top', 'From Door Bottom', 'Spacing From Previous']],
             'extrusion' => ['Extrusion Output', true, ['Description', 'Part Number', 'Qty', 'Length']],
             'component' => ['Component Output', true, ['Description', 'Part Number', 'Qty', 'Notes']],
             'hwlib_hardware' => ['Hwlib Hardware Schedule', false, ['Category', 'Item', 'Model / PN', 'Series', 'Qty', 'Notes', 'Variable Overrides']],
@@ -46,6 +47,7 @@ class PackageReportService
         ],
         'frame' => [
             'summary' => ['Configuration Summary', false, null],
+            'hinge_prep' => ['Hinge Prep Locations', false, ['Hinge', 'From Head', 'From Floor', 'Spacing From Previous']],
             'extrusion' => ['Extrusion Output', true, ['Description', 'Part Number', 'Qty', 'Length']],
             'weatherstrip' => ['Weatherstripping & Gaskets', false, ['Description', 'Part Number', 'Qty', 'Notes']],
             'hardware' => ['Hardware & Components', false, ['Description', 'Part Number', 'Qty', 'Notes']],
@@ -58,14 +60,14 @@ class PackageReportService
 
     public const DEFAULT_LAYOUTS = [
         'door' => [
-            ['key' => 'summary', 'span' => 12, 'enabled' => true], ['key' => 'extrusion', 'span' => 12, 'enabled' => true],
-            ['key' => 'component', 'span' => 12, 'enabled' => true], ['key' => 'hwlib_hardware', 'span' => 12, 'enabled' => true],
+            ['key' => 'summary', 'span' => 12, 'enabled' => true], ['key' => 'hinge_prep', 'span' => 12, 'enabled' => true],
+            ['key' => 'extrusion', 'span' => 12, 'enabled' => true], ['key' => 'component', 'span' => 12, 'enabled' => true], ['key' => 'hwlib_hardware', 'span' => 12, 'enabled' => true],
             ['key' => 'hwlib_backers', 'span' => 12, 'enabled' => true], ['key' => 'hwlib_variables', 'span' => 12, 'enabled' => true],
             ['key' => 'hwlib_inspection', 'span' => 12, 'enabled' => true],
         ],
         'frame' => [
-            ['key' => 'summary', 'span' => 12, 'enabled' => true], ['key' => 'extrusion', 'span' => 12, 'enabled' => true],
-            ['key' => 'weatherstrip', 'span' => 6, 'enabled' => true], ['key' => 'hardware', 'span' => 6, 'enabled' => true],
+            ['key' => 'summary', 'span' => 12, 'enabled' => true], ['key' => 'hinge_prep', 'span' => 12, 'enabled' => true],
+            ['key' => 'extrusion', 'span' => 12, 'enabled' => true], ['key' => 'weatherstrip', 'span' => 6, 'enabled' => true], ['key' => 'hardware', 'span' => 6, 'enabled' => true],
             ['key' => 'hwlib_hardware', 'span' => 12, 'enabled' => true], ['key' => 'hwlib_backers', 'span' => 12, 'enabled' => true],
             ['key' => 'hwlib_variables', 'span' => 12, 'enabled' => true], ['key' => 'hwlib_inspection', 'span' => 12, 'enabled' => true],
         ],
@@ -314,6 +316,8 @@ class PackageReportService
             $data['hardware'] = $this->groupByPn(array_values(array_filter($rows, fn ($r) => ! $r['weather'])));
         }
 
+        $data['hinge_prep'] = $this->hingePrepRows($config, $kind);
+
         $links = $this->pageLinks($config, $kind, $leaf, $variables);
         $data['hwlib_hardware'] = $this->hardwareSchedule($config, $kind, $links, $variables, $leaf);
         $data['hwlib_backers'] = $this->backerRows($config, $kind, $links);
@@ -321,6 +325,47 @@ class PackageReportService
         $data['hwlib_inspection'] = $this->inspectionRows($links, $variables, $kind);
 
         return ['kind' => $kind, 'title' => $title, 'pills' => $pills, 'data' => $data];
+    }
+
+    /**
+     * Butt-hinge prep locations for one sheet (empty unless the opening uses butt hinges with a count and a
+     * spacing standard). The standard measures from the door top; the door sheet prints that and the matching
+     * distance from the door bottom, the frame sheet prints it from the head (the door hangs the top gap below
+     * it) and from the finished floor (door bottom sits the bottom gap above it). Rows are read off a tape, so
+     * fractions with the decimal alongside, plus the centre-to-centre spacing from the hinge above.
+     */
+    private function hingePrepRows(DoorFrameConfiguration $config, string $kind): array
+    {
+        $spec = $config->openingSpecs;
+        $locations = $spec?->hingeLocations() ?? [];
+        if (! $locations) {
+            return [];
+        }
+
+        $settings = ConfiguratorSetting::current();
+        $doorHeight = (float) $spec->door_opening_height;
+        $fmt = fn (float $v) => $this->fractionInch((string) round($v, 4)).' ('.$this->fmtNum($v, 4).')';
+
+        $rows = [];
+        $previous = null;
+        foreach ($locations as $loc) {
+            $fromTop = (float) $loc['distance_from_top'];
+            $fromBottom = $doorHeight - $fromTop;
+            $first = $kind === 'door'
+                ? $fromTop
+                : $fromTop + (float) $settings->top_gap;
+            $second = $kind === 'door'
+                ? $fromBottom
+                : $fromBottom + (float) $settings->bottom_gap;
+
+            $rows[] = [
+                str_replace(', from door top', '', $loc['label']), $fmt($first), $fmt($second),
+                $previous === null ? '—' : $fmt($fromTop - $previous),
+            ];
+            $previous = $fromTop;
+        }
+
+        return $rows;
     }
 
     /**

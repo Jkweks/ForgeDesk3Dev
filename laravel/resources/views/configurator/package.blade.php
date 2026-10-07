@@ -118,7 +118,7 @@
 let pkJobs = [];
 
 const PK_TITLES = {
-  extrusion: 'EXTRUSION OUTPUT', component: 'COMPONENT OUTPUT', weatherstrip: 'WEATHERSTRIPPING & GASKETS', hardware: 'HARDWARE & COMPONENTS',
+  hinge_prep: 'HINGE PREP LOCATIONS', extrusion: 'EXTRUSION OUTPUT', component: 'COMPONENT OUTPUT', weatherstrip: 'WEATHERSTRIPPING & GASKETS', hardware: 'HARDWARE & COMPONENTS',
   hwlib_hardware: 'HWLIB CUSTOM / STANDARD HARDWARE', hwlib_backers: 'HWLIB BACKERS & FASTENERS', hwlib_variables: 'HARDWARE VARIABLES', hwlib_inspection: 'INSPECTION SIGN-OFF',
 };
 
