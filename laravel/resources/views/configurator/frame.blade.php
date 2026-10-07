@@ -25,26 +25,44 @@
   <main class="page-body">
     <div class="container-xl">
       <div class="row row-cards">
-        <div class="col-12 col-lg-4">
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">Configurations</h3>
-              <div class="card-actions">
-                <select class="form-select form-select-sm" id="fb-list-job-filter" style="min-width:180px" onchange="fbLoadList()">
-                  <option value="">All Jobs</option>
-                </select>
+        {{-- Entry selection: one wide bar (job -> entry) so the working area below gets the full width. --}}
+        <div class="col-12">
+          <div class="card" id="fb-entry-bar">
+            <div class="card-body py-2">
+              <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4 col-xl-3">
+                  <label class="form-label mb-1 small text-secondary" for="fb-list-job-filter">Job</label>
+                  <select class="form-select" id="fb-list-job-filter" onchange="fbOnJobChange()">
+                    <option value="">All Jobs</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-5 col-xl-5">
+                  <label class="form-label mb-1 small text-secondary" for="fb-entry-select">Entry / Door <span class="text-muted" id="fb-entry-count"></span></label>
+                  <div class="input-group">
+                    <button type="button" class="btn btn-icon" id="fb-entry-prev" onclick="fbStep(-1)" title="Previous entry" aria-label="Previous entry"><i class="ti ti-chevron-left"></i></button>
+                    <select class="form-select" id="fb-entry-select" onchange="fbOnEntryChange()">
+                      <option value="">Select an entry&hellip;</option>
+                    </select>
+                    <button type="button" class="btn btn-icon" id="fb-entry-next" onclick="fbStep(1)" title="Next entry" aria-label="Next entry"><i class="ti ti-chevron-right"></i></button>
+                  </div>
+                </div>
+                <div class="col-12 col-md-auto d-flex align-items-center gap-2 pb-1" id="fb-entry-badges"></div>
               </div>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-vcenter card-table">
-                <thead><tr><th>Job</th><th>Scope</th><th>Status</th><th>WO</th></tr></thead>
-                <tbody id="fb-list-tbody"></tbody>
-              </table>
             </div>
           </div>
         </div>
 
-        <div class="col-12 col-lg-8" id="fb-detail-col" style="display:none">
+        <div class="col-12" id="fb-empty">
+          <div class="card">
+            <div class="empty">
+              <div class="empty-icon"><i class="ti ti-door fs-1"></i></div>
+              <p class="empty-title">Choose a job and an entry</p>
+              <p class="empty-subtitle text-secondary">Pick one above to configure its frame, door and hardware, or create a new entry.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12" id="fb-detail-col" style="display:none">
           <div class="card mb-3">
             <div class="card-header flex-wrap row-gap-2">
               <div>
@@ -60,7 +78,9 @@
                   <button class="btn btn-outline-danger" id="fb-unrelease-btn" onclick="fbUnrelease()" style="display:none" data-permission="configurator.release"><i class="ti ti-lock-open me-1"></i>Un-release</button>
                 </div>
                 <div class="btn-group" role="group">
+                  <button class="btn btn-outline-secondary" id="fb-edit-btn" onclick="fbOpenEditModal()" data-permission="configurator.edit"><i class="ti ti-pencil me-1"></i>Edit Details</button>
                   <button class="btn btn-outline-secondary" onclick="fbOpenDuplicateModal()" data-permission="configurator.edit"><i class="ti ti-copy me-1"></i>Duplicate</button>
+                  <button class="btn btn-outline-danger" id="fb-delete-btn" onclick="fbDeleteConfig()" data-permission="configurator.delete" title="Delete this configuration (admin)"><i class="ti ti-trash me-1"></i>Delete</button>
                   <button class="btn btn-outline-primary" onclick="fbExportPdf()" data-permission="configurator.view"><i class="ti ti-file-download me-1"></i>Export PDF</button>
                   <button class="btn btn-outline-primary" onclick="fbExportCsv()" data-permission="configurator.view"><i class="ti ti-file-spreadsheet me-1"></i>Export CSV</button>
                   <button class="btn btn-outline-primary" onclick="window.open('/config/labels?config=' + fbSelectedId, '_blank')" data-permission="configurator.view"><i class="ti ti-tag me-1"></i>Labels</button>
@@ -442,7 +462,7 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <form id="fb-new-form">
-        <div class="modal-header"><h5 class="modal-title">New Door/Frame Configuration</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><h5 class="modal-title">New Entry</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Job</label>
@@ -457,9 +477,9 @@
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label">Door Tags (comma separated)</label>
-            <input type="text" class="form-control" id="fb-new-tags" placeholder="D1, D2" required>
-            <div class="form-text">One tag per physical opening — this also sets the quantity (2 tags = qty 2) and becomes this configuration's name.</div>
+            <label class="form-label">Door Tag</label>
+            <input type="text" class="form-control" id="fb-new-tags" placeholder="D1" maxlength="50" required>
+            <div class="form-text">One door tag per entry &mdash; it names this configuration. For more openings, create one and use <strong>Duplicate</strong>.</div>
           </div>
         </div>
         <div class="modal-footer">
@@ -515,6 +535,38 @@
 </div>
 
 <!-- Bulk Duplicate Modal -->
+<!-- Edit Details Modal -->
+<div class="modal modal-blur fade" id="fb-edit-modal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="fb-edit-form">
+        <div class="modal-header"><h5 class="modal-title">Edit Details</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Job</label>
+            <select class="form-select" id="fb-edit-job"></select>
+            <div class="form-text" id="fb-edit-job-hint"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Door Tag</label>
+            <input type="text" class="form-control" id="fb-edit-tag" maxlength="50" required>
+            <div class="form-text" id="fb-edit-tag-hint"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="fb-edit-notes" rows="3" maxlength="2000"></textarea>
+          </div>
+          <div class="form-text">Scope, opening, frame, door and hardware are edited on their own tabs.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="fb-edit-submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal modal-blur fade" id="fb-duplicate-modal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -522,13 +574,13 @@
         <div class="modal-header"><h5 class="modal-title">Duplicate Configuration</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <p class="text-muted small mb-3">
-            Each row creates a full copy of this configuration's opening, frame, door and hardware
-            data under new door tag(s). Check "Flip Hand" on a row to swap LH/RH throughout the copy
-            instead of duplicating it exactly.
+            Each door tag creates its own full copy of this configuration's opening, frame, door and
+            hardware data. Type several tags in a row, separated by commas, to make one copy of each.
+            Check "Flip Hand" on a row to swap LH/RH throughout its copies instead of duplicating exactly.
           </p>
           <div class="table-responsive">
             <table class="table table-sm align-middle">
-              <thead><tr><th style="width:55%">New Door Tag(s)</th><th style="width:25%">Flip Hand</th><th></th></tr></thead>
+              <thead><tr><th style="width:55%">New Door Tag(s) &mdash; one copy per tag</th><th style="width:25%">Flip Hand</th><th></th></tr></thead>
               <tbody id="fb-duplicate-rows"></tbody>
             </table>
           </div>
@@ -1163,25 +1215,72 @@ function fbStatusBadgeClass(status) {
   return 'bg-yellow-lt';
 }
 
+// Entry label: "Door tags · Scope · Status · WO", prefixed with the job number when several jobs are listed.
+function fbEntryLabel(c, withJob) {
+  const name = (c.door_tags && String(c.door_tags).trim()) || c.scope_label;
+  const parts = [name, c.scope_label, c.status_label];
+  if (c.work_order_release_token) parts.push(`WO ${c.work_order_release_token}`);
+  return (withJob ? `${c.job_number} — ` : '') + parts.filter((p, i) => p && !(i === 1 && p === name)).join(' · ');
+}
+
+// Fills the entry dropdown, keeps it on the selected entry, and refreshes the status badges + prev/next state.
 function fbRenderList() {
-  const tbody = document.getElementById('fb-list-tbody');
-  tbody.innerHTML = fbConfigs.map(c => `
-    <tr class="${c.id == fbSelectedId ? 'table-active' : ''}" style="cursor:pointer" onclick="fbSelect(${c.id})">
-      <td>${esc(c.job_number)}<div class="text-muted small">${esc(c.door_tags)}</div></td>
-      <td>${esc(c.scope_label)}</td>
-      <td><span class="badge ${fbStatusBadgeClass(c.status)}">${esc(c.status_label)}</span></td>
-      <td>${c.work_order_release_token ? `<span class="badge bg-blue-lt">${esc(c.work_order_release_token)}</span>` : '<span class="text-muted">—</span>'}</td>
-    </tr>`).join('') || '<tr><td colspan="4" class="text-muted">No configurations yet.</td></tr>';
+  const select = document.getElementById('fb-entry-select');
+  const withJob = !document.getElementById('fb-list-job-filter').value;
+  select.innerHTML = '<option value="">' + (fbConfigs.length ? 'Select an entry…' : 'No entries for this job yet') + '</option>' +
+    fbConfigs.map(c => `<option value="${c.id}">${esc(fbEntryLabel(c, withJob))}</option>`).join('');
+  select.value = fbConfigs.some(c => c.id == fbSelectedId) ? String(fbSelectedId) : '';
+  document.getElementById('fb-entry-count').textContent = fbConfigs.length ? `(${fbConfigs.length})` : '';
+
+  const index = fbConfigs.findIndex(c => c.id == fbSelectedId);
+  document.getElementById('fb-entry-prev').disabled = !(fbConfigs.length > 1 && index !== 0);
+  document.getElementById('fb-entry-next').disabled = !(fbConfigs.length > 1 && index !== fbConfigs.length - 1);
+
+  const current = fbConfigs[index];
+  document.getElementById('fb-entry-badges').innerHTML = current
+    ? `<span class="badge ${fbStatusBadgeClass(current.status)}">${esc(current.status_label)}</span>` +
+      (current.work_order_release_token ? `<span class="badge bg-blue-lt">WO ${esc(current.work_order_release_token)}</span>` : '')
+    : '';
+}
+
+// Changing the job clears the current entry (it may belong to another job); a job with one entry opens it.
+async function fbOnJobChange() {
+  fbSelectedId = null;
+  fbSelectedDetail = null;
+  document.getElementById('fb-detail-col').style.display = 'none';
+  document.getElementById('fb-empty').style.display = '';
+  await fbLoadList();
+  if (document.getElementById('fb-list-job-filter').value && fbConfigs.length === 1) await fbSelect(fbConfigs[0].id);
+}
+
+function fbOnEntryChange() {
+  const id = parseInt(document.getElementById('fb-entry-select').value, 10);
+  if (id) fbSelect(id);
+}
+
+function fbStep(delta) {
+  const index = fbConfigs.findIndex(c => c.id == fbSelectedId);
+  const next = fbConfigs[index + delta];
+  if (next) fbSelect(next.id);
 }
 
 async function fbSelect(id) {
   fbSelectedId = id;
   fbRenderList();
   document.getElementById('fb-detail-col').style.display = '';
+  document.getElementById('fb-empty').style.display = 'none';
   await fbLoadCatalogTree();
   await fbLoadDoorCatalog();
   await fbLoadHwCatalog();
   await fbLoadDetail();
+
+  // Opened from outside the bar's current job (new entry, deep link): move the bar to that entry's job.
+  const jobId = fbSelectedDetail?.business_job?.id;
+  const jobSelect = document.getElementById('fb-list-job-filter');
+  if (jobId && jobSelect.value && jobSelect.value != jobId) {
+    jobSelect.value = String(jobId);
+    await fbLoadList();
+  }
 }
 
 async function fbLoadDetail() {
@@ -1196,6 +1295,9 @@ function fbRenderDetail() {
   const woLabel = c.work_order ? ` · WO ${c.work_order.release_token}` : ' · No work order yet';
   const resLabel = c.job_reservation ? ` · Reservation ${c.job_reservation.reservation_id}` : '';
   document.getElementById('fb-detail-subtitle').textContent = `${c.business_job.job_name} · Qty ${c.quantity} · ${c.door_tags.join(', ')}${woLabel}${resLabel}`;
+  // Delete only while draft/reserved (later ones are tied to a work order); details editable like the rest.
+  document.getElementById('fb-delete-btn').style.display = ['draft', 'reserved'].includes(c.status) ? '' : 'none';
+  document.getElementById('fb-edit-btn').style.display = c.can_edit ? '' : 'none';
   const badge = document.getElementById('fb-status-badge');
   badge.textContent = c.status_label;
   badge.className = 'badge ' + fbStatusBadgeClass(c.status);
@@ -1468,7 +1570,7 @@ function fbAddDuplicateRow() {
   const tr = document.createElement('tr');
   tr.id = `fb-dup-row-${id}`;
   tr.innerHTML = `
-    <td><input type="text" class="form-control form-control-sm fb-dup-tags" placeholder="e.g. 105A, 106A"></td>
+    <td><input type="text" class="form-control form-control-sm fb-dup-tags" placeholder="e.g. 105A or 105A, 106A"></td>
     <td class="text-center"><input type="checkbox" class="form-check-input fb-dup-flip"></td>
     <td class="text-end">
       <button type="button" class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('fb-dup-row-${id}').remove()">
@@ -1513,7 +1615,8 @@ document.getElementById('fb-duplicate-form').addEventListener('submit', async (e
     const tags = row.querySelector('.fb-dup-tags').value.split(',').map(s => s.trim()).filter(Boolean);
     if (!tags.length) return;
     const flip = row.querySelector('.fb-dup-flip').checked;
-    duplicates.push({ door_tags: tags, overrides: flip ? fbFlipHandOverrides() : {} });
+    // One configuration per door tag: a comma list in a row becomes several copies.
+    tags.forEach(tag => duplicates.push({ door_tags: [tag], overrides: flip ? fbFlipHandOverrides() : {} }));
   });
   if (!duplicates.length) { showNotification('Enter at least one door tag', 'warning'); return; }
 
@@ -1564,6 +1667,86 @@ document.getElementById('fb-settings-form').addEventListener('submit', async (e)
   } catch (err) { showNotification(err.message, 'danger'); }
 });
 
+// ---- Edit details / delete ----
+async function fbOpenEditModal() {
+  const c = fbSelectedDetail;
+  if (!c) return;
+  await fbLoadJobsInto(document.getElementById('fb-edit-job'));
+  const jobSelect = document.getElementById('fb-edit-job');
+  jobSelect.value = String(c.business_job.id);
+  const jobLocked = c.status !== 'draft' || !!c.duplicate_group_id;
+  jobSelect.disabled = jobLocked;
+  document.getElementById('fb-edit-job-hint').textContent = jobLocked
+    ? (c.duplicate_group_id ? 'Linked to duplicates, so it stays on this job. Unlink it to move it.' : 'The job can only be changed while this is a draft.')
+    : '';
+
+  const tags = c.door_tags || [];
+  const tagInput = document.getElementById('fb-edit-tag');
+  tagInput.value = tags.join(', ');
+  const tagLocked = !['draft', 'reserved'].includes(c.status) || tags.length > 1;
+  tagInput.disabled = tagLocked;
+  tagInput.required = !tagLocked;
+  document.getElementById('fb-edit-tag-hint').textContent = tags.length > 1
+    ? 'This older entry has several door tags. Use Duplicate to make one configuration per tag.'
+    : (tagLocked ? 'The door tag can only be changed while this is a draft or reserved.' : '');
+
+  document.getElementById('fb-edit-notes').value = c.notes || '';
+  showModal(document.getElementById('fb-edit-modal'));
+}
+
+document.getElementById('fb-edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const c = fbSelectedDetail;
+  const jobSelect = document.getElementById('fb-edit-job');
+  const tagInput = document.getElementById('fb-edit-tag');
+  const payload = { notes: document.getElementById('fb-edit-notes').value };
+  if (!jobSelect.disabled && String(jobSelect.value) !== String(c.business_job.id)) payload.business_job_id = jobSelect.value;
+  if (!tagInput.disabled && tagInput.value.trim() !== (c.door_tags || []).join(', ')) {
+    if (tagInput.value.includes(',')) { showNotification('Enter a single door tag. Use Duplicate for more openings.', 'warning'); return; }
+    payload.door_tag = tagInput.value.trim();
+  }
+
+  const btn = document.getElementById('fb-edit-submit');
+  btn.disabled = true;
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}`, { method: 'PUT', body: JSON.stringify(payload) });
+    hideModal(document.getElementById('fb-edit-modal'));
+    if (payload.business_job_id) document.getElementById('fb-list-job-filter').value = String(payload.business_job_id);
+    showNotification('Details saved', 'success');
+    await fbLoadList();
+    await fbLoadDetail();
+  } catch (err) {
+    showNotification(err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function fbDeleteConfig() {
+  const c = fbSelectedDetail;
+  if (!c) return;
+  const name = `${c.business_job.job_number} ${(c.door_tags || []).join(', ') || c.scope_label}`.trim();
+  const ok = await fabConfirm({
+    title: 'Delete configuration?',
+    message: `Delete ${name}? Its opening, frame, door and hardware settings and generated parts are removed.`
+      + (c.status === 'reserved' ? ' Its reserved stock is released back to the job.' : ''),
+    confirmLabel: 'Delete',
+    confirmClass: 'btn-danger',
+  });
+  if (!ok) return;
+  try {
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}`, { method: 'DELETE' });
+    fbSelectedId = null;
+    fbSelectedDetail = null;
+    document.getElementById('fb-detail-col').style.display = 'none';
+    document.getElementById('fb-empty').style.display = '';
+    showNotification('Configuration deleted', 'success');
+    await fbLoadList();
+  } catch (err) {
+    showNotification(err.message, 'danger');
+  }
+}
+
 // ---- New configuration ----
 async function fbOpenNewModal() {
   await fbLoadJobsInto(document.getElementById('fb-new-job'));
@@ -1575,8 +1758,12 @@ document.getElementById('fb-new-form').addEventListener('submit', async (e) => {
   const payload = {
     business_job_id: document.getElementById('fb-new-job').value,
     job_scope: document.getElementById('fb-new-scope').value,
-    door_tags: document.getElementById('fb-new-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+    door_tags: [document.getElementById('fb-new-tags').value.trim()].filter(Boolean),
   };
+  if (document.getElementById('fb-new-tags').value.includes(',')) {
+    showNotification('Enter a single door tag. Use Duplicate afterwards for more openings.', 'warning');
+    return;
+  }
   try {
     const res = await authenticatedFetch('/door-frame-configurations', { method: 'POST', body: JSON.stringify(payload) });
     hideModal(document.getElementById('fb-new-modal'));

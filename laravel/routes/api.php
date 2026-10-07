@@ -554,6 +554,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.edit');
         Route::get('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'show'])->middleware('permission:configurator.view');
+        Route::put('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'update'])->middleware('permission:configurator.edit');
+        Route::delete('/door-frame-configurations/{id}', [DoorFrameConfigurationController::class, 'destroy'])->middleware('permission:configurator.delete');
         Route::post('/door-frame-configurations/{id}/duplicate', [DoorFrameConfigurationController::class, 'duplicate'])->middleware('permission:configurator.edit');
         Route::post('/door-frame-configurations/{id}/unlink', [DoorFrameConfigurationController::class, 'unlink'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/opening-specs', [DoorFrameConfigurationController::class, 'updateOpeningSpecs'])->middleware('permission:configurator.edit');

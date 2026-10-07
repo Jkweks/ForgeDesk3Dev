@@ -156,22 +156,29 @@ class DoorFrameConfigurationController extends Controller
             $validator = Validator::make($request->all(), [
                 'business_job_id' => 'required|exists:business_jobs,id',
                 'job_scope' => 'required|in:door_and_frame,frame_only,door_only',
-                'door_tags' => 'required|array|min:1',
-                'door_tags.*' => 'required|string|max:50',
+                // One door tag per configuration; more openings are made with Duplicate.
+                'door_tags' => 'required|array|size:1',
+                'door_tags.*' => ['required', 'string', 'max:50', 'not_regex:/,/'],
+            ], [
+                'door_tags.size' => 'A configuration has exactly one door tag. Create it, then use Duplicate for the other openings.',
+                'door_tags.*.not_regex' => 'Enter a single door tag (no commas). Use Duplicate for more openings.',
             ]);
 
+            // `message` carries the specific reason: the page's fetch helper shows only that field.
             if ($validator->fails()) {
                 return response()->json([
-                    'message' => 'Validation failed',
+                    'message' => $validator->errors()->first(),
                     'errors' => $validator->errors(),
                 ], 422);
             }
 
             $conflicts = $this->conflictingDoorTags((int) $request->business_job_id, $request->door_tags);
             if (! empty($conflicts)) {
+                $reason = 'Door tag(s) '.implode(', ', $conflicts).' already belong to another configuration on this job.';
+
                 return response()->json([
-                    'message' => 'Validation failed',
-                    'errors' => ['door_tags' => ['Door tag(s) '.implode(', ', $conflicts).' already belong to another configuration on this job.']],
+                    'message' => $reason,
+                    'errors' => ['door_tags' => [$reason]],
                 ], 422);
             }
 
@@ -228,6 +235,149 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Edit a configuration's identity details: job, door tag, notes. (Scope, opening, frame,
+     * door and hardware are edited through their own endpoints.)
+     *
+     *  - notes: any editable status.
+     *  - door tag: draft or reserved only (a work order matches elevations on it once released);
+     *    refused for legacy entries that still carry several tags.
+     *  - job: draft only, not while linked to duplicates, and the tag must be free on the new job.
+     */
+    public function update(Request $request, $id)
+    {
+        $config = DoorFrameConfiguration::with(['doors', 'businessJob'])->findOrFail($id);
+
+        if (! $config->canEdit()) {
+            return response()->json([
+                'error' => 'Cannot edit configuration',
+                'message' => 'Configuration is not in editable status',
+            ], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'business_job_id' => 'sometimes|required|exists:business_jobs,id',
+            'door_tag' => ['sometimes', 'required', 'string', 'max:50', 'not_regex:/,/'],
+            'notes' => 'sometimes|nullable|string|max:2000',
+        ], [
+            'door_tag.not_regex' => 'Enter a single door tag (no commas). Use Duplicate for more openings.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $currentTags = $config->doors->pluck('door_tag')->all();
+        $newTag = $request->has('door_tag') ? trim((string) $request->door_tag) : null;
+        $tagChanged = $newTag !== null && $currentTags !== [$newTag];
+        $jobChanged = $request->has('business_job_id') && (int) $request->business_job_id !== (int) $config->business_job_id;
+
+        $fail = fn (string $field, string $message) => response()->json([
+            'message' => $message, // shown as-is by the page's fetch helper
+            'errors' => [$field => [$message]],
+        ], 422);
+
+        if ($tagChanged) {
+            if (! in_array($config->status, ['draft', 'reserved'], true)) {
+                return $fail('door_tag', 'The door tag can only be changed while the configuration is draft or reserved.');
+            }
+            if (count($currentTags) > 1) {
+                return $fail('door_tag', 'This older entry has several door tags. Create one configuration per tag with Duplicate instead of renaming it.');
+            }
+        }
+        if ($jobChanged) {
+            if ($config->status !== 'draft') {
+                return $fail('business_job_id', 'The job can only be changed while the configuration is a draft. Un-reserve it first.');
+            }
+            if ($config->duplicate_group_id) {
+                return $fail('business_job_id', 'This configuration is linked to duplicates. Unlink it before moving it to another job.');
+            }
+        }
+
+        // Tags must stay unique within a job, ignoring this configuration's own rows.
+        if ($tagChanged || $jobChanged) {
+            $targetJob = $jobChanged ? (int) $request->business_job_id : (int) $config->business_job_id;
+            $tags = $tagChanged ? [$newTag] : $currentTags;
+            $taken = DoorFrameConfigurationDoor::whereIn('door_tag', $tags)
+                ->whereHas('configuration', fn ($q) => $q->where('business_job_id', $targetJob)->where('id', '!=', $config->id))
+                ->pluck('door_tag')->unique()->all();
+            if ($taken) {
+                return $fail($tagChanged ? 'door_tag' : 'business_job_id', 'Door tag(s) '.implode(', ', $taken).' already belong to another configuration on that job.');
+            }
+        }
+
+        DB::transaction(function () use ($request, $config, $newTag, $tagChanged, $jobChanged) {
+            if ($jobChanged) {
+                $config->business_job_id = (int) $request->business_job_id;
+            }
+            if ($request->has('notes')) {
+                $config->notes = $request->notes;
+            }
+            $config->save();
+
+            if ($tagChanged) {
+                $config->doors->first()?->update(['door_tag' => $newTag]);
+            }
+        });
+
+        if ($tagChanged && $config->status === 'reserved') {
+            app(\App\Services\Configurator\ConfigurationReservationBridge::class)->syncJob($config->fresh()->businessJob, auth()->user());
+        }
+
+        return response()->json([
+            'message' => 'Configuration updated',
+            'configuration' => ['id' => $config->id],
+        ]);
+    }
+
+    /**
+     * Delete (soft) a configuration. Admin-only via configurator.delete. Only draft or reserved
+     * entries can go: released and later ones are tied to a work order and cut list, so they must
+     * be un-released first. A reserved entry first drops out of the job's reservation so its
+     * committed stock is released, exactly as Un-reserve does.
+     */
+    public function destroy($id)
+    {
+        $config = DoorFrameConfiguration::with('businessJob')->findOrFail($id);
+
+        if (! in_array($config->status, ['draft', 'reserved'], true)) {
+            return response()->json([
+                'error' => 'Cannot delete',
+                'message' => "A {$config->status_label} configuration is tied to a work order. Un-release it first, then delete it.",
+            ], 422);
+        }
+
+        $groupId = $config->duplicate_group_id;
+        $wasReserved = $config->status === 'reserved';
+
+        DB::transaction(function () use ($config, $groupId, $wasReserved) {
+            if ($wasReserved) {
+                $config->status = 'draft';
+                $config->job_reservation_id = null;
+                $config->save();
+            }
+
+            $config->delete();
+
+            // Recompute the job's reservation from the configurations that remain.
+            if ($wasReserved) {
+                app(\App\Services\Configurator\ConfigurationReservationBridge::class)->syncJob($config->businessJob, auth()->user());
+            }
+
+            // A "linked" group of one is no group.
+            if ($groupId) {
+                $remaining = DoorFrameConfiguration::where('duplicate_group_id', $groupId)->get();
+                if ($remaining->count() <= 1) {
+                    $remaining->each(fn ($c) => $c->update(['duplicate_group_id' => null]));
+                }
+            }
+        });
+
+        Log::info('Configuration deleted', ['config_id' => $config->id, 'deleted_by' => auth()->id(), 'was_reserved' => $wasReserved]);
+
+        return response()->json(['message' => 'Configuration deleted']);
+    }
+
+    /**
      * Bulk-duplicate a configuration: each entry in `duplicates` becomes a new
      * configuration cloning this one's opening/frame/door/hardware data (with
      * that entry's own door tags and any field overrides — e.g. flipped hand),
@@ -248,18 +398,22 @@ class DoorFrameConfigurationController extends Controller
 
         $validator = Validator::make($request->all(), [
             'duplicates' => 'required|array|min:1|max:50',
-            'duplicates.*.door_tags' => 'required|array|min:1',
-            'duplicates.*.door_tags.*' => 'required|string|max:50',
+            // Each copy is its own configuration with its own single door tag.
+            'duplicates.*.door_tags' => 'required|array|size:1',
+            'duplicates.*.door_tags.*' => ['required', 'string', 'max:50', 'not_regex:/,/'],
             'duplicates.*.overrides' => 'nullable|array',
             'duplicates.*.overrides.opening_specs' => 'nullable|array',
             'duplicates.*.overrides.frame_config' => 'nullable|array',
             'duplicates.*.overrides.door_config' => 'nullable|array',
             'link' => 'nullable|boolean',
+        ], [
+            'duplicates.*.door_tags.size' => 'Each copy takes exactly one door tag. Add one row per tag.',
+            'duplicates.*.door_tags.*.not_regex' => 'Enter a single door tag per copy (no commas).',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation failed',
+                'message' => $validator->errors()->first(),
                 'errors' => $validator->errors(),
             ], 422);
         }
@@ -267,9 +421,11 @@ class DoorFrameConfigurationController extends Controller
         $allTags = collect($request->duplicates)->pluck('door_tags')->flatten()->all();
         $conflicts = $this->conflictingDoorTags($source->business_job_id, $allTags);
         if (! empty($conflicts)) {
+            $reason = 'Door tag(s) '.implode(', ', $conflicts).' already belong to another configuration on this job.';
+
             return response()->json([
-                'message' => 'Validation failed',
-                'errors' => ['duplicates' => ['Door tag(s) '.implode(', ', $conflicts).' already belong to another configuration on this job.']],
+                'message' => $reason,
+                'errors' => ['duplicates' => [$reason]],
             ], 422);
         }
 
