@@ -91,6 +91,58 @@ class WidgetRegistry
             ['Maintenance', ['maintenance.view'], '/dashboard/widgets/maintenance/recent', [
                 $list('maintenance_recent', 'Recent Service Log', 'The latest maintenance records.', 'ti-history'),
             ]],
+            ['Purchasing', ['orders.view'], '/dashboard/widgets/purchase-orders', [
+                $stat('po_open', 'Open Purchase Orders', 'Submitted, approved and partially received orders.', 'ti-shopping-cart', 'open', '/purchase-orders'),
+                $stat('po_awaiting_approval', 'POs Awaiting Approval', 'Submitted purchase orders not yet approved.', 'ti-checkbox', 'awaiting_approval', '/purchase-orders'),
+                $stat('po_overdue', 'Overdue Purchase Orders', 'Open orders past their expected date.', 'ti-truck-off', 'overdue', '/purchase-orders'),
+            ]],
+            ['Purchasing', ['orders.view'], '/dashboard/widgets/purchase-orders/due', [
+                $list('po_due_list', 'Purchase Orders Due', 'Open purchase orders by expected date, overdue first.', 'ti-package-import'),
+            ]],
+            ['Jobs', ['jobs.view'], '/dashboard/widgets/jobs', [
+                $stat('jobs_active', 'Active Jobs', 'Jobs currently active.', 'ti-briefcase', 'active', '/jobs'),
+                $stat('jobs_past_target', 'Jobs Past Target', 'Active or on-hold jobs past their target completion date.', 'ti-calendar-x', 'past_target', '/jobs'),
+            ]],
+            ['Jobs', ['jobs.view'], '/dashboard/widgets/jobs/due', [
+                $list('jobs_due_list', 'Jobs by Target Date', 'Live jobs ordered by target completion, overdue first.', 'ti-timeline-event'),
+            ]],
+            ['Jobs', ['reservations.dashboard.view'], '/dashboard/widgets/reservations', [
+                $stat('reservations_open', 'Open Reservations', 'Reservations not yet fulfilled or cancelled.', 'ti-lock', 'open', '/fulfillment/job-reservations'),
+                $stat('reservations_overdue', 'Overdue Reservations', 'Open reservations past their needed-by date.', 'ti-lock-exclamation', 'overdue', '/fulfillment/job-reservations'),
+            ]],
+            ['Inventory', ['inventory.view'], '/dashboard/widgets/transactions', [
+                $stat('transactions_today', 'Transactions Today', 'Inventory transactions recorded today.', 'ti-arrows-exchange', 'today', '/transactions'),
+            ]],
+            ['Inventory', ['inventory.view'], '/dashboard/widgets/transactions/recent', [
+                $list('transactions_recent', 'Recent Transactions', 'The latest inventory movements with the change in on-hand quantity.', 'ti-history'),
+            ]],
+            ['Inventory', ['inventory.view'], '/dashboard/widgets/low-stock', [
+                $list('low_stock_list', 'Lowest Stock Items', 'Critical and low products, most urgent first.', 'ti-alert-triangle'),
+            ]],
+            ['Fabrication', ['fabrication.view'], '/dashboard/widgets/fabrication-documents', [
+                $stat('fabdocs_total', 'Fabrication Documents', 'Fabrication, installation and maintenance documents on file.', 'ti-files', 'total', '/fabrication/documents'),
+                $stat('fabdocs_week', 'Documents Added (7 days)', 'Documents uploaded in the last week.', 'ti-file-plus', 'added_this_week', '/fabrication/documents'),
+            ]],
+            ['Fabrication', ['fabrication.view'], '/dashboard/widgets/fabrication-documents/recent', [
+                $list('fabdocs_recent', 'Recent Documents', 'The latest uploaded fabrication documents.', 'ti-file-text'),
+            ]],
+            ['Fabrication', ['fabrication.work-orders.view'], '/dashboard/widgets/cutflow', [
+                $stat('cutflow_open_jobs', 'Open Cut Lists', 'Cut lists with parts still to cut.', 'ti-cut', 'open_jobs', '/fabrication/cut-lists'),
+                $stat('cutflow_active_sticks', 'Sticks Being Cut', 'Stock lengths currently on the saw.', 'ti-ruler-measure', 'active_sticks', '/fabrication/cut-lists'),
+                $stat('cutflow_cuts_week', 'Cuts This Week', 'Pieces logged by the cut station since Monday.', 'ti-scissors', 'cuts_this_week', '/fabrication/cut-lists'),
+            ]],
+            ['Configurator', ['configurator.view'], '/dashboard/widgets/configurator', [
+                $stat('configurator_open', 'Open Configurations', 'Door/frame configurations not yet archived.', 'ti-adjustments-horizontal', 'open', '/config'),
+                $stat('configurator_draft', 'Draft Configurations', 'Configurations still in draft.', 'ti-pencil', 'draft', '/config'),
+                $stat('configurator_on_hold', 'Configurations On Hold', 'Configurations currently on hold.', 'ti-player-pause', 'on_hold', '/config'),
+            ]],
+            ['Configurator', ['configurator.view'], '/dashboard/widgets/configurator/recent', [
+                $list('configurator_recent', 'Recent Configurations', 'Recently updated door/frame configurations.', 'ti-door'),
+            ]],
+            ['Inventory', ['inventory.view'], '/dashboard/widgets/storage', [
+                $stat('storage_locations', 'Storage Locations', 'Active storage locations.', 'ti-map-pin', 'locations', '/storage-locations'),
+                $stat('storage_unassigned', 'Products Without a Location', 'Active products with no storage location assigned.', 'ti-map-pin-off', 'products_without_location', '/admin/location-assignment'),
+            ]],
             ['Cycle Counting', ['cycle-count.view'], '/dashboard/widgets/cycle-counts', [
                 $stat('cycle_active', 'Active Cycle Counts', 'Planned and in-progress counting sessions.', 'ti-clipboard-check', 'active_sessions', '/cycle-counting'),
                 $stat('cycle_in_progress', 'Counts In Progress', 'Sessions currently being counted.', 'ti-player-play', 'in_progress', '/cycle-counting'),

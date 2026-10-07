@@ -3,12 +3,24 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BusinessJob;
+use App\Models\CutFlow\CutLogEntry;
+use App\Models\CutFlow\Part;
+use App\Models\CutFlow\StickSession;
 use App\Models\CycleCountSession;
+use App\Models\DoorFrameConfiguration;
+use App\Models\FabricationDocument;
 use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
+use App\Models\InventoryLocation;
+use App\Models\InventoryTransaction;
+use App\Models\JobReservation;
 use App\Models\MaintenanceRecord;
 use App\Models\MaintenanceTask;
+use App\Models\Product;
+use App\Models\PurchaseOrder;
 use App\Models\QualityReport;
+use App\Models\StorageLocation;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -268,6 +280,269 @@ class DashboardWidgetController extends Controller
                     'link' => '/cycle-counting',
                 ];
             })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** Fabrication document counts: total, added in the last 7 days, and by type. */
+    public function fabricationDocuments()
+    {
+        $byType = FabricationDocument::query()->selectRaw('type, COUNT(*) as count')->groupBy('type')->pluck('count', 'type');
+
+        return response()->json([
+            'total' => (int) $byType->sum(),
+            'added_this_week' => FabricationDocument::where('created_at', '>=', now()->subDays(7))->count(),
+            'fabrication' => (int) ($byType['fabrication'] ?? 0),
+            'installation' => (int) ($byType['installation'] ?? 0),
+            'maintenance' => (int) ($byType['maintenance'] ?? 0),
+        ]);
+    }
+
+    /** The most recently added fabrication documents. */
+    public function fabricationDocumentsRecent()
+    {
+        $items = FabricationDocument::latest()->limit(8)->get(['id', 'title', 'type', 'file_name', 'created_at'])
+            ->map(fn (FabricationDocument $d) => [
+                'label' => $d->title,
+                'sub' => ucfirst($d->type).($d->file_name ? ' · '.$d->file_name : ''),
+                'meta' => $d->created_at?->format('M j'),
+                'meta_class' => 'bg-secondary-lt',
+                'link' => '/fabrication/documents',
+            ])->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** Door/frame configurations by status, excluding archived (completed work order) ones. */
+    public function configurator()
+    {
+        $byStatus = DoorFrameConfiguration::notArchived()->selectRaw('status, COUNT(*) as count')->groupBy('status')->pluck('count', 'status');
+
+        return response()->json([
+            'open' => (int) $byStatus->sum(),
+            'draft' => (int) ($byStatus['draft'] ?? 0),
+            'reserved' => (int) ($byStatus['reserved'] ?? 0),
+            'in_progress' => (int) ($byStatus['in_progress'] ?? 0),
+            'on_hold' => (int) ($byStatus['on_hold'] ?? 0),
+        ]);
+    }
+
+    /** Recently updated, non-archived configurations. */
+    public function configuratorRecent()
+    {
+        $badge = ['draft' => 'bg-secondary-lt', 'reserved' => 'bg-blue-lt', 'released' => 'bg-azure-lt', 'in_progress' => 'bg-yellow-lt',
+            'completed' => 'bg-green-lt', 'on_hold' => 'bg-orange-lt', 'cancelled' => 'bg-red-lt'];
+
+        $items = DoorFrameConfiguration::notArchived()
+            ->with(['businessJob:id,job_number,job_name', 'doors:id,configuration_id,door_tag'])
+            ->latest('updated_at')
+            ->limit(8)
+            ->get()
+            ->map(function (DoorFrameConfiguration $c) use ($badge) {
+                $tags = $c->doors->pluck('door_tag')->filter()->take(3)->implode(', ');
+
+                return [
+                    'label' => trim(($c->businessJob?->job_number ?? 'No job').($tags !== '' ? ' · '.$tags : '')),
+                    'sub' => $c->businessJob?->job_name,
+                    'meta' => $c->status_label,
+                    'meta_class' => $badge[$c->status] ?? 'bg-secondary-lt',
+                    'link' => '/config',
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * Storage health. Deliberately not /storage-locations-stats, which loads every location and its
+     * inventory rows and sums value in PHP.
+     */
+    public function storage()
+    {
+        return response()->json([
+            'locations' => StorageLocation::where('is_active', true)->count(),
+            'products_without_location' => Product::where('is_active', true)
+                ->whereDoesntHave('inventoryLocations', fn ($q) => $q->whereNotNull('storage_location_id'))
+                ->count(),
+            'unassigned_stock_rows' => InventoryLocation::whereNull('storage_location_id')->count(),
+        ]);
+    }
+
+    /**
+     * CutFlow numbers live in their own Postgres database. If it is unreachable the
+     * dashboard must still load, so failures degrade to nulls (widgets show "-").
+     */
+    public function cutflow()
+    {
+        try {
+            return response()->json([
+                'available' => true,
+                'open_jobs' => Part::where('qty_remaining', '>', 0)->distinct()->count('cut_job_id'),
+                'active_sticks' => StickSession::where('status', 'active')->whereNull('cancelled_at')->count(),
+                'sticks_completed_this_week' => StickSession::where('status', 'complete')->where('updated_at', '>=', now()->startOfWeek())->count(),
+                'cuts_this_week' => CutLogEntry::where('created_at', '>=', now()->startOfWeek())->count(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'available' => false,
+                'open_jobs' => null,
+                'active_sticks' => null,
+                'sticks_completed_this_week' => null,
+                'cuts_this_week' => null,
+            ]);
+        }
+    }
+
+    // ── Purchase orders ───────────────────────────────────────────────────
+
+    /** "Open" is PurchaseOrder::scopeOpen; "overdue" is open and past expected_date (no model definition exists). */
+    public function purchaseOrders()
+    {
+        $today = today()->toDateString();
+
+        return response()->json([
+            'open' => PurchaseOrder::open()->count(),
+            'awaiting_approval' => PurchaseOrder::where('status', 'submitted')->count(),
+            'overdue' => PurchaseOrder::open()->whereNotNull('expected_date')->where('expected_date', '<', $today)->count(),
+            'drafts' => PurchaseOrder::where('status', 'draft')->count(),
+        ]);
+    }
+
+    /** Open purchase orders, earliest expected date first (undated last). */
+    public function purchaseOrdersDue()
+    {
+        $items = PurchaseOrder::open()
+            ->with('supplier:id,name')
+            ->orderByRaw('expected_date IS NULL, expected_date ASC')
+            ->limit(8)
+            ->get(['id', 'po_number', 'supplier_id', 'status', 'expected_date'])
+            ->map(function (PurchaseOrder $po) {
+                [$meta, $class] = $po->expected_date
+                    ? $this->dueMeta($po->expected_date)
+                    : ['No date', 'bg-secondary-lt'];
+
+                return [
+                    'label' => $po->po_number,
+                    'sub' => ($po->supplier?->name ?? 'No supplier').' · '.str_replace('_', ' ', ucfirst($po->status)),
+                    'meta' => $meta,
+                    'meta_class' => $class,
+                    'link' => '/purchase-orders',
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    // ── Jobs and reservations ─────────────────────────────────────────────
+
+    /** Jobs "past target" are active or on-hold jobs whose target completion date has passed. */
+    public function jobs()
+    {
+        $today = today()->toDateString();
+
+        return response()->json([
+            'active' => BusinessJob::where('status', 'active')->count(),
+            'on_hold' => BusinessJob::where('status', 'on_hold')->count(),
+            'past_target' => BusinessJob::whereIn('status', ['active', 'on_hold'])
+                ->whereNotNull('target_completion_date')->where('target_completion_date', '<', $today)->count(),
+        ]);
+    }
+
+    /** Live jobs ordered by target completion date, overdue first. */
+    public function jobsDue()
+    {
+        $items = BusinessJob::whereIn('status', ['active', 'on_hold'])
+            ->orderByRaw('target_completion_date IS NULL, target_completion_date ASC')
+            ->limit(8)
+            ->get(['id', 'job_number', 'job_name', 'status', 'target_completion_date'])
+            ->map(function (BusinessJob $j) {
+                [$meta, $class] = $j->target_completion_date
+                    ? $this->dueMeta($j->target_completion_date)
+                    : ['No target', 'bg-secondary-lt'];
+
+                return [
+                    'label' => $j->job_number,
+                    'sub' => $j->job_name.($j->status === 'on_hold' ? ' · On hold' : ''),
+                    'meta' => $meta,
+                    'meta_class' => $class,
+                    'link' => '/jobs',
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** Reservations: open is everything not fulfilled or cancelled; overdue is open and past needed_by. */
+    public function reservations()
+    {
+        $today = today()->toDateString();
+        $open = fn () => JobReservation::whereNotIn('status', ['fulfilled', 'cancelled']);
+
+        return response()->json([
+            'open' => $open()->count(),
+            'in_progress' => JobReservation::where('status', 'in_progress')->count(),
+            'on_hold' => JobReservation::where('status', 'on_hold')->count(),
+            'overdue' => $open()->whereNotNull('needed_by')->where('needed_by', '<', $today)->count(),
+        ]);
+    }
+
+    // ── Inventory ─────────────────────────────────────────────────────────
+
+    public function transactions()
+    {
+        return response()->json([
+            'today' => InventoryTransaction::where('transaction_date', '>=', today())->count(),
+            'this_week' => InventoryTransaction::where('transaction_date', '>=', now()->startOfWeek())->count(),
+        ]);
+    }
+
+    /** Latest transactions with the signed change in on-hand quantity. Narrow columns: no Product appends. */
+    public function transactionsRecent()
+    {
+        $items = InventoryTransaction::query()
+            ->with(['product' => fn ($q) => $q->withTrashed()->select('id', 'sku'), 'user:id,name'])
+            ->orderByDesc('transaction_date')->orderByDesc('id')
+            ->limit(10)
+            ->get(['id', 'product_id', 'user_id', 'type', 'quantity_before', 'quantity_after', 'transaction_date'])
+            ->map(function (InventoryTransaction $t) {
+                $delta = round((float) $t->quantity_after - (float) $t->quantity_before, 1);
+
+                return [
+                    'label' => $t->product?->sku ?? 'Unknown product',
+                    'sub' => str_replace('_', ' ', ucfirst($t->type)).' · '.($t->user?->name ?? 'System').' · '.$t->transaction_date?->format('M j'),
+                    'meta' => ($delta > 0 ? '+' : '').rtrim(rtrim(number_format($delta, 1, '.', ''), '0'), '.'),
+                    'meta_class' => $delta > 0 ? 'bg-green-lt' : ($delta < 0 ? 'bg-red-lt' : 'bg-secondary-lt'),
+                    'link' => '/transactions',
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** The lowest-stock products (critical first), straight from columns so Product's expensive appends never run. */
+    public function lowStock()
+    {
+        $rows = Product::where('is_active', true)
+            ->where(fn ($q) => $q->where('nonsof', false)->orWhereNull('nonsof'))
+            ->excludeMaintenanceConsumables()
+            ->whereIn('status', ['critical', 'very_low', 'low'])
+            ->orderByRaw("CASE status WHEN 'critical' THEN 0 WHEN 'very_low' THEN 1 ELSE 2 END")
+            ->orderBy('quantity_on_hand')
+            ->limit(8)
+            ->toBase()
+            ->get(['id', 'sku', 'description', 'status', 'quantity_on_hand']);
+
+        $style = ['critical' => 'bg-red-lt', 'very_low' => 'bg-orange-lt', 'low' => 'bg-yellow-lt'];
+
+        $items = $rows->map(fn ($p) => [
+            'label' => $p->sku,
+            'sub' => Str::limit((string) $p->description, 48),
+            'meta' => rtrim(rtrim(number_format((float) $p->quantity_on_hand, 1, '.', ''), '0'), '.').' on hand',
+            'meta_class' => $style[$p->status] ?? 'bg-secondary-lt',
+            'link' => $p->status === 'critical' ? '/critical-stock' : '/low-stock',
+        ])->values();
 
         return response()->json(['items' => $items]);
     }

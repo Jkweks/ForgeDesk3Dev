@@ -4,6 +4,17 @@ namespace Tests\Feature;
 
 use App\Dashboard\WidgetRegistry;
 use App\Models\BusinessJob;
+use App\Models\CutFlow\CutJob;
+use App\Models\CutFlow\Part;
+use App\Models\CutFlow\StickSession;
+use App\Models\DoorFrameConfiguration;
+use App\Models\FabricationDocument;
+use App\Models\InventoryTransaction;
+use App\Models\JobReservation;
+use App\Models\Product;
+use App\Models\PurchaseOrder;
+use App\Models\StorageLocation;
+use App\Models\Supplier;
 use App\Models\CycleCountSession;
 use App\Models\FdWoElevation;
 use App\Models\FdWoStage;
@@ -199,11 +210,199 @@ class DashboardWidgetDataTest extends TestCase
         $this->assertArrayNotHasKey('CC-5', $byLabel->all());
     }
 
+    private function product(string $sku, array $state = []): Product
+    {
+        $supplier = Supplier::firstOrCreate(['name' => 'Test Supplier']);
+        $product = Product::create(['sku' => $sku, 'description' => "Desc {$sku}", 'supplier_id' => $supplier->id]);
+        // Query update on purpose: model saves recompute status/quantities.
+        $state && Product::where('id', $product->id)->update($state);
+
+        return $product->fresh();
+    }
+
+    public function test_purchase_order_counts_and_due_list(): void
+    {
+        $this->admin();
+        $supplier = Supplier::create(['name' => 'Acme']);
+        $po = fn (string $n, string $status, $expected) => PurchaseOrder::create([
+            'po_number' => $n, 'order_date' => today(), 'status' => $status, 'expected_date' => $expected, 'supplier_id' => $supplier->id,
+        ]);
+        $po('PO-T-1', 'approved', today()->subDays(3));   // open, overdue
+        $po('PO-T-2', 'submitted', today()->addDays(2));  // open, awaiting approval
+        $po('PO-T-3', 'partially_received', null);        // open, undated
+        $po('PO-T-4', 'draft', today()->subDays(9));      // not open
+        $po('PO-T-5', 'received', today()->subDays(9));   // not open
+
+        $this->getJson('/api/v1/dashboard/widgets/purchase-orders')->assertOk()->assertJson([
+            'open' => 3, 'awaiting_approval' => 1, 'overdue' => 1, 'drafts' => 1,
+        ]);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/purchase-orders/due')->assertOk()->json('items');
+        $this->assertSame(['PO-T-1', 'PO-T-2', 'PO-T-3'], array_column($items, 'label'));
+        $this->assertSame('3d overdue', $items[0]['meta']);
+        $this->assertSame('bg-red-lt', $items[0]['meta_class']);
+        $this->assertSame('No date', $items[2]['meta']);
+        $this->assertStringStartsWith('Acme', $items[0]['sub']);
+    }
+
+    public function test_jobs_and_reservations_counts(): void
+    {
+        $this->admin();
+        $job = fn (string $n, string $status, $target) => BusinessJob::create(['job_number' => $n, 'job_name' => "Job {$n}", 'status' => $status, 'target_completion_date' => $target]);
+        $job('JT-1', 'active', today()->subDays(4));    // past target
+        $job('JT-2', 'active', today()->addDays(10));
+        $job('JT-3', 'on_hold', today()->subDay());     // past target
+        $job('JT-4', 'completed', today()->subDays(30)); // ignored
+        $before = $this->getJson('/api/v1/dashboard/widgets/jobs')->json();
+
+        $this->assertSame(2, $before['active']);
+        $this->assertSame(1, $before['on_hold']);
+        $this->assertSame(2, $before['past_target']);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/jobs/due')->assertOk()->json('items');
+        $this->assertSame(['JT-1', 'JT-3', 'JT-2'], array_column($items, 'label'));
+        $this->assertSame('4d overdue', $items[0]['meta']);
+        $this->assertStringContainsString('On hold', $items[1]['sub']);
+
+        $linked = BusinessJob::where('job_number', 'JT-2')->first();
+        $res = fn (string $n, string $status, $needed) => JobReservation::create([
+            'job_number' => $n, 'job_name' => "Res {$n}", 'requested_by' => 'Tester', 'status' => $status, 'needed_by' => $needed,
+            'business_job_id' => $linked->id, // reservation_id is only generated for job-linked reservations
+        ]);
+        $res('RT-1', 'active', today()->subDays(2));       // open, overdue
+        $res('RT-2', 'in_progress', today()->addDays(5));  // open
+        $res('RT-3', 'on_hold', null);                     // open
+        $res('RT-4', 'fulfilled', today()->subDays(9));    // closed
+        $res('RT-5', 'cancelled', today()->subDays(9));    // closed
+
+        $this->getJson('/api/v1/dashboard/widgets/reservations')->assertOk()->assertJson([
+            'open' => 3, 'in_progress' => 1, 'on_hold' => 1, 'overdue' => 1,
+        ]);
+    }
+
+    public function test_transactions_recent_shows_signed_change_and_counts_today(): void
+    {
+        $this->admin();
+        $p = $this->product('TX-1');
+        $tx = fn (string $type, float $before, float $after, $when) => InventoryTransaction::create([
+            'product_id' => $p->id, 'type' => $type, 'quantity' => abs($after - $before),
+            'quantity_before' => $before, 'quantity_after' => $after, 'transaction_date' => $when,
+        ]);
+        $tx('receipt', 0, 10, now());
+        $tx('issue', 10, 7.5, now()->subMinute());
+        $tx('adjustment', 7.5, 7.5, now()->subDays(3));
+
+        $this->getJson('/api/v1/dashboard/widgets/transactions')->assertOk()->assertJson(['today' => 2]);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/transactions/recent')->assertOk()->json('items');
+        $this->assertSame(['+10', '-2.5', '0'], array_column($items, 'meta'));
+        $this->assertSame(['bg-green-lt', 'bg-red-lt', 'bg-secondary-lt'], array_column($items, 'meta_class'));
+        $this->assertSame('TX-1', $items[0]['label']);
+        $this->assertStringContainsString('System', $items[0]['sub']);
+    }
+
+    public function test_low_stock_list_orders_critical_first_and_skips_healthy_items(): void
+    {
+        $this->admin();
+        $this->product('LS-OK', ['status' => 'in_stock', 'quantity_on_hand' => 500]);
+        $this->product('LS-LOW', ['status' => 'low', 'quantity_on_hand' => 12]);
+        $this->product('LS-CRIT', ['status' => 'critical', 'quantity_on_hand' => 0]);
+        $this->product('LS-VLOW', ['status' => 'very_low', 'quantity_on_hand' => 3]);
+        $this->product('LS-INACTIVE', ['status' => 'critical', 'quantity_on_hand' => 0, 'is_active' => false]);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/low-stock')->assertOk()->json('items');
+
+        $this->assertSame(['LS-CRIT', 'LS-VLOW', 'LS-LOW'], array_column($items, 'label'));
+        $this->assertSame('bg-red-lt', $items[0]['meta_class']);
+        $this->assertSame('/critical-stock', $items[0]['link']);
+        $this->assertSame('3 on hand', $items[1]['meta']);
+    }
+
+    public function test_fabrication_documents_counts_and_recent(): void
+    {
+        $this->admin();
+        FabricationDocument::create(['title' => 'Old drawing', 'type' => 'fabrication'])->forceFill(['created_at' => now()->subDays(20)])->save();
+        FabricationDocument::create(['title' => 'Install guide', 'type' => 'installation', 'file_name' => 'guide.pdf']);
+        FabricationDocument::create(['title' => 'PM checklist', 'type' => 'maintenance']);
+
+        $this->getJson('/api/v1/dashboard/widgets/fabrication-documents')->assertOk()->assertJson([
+            'total' => 3, 'added_this_week' => 2, 'fabrication' => 1, 'installation' => 1, 'maintenance' => 1,
+        ]);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/fabrication-documents/recent')->assertOk()->json('items');
+        $this->assertCount(3, $items);
+        $this->assertSame('Old drawing', $items[2]['label']);
+        $this->assertSame('Installation · guide.pdf', collect($items)->firstWhere('label', 'Install guide')['sub']);
+    }
+
+    public function test_configurator_counts_exclude_archived_and_recent_lists_status(): void
+    {
+        $this->admin();
+        $job = BusinessJob::create(['job_number' => 'CF-1', 'job_name' => 'Config Job', 'status' => 'active']);
+        $cfg = fn (string $status, bool $archived = false) => DoorFrameConfiguration::create([
+            'business_job_id' => $job->id, 'job_scope' => 'door_and_frame', 'status' => $status, 'archived' => $archived,
+        ]);
+        $cfg('draft'); $cfg('draft'); $cfg('on_hold'); $cfg('in_progress'); $cfg('completed', true);
+
+        $this->getJson('/api/v1/dashboard/widgets/configurator')->assertOk()->assertJson([
+            'open' => 4, 'draft' => 2, 'on_hold' => 1, 'in_progress' => 1, 'reserved' => 0,
+        ]);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/configurator/recent')->assertOk()->json('items');
+        $this->assertCount(4, $items);
+        $this->assertStringStartsWith('CF-1', $items[0]['label']);
+        $this->assertSame('Config Job', $items[0]['sub']);
+    }
+
+    public function test_storage_counts_active_locations_and_unassigned_products(): void
+    {
+        $this->admin();
+        // Migrations seed some rows into the test DB, so assert on the change.
+        $before = $this->getJson('/api/v1/dashboard/widgets/storage')->assertOk()->json();
+
+        StorageLocation::create(['name' => 'A1']);
+        StorageLocation::create(['name' => 'Old', 'is_active' => false]);
+        $this->product('ST-1');
+        $this->product('ST-2', ['is_active' => false]);
+
+        $after = $this->getJson('/api/v1/dashboard/widgets/storage')->assertOk()->json();
+
+        $this->assertSame($before['locations'] + 1, $after['locations']);
+        $this->assertSame($before['products_without_location'] + 1, $after['products_without_location']);
+    }
+
+    public function test_cutflow_widget_degrades_instead_of_erroring_when_its_database_is_unavailable(): void
+    {
+        $this->admin();
+        // RefreshDatabase does not create the separate cutflow connection's tables, which stands in for
+        // "cutflow Postgres is down": the dashboard must still get a 200 with nulls.
+        $this->getJson('/api/v1/dashboard/widgets/cutflow')->assertOk()->assertJson([
+            'available' => false, 'open_jobs' => null, 'active_sticks' => null, 'cuts_this_week' => null,
+        ]);
+    }
+
+    public function test_cutflow_counts_open_jobs_and_sticks(): void
+    {
+        $this->admin();
+        $this->artisan('migrate', ['--database' => 'cutflow', '--path' => 'database/migrations/cutflow', '--force' => true]);
+
+        $job = CutJob::create(['name' => 'Cut Job']);
+        $done = CutJob::create(['name' => 'Done Job']);
+        Part::create(['cut_job_id' => $job->id, 'name' => 'Rail', 'dimension_inches' => 48, 'qty_original' => 4, 'qty_remaining' => 2]);
+        Part::create(['cut_job_id' => $done->id, 'name' => 'Jamb', 'dimension_inches' => 80, 'qty_original' => 2, 'qty_remaining' => 0]);
+        StickSession::create(['length_label' => '20ft', 'part_name' => 'Rail', 'length_inches' => 240, 'status' => 'active']);
+        StickSession::create(['length_label' => '20ft', 'part_name' => 'Rail', 'length_inches' => 240, 'status' => 'complete']);
+
+        $this->getJson('/api/v1/dashboard/widgets/cutflow')->assertOk()->assertJson([
+            'available' => true, 'open_jobs' => 1, 'active_sticks' => 1, 'sticks_completed_this_week' => 1,
+        ]);
+    }
+
     public function test_widget_data_endpoints_are_permission_gated(): void
     {
         $this->noPermissions();
 
-        foreach (['work-orders', 'work-orders/due', 'work-orders/table', 'work-orders/stages', 'quality', 'maintenance/upcoming', 'maintenance/recent', 'cycle-counts', 'cycle-counts/sessions'] as $path) {
+        foreach (['work-orders', 'work-orders/due', 'work-orders/table', 'work-orders/stages', 'quality', 'maintenance/upcoming', 'maintenance/recent', 'cycle-counts', 'cycle-counts/sessions', 'purchase-orders', 'purchase-orders/due', 'jobs', 'jobs/due', 'reservations', 'transactions', 'transactions/recent', 'low-stock', 'fabrication-documents', 'fabrication-documents/recent', 'configurator', 'configurator/recent', 'storage', 'cutflow'] as $path) {
             $this->getJson("/api/v1/dashboard/widgets/{$path}")->assertForbidden();
         }
     }

@@ -268,6 +268,30 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/widgets/maintenance/upcoming', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'maintenanceUpcoming']);
             Route::get('/dashboard/widgets/maintenance/recent', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'maintenanceRecent']);
         });
+        Route::middleware('permission:fabrication.view')->group(function () {
+            Route::get('/dashboard/widgets/fabrication-documents', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'fabricationDocuments']);
+            Route::get('/dashboard/widgets/fabrication-documents/recent', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'fabricationDocumentsRecent']);
+        });
+        Route::middleware('permission:configurator.view')->group(function () {
+            Route::get('/dashboard/widgets/configurator', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'configurator']);
+            Route::get('/dashboard/widgets/configurator/recent', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'configuratorRecent']);
+        });
+        Route::get('/dashboard/widgets/storage', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'storage'])->middleware('permission:inventory.view');
+        Route::get('/dashboard/widgets/cutflow', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cutflow'])->middleware('permission:fabrication.work-orders.view');
+        Route::middleware('permission:orders.view')->group(function () {
+            Route::get('/dashboard/widgets/purchase-orders', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'purchaseOrders']);
+            Route::get('/dashboard/widgets/purchase-orders/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'purchaseOrdersDue']);
+        });
+        Route::middleware('permission:jobs.view')->group(function () {
+            Route::get('/dashboard/widgets/jobs', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'jobs']);
+            Route::get('/dashboard/widgets/jobs/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'jobsDue']);
+        });
+        Route::get('/dashboard/widgets/reservations', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'reservations'])->middleware('permission:reservations.dashboard.view');
+        Route::middleware('permission:inventory.view')->group(function () {
+            Route::get('/dashboard/widgets/transactions', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'transactions']);
+            Route::get('/dashboard/widgets/transactions/recent', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'transactionsRecent']);
+            Route::get('/dashboard/widgets/low-stock', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'lowStock']);
+        });
         Route::middleware('permission:cycle-count.view')->group(function () {
             Route::get('/dashboard/widgets/cycle-counts', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cycleCounts']);
             Route::get('/dashboard/widgets/cycle-counts/sessions', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cycleCountSessions']);
