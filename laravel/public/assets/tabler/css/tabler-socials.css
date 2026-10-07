@@ -1,7 +1,7 @@
 /*!
- * Tabler Socials v1.4.0 (https://tabler.io)
- * Copyright 2018-2025 The Tabler Authors
- * Copyright 2018-2025 codecalm.net Paweł Kuna
+ * Tabler Socials v1.6.1 (https://tabler.io)
+ * Copyright 2018-2026 The Tabler Authors
+ * Copyright 2018-2026 codecalm.net Paweł Kuna
  * Licensed under MIT (https://github.com/tabler/tabler/blob/master/LICENSE)
  */
 /**
@@ -16,14 +16,18 @@
  * @param {Color} $color - The base color to be made transparent.
  * @param {Number} $alpha - The level of transparency, ranging from 0 (fully transparent) to 1 (fully opaque). Default is 1.
  * @return {Color} - The resulting color with the specified transparency.
+ *
+ * Mixes in `oklab` so tints against an opaque background (e.g. alert backgrounds
+ * over `--bg-surface`) stay perceptually even; mixing with `transparent` gives
+ * the same result in every color space.
  */
 .social {
   position: relative;
   display: inline-block;
   height: 2.5rem;
   aspect-ratio: 1;
-  background: no-repeat center/cover;
   vertical-align: bottom;
+  background: no-repeat center/cover;
 }
 
 .social-app-apple {
