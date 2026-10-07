@@ -21,8 +21,8 @@
   };
 
   // ---- Widget renderers, keyed by registry `type` -------------------------
-  // Each takes the widget's body element, its catalog entry, and the JSON from
-  // its data endpoint.
+  // Each takes the widget's body element, its catalog entry, the JSON from its
+  // data endpoint, and its runtime item (for per-widget state such as a chart).
   const renderers = {
     stat(body, def, data) {
       const raw = data ? data[def.field] : null;
@@ -30,6 +30,136 @@
       body.innerHTML = `
         <div class="h1 mb-1">${esc(value)}</div>
         ${def.link ? `<a href="${esc(def.link)}" class="small text-secondary">View details</a>` : ''}`;
+    },
+
+    list(body, def, data) {
+      const items = (data && data.items) || [];
+      if (!items.length) {
+        body.innerHTML = '<div class="text-secondary small">Nothing to show.</div>';
+        return;
+      }
+      body.innerHTML = `<div class="list-group list-group-flush overflow-auto h-100">${items.map((i) => `
+        <a href="${esc(i.link || '#')}" class="list-group-item list-group-item-action d-flex align-items-center px-0">
+          <div class="flex-fill text-truncate">
+            <div class="fw-medium text-truncate">${esc(i.label)}</div>
+            ${i.sub ? `<div class="small text-secondary text-truncate">${esc(i.sub)}</div>` : ''}
+          </div>
+          ${i.meta ? `<span class="badge ${esc(i.meta_class || 'bg-secondary-lt')} ms-2">${esc(i.meta)}</span>` : ''}
+        </a>`).join('')}</div>`;
+    },
+
+    table(body, def, data) {
+      const cols = (data && data.columns) || [];
+      const rows = (data && data.rows) || [];
+      if (!rows.length) {
+        body.innerHTML = '<div class="text-secondary small">Nothing to show.</div>';
+        return;
+      }
+      const cell = (c) => (c && typeof c === 'object'
+        ? `<span class="badge ${esc(c.class || 'bg-secondary-lt')}">${esc(c.text)}</span>`
+        : esc(c));
+      const align = (c) => (c.align === 'end' ? ' class="text-end"' : '');
+      const more = data.total > rows.length
+        ? `<div class="small text-secondary pt-2">Showing ${rows.length} of ${data.total}</div>` : '';
+      body.innerHTML = `
+        <div class="table-responsive h-100">
+          <table class="table table-sm table-vcenter table-hover mb-0 dash-table">
+            <thead><tr>${cols.map((c) => `<th${align(c)}>${esc(c.label)}</th>`).join('')}</tr></thead>
+            <tbody>${rows.map((r) => `
+              <tr data-href="${esc(r.link || '')}">${cols.map((c) => `<td${align(c)}>${cell(r.cells[c.key])}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>${more}
+        </div>`;
+      body.querySelectorAll('tr[data-href]').forEach((tr) => {
+        if (tr.dataset.href) tr.addEventListener('click', () => { if (!state.editing) window.location.href = tr.dataset.href; });
+      });
+    },
+
+    chart(body, def, data, item) {
+      const build = chartBuilders[def.chart];
+      if (!build || typeof Chart === 'undefined') {
+        body.innerHTML = '<div class="text-danger small">Chart unavailable.</div>';
+        return;
+      }
+      const config = build(data);
+      if (!config) {
+        if (item.chart) { item.chart.destroy(); item.chart = null; }
+        body.innerHTML = '<div class="text-secondary small">No data yet.</div>';
+        return;
+      }
+      if (item.chart) item.chart.destroy();
+      body.innerHTML = '<div class="dash-chart"><canvas></canvas></div>';
+      Chart.defaults.color = getComputedStyle(document.body).color;
+      Chart.defaults.borderColor = 'rgba(128,128,128,0.2)';
+      item.chart = new Chart(body.querySelector('canvas'), config);
+    },
+  };
+
+  // Tabler palette, matching fabrication/quality.blade.php.
+  const BLUE = 'rgba(32,107,196,0.5)';
+  const RED = '#d63939';
+  const GREEN = '#2fb344';
+  const baseOptions = { responsive: true, maintainAspectRatio: false };
+
+  const chartBuilders = {
+    incident_rate(data) {
+      const rows = (data && data.data) || [];
+      if (!rows.length) return null;
+      const labels = rows.map((r) => r.month_label);
+      return {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { type: 'bar', label: 'Joints completed', data: rows.map((r) => r.joint_count), backgroundColor: BLUE, yAxisID: 'y', order: 2 },
+            { type: 'line', label: 'Incident rate (%)', data: rows.map((r) => r.incident_rate), borderColor: RED, backgroundColor: RED, tension: 0.3, yAxisID: 'y1', order: 1 },
+            { type: 'line', label: 'Goal (1.5%)', data: rows.map(() => 1.5), borderColor: GREEN, borderDash: [6, 4], pointRadius: 0, yAxisID: 'y1', order: 0 },
+          ],
+        },
+        options: {
+          ...baseOptions,
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } },
+          },
+        },
+      };
+    },
+
+    problem_types(data) {
+      const rows = (data && data.data) || [];
+      if (!rows.length) return null;
+      return {
+        type: 'bar',
+        data: { labels: rows.map((r) => r.problem_type), datasets: [{ label: 'Cases', data: rows.map((r) => r.count), backgroundColor: BLUE }] },
+        options: { ...baseOptions, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+      };
+    },
+
+    weekly_trend(data) {
+      const rows = (data && data.data) || [];
+      if (!rows.length) return null;
+      return {
+        type: 'bar',
+        data: {
+          labels: rows.map((r) => r.week),
+          datasets: [
+            { type: 'bar', label: 'Cases', data: rows.map((r) => r.case_count), backgroundColor: BLUE },
+            { type: 'line', label: 'Trend', data: rows.map((r) => r.trend_value), borderColor: RED, tension: 0, pointRadius: 0 },
+          ],
+        },
+        options: { ...baseOptions, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+      };
+    },
+
+    stage_wip(data) {
+      const rows = (data && data.data) || [];
+      if (!rows.length) return null;
+      return {
+        type: 'bar',
+        data: { labels: rows.map((r) => r.name), datasets: [{ label: 'Open stages', data: rows.map((r) => r.count), backgroundColor: BLUE }] },
+        options: { ...baseOptions, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+      };
     },
   };
 
@@ -63,7 +193,7 @@
     const { def, bodyEl } = item;
     try {
       const data = await fetchEndpoint(def.endpoint);
-      (renderers[def.type] || renderers.stat)(bodyEl, def, data);
+      (renderers[def.type] || renderers.stat)(bodyEl, def, data, item);
       item.loadedAt = Date.now();
     } catch (e) {
       bodyEl.innerHTML = '<div class="text-danger small">Could not load this widget.</div>';
@@ -108,16 +238,22 @@
     loadWidget(entry.id);
   }
 
+  function destroyItem(id) {
+    const item = state.items.get(id);
+    if (item && item.chart) item.chart.destroy();
+    state.items.delete(id);
+  }
+
   function removeWidget(id) {
     const node = state.grid.engine.nodes.find((n) => n.id === id);
     if (node) state.grid.removeWidget(node.el);
-    state.items.delete(id);
+    destroyItem(id);
     updateEmptyState();
   }
 
   function renderLayout(layout) {
     state.grid.removeAll();
-    state.items.clear();
+    [...state.items.keys()].forEach(destroyItem);
     // Batch so GridStack doesn't re-flow on every add.
     state.grid.batchUpdate();
     (layout.widgets || []).forEach(addToGrid);
@@ -130,14 +266,17 @@
   }
 
   function currentLayout() {
-    const positions = state.grid.save(false); // [{id,x,y,w,h}]
+    // Read nodes directly: grid.save() omits values equal to GridStack's
+    // defaults (x:0, y:0, ...), but the server requires all four.
+    const nodes = state.grid.engine.nodes;
     return {
-      widgets: positions
+      widgets: nodes
         .filter((p) => state.items.has(p.id))
+        .sort((a, b) => (a.y - b.y) || (a.x - b.x))
         .map((p) => ({
           id: p.id,
           key: state.items.get(p.id).def.key,
-          x: p.x, y: p.y, w: p.w, h: p.h,
+          x: p.x ?? 0, y: p.y ?? 0, w: p.w ?? 1, h: p.h ?? 1,
           settings: state.items.get(p.id).settings || {},
         })),
     };
@@ -247,6 +386,10 @@
     const { layout, source } = await layoutRes.json();
     state.savedLayout = layout;
     state.source = source;
+
+    // GridStack 12 renders `content` as plain text by default. Ours is markup
+    // built by widgetHtml(), which escapes every interpolated registry value.
+    GridStack.renderCB = (el, w) => { if (w && w.content) el.innerHTML = w.content; };
 
     state.grid = GridStack.init({
       column: COLUMNS,

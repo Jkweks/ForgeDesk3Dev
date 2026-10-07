@@ -8,6 +8,10 @@
     <style>
       /* Widgets fill their grid cell; the remove (x) only shows while editing. */
       #dashboardGrid .grid-stack-item-content { overflow: hidden; inset: 4px; }
+      #dashboardGrid .dash-widget-body { position: relative; min-height: 0; }
+      #dashboardGrid .dash-chart { position: absolute; inset: 0; }
+      #dashboardGrid .dash-table thead th { position: sticky; top: 0; background: var(--tblr-bg-surface, #fff); z-index: 1; }
+      #dashboardGrid .dash-table tbody tr[data-href] { cursor: pointer; }
       #dashboardGrid .dash-remove { display: none; }
       #dashboardGrid.dash-editing .dash-remove { display: inline-block; }
       #dashboardGrid.dash-editing .grid-stack-item-content { outline: 2px dashed var(--tblr-border-color, #ccc); outline-offset: -2px; cursor: move; }
@@ -63,5 +67,6 @@
 
 @push('scripts')
 <script src="/assets/gridstack/gridstack-all.js"></script>
+<script src="/assets/chartjs/chart.umd.min.js"></script>
 <script src="/js/dashboard-widgets.js"></script>
 @endpush

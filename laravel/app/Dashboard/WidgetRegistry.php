@@ -15,7 +15,12 @@ use App\Models\User;
  * middleware, since hiding a widget in the UI is not access control.
  *
  * Widget `type`s understood by public/js/dashboard-widgets.js:
- *   stat — one number: `field` read from the `endpoint` JSON, optional `link`.
+ *   stat  — one number: `field` read from the `endpoint` JSON, optional `link`.
+ *   list  — `endpoint` returns {items:[{label, sub, meta, meta_class, link}]}.
+ *   table — `endpoint` returns {columns:[{key,label,align?}], rows:[{link, cells}], total};
+ *           a cell is a string or {text, class} (rendered as a badge).
+ *   chart — Chart.js chart named by `chart`; the renderer in the JS knows each
+ *           chart's endpoint shape.
  */
 class WidgetRegistry
 {
@@ -26,25 +31,74 @@ class WidgetRegistry
     /** @return array<string, array<string, mixed>> keyed by widget key */
     public static function all(): array
     {
-        $widgets = [
-            ['key' => 'inventory_skus', 'title' => 'SKUs Tracked', 'description' => 'Active products in inventory.', 'icon' => 'ti-box', 'field' => 'skus_tracked', 'link' => '/inventory/products'],
-            ['key' => 'inventory_on_hand', 'title' => 'Units On Hand', 'description' => 'Total units across all locations.', 'icon' => 'ti-packages', 'field' => 'units_on_hand', 'link' => '/inventory/products'],
-            ['key' => 'inventory_available', 'title' => 'Units Available', 'description' => 'On hand minus units committed to jobs.', 'icon' => 'ti-circle-check', 'field' => 'units_available', 'link' => '/inventory/products'],
-            ['key' => 'inventory_low_stock', 'title' => 'Low Stock Alerts', 'description' => 'Products at or below their low/critical thresholds.', 'icon' => 'ti-alert-triangle', 'field' => 'low_stock_alerts', 'link' => '/low-stock'],
-            ['key' => 'inventory_critical', 'title' => 'Critical Stock', 'description' => 'Products at critical stock level.', 'icon' => 'ti-alert-octagon', 'field' => 'critical_count', 'link' => '/critical-stock'],
+        $stat = fn (string $key, string $title, string $description, string $icon, string $field, string $link) => [
+            'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
+            'type' => 'stat', 'field' => $field, 'link' => $link,
+            'default_size' => ['w' => 3, 'h' => 2], 'min_size' => ['w' => 2, 'h' => 2],
+            'refresh_seconds' => 120,
+        ];
+        $chart = fn (string $key, string $title, string $description, string $icon, string $chart) => [
+            'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
+            'type' => 'chart', 'chart' => $chart,
+            'default_size' => ['w' => 6, 'h' => 5], 'min_size' => ['w' => 3, 'h' => 3],
+            'refresh_seconds' => 600,
+        ];
+        $table = fn (string $key, string $title, string $description, string $icon) => [
+            'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
+            'type' => 'table',
+            'default_size' => ['w' => 8, 'h' => 6], 'min_size' => ['w' => 4, 'h' => 3],
+            'refresh_seconds' => 120,
+        ];
+        $list = fn (string $key, string $title, string $description, string $icon) => [
+            'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
+            'type' => 'list',
+            'default_size' => ['w' => 4, 'h' => 5], 'min_size' => ['w' => 3, 'h' => 3],
+            'refresh_seconds' => 120,
+        ];
+
+        $groups = [
+            ['Inventory', ['inventory.view'], '/dashboard/stats', [
+                $stat('inventory_skus', 'SKUs Tracked', 'Active products in inventory.', 'ti-box', 'skus_tracked', '/inventory/products'),
+                $stat('inventory_on_hand', 'Units On Hand', 'Total units across all locations.', 'ti-packages', 'units_on_hand', '/inventory/products'),
+                $stat('inventory_available', 'Units Available', 'On hand minus units committed to jobs.', 'ti-circle-check', 'units_available', '/inventory/products'),
+                $stat('inventory_low_stock', 'Low Stock Alerts', 'Products at or below their low/critical thresholds.', 'ti-alert-triangle', 'low_stock_alerts', '/low-stock'),
+                $stat('inventory_critical', 'Critical Stock', 'Products at critical stock level.', 'ti-alert-octagon', 'critical_count', '/critical-stock'),
+            ]],
+            ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders', [
+                $stat('wo_open', 'Open Work Orders', 'Active and on-hold work orders.', 'ti-clipboard-list', 'open', '/fabrication/work-orders'),
+                $stat('wo_overdue', 'Overdue Work Orders', 'Open work orders past their due date.', 'ti-clock-exclamation', 'overdue_count', '/fabrication/work-orders'),
+                $stat('wo_due_week', 'Due This Week', 'Open work orders due within 7 days.', 'ti-calendar-due', 'due_this_week', '/fabrication/work-orders'),
+                $stat('wo_on_hold', 'On Hold', 'Work orders currently on hold.', 'ti-player-pause', 'on_hold_count', '/fabrication/work-orders'),
+            ]],
+            ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/due', [
+                $list('wo_due_list', 'Work Orders Due Soon', 'Open work orders with the earliest due dates, overdue first.', 'ti-list-details'),
+            ]],
+            ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/table', [
+                $table('wo_table', 'Work Order Table', 'Open work orders in priority order, with job, status, due date and elevation progress.', 'ti-table'),
+            ]],
+            ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/stages', [
+                $chart('wo_stage_wip', 'Work in Progress by Stage', 'Open pending and in-progress stages, grouped by stage name.', 'ti-chart-bar', 'stage_wip'),
+            ]],
+            ['Quality', ['quality.view'], '/dashboard/widgets/quality', [
+                $stat('quality_pending', 'Reports Pending Verification', 'Quality reports waiting to be verified.', 'ti-file-search', 'pending_review', '/fabrication/quality'),
+                $stat('quality_awaiting_review', 'Reports Awaiting Review', 'Verified quality reports waiting for review.', 'ti-file-check', 'verified', '/fabrication/quality'),
+            ]],
+            ['Quality', ['quality.view'], '/quality-reports/analytics/incident-rate', [
+                $chart('quality_incident_rate', 'Incident Rate by Month', 'Joints completed and incident rate, with the 1.5% goal.', 'ti-chart-line', 'incident_rate'),
+            ]],
+            ['Quality', ['quality.view'], '/quality-reports/analytics/problem-types', [
+                $chart('quality_problem_types', 'Problem Types', 'Quality cases by problem type over the last 13 weeks.', 'ti-chart-bar', 'problem_types'),
+            ]],
+            ['Quality', ['quality.view'], '/quality-reports/analytics/weekly-trend', [
+                $chart('quality_weekly_trend', 'Weekly Case Trend', 'Quality cases per week with a trend line.', 'ti-trending-up', 'weekly_trend'),
+            ]],
         ];
 
         $catalog = [];
-        foreach ($widgets as $w) {
-            $catalog[$w['key']] = $w + [
-                'category' => 'Inventory',
-                'type' => 'stat',
-                'permission' => ['inventory.view'],
-                'endpoint' => '/dashboard/stats',
-                'default_size' => ['w' => 3, 'h' => 2],
-                'min_size' => ['w' => 2, 'h' => 2],
-                'refresh_seconds' => 120,
-            ];
+        foreach ($groups as [$category, $permission, $endpoint, $widgets]) {
+            foreach ($widgets as $w) {
+                $catalog[$w['key']] = $w + ['category' => $category, 'permission' => $permission, 'endpoint' => $endpoint];
+            }
         }
 
         return $catalog;
