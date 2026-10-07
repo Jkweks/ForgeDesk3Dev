@@ -9,6 +9,7 @@
   {{-- Apply the persisted/OS theme before first paint to avoid a flash of light. --}}
   <script src="{{ asset('assets/tabler/js/tabler-theme.min.js') }}"></script>
   <link href="{{ asset('assets/tabler/css/tabler.min.css') }}" rel="stylesheet">
+  <link href="{{ asset('assets/tabler/css/tabler-themes.min.css') }}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.49.0/dist/tabler-icons.min.css" rel="stylesheet">
   <style>
     body { background: var(--tblr-bg-surface); color: var(--tblr-body-color); font-size: 16px; -webkit-tap-highlight-color: transparent; overflow-x: clip; }
@@ -36,20 +37,20 @@
     .sf-filter-label { font-size: .8rem; color: var(--tblr-secondary); white-space: nowrap; }
     .sf-theme-toggle {
       border: 1px solid var(--tblr-border-color); background: transparent;
-      color: var(--tblr-body-color); border-radius: 8px;
+      color: var(--tblr-body-color); border-radius: var(--tblr-border-radius-lg);
       width: 2.1rem; height: 2.1rem; display: inline-flex;
       align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem;
     }
 
     /* ── Pills ── */
     .pill {
-      padding: .3rem .8rem; border-radius: 20px;
+      padding: .3rem .8rem; border-radius: var(--tblr-border-radius-pill);
       border: 1.5px solid var(--tblr-border-color);
       background: transparent; font-size: .85rem; cursor: pointer; white-space: nowrap;
       color: var(--tblr-body-color);
       transition: background .1s, border-color .1s, color .1s;
     }
-    .pill.active { background: var(--tblr-primary); border-color: var(--tblr-primary); color: #fff; }
+    .pill.active { background: var(--tblr-primary); border-color: var(--tblr-primary); color: var(--tblr-primary-fg); }
 
     /* ── WO table ── */
     .sf-table { width: 100%; border-collapse: collapse; }
@@ -82,12 +83,12 @@
 
     /* ── Progress bar ── */
     .sf-progress {
-      height: 6px; border-radius: 3px;
+      height: 6px; border-radius: var(--tblr-border-radius-sm);
       background: var(--tblr-border-color);
       overflow: hidden; width: 80px;
     }
     .sf-progress-fill {
-      height: 100%; border-radius: 3px;
+      height: 100%; border-radius: var(--tblr-border-radius-sm);
       background: var(--tblr-success);
       transition: width .3s;
     }
@@ -116,7 +117,7 @@
     /* ── Stage buttons (big tap targets) ── */
     .stage-btn {
       display: inline-flex; flex-direction: column; align-items: center;
-      padding: .4rem .7rem; border-radius: 8px; border: none;
+      padding: .4rem .7rem; border-radius: var(--tblr-border-radius-lg); border: none;
       cursor: pointer; min-width: 88px;
       transition: filter .1s, transform .07s;
       line-height: 1.3;
@@ -127,32 +128,27 @@
     .stage-btn:active { transform: scale(.94); filter: brightness(.88); }
     .stage-btn .sname { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
     .stage-btn .sstatus { font-size: .95rem; font-weight: 700; }
-    .stage-btn.pending     { background: #e9ecef; color: #495057; }
-    .stage-btn.in_progress { background: #fff3cd; color: #664d03; }
-    .stage-btn.complete    { background: #d1e7dd; color: #0a3622; }
-    .stage-btn.blocked     { background: #f8d7da; color: #58151c; }
-    .stage-btn.on_hold     { background: #fde3c4; color: #7a3f00; border: 2px dashed #b96a00; }
-    [data-bs-theme="dark"] .stage-btn.pending     { background: #343a40; color: #c5ccd3; }
-    [data-bs-theme="dark"] .stage-btn.in_progress { background: #3d2e00; color: #ffc107; }
-    [data-bs-theme="dark"] .stage-btn.complete    { background: #12281c; color: #8fd0ad; }
-    [data-bs-theme="dark"] .stage-btn.blocked     { background: #3a1417; color: #ef9aa1; }
-    [data-bs-theme="dark"] .stage-btn.on_hold     { background: #3d2503; color: #f5a623; border: 2px dashed #f5a623; }
+    /* Status colours come from Tabler tokens (one --sf-c per status), so they follow
+       light/dark mode and the user's theme without per-mode hex pairs. */
+    .stage-btn, .sf-chip {
+      --sf-c: var(--tblr-secondary);
+      background: color-mix(in oklab, var(--sf-c) 18%, transparent);
+      color: color-mix(in oklab, var(--sf-c) 68%, var(--tblr-body-color));
+    }
+    .stage-btn.pending,      .sf-chip.pending      { --sf-c: var(--tblr-secondary); }
+    .stage-btn.in_progress,  .sf-chip.in_progress  { --sf-c: var(--tblr-yellow); }
+    .stage-btn.complete,     .sf-chip.complete     { --sf-c: var(--tblr-green); }
+    .stage-btn.blocked,      .sf-chip.blocked      { --sf-c: var(--tblr-red); }
+    .stage-btn.not_required, .sf-chip.not_required { --sf-c: var(--tblr-blue); }
+    .stage-btn.on_hold,      .sf-chip.on_hold      { --sf-c: var(--tblr-orange); }
+    .stage-btn.on_hold { border: 2px dashed var(--sf-c); }
 
     /* ── Status summary chips ── */
     .sf-chip {
-      font-size: .78rem; padding: .15rem .45rem; border-radius: 4px;
+      font-size: .78rem; padding: .15rem .45rem; border-radius: var(--tblr-border-radius-sm);
       font-weight: 600; white-space: nowrap;
     }
-    .sf-chip.in_progress { background: #fff3cd; color: #664d03; }
-    .sf-chip.blocked     { background: #f8d7da; color: #58151c; }
-    .sf-chip.on_hold     { background: #fde3c4; color: #7a3f00; }
-    [data-bs-theme="dark"] .sf-chip.in_progress { background: #3d2e00; color: #ffc107; }
-    [data-bs-theme="dark"] .sf-chip.blocked     { background: #3a1417; color: #ef9aa1; }
-    [data-bs-theme="dark"] .sf-chip.on_hold     { background: #3d2503; color: #f5a623; }
-
-    /* ── not_required stage ── */
-    .stage-btn.not_required { background: #dce7f9; color: #2c5fc3; }
-    [data-bs-theme="dark"] .stage-btn.not_required { background: #0d1f3c; color: #7aa7e9; }
+    /* ── locked stages ── */
     .stage-btn.locked { opacity: .5; }
     .stage-btn.locked:active { transform: none; filter: none; }
 
@@ -165,14 +161,14 @@
     .sf-pin-card {
       background: var(--tblr-bg-surface);
       border: 1px solid var(--tblr-border-color);
-      border-radius: 12px; padding: 2rem 2.5rem;
+      border-radius: var(--tblr-border-radius-lg); padding: 2rem 2.5rem;
       width: min(380px, 90vw); text-align: center;
       box-shadow: 0 12px 40px rgba(0,0,0,.5);
     }
     .sf-pin-card h3 { margin-bottom: 1.25rem; font-size: 1.2rem; }
     .sf-pin-input {
       width: 100%; font-size: 1.5rem; letter-spacing: .3em; text-align: center;
-      border: 2px solid var(--tblr-border-color); border-radius: 8px;
+      border: 2px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius-lg);
       padding: .6rem 1rem; background: var(--tblr-bg-surface);
       color: var(--tblr-body-color); outline: none; margin-bottom: 1rem;
     }
@@ -188,7 +184,7 @@
     .sf-prompt-card {
       background: var(--tblr-bg-surface);
       border: 1px solid var(--tblr-border-color);
-      border-radius: 12px; padding: 2rem; width: min(380px, 90vw);
+      border-radius: var(--tblr-border-radius-lg); padding: 2rem; width: min(380px, 90vw);
       box-shadow: 0 12px 40px rgba(0,0,0,.5); text-align: center;
     }
 
@@ -547,11 +543,11 @@ function render() {
     ].filter(Boolean).join(' ');
 
     const assignedBadges = (wo.assigned_users || []).map(u =>
-      `<span style="font-size:.75rem;padding:.1rem .35rem;border-radius:4px;background:var(--tblr-blue-lt);color:var(--tblr-blue);font-weight:600" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
+      `<span style="font-size:.75rem;padding:.1rem .35rem;border-radius: var(--tblr-border-radius-sm);background:var(--tblr-blue-lt);color:var(--tblr-blue);font-weight:600" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
     ).join(' ') || '<span class="text-secondary small">—</span>';
 
     const priorityBadge = wo.priority != null
-      ? `<span style="font-size:.78rem;padding:.1rem .4rem;border-radius:4px;background:var(--tblr-bg-surface-secondary);color:var(--tblr-body-color)">${wo.priority}</span>`
+      ? `<span style="font-size:.78rem;padding:.1rem .4rem;border-radius: var(--tblr-border-radius-sm);background:var(--tblr-bg-surface-secondary);color:var(--tblr-body-color)">${wo.priority}</span>`
       : '<span class="text-secondary small">—</span>';
 
     const isOpen = expandedWOs.has(wo.id);
@@ -1105,7 +1101,7 @@ function renderMyQueue() {
     const due = t.due_date
       ? `<span class="small ${isPast(t.due_date) ? 'text-danger' : 'text-secondary'}">due ${t.due_date}</span>` : '';
     const prio = t.priority != null
-      ? `<span style="font-size:.75rem;padding:.05rem .35rem;border-radius:4px;background:var(--tblr-bg-surface-secondary);color:var(--tblr-body-color)">#${t.priority}</span>` : '';
+      ? `<span style="font-size:.75rem;padding:.05rem .35rem;border-radius: var(--tblr-border-radius-sm);background:var(--tblr-bg-surface-secondary);color:var(--tblr-body-color)">#${t.priority}</span>` : '';
     const mates = (t.assignee_names || []).filter(n => n && n !== sfFabUser?.name);
     const shared = mates.length
       ? `<span class="badge bg-purple-lt text-purple" style="font-size:.7rem" title="Working with ${esc(mates.join(', '))}">
