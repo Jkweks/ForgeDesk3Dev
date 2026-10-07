@@ -66,8 +66,19 @@
     /* Modals: keep the header/footer in view and scroll the body, sized from the
        viewport minus Tabler's own modal margin (no magic numbers). */
     .modal-content { max-height: calc(100dvh - var(--tblr-modal-margin) * 2); }
-    .modal-body { overflow-y: auto; scrollbar-width: thin; }
+    .modal-body {
+      overflow-y: auto;
+      /* An explicit colour keeps the scrollbar visible (a default thin one can be invisible on some
+         systems), so people can tell there is more below. */
+      scrollbar-color: color-mix(in oklab, var(--tblr-body-color) 45%, transparent) transparent;
+    }
     .modal-header, .modal-footer { flex-shrink: 0; }
+    /* Many modals wrap body + footer in a <form>. A plain form is not a flex container, so the body would
+       never get a bounded height: it would overflow and be clipped with no scrollbar. Make the form
+       part of the modal's flex column so the body scrolls and the footer stays in view. */
+    .modal-content > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    .modal-content > form > .modal-body { flex: 1 1 auto; min-height: 0; }
+    .modal-content > form > .modal-header, .modal-content > form > .modal-footer { flex-shrink: 0; }
 
     /* Tablets: let modals use more of the width. Sets Tabler's width variable
        rather than overriding max-width. */

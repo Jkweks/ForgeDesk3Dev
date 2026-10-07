@@ -181,23 +181,23 @@
             <!-- Identity — mirrors edit form header -->
             <div class="mb-3">
               <div class="row g-2 mb-2">
-                <div class="col-3">
+                <div class="col-md-3">
                   <label class="form-label small text-muted mb-1">Part Number</label>
                   <input type="text" class="form-control form-control-sm" name="part_number" id="productPartNumber" placeholder="e.g., ABC-123">
                   <small class="form-text text-primary" id="skuPreview"></small>
                   <small class="form-text text-success" id="partLookupHint" style="display:none"></small>
                 </div>
-                <div class="col-3">
+                <div class="col-md-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
                   <select class="form-select form-select-sm" name="finish" id="productFinish">
                     <option value="">None</option>
                   </select>
                 </div>
-                <div class="col-3">
+                <div class="col-md-4">
                   <label class="form-label small text-muted mb-1">SKU</label>
                   <input type="text" class="form-control form-control-sm" name="sku" id="productSku" placeholder="Auto-generated">
                 </div>
-                <div class="col-3">
+                <div class="col-md-2">
                   <label class="form-label small text-muted mb-1">Active</label>
                   <select class="form-select form-select-sm" name="is_active" id="productIsActive">
                     <option value="1" selected>Active</option>
@@ -205,38 +205,54 @@
                   </select>
                 </div>
               </div>
+
+              <!-- Finish variants: the same product in other finishes, created together -->
+              <div class="mb-2 d-none" id="finishVariantsRow">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <span class="small text-muted">Also create in:</span>
+                  <div class="form-selectgroup" id="finishVariantOptions"></div>
+                  <label class="form-check form-check-inline small mb-0 ms-auto d-none" id="copyStockWrap">
+                    <input class="form-check-input" type="checkbox" id="copyStockToVariants">
+                    <span class="form-check-label" title="By default variants start with no stock, since each finish is separate stock">Also copy On Hand and On Order</span>
+                  </label>
+                </div>
+                <small class="form-text text-primary" id="variantPreview"></small>
+              </div>
+
               <div class="mb-2">
                 <label class="form-label small text-muted mb-1">Description <span class="text-danger">*</span></label>
                 <input type="text" class="form-control form-control-sm" name="description" id="productDescription" placeholder="Product description" required>
               </div>
-              <div class="mb-2">
-                <label class="form-label small text-muted mb-1">Long Description</label>
-                <textarea class="form-control form-control-sm" name="long_description" id="productLongDescription" rows="2"></textarea>
-              </div>
-              <div>
-                <label class="form-label small text-muted mb-1">Categories</label>
-                <select class="form-select form-select-sm" name="category_ids" id="productCategoryIds" multiple size="4">
-                  <!-- Options loaded dynamically -->
-                </select>
-                <small class="form-text">Hold Ctrl/Cmd to select multiple. Indented items are subcategories.</small>
+              <div class="row g-2">
+                <div class="col-md-8">
+                  <label class="form-label small text-muted mb-1">Long Description</label>
+                  <textarea class="form-control form-control-sm" name="long_description" id="productLongDescription" rows="3"></textarea>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small text-muted mb-1">Categories</label>
+                  <select class="form-select form-select-sm" name="category_ids" id="productCategoryIds" multiple size="3">
+                    <!-- Options loaded dynamically -->
+                  </select>
+                  <small class="form-text">Ctrl/Cmd for several. Indented = subcategory.</small>
+                </div>
               </div>
             </div>
 
-            <!-- Cards row 1: Pricing + Supplier -->
+            <!-- Row 1: Pricing + Supplier + Initial Stock -->
             <div class="row g-3 mb-3">
-              <div class="col-md-6">
+              <div class="col-lg-3">
                 <div class="card card-sm h-100">
                   <div class="card-header py-2"><strong>Pricing</strong></div>
                   <div class="card-body py-2">
                     <div class="row g-2">
-                      <div class="col-6">
+                      <div class="col-6 col-lg-12">
                         <label class="form-label small text-muted mb-1">List Price <span class="text-danger">*</span></label>
                         <div class="input-group input-group-sm">
                           <span class="input-group-text">$</span>
                           <input type="number" class="form-control" name="unit_cost" id="productUnitCost" placeholder="0.00" step="0.01" min="0" required>
                         </div>
                       </div>
-                      <div class="col-6">
+                      <div class="col-6 col-lg-12">
                         <label class="form-label small text-muted mb-1">Net Price</label>
                         <div class="input-group input-group-sm">
                           <span class="input-group-text">$</span>
@@ -247,22 +263,22 @@
                   </div>
                 </div>
               </div>
-              <div class="col-md-6">
+              <div class="col-lg-5">
                 <div class="card card-sm h-100">
                   <div class="card-header py-2"><strong>Supplier</strong></div>
                   <div class="card-body py-2">
                     <div class="row g-2">
-                      <div class="col-5">
+                      <div class="col-12">
                         <label class="form-label small text-muted mb-1 required">Supplier</label>
                         <select class="form-select form-select-sm" name="supplier_id" id="productSupplierId" required>
                           <option value="">Select supplier…</option>
                         </select>
                       </div>
-                      <div class="col-4">
+                      <div class="col-7">
                         <label class="form-label small text-muted mb-1">Supplier SKU</label>
                         <input type="text" class="form-control form-control-sm" name="supplier_sku" id="productSupplierSku" placeholder="">
                       </div>
-                      <div class="col-3">
+                      <div class="col-5">
                         <label class="form-label small text-muted mb-1">Lead Time (d)</label>
                         <input type="number" class="form-control form-control-sm" name="lead_time_days" id="productLeadTime" placeholder="0" min="0">
                       </div>
@@ -270,11 +286,7 @@
                   </div>
                 </div>
               </div>
-            </div>
-
-            <!-- Cards row 2: Initial Stock + Stock Management -->
-            <div class="row g-3 mb-3">
-              <div class="col-md-6">
+              <div class="col-lg-4">
                 <div class="card card-sm h-100">
                   <div class="card-header py-2"><strong>Initial Stock</strong></div>
                   <div class="card-body py-2">
@@ -287,7 +299,7 @@
                         <label class="form-label small text-muted mb-1">On Order</label>
                         <input type="number" class="form-control form-control-sm" name="on_order_qty" id="productOnOrderQty" placeholder="0" min="0" value="0">
                       </div>
-                      <div class="col-12 mt-2">
+                      <div class="col-12">
                         <label class="form-label small text-muted mb-1">Storage Location</label>
                         <input type="text" class="form-control form-control-sm" name="location" id="productLocation" placeholder="Choose from list" list="productLocationList">
                         <datalist id="productLocationList"></datalist>
@@ -296,7 +308,11 @@
                   </div>
                 </div>
               </div>
-              <div class="col-md-6">
+            </div>
+
+            <!-- Row 2: Stock Management + Unit of Measure -->
+            <div class="row g-3 mb-3">
+              <div class="col-lg-8">
                 <div class="card card-sm h-100">
                   <div class="card-header py-2"><strong>Stock Management</strong></div>
                   <div class="card-body py-2">
@@ -318,32 +334,32 @@
                         <label class="form-label small text-muted mb-1">Safety Stock</label>
                         <input type="number" class="form-control form-control-sm" name="safety_stock" id="productSafetyStock" placeholder="0" min="0" step="0.01">
                       </div>
-                      <div class="col-6 mt-2">
+                      <div class="col-4">
                         <label class="form-label small text-muted mb-1">Avg Daily Use</label>
                         <input type="number" class="form-control form-control-sm" name="average_daily_use" id="productAvgDailyUse" placeholder="0.00" step="0.01" min="0">
                       </div>
-                      <div class="col-3 mt-2">
+                      <div class="col-2">
                         <label class="form-label small text-muted mb-1">Type</label>
                         <div class="form-check form-switch mt-1">
                           <input class="form-check-input" type="checkbox" name="nonsof" id="productNonsof">
                           <label class="form-check-label small" for="productNonsof" id="productNonsofLabel">Stock</label>
                         </div>
                       </div>
-                      <div class="col-3 mt-2">
+                      <div class="col-2">
                         <label class="form-label small text-muted mb-1">Door Shim</label>
                         <div class="form-check form-switch mt-1">
                           <input class="form-check-input" type="checkbox" name="cp_part" id="productCpPart">
                           <label class="form-check-label small" for="productCpPart">No</label>
                         </div>
                       </div>
-                      <div class="col-4 mt-2">
-                        <label class="form-label small text-muted mb-1">Shared Component</label>
+                      <div class="col-2">
+                        <label class="form-label small text-muted mb-1">Shared</label>
                         <div class="form-check form-switch mt-1">
                           <input class="form-check-input" type="checkbox" name="is_shared" id="productIsShared">
                           <label class="form-check-label small" for="productIsShared">No</label>
                         </div>
                       </div>
-                      <div class="col-4 mt-2">
+                      <div class="col-2">
                         <label class="form-label small text-muted mb-1">Special Order</label>
                         <div class="form-check form-switch mt-1">
                           <input class="form-check-input" type="checkbox" name="is_special_order" id="productIsSpecialOrder">
@@ -354,31 +370,26 @@
                   </div>
                 </div>
               </div>
-            </div>
-
-            <!-- Cards row 3: Unit of Measure -->
-            <div class="row g-3 mb-3">
-              <div class="col-12">
-                <div class="card card-sm">
+              <div class="col-lg-4">
+                <div class="card card-sm h-100">
                   <div class="card-header py-2"><strong>Unit of Measure</strong></div>
                   <div class="card-body py-2">
                     <div class="row g-2">
-                      <div class="col-md-3">
+                      <div class="col-6">
                         <label class="form-label small text-muted mb-1">Stock UOM <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" name="unit_of_measure" id="productUOM" required>
                           <option value="">Select…</option>
                         </select>
                       </div>
-                      <div class="col-md-3">
+                      <div class="col-6">
                         <label class="form-label small text-muted mb-1">Pack Size</label>
                         <input type="number" class="form-control form-control-sm" name="pack_size" id="productPackSize" placeholder="1" min="1" value="1">
-                        <small class="form-text">Units per pack</small>
                       </div>
-                      <div class="col-md-3">
+                      <div class="col-6">
                         <label class="form-label small text-muted mb-1">Min Order Qty</label>
                         <input type="number" class="form-control form-control-sm" name="min_order_qty" id="productMinOrderQty" placeholder="1" min="1">
                       </div>
-                      <div class="col-md-3">
+                      <div class="col-6">
                         <label class="form-label small text-muted mb-1">Order Multiple</label>
                         <input type="number" class="form-control form-control-sm" name="order_multiple" id="productOrderMultiple" placeholder="1" min="1">
                       </div>
@@ -784,6 +795,7 @@
           option.textContent = `${finish.code} - ${finish.name}`;
           finishSelect.appendChild(option);
         });
+        renderFinishVariantOptions();
 
         // Populate UOM dropdowns
         ['productUOM'].forEach(selectId => {
@@ -908,6 +920,47 @@
       }
     }
 
+    // ---- Finish variants: create the same product in other finishes at the same time ----
+    // Mirrors ProductController::finishVariantData(): an auto-generated SKU is rebuilt for the new
+    // finish; a custom SKU has a trailing "-<finish>" swapped, or "-<finish>" appended.
+    function variantSkuFor(finish) {
+      const sku = document.getElementById('productSku').value.trim().toUpperCase();
+      const partNumber = document.getElementById('productPartNumber').value.trim().toUpperCase();
+      const primary = document.getElementById('productFinish').value;
+      if (!sku) return '';
+      if (partNumber && sku === (primary ? `${partNumber}-${primary}` : partNumber)) return `${partNumber}-${finish}`;
+      if (primary && sku.endsWith(`-${primary.toUpperCase()}`)) return sku.slice(0, sku.length - primary.length) + finish;
+      return `${sku}-${finish}`;
+    }
+
+    function selectedFinishVariants() {
+      return Array.from(document.querySelectorAll('#finishVariantOptions input:checked')).map(i => i.value);
+    }
+
+    function updateVariantPreview() {
+      const chosen = selectedFinishVariants();
+      const preview = document.getElementById('variantPreview');
+      const skus = chosen.map(variantSkuFor).filter(Boolean);
+      preview.textContent = chosen.length
+        ? (skus.length ? `Will also create: ${skus.join(', ')} (same details; no stock unless you tick the box)` : 'Enter a part number or SKU to create variants.')
+        : '';
+      document.getElementById('copyStockWrap').classList.toggle('d-none', !chosen.length);
+    }
+
+    function renderFinishVariantOptions() {
+      const primary = document.getElementById('productFinish').value;
+      const wrap = document.getElementById('finishVariantOptions');
+      const kept = new Set(selectedFinishVariants());
+      const options = finishCodes.filter(f => f.code !== primary);
+      wrap.innerHTML = options.map(f => `
+        <label class="form-selectgroup-item">
+          <input type="checkbox" value="${htmlEscape(f.code)}" class="form-selectgroup-input" ${kept.has(f.code) ? 'checked' : ''}>
+          <span class="form-selectgroup-label py-1 px-2" title="${htmlEscape(f.name)}">${htmlEscape(f.code)}</span>
+        </label>`).join('');
+      document.getElementById('finishVariantsRow').classList.toggle('d-none', !options.length);
+      updateVariantPreview();
+    }
+
     // Calculate reorder point preview
     function updateReorderPointPreview() {
       const avgDailyUse = parseFloat(document.getElementById('productAvgDailyUse').value) || 0;
@@ -967,6 +1020,9 @@
     document.getElementById('productPartNumber').addEventListener('input', updateSkuPreview);
     document.getElementById('productPartNumber').addEventListener('blur', tryAutofillFromEzEstimate);
     document.getElementById('productFinish').addEventListener('change', updateSkuPreview);
+    document.getElementById('productFinish').addEventListener('change', renderFinishVariantOptions);
+    document.getElementById('finishVariantOptions').addEventListener('change', updateVariantPreview);
+    ['productPartNumber', 'productSku'].forEach(id => document.getElementById(id).addEventListener('input', updateVariantPreview));
     document.getElementById('productAvgDailyUse').addEventListener('input', updateReorderPointPreview);
     document.getElementById('productLeadTime').addEventListener('input', updateReorderPointPreview);
     document.getElementById('productSafetyStock').addEventListener('input', updateReorderPointPreview);
@@ -981,6 +1037,9 @@
       partLookupHint.textContent = '';
       partLookupHint.style.display = 'none';
       lastGeneratedSku = '';
+      document.getElementById('finishVariantOptions').innerHTML = ''; // start with no variants ticked
+      document.getElementById('copyStockToVariants').checked = false;
+      renderFinishVariantOptions();
 
       // Wire toggle live-labels
       const nonsofCb = document.getElementById('productNonsof');
@@ -1019,6 +1078,13 @@
       data.is_shared = !!document.getElementById('productIsShared')?.checked;
       data.is_special_order = !!document.getElementById('productIsSpecialOrder')?.checked;
 
+      // Finish variants (checkboxes have no name, so they are not in FormData)
+      const variantFinishes = selectedFinishVariants();
+      if (variantFinishes.length) {
+        data.finish_variants = variantFinishes;
+        data.copy_stock_to_variants = !!document.getElementById('copyStockToVariants').checked;
+      }
+
       // Handle multiple category selection
       const categorySelect = document.getElementById('productCategoryIds');
       const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => parseInt(option.value));
@@ -1044,15 +1110,23 @@
         });
 
         if (response.ok) {
+          const created = await response.json().catch(() => ({}));
           hideModal(document.getElementById('addProductModal'));
-          showNotification('Product created successfully!', 'success');
+          showNotification(
+            created.variants && created.variants.length
+              ? `Created ${[created.sku, ...created.variants.map(v => v.sku)].join(', ')}`
+              : 'Product created successfully!',
+            'success'
+          );
           loadDashboard();
         } else {
           const error = await response.json();
           if (error.errors) {
-            // Display field-specific errors
+            // Display field-specific errors; ones with no matching input (e.g. variants) go in the banner
+            const unmatched = [];
             Object.keys(error.errors).forEach(field => {
-              const input = document.querySelector(`[name="${field}"]`);
+              const input = document.querySelector(`#addProductForm [name="${field}"]`);
+              if (!input) unmatched.push(error.errors[field][0]);
               if (input) {
                 input.classList.add('is-invalid');
                 const feedback = input.parentElement.querySelector('.invalid-feedback') ||
@@ -1063,6 +1137,10 @@
                 }
               }
             });
+            if (unmatched.length) {
+              document.getElementById('formError').textContent = unmatched.join(' ');
+              document.getElementById('formError').style.display = 'block';
+            }
           } else {
             document.getElementById('formError').textContent = error.message || 'Failed to create product';
             document.getElementById('formError').style.display = 'block';

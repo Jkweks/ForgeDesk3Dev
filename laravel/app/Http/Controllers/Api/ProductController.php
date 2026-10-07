@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
@@ -128,7 +130,20 @@ class ProductController extends Controller
             // Status
             'is_active' => 'nullable|boolean',
             'is_special_order' => 'nullable|boolean',
+            'nonsof' => 'nullable|boolean',
+            'cp_part' => 'nullable|boolean',
+            'is_shared' => 'nullable|boolean',
+
+            // Create the same product in other finishes at the same time (see createFinishVariants)
+            'finish_variants' => 'nullable|array|max:8',
+            'finish_variants.*' => ['string', Rule::in(array_keys(Product::$finishCodes))],
+            'copy_stock_to_variants' => 'nullable|boolean',
         ]);
+
+        $variantFinishes = collect($validated['finish_variants'] ?? [])->unique()
+            ->reject(fn ($f) => $f === ($validated['finish'] ?? null))->values()->all();
+        $copyStock = (bool) ($validated['copy_stock_to_variants'] ?? false);
+        unset($validated['finish_variants'], $validated['copy_stock_to_variants']);
 
         // Auto-generate SKU if part_number is provided but not SKU
         if (! empty($validated['part_number']) && empty($validated['sku'])) {
@@ -146,7 +161,29 @@ class ProductController extends Controller
             );
         }
 
-        $product = Product::create($validated);
+        $variantData = $this->finishVariantData($validated, $variantFinishes, $copyStock);
+
+        $variants = [];
+        $product = DB::transaction(function () use ($validated, $request, $variantData, &$variants) {
+            $product = $this->createProductWithCategories($validated, $request);
+
+            foreach ($variantData as $data) {
+                $variants[] = $this->createProductWithCategories($data, $request);
+            }
+
+            return $product;
+        });
+
+        // Reload product with categories
+        $product->load('categories');
+
+        return response()->json($variants ? $product->toArray() + ['variants' => collect($variants)->map->toArray()->all()] : $product, 201);
+    }
+
+    /** Create one product (status + categories), as the add form does. */
+    private function createProductWithCategories(array $data, Request $request): Product
+    {
+        $product = Product::create($data);
         $product->updateStatus();
 
         // Handle multiple categories
@@ -164,10 +201,61 @@ class ProductController extends Controller
             $product->categories()->sync([$request->category_id => ['is_primary' => true]]);
         }
 
-        // Reload product with categories
-        $product->load('categories');
+        return $product->load('categories');
+    }
 
-        return response()->json($product, 201);
+    /**
+     * The data for each finish variant of a new product: everything entered on the form, with that
+     * finish and its own SKU. Initial stock (on hand, on order) is not copied unless asked,
+     * since a variant is a different physical stock item. Throws a validation error, creating nothing,
+     * if there is no way to derive SKUs or any resulting SKU already exists.
+     *
+     * SKU rule: if the SKU is still the auto-generated "<part number>-<finish>" it is rebuilt for the
+     * new finish; a custom SKU has a trailing "-<finish>" swapped, or "-<finish>" appended.
+     *
+     * @param  array<int, string>  $finishes
+     * @return array<int, array<string, mixed>>
+     */
+    private function finishVariantData(array $base, array $finishes, bool $copyStock): array
+    {
+        if (! $finishes) {
+            return [];
+        }
+
+        $primaryFinish = $base['finish'] ?? null;
+        $partNumber = $base['part_number'] ?? null;
+        $sku = $base['sku'] ?? null;
+
+        if (! $sku) {
+            throw ValidationException::withMessages(['finish_variants' => 'Enter a part number or SKU to create finish variants.']);
+        }
+
+        $rows = [];
+        foreach ($finishes as $finish) {
+            if ($partNumber && $sku === Product::generateSku($partNumber, $primaryFinish)) {
+                $variantSku = Product::generateSku($partNumber, $finish);
+            } elseif ($primaryFinish && str_ends_with(strtoupper($sku), '-'.strtoupper($primaryFinish))) {
+                $variantSku = substr($sku, 0, -strlen($primaryFinish)).$finish;
+            } else {
+                $variantSku = strtoupper($sku).'-'.$finish;
+            }
+
+            $row = array_merge($base, ['sku' => $variantSku, 'finish' => $finish]);
+            if (! $copyStock) {
+                $row['quantity_on_hand'] = 0;
+                $row['on_order_qty'] = 0;
+                $row['location'] = null;
+            }
+            $rows[] = $row;
+        }
+
+        $skus = array_column($rows, 'sku');
+        $taken = Product::withTrashed()->whereIn('sku', $skus)->pluck('sku')->all();
+        if ($taken) {
+            throw ValidationException::withMessages(['finish_variants' => 'SKU '.implode(', ', $taken).' already exists, so no products were created.']);
+        }
+
+        return $rows;
     }
 
     public function show(Product $product)
