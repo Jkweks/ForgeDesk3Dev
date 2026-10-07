@@ -85,7 +85,7 @@ return [
         'label' => 'Configurator', 'icon' => 'adjustments-horizontal', 'permission' => ['nav.configurator', 'nav.fulfillment'],
         'active' => ['config*'],
         'items' => [
-            ['label' => 'Frame Builder', 'href' => '/config', 'permission' => 'configurator.view', 'active' => ['config'], 'nav' => 'nav.configurator'],
+            ['label' => 'Entry Builder', 'href' => '/config', 'permission' => 'configurator.view', 'active' => ['config'], 'nav' => 'nav.configurator'],
             ['label' => 'Fabrication Package', 'href' => '/config/package', 'permission' => 'configurator.view', 'active' => ['config/package'], 'nav' => 'nav.configurator'],
             ['label' => 'Door Labels', 'href' => '/config/labels', 'permission' => 'configurator.view', 'active' => ['config/labels'], 'nav' => 'nav.configurator'],
             ['divider' => true],

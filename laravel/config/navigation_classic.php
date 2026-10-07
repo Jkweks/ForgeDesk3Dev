@@ -72,7 +72,7 @@ return [
         'label' => 'Configurator', 'icon' => 'adjustments-horizontal', 'permission' => 'nav.configurator',
         'active' => ['config*'],
         'items' => [
-            ['label' => 'Frame Builder', 'href' => '/config', 'permission' => 'configurator.view', 'active' => ['config']],
+            ['label' => 'Entry Builder', 'href' => '/config', 'permission' => 'configurator.view', 'active' => ['config']],
             ['label' => 'Fabrication Package', 'href' => '/config/package', 'permission' => 'configurator.view', 'active' => ['config/package']],
             ['label' => 'Door Labels', 'href' => '/config/labels', 'permission' => 'configurator.view', 'active' => ['config/labels']],
             ['divider' => true],
