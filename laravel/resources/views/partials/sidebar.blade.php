@@ -11,9 +11,11 @@
         <i class="ti ti-layout-sidebar-left-collapse icon"></i>
       </button>
     </div>
-    <div class="navbar-footer d-flex align-items-center gap-2">
-      @include('partials.user-menu', ['placement' => 'side'])
-      <div class="ms-auto">@include('partials.notifications', ['placement' => 'side'])</div>
+    <div class="navbar-footer">
+      <ul class="navbar-nav">
+        @include('partials.notifications', ['placement' => 'side'])
+        @include('partials.user-menu', ['placement' => 'side'])
+      </ul>
     </div>
     <div class="collapse navbar-collapse" id="sidebar-menu">
       @include('partials.nav-menu', ['mode' => 'side'])

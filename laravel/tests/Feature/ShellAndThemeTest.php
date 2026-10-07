@@ -26,6 +26,9 @@ class ShellAndThemeTest extends TestCase
             );
         }
 
+        // Sidebar user text must live in .nav-link-title so Tabler collapses it when the sidebar folds.
+        $this->assertMatchesRegularExpression('/nav-link-title[^"]*">\s*<div class="js-user-name"/', $html);
+
         // Duplicate ids would break getElementById-based scripts across the two navs.
         foreach (['id="navbar-menu"', 'id="sidebar-menu"', 'id="offcanvasTheme"'] as $id) {
             $this->assertSame(1, substr_count($html, $id), "{$id} must be unique");
@@ -59,6 +62,7 @@ class ShellAndThemeTest extends TestCase
             'sidebar' => 'folded-hover',
             'layout' => 'boxed',
             'navbar' => 'sticky',
+            'navbar-theme' => 'dark',
             'theme-base' => 'gray',
         ])->assertOk()->assertJsonPath('theme_preferences.navbar-position', 'vertical');
 
@@ -70,11 +74,23 @@ class ShellAndThemeTest extends TestCase
             ->assertOk()->assertExactJson(['theme_preferences' => null]);
     }
 
+    public function test_customize_panel_renders_a_preview_tile_for_every_option(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        // Tile controls carry an inline SVG preview; spot-check a few, incl. the pinned gray-scale attr.
+        $this->assertStringContainsString('form-imagecheck-image', $html);
+        $this->assertStringContainsString('data-bs-theme-base="stone"', $html);
+        foreach (['navbar-position', 'sidebar', 'navbar', 'navbar-theme', 'layout', 'theme-radius'] as $key) {
+            $this->assertStringContainsString('name="'.$key.'"', $html);
+        }
+    }
+
     public function test_theme_preferences_reject_unknown_values(): void
     {
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
 
-        foreach ([['navbar-position' => 'left'], ['sidebar' => 'huge'], ['layout' => 'wide'], ['theme' => 'sepia']] as $payload) {
+        foreach ([['navbar-position' => 'left'], ['sidebar' => 'huge'], ['layout' => 'wide'], ['theme' => 'sepia'], ['navbar-theme' => 'neon']] as $payload) {
             $this->putJson('/api/v1/user/theme-preferences', $payload)->assertStatus(422);
         }
     }

@@ -7,7 +7,35 @@
 --}}
 @php $placement = $placement ?? 'top'; @endphp
 @if(Auth::user() && Auth::user()->isAdmin())
-<div class="nav-item dropdown {{ $placement === 'side' ? 'dropup' : 'd-none d-md-flex me-3' }}">
+@if ($placement === 'side')
+<li class="nav-item dropup">
+  <a href="#" class="nav-link" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-label="Show notifications">
+    <span class="nav-link-icon position-relative">
+      <i class="ti ti-bell icon"></i>
+      <span class="badge text-bg-red badge-notification badge-blink d-none js-notification-badge"></span>
+    </span>
+    <span class="nav-link-title">Notifications</span>
+  </a>
+  <div class="dropdown-menu dropdown-menu-arrow dropdown-menu-end dropdown-menu-card">
+    <div class="card">
+      <div class="card-header d-flex">
+        <h3 class="card-title">Notifications</h3>
+        <div class="btn-close ms-auto" data-bs-dismiss="dropdown"></div>
+      </div>
+      <div class="list-group list-group-flush list-group-hoverable js-notification-list">
+        <div class="list-group-item">
+          <div class="row align-items-center">
+            <div class="col text-truncate">
+              <div class="text-secondary">No new notifications</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</li>
+@else
+<div class="nav-item dropdown d-none d-md-flex me-3">
   <a href="#" class="nav-link px-0 position-relative" data-bs-toggle="dropdown" data-bs-auto-close="outside" tabindex="-1" aria-label="Show notifications">
     <i class="ti ti-bell icon"></i>
     <span class="badge text-bg-red badge-notification badge-blink d-none js-notification-badge"></span>
@@ -30,6 +58,7 @@
     </div>
   </div>
 </div>
+@endif
 @once
 <script>
   (function () {
