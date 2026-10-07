@@ -52,6 +52,8 @@ class HwlibBomGenerator
                     'leaf' => $link->leaf,
                 ]);
                 $defaultLink->setRelation('item', $default);
+                // Unsaved link: its BOM rows are attributed to the item it is the default for.
+                $defaultLink->setAttribute('attached_to_link_id', $link->id);
                 $links->push($defaultLink);
                 $linkedItemIds[] = $defaultId;
             }
@@ -74,6 +76,9 @@ class HwlibBomGenerator
 
         foreach ($links as $link) {
             $item = $link->item;
+            // Every row this link produces (item, backers, fasteners) carries this id, so the UI can
+            // keep a hardware item's backers/covers/fasteners together with it.
+            $attributedTo = $link->id ?: $link->getAttribute('attached_to_link_id');
 
             // A link flagged for "both" leaves is per leaf: on a pair that's two of everything
             // (fab_utils' effectiveLinkQty). 'active'/'inactive' links name one leaf already.
@@ -92,7 +97,7 @@ class HwlibBomGenerator
                         'product_id' => $itemProductId,
                         'quantity' => $pieceQty,
                         'source_type' => 'item',
-                        'hwlib_link_id' => $link->id,
+                        'hwlib_link_id' => $attributedTo,
                         'is_auto_generated' => true,
                         'sort_order' => $sortOrder++,
                     ];
@@ -107,7 +112,7 @@ class HwlibBomGenerator
                         'product_id' => null,
                         'quantity' => $pieceQty,
                         'source_type' => 'item',
-                        'hwlib_link_id' => $link->id,
+                        'hwlib_link_id' => $attributedTo,
                         'is_auto_generated' => true,
                         'sort_order' => $sortOrder++,
                     ];
@@ -143,6 +148,7 @@ class HwlibBomGenerator
                     'product_id' => $backerProductId,
                     'quantity' => $backerQty,
                     'source_type' => 'backer',
+                    'hwlib_link_id' => $attributedTo,
                     'is_auto_generated' => true,
                     'sort_order' => $sortOrder++,
                 ];
@@ -161,6 +167,7 @@ class HwlibBomGenerator
                             'product_id' => $fastenerProductId,
                             'quantity' => round((float) $backerFastener->qty * $backerQty, 3),
                             'source_type' => 'fastener',
+                            'hwlib_link_id' => $attributedTo,
                             'is_auto_generated' => true,
                             'sort_order' => $sortOrder++,
                         ];

@@ -1754,8 +1754,41 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Helper: Format configuration detail
      */
+    /**
+     * Which Hardware section ("standard" or "custom") each linked item belongs to, keyed by link id.
+     * A link follows its catalog item's `vos_standard` flag, except an item that is another linked
+     * item's default strike/cover, which follows that parent so accessories stay with their hardware.
+     *
+     * @param  \Illuminate\Support\Collection  $links  links with `item` loaded
+     * @return array<int, string>
+     */
+    private function hardwareSections($links): array
+    {
+        $parentsOf = [];
+        foreach ($links as $parent) {
+            foreach ([$parent->item->default_strike_item_id, $parent->item->default_cover_item_id] as $accessoryItemId) {
+                if ($accessoryItemId && (int) $accessoryItemId !== (int) $parent->item_id) {
+                    $parentsOf[(int) $accessoryItemId][] = $parent;
+                }
+            }
+        }
+
+        $sections = [];
+        foreach ($links as $link) {
+            $parents = $parentsOf[(int) $link->item_id] ?? [];
+            $standard = $parents
+                ? collect($parents)->contains(fn ($parent) => (bool) $parent->item->vos_standard)
+                : (bool) $link->item->vos_standard;
+            $sections[$link->id] = $standard ? 'standard' : 'custom';
+        }
+
+        return $sections;
+    }
+
     private function formatConfigurationDetail($config)
     {
+        $sections = $this->hardwareSections($config->hardwareLinks);
+
         return [
             'id' => $config->id,
             'business_job' => [
@@ -1790,8 +1823,10 @@ class DoorFrameConfigurationController extends Controller
             'opening_specs' => $config->openingSpecs ? $this->formatOpeningSpecs($config->openingSpecs) : null,
             'frame_config' => $config->frameConfig ? $this->formatFrameConfig($config->frameConfig) : null,
             'door_config' => $config->doorConfigs->first() ? $this->formatDoorConfig($config->doorConfigs->first()) : null,
-            'hardware_links' => $config->hardwareLinks->map(fn ($l) => $this->formatHardwareLink($l)),
-            'hardware_parts' => $config->hardwareParts->map(fn ($p) => $this->formatPart($p)),
+            'hardware_links' => $config->hardwareLinks->map(fn ($l) => $this->formatHardwareLink($l) + ['section' => $sections[$l->id] ?? 'custom']),
+            // `section` is null for parts with no originating link: manual parts, or auto-generated
+            // rows from before backers/fasteners were attributed (they sort themselves on Recalculate).
+            'hardware_parts' => $config->hardwareParts->map(fn ($p) => $this->formatPart($p) + ['section' => $sections[$p->hwlib_link_id] ?? null]),
             'is_complete' => $config->isComplete(),
             'can_edit' => $config->canEdit(),
             'cut_list' => $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder) : null,
@@ -2245,6 +2280,7 @@ class DoorFrameConfigurationController extends Controller
         $variables = \App\Models\ConfiguratorHwlibVariable::whereIn('code', collect($resolvedByLink)->flatMap(fn ($v) => array_keys($v))->unique())
             ->get()->keyBy('code');
 
+        $sections = $this->hardwareSections($config->hardwareLinks);
         $out = [];
         foreach ($config->hardwareLinks as $link) {
             $rows = [];
@@ -2273,6 +2309,7 @@ class DoorFrameConfigurationController extends Controller
                 'series' => $link->series,
                 'leaf' => $link->leaf,
                 'vos_standard' => (bool) $link->item->vos_standard,
+                'section' => $sections[$link->id] ?? 'custom',
                 'values' => $rows,
             ];
         }

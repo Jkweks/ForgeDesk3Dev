@@ -401,6 +401,16 @@
                           </table>
                           <div class="text-muted p-3" id="fb-hws-parts-empty">No standard hardware parts yet &mdash; select hardware, then click Generate.</div>
                         </div>
+                        <div class="mt-3 d-none" id="fb-hws-parts-unsorted">
+                          <h5 class="mb-1">Not yet sorted</h5>
+                          <div class="text-muted small mb-2">Generated before backers, covers and fasteners were tied to their hardware. Click Generate / Recalculate to sort them into Standard or Custom.</div>
+                          <div class="table-responsive">
+                            <table class="table table-vcenter card-table">
+                              <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                              <tbody id="fb-hws-parts-unsorted-tbody"></tbody>
+                            </table>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -466,13 +476,15 @@
                   </form>
                       </div>
                       <div class="tab-pane" id="fb-hwc-linked" role="tabpanel">
+                        <div class="text-muted small mb-2 fb-hwc-includes-standard">Everything linked to this opening, including the standard hardware chosen in the Standard Hardware tab (marked <span class="badge bg-blue-lt">Standard</span>).</div>
                         <table class="table table-vcenter card-table">
                           <thead><tr><th>Item</th><th>Category</th><th>Series</th><th>Leaf</th><th>Qty</th><th class="w-1"></th></tr></thead>
                           <tbody id="fb-hwc-links-tbody"></tbody>
                         </table>
-                        <div class="text-muted p-3" id="fb-hwc-links-empty">No custom hardware linked yet.</div>
+                        <div class="text-muted p-3" id="fb-hwc-links-empty">No hardware linked yet.</div>
                       </div>
                       <div class="tab-pane" id="fb-hwc-values" role="tabpanel">
+                        <div class="text-muted small mb-2 fb-hwc-includes-standard">Includes the standard hardware linked to this opening.</div>
                         <div class="text-muted small mb-3">Prep values for this opening. They start from the hardware's catalog standard; change one here to override it for this configuration only (the catalog is not touched), or reset it to go back to the standard. Recalculate the Hardware BOM after changing values.</div>
                         <div id="fb-hwc-resolved"></div>
                         <div class="text-muted p-3" id="fb-hwc-resolved-empty">No prep values yet &mdash; link hardware first.</div>
@@ -482,7 +494,7 @@
                           <i class="ti ti-alert-triangle me-1"></i>A prep value changed since the BOM was last generated. Recalculate to apply it.
                         </div>
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                          <div class="text-muted small">Parts from custom (non-standard) hardware and any manually added parts. Generate / Recalculate rebuilds the whole hardware BOM, standard and custom.</div>
+                          <div class="text-muted small">The whole hardware BOM for this opening: standard and custom hardware with their backers, covers and fasteners, plus any manually added parts. Generate / Recalculate rebuilds it.</div>
                           <button class="btn btn-primary btn-sm" onclick="fbGenerateHardwareParts()" data-permission="configurator.edit"><i class="ti ti-refresh me-1"></i>Generate / Recalculate</button>
                         </div>
                         <div class="table-responsive">
@@ -490,7 +502,17 @@
                             <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
                             <tbody id="fb-hwc-parts-tbody"></tbody>
                           </table>
-                          <div class="text-muted p-3" id="fb-hwc-parts-empty">No custom hardware parts yet &mdash; add hardware, then click Generate.</div>
+                          <div class="text-muted p-3" id="fb-hwc-parts-empty">No hardware parts yet &mdash; link hardware, then click Generate.</div>
+                        </div>
+                        <div class="mt-3 d-none" id="fb-hwc-parts-unsorted">
+                          <h5 class="mb-1">Not yet sorted</h5>
+                          <div class="text-muted small mb-2">Generated before backers, covers and fasteners were tied to their hardware. Click Generate / Recalculate to sort them into Standard or Custom.</div>
+                          <div class="table-responsive">
+                            <table class="table table-vcenter card-table">
+                              <thead><tr><th>Part</th><th>Product</th><th>Qty</th><th>Source</th><th class="w-1"></th></tr></thead>
+                              <tbody id="fb-hwc-parts-unsorted-tbody"></tbody>
+                            </table>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1133,12 +1155,13 @@ async function fbApplyStandardHardware() {
 
 // Standard = a VOS Standard catalog item; everything else is custom. The Standard and Custom
 // sections each show only their own links, prep values and BOM parts.
-const fbIsStdLink = (l) => !!(l.item && l.item.vos_standard);
+// `section` is computed by the API (a default strike/cover follows the item it accompanies).
+const fbIsStdLink = (l) => l.section ? l.section === 'standard' : !!(l.item && l.item.vos_standard);
 
-function fbHwLinkRowHtml(l) {
+function fbHwLinkRowHtml(l, showStd = false) {
   return `
     <tr>
-      <td>${esc(l.item.name)}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
+      <td>${esc(l.item.name)}${showStd && fbIsStdLink(l) ? ' <span class="badge bg-blue-lt">Standard</span>' : ''}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
       <td>${esc(l.item.category.name)}${l.item.subcategory ? ' - ' + esc(l.item.subcategory.name) : ''}</td>
       <td>${esc(l.series)}</td>
       <td>${esc(l.leaf)}</td>
@@ -1150,9 +1173,11 @@ function fbHwLinkRowHtml(l) {
 }
 
 function fbRenderHwLinks(links) {
-  [['hws', links.filter(fbIsStdLink)], ['hwc', links.filter(l => !fbIsStdLink(l))]].forEach(([prefix, subset]) => {
+  // Standard shows only standard hardware; Custom shows everything linked (standard rows are badged),
+  // so an opening that mixes both can be worked from either tab.
+  [['hws', links.filter(fbIsStdLink), false], ['hwc', links, true]].forEach(([prefix, subset, showStd]) => {
     document.getElementById(`fb-${prefix}-links-empty`).style.display = subset.length ? 'none' : 'block';
-    document.getElementById(`fb-${prefix}-links-tbody`).innerHTML = subset.map(fbHwLinkRowHtml).join('');
+    document.getElementById(`fb-${prefix}-links-tbody`).innerHTML = subset.map(l => fbHwLinkRowHtml(l, showStd)).join('');
     document.getElementById(`fb-${prefix}-linked-count`).textContent = subset.length;
   });
   applyActionPermissions();
@@ -1214,9 +1239,9 @@ function fbPrepStatusHtml(linkId, v, canEdit) {
   return v.is_calculated ? '<span class="badge bg-secondary-lt">Calculated</span>' : '<span class="text-muted small">Catalog</span>';
 }
 
-function fbPrepLinkHtml(l, canEdit) {
+function fbPrepLinkHtml(l, canEdit, showStd = false) {
   return `<div class="card card-sm mb-3"><div class="card-header">
-      <h4 class="card-title mb-0">${esc(l.item_name)}</h4>
+      <h4 class="card-title mb-0">${esc(l.item_name)}${showStd && l.section === 'standard' ? ' <span class="badge bg-blue-lt ms-1">Standard</span>' : ''}</h4>
       <div class="card-actions text-muted small">${esc(l.category || '')}${l.series ? ' · ' + esc(l.series) : ''}${l.leaf && l.leaf !== 'both' ? ' · ' + esc(l.leaf) : ''}</div>
     </div>
     <div class="table-responsive"><table class="table table-vcenter card-table table-sm mb-0"><tbody>
@@ -1234,8 +1259,8 @@ async function fbLoadHwResolvedValues() {
     const data = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-values`);
     const canEdit = !!fbSelectedDetail?.can_edit && hasPermission('configurator.edit');
     const links = (data.links || []).filter(l => l.values.length);
-    [['hws', links.filter(l => l.vos_standard)], ['hwc', links.filter(l => !l.vos_standard)]].forEach(([prefix, subset]) => {
-      document.getElementById(`fb-${prefix}-resolved`).innerHTML = subset.map(l => fbPrepLinkHtml(l, canEdit)).join('');
+    [['hws', links.filter(l => l.section === 'standard'), false], ['hwc', links, true]].forEach(([prefix, subset, showStd]) => {
+      document.getElementById(`fb-${prefix}-resolved`).innerHTML = subset.map(l => fbPrepLinkHtml(l, canEdit, showStd)).join('');
       document.getElementById(`fb-${prefix}-resolved-empty`).style.display = subset.length ? 'none' : 'block';
     });
   } catch (err) { /* non-fatal: prep values are shown for convenience; the BOM does not depend on this call */ }
@@ -1259,15 +1284,15 @@ function fbShowBomStale() {
   ['hws', 'hwc'].forEach(prefix => document.getElementById(`fb-${prefix}-bom-stale`).classList.toggle('d-none', !fbPrepStale));
 }
 
-// BOM parts: those generated from a standard link belong to Standard; custom links' parts and
-// manual/unlinked parts belong to Custom.
+// BOM parts follow the section of the link they were generated from, so a hardware item's backers,
+// covers (default accessories) and fasteners stay with it. Manual parts have no link and belong to
+// Custom. Auto-generated rows from before backers/fasteners were attributed have no section yet:
+// they are listed (never hidden) in a "not yet sorted" group in both tabs until Recalculate.
 function fbRenderHwParts(parts) {
-  const stdLinkIds = new Set((fbSelectedDetail?.hardware_links || []).filter(fbIsStdLink).map(l => l.id));
-  const isStdPart = (p) => p.hwlib_link_id != null && stdLinkIds.has(p.hwlib_link_id);
   const sourceBadge = { item: 'bg-blue-lt', backer: 'bg-azure-lt', fastener: 'bg-purple-lt', manual: 'bg-secondary-lt' };
-  const rowHtml = (p) => `
+  const rowHtml = (p, showStd = false) => `
     <tr>
-      <td>${esc(p.formatted_label)}</td>
+      <td>${esc(p.formatted_label)}${showStd && p.section === 'standard' ? ' <span class="badge bg-blue-lt ms-1">Standard</span>' : ''}</td>
       <td>${p.product
         ? `${esc(p.product.part_number)}<div class="text-muted small">${esc(p.product.description || '')}</div>`
         : `<span class="badge bg-orange-lt">Special order</span><div class="text-muted small">${esc([p.manufacturer, p.model_number].filter(Boolean).join(' · '))}</div>`}</td>
@@ -1277,10 +1302,16 @@ function fbRenderHwParts(parts) {
         ${!p.is_auto_generated ? `<button type="button" class="btn btn-sm btn-icon text-danger" onclick="fbDeleteHwPart(${p.id})" data-permission="configurator.edit"><i class="ti ti-trash"></i></button>` : ''}
       </td>
     </tr>`;
-  [['hws', parts.filter(isStdPart)], ['hwc', parts.filter(p => !isStdPart(p))]].forEach(([prefix, subset]) => {
-    document.getElementById(`fb-${prefix}-parts-empty`).style.display = subset.length ? 'none' : 'block';
-    document.getElementById(`fb-${prefix}-parts-tbody`).innerHTML = subset.map(rowHtml).join('');
+  const unsorted = parts.filter(p => !p.section && p.is_auto_generated);
+  const sorted = parts.filter(p => !(!p.section && p.is_auto_generated));
+  // Standard: its own parts, plus (until Recalculate) the unsorted group. Custom: the whole BOM.
+  [['hws', sorted.filter(p => p.section === 'standard'), false, true], ['hwc', parts, true, false]].forEach(([prefix, subset, showStd, withUnsorted]) => {
+    const extra = withUnsorted ? unsorted : [];
+    document.getElementById(`fb-${prefix}-parts-empty`).style.display = subset.length || extra.length ? 'none' : 'block';
+    document.getElementById(`fb-${prefix}-parts-tbody`).innerHTML = subset.map(p => rowHtml(p, showStd)).join('');
     document.getElementById(`fb-${prefix}-bom-count`).textContent = subset.length;
+    document.getElementById(`fb-${prefix}-parts-unsorted`).classList.toggle('d-none', !extra.length);
+    document.getElementById(`fb-${prefix}-parts-unsorted-tbody`).innerHTML = extra.map(p => rowHtml(p)).join('');
   });
   applyActionPermissions();
 }

@@ -10,6 +10,9 @@ use App\Models\ConfiguratorHwlibLink;
 use App\Models\ConfiguratorHwlibLinkValue;
 use App\Models\ConfiguratorHwlibVariable;
 use App\Models\DoorFrameConfiguration;
+use App\Models\DoorFrameHardwarePart;
+use App\Models\Product;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -179,5 +182,47 @@ class ConfiguratorHardwareSectionsTest extends TestCase
         }
         $this->assertStringContainsString('id="fb-hardware-add-form"', $html, 'the add form moved into Custom > Add Hardware');
         $this->assertStringContainsString('id="fb-hws-sections"', $html, 'the standard selection table is still there');
+
+        // The Custom sections show everything linked (standard items badged), so a mixed opening can be
+        // worked from either tab; the Standard sections stay standard-only.
+        $this->assertSame(2, substr_count($html, 'fb-hwc-includes-standard'));
+        $this->assertStringContainsString("['hwc', links, true]", $html, 'custom linked hardware = all links');
+        $this->assertStringContainsString("['hwc', parts, true, false]", $html, 'custom BOM = all parts');
+        $this->assertStringContainsString("links.filter(fbIsStdLink), false]", $html, 'standard linked hardware = standard only');
+    }
+
+    public function test_accessories_follow_their_parents_section_and_parts_report_their_section(): void
+    {
+        $category = ConfiguratorHwlibCategory::first();
+        $cover = ConfiguratorHwlibItem::create(['category_id' => $category->id, 'name' => 'Std Cover', 'vos_standard' => false]);
+        $lock = ConfiguratorHwlibItem::create(['category_id' => $category->id, 'name' => 'Std Lock', 'vos_standard' => true, 'default_cover_item_id' => $cover->id]);
+        $coverLink = ConfiguratorHwlibLink::create(['configuration_id' => $this->config->id, 'item_id' => $cover->id, 'quantity' => 1, 'series' => 'Standard', 'leaf' => 'both']);
+        $lockLink = ConfiguratorHwlibLink::create(['configuration_id' => $this->config->id, 'item_id' => $lock->id, 'quantity' => 1, 'series' => 'Standard', 'leaf' => 'both']);
+
+        $supplier = Supplier::create(['name' => 'Sec Supplier']);
+        $product = Product::create(['sku' => 'SEC-1', 'description' => 'Sec part', 'supplier_id' => $supplier->id]);
+        $part = fn (string $label, string $source, ?int $linkId, bool $auto) => DoorFrameHardwarePart::create([
+            'configuration_id' => $this->config->id, 'part_label' => $label, 'product_id' => $product->id, 'quantity' => 1,
+            'source_type' => $source, 'hwlib_link_id' => $linkId, 'is_auto_generated' => $auto,
+        ]);
+        $part('Lock', 'item', $lockLink->id, true);
+        $part('Lock backer', 'backer', $lockLink->id, true);
+        $part('Cover', 'item', $coverLink->id, true);
+        $part('Custom closer backer', 'backer', $this->customLink->id, true);
+        $part('Old generated row', 'backer', null, true);
+        $part('Hand added', 'manual', null, false);
+
+        $detail = $this->getJson("/api/v1/door-frame-configurations/{$this->config->id}")->assertOk()->json('configuration');
+
+        $linkSections = collect($detail['hardware_links'])->mapWithKeys(fn ($l) => [$l['item']['name'] => $l['section']]);
+        $this->assertSame('standard', $linkSections['Std Lock']);
+        $this->assertSame('standard', $linkSections['Std Cover'], 'a default cover stays with its lock even though it is not flagged standard itself');
+        $this->assertSame('custom', $linkSections['Custom Closer']);
+
+        $partSections = collect($detail['hardware_parts'])->mapWithKeys(fn ($p) => [$p['part_label'] => $p['section']]);
+        $this->assertSame(['Lock' => 'standard', 'Lock backer' => 'standard', 'Cover' => 'standard', 'Custom closer backer' => 'custom',
+            'Old generated row' => null, 'Hand added' => null], $partSections->all());
+
+        $this->assertSame('standard', $this->resolved($coverLink)['section']);
     }
 }
