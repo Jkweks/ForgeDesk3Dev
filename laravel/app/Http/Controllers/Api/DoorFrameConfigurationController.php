@@ -70,6 +70,7 @@ class DoorFrameConfigurationController extends Controller
                         'door_tags' => $config->doors->pluck('door_tag')->implode(', '),
                         'is_complete' => $config->isComplete(),
                         'can_edit' => $config->canEdit(),
+                        'can_edit_hardware' => $config->canEditHardware(),
                         'work_order_id' => $config->work_order_id,
                         'work_order_release_token' => $config->workOrder?->release_token,
                         'created_at' => $config->created_at->format('Y-m-d H:i:s'),
@@ -108,6 +109,7 @@ class DoorFrameConfigurationController extends Controller
                 'doorConfigs.parts.product',
                 'hardwareLinks.item.category', 'hardwareLinks.item.subcategory', 'hardwareLinks.functions',
                 'hardwareParts.product',
+                'appliedHardwareSets',
                 'createdBy',
             ])->findOrFail($id);
 
@@ -393,7 +395,7 @@ class DoorFrameConfigurationController extends Controller
         HwlibBomGenerator $hwGen,
         \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge
     ) {
-        $source = DoorFrameConfiguration::with(['openingSpecs', 'frameConfig', 'doorConfigs', 'hardwareLinks.values'])
+        $source = DoorFrameConfiguration::with(['openingSpecs', 'frameConfig', 'doorConfigs', 'hardwareLinks.values', 'appliedHardwareSets'])
             ->findOrFail($id);
 
         $validator = Validator::make($request->all(), [
@@ -514,6 +516,14 @@ class DoorFrameConfigurationController extends Controller
                             'value_text' => $v->value_text,
                         ]);
                     }
+                }
+
+                // Keep the copies in sync with any hardware set the source follows.
+                foreach ($source->appliedHardwareSets as $set) {
+                    DB::table('door_frame_configuration_hwlib_sets')->insert([
+                        'configuration_id' => $new->id, 'set_id' => $set->id,
+                        'applied_at' => $set->pivot->applied_at, 'created_at' => now(), 'updated_at' => now(),
+                    ]);
                 }
 
                 $created[] = $new;
@@ -1337,10 +1347,10 @@ class DoorFrameConfigurationController extends Controller
                 'doors',
             ])->findOrFail($id);
 
-            if (! in_array($config->status, ['draft', 'reserved'])) {
+            if (! in_array($config->status, ['draft', 'reserved', 'cut_released'])) {
                 return response()->json([
                     'error' => 'Invalid status',
-                    'message' => 'Only draft or reserved configurations can be released',
+                    'message' => 'Only draft, reserved or cut-released configurations can be released',
                 ], 422);
             }
 
@@ -1392,6 +1402,12 @@ class DoorFrameConfigurationController extends Controller
                     'error' => 'No work order',
                     'message' => 'Configuration must be tied to a work order before it can be released.',
                 ], 422);
+            }
+
+            // Withheld cut lists (e.g. precut doors) can be set here for a straight release;
+            // from "cut_released" the choice made then stands (it is already in CutFlow).
+            if ($config->status !== 'cut_released') {
+                $this->applyCutflowFlags($config);
             }
 
             $config->status = 'released';
@@ -1465,6 +1481,159 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Read the "send frame / send door to CutFlow" choices from the request (each defaults to
+     * whatever is already stored) and set them on the configuration; the caller saves.
+     */
+    private function applyCutflowFlags(DoorFrameConfiguration $config): void
+    {
+        foreach (['cutflow_include_frame', 'cutflow_include_door'] as $flag) {
+            if (request()->has($flag)) {
+                $config->{$flag} = request()->boolean($flag);
+            }
+        }
+    }
+
+    /**
+     * Release to CutFlow only: sends the cut list so cutting can start after validation, locks the
+     * opening/frame/door (their cut data has gone out), but leaves hardware editable until the
+     * full release. Honors the frame/door withhold flags.
+     */
+    public function cutRelease(
+        Request $request,
+        $id,
+        \App\Services\Configurator\ElevationConfigurationMatcher $matcher,
+        \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge
+    ) {
+        $config = DoorFrameConfiguration::with(['openingSpecs', 'frameConfig', 'doorConfigs', 'doors'])->findOrFail($id);
+
+        if (! in_array($config->status, ['draft', 'reserved'], true)) {
+            return response()->json([
+                'error' => 'Invalid status',
+                'message' => 'Only draft or reserved configurations can be released to CutFlow.',
+            ], 422);
+        }
+
+        if (! $request->boolean('confirm_dimensions')) {
+            return response()->json([
+                'error' => 'Confirmation required',
+                'message' => 'Confirm that all dimensions are up to date before releasing to CutFlow.',
+            ], 422);
+        }
+
+        $this->applyCutflowFlags($config);
+        if (! $config->cutflow_include_frame && ! $config->cutflow_include_door) {
+            return response()->json([
+                'error' => 'Nothing to send',
+                'message' => 'Both the frame and door cut lists are withheld — leave at least one to send, or release the opening without CutFlow.',
+            ], 422);
+        }
+
+        $preflight = $this->releasePreflightData($config, true);
+        if (! empty($preflight['blockers'])) {
+            return response()->json([
+                'error' => 'Cannot release',
+                'message' => implode(' ', $preflight['blockers']),
+                'blockers' => $preflight['blockers'],
+            ], 422);
+        }
+
+        $workOrder = $config->workOrder;
+        if (! $workOrder) {
+            return response()->json([
+                'error' => 'No work order',
+                'message' => 'Configuration must be tied to a work order before it can be released to CutFlow.',
+            ], 422);
+        }
+
+        $config->status = 'cut_released';
+        $config->save();
+
+        $reservation = null;
+        try {
+            $reservation = $reservationBridge->reserve($config, auth()->user())['reservation'];
+        } catch (\Throwable $e) {
+            Log::warning('Failed to sync job reservation on cut release', ['config_id' => $id, 'message' => $e->getMessage()]);
+        }
+
+        $cutFlowResult = null;
+        try {
+            $cutFlowResult = app(\App\Services\Configurator\CutFlowExportService::class)->exportWorkOrder($workOrder);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to export cut list to CutFlow on cut release', ['config_id' => $id, 'work_order_id' => $workOrder->id, 'message' => $e->getMessage()]);
+        }
+
+        Log::info('Configuration released to CutFlow', [
+            'config_id' => $id,
+            'released_by' => auth()->id(),
+            'work_order_id' => $workOrder->id,
+            'cutflow_sent' => $cutFlowResult['sent'] ?? false,
+            'include_frame' => $config->cutflow_include_frame,
+            'include_door' => $config->cutflow_include_door,
+        ]);
+
+        return response()->json([
+            'message' => 'Released to CutFlow. Hardware stays editable until the full release.',
+            'configuration' => [
+                'id' => $config->id,
+                'status' => $config->status,
+                'status_label' => $config->status_label,
+                'work_order_id' => $config->work_order_id,
+                'job_reservation_id' => $reservation?->id,
+                'cutflow_sent' => $cutFlowResult['sent'] ?? false,
+            ],
+        ]);
+    }
+
+    /**
+     * Change which cut lists (frame / door) go to CutFlow for a cut-released opening, then rebuild
+     * the work order's generated lines to match. Refused once any cut has been logged.
+     */
+    public function updateCutflowOptions(Request $request, $id, \App\Services\Configurator\CutFlowExportService $cutFlow)
+    {
+        $config = DoorFrameConfiguration::with('workOrder')->findOrFail($id);
+
+        if (! in_array($config->status, ['cut_released', 'released'], true)) {
+            return response()->json(['error' => 'Invalid status', 'message' => 'The opening has not been released to CutFlow.'], 422);
+        }
+
+        $data = $request->validate([
+            'cutflow_include_frame' => 'required|boolean',
+            'cutflow_include_door' => 'required|boolean',
+        ]);
+        if (! $data['cutflow_include_frame'] && ! $data['cutflow_include_door']) {
+            return response()->json(['error' => 'Nothing to send', 'message' => 'Leave at least one of the frame or door cut lists to send.'], 422);
+        }
+
+        $cut = $config->workOrder ? $cutFlow->status($config->workOrder) : null;
+        if ($cut && $cut['cut_started']) {
+            return response()->json(['error' => 'Cutting has started', 'message' => 'Cutting has started on this work order, so what is sent can no longer change.'], 422);
+        }
+        if ($cut && $cut['diverged'] && ! $request->boolean('confirm_discard_cut_edits')) {
+            return response()->json([
+                'error' => 'Confirmation required',
+                'code' => 'cut_list_edits',
+                'message' => 'The work order\'s cut list has hand edits. Changing this rebuilds the generated lines and discards edits to them.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($config, $data, $cutFlow) {
+            $config->update($data);
+            if ($config->workOrder) {
+                $cutFlow->rebuildWorkOrder($config->workOrder);
+            }
+        });
+
+        return response()->json([
+            'message' => 'CutFlow cut lists updated',
+            'configuration' => [
+                'id' => $config->id,
+                'cutflow_include_frame' => $config->cutflow_include_frame,
+                'cutflow_include_door' => $config->cutflow_include_door,
+            ],
+        ]);
+    }
+
+    /**
      * Everything to check before release, without changing anything: hard blockers, softer
      * warnings, stock shortages for the job, and the two confirmations release requires.
      */
@@ -1472,18 +1641,25 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
-        return response()->json($this->releasePreflightData($config));
+        return response()->json($this->releasePreflightData($config, request()->query('mode') === 'cut'));
     }
 
-    private function releasePreflightData(DoorFrameConfiguration $config): array
+    /**
+     * @param  bool  $cutOnly  Preflight for the CutFlow-only release: hardware isn't locked, so it
+     *                         is neither a blocker nor attested.
+     */
+    private function releasePreflightData(DoorFrameConfiguration $config, bool $cutOnly = false): array
     {
         $config->load(['openingSpecs', 'frameConfig.parts', 'doorConfigs.parts', 'hardwareLinks', 'hardwareParts', 'workOrder', 'businessJob']);
 
         $blockers = [];
         $warnings = [];
 
-        if (! in_array($config->status, ['draft', 'reserved'], true)) {
-            $blockers[] = 'Only a draft or reserved configuration can be released.';
+        $allowed = $cutOnly ? ['draft', 'reserved'] : ['draft', 'reserved', 'cut_released'];
+        if (! in_array($config->status, $allowed, true)) {
+            $blockers[] = $cutOnly
+                ? 'Only a draft or reserved configuration can be released to CutFlow.'
+                : 'Only a draft, reserved or cut-released configuration can be released.';
         }
         foreach ($config->getValidationErrors() as $error) {
             $blockers[] = $error.'.';
@@ -1494,7 +1670,7 @@ class DoorFrameConfigurationController extends Controller
         if ($config->includesDoor() && $config->doorConfigs->flatMap(fn ($dc) => $dc->parts)->isEmpty()) {
             $blockers[] = 'Door parts have not been generated.';
         }
-        if ($config->hardwareLinks->isNotEmpty() && $config->hardwareParts->isEmpty()) {
+        if (! $cutOnly && $config->hardwareLinks->isNotEmpty() && $config->hardwareParts->isEmpty()) {
             $blockers[] = 'Hardware is linked but its parts have not been generated.';
         }
         if ($config->hardwareLinks->isEmpty()) {
@@ -1538,10 +1714,12 @@ class DoorFrameConfigurationController extends Controller
             'warnings' => array_values(array_unique($warnings)),
             'shortages' => $shortages,
             'cut_list' => $cutList,
-            'confirmations' => [
+            'confirmations' => array_values(array_filter([
                 ['key' => 'confirm_dimensions', 'label' => 'All dimensions are up to date for this opening.'],
-                ['key' => 'confirm_hardware', 'label' => 'All hardware has been added for this opening.'],
-            ],
+                $cutOnly ? null : ['key' => 'confirm_hardware', 'label' => 'All hardware has been added for this opening.'],
+            ])),
+            'cutflow_include_frame' => (bool) $config->cutflow_include_frame,
+            'cutflow_include_door' => (bool) $config->cutflow_include_door,
         ];
     }
 
@@ -1554,10 +1732,10 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::with(['workOrder', 'businessJob'])->findOrFail($id);
 
-        if ($config->status !== 'released') {
+        if (! in_array($config->status, ['released', 'cut_released'], true)) {
             return response()->json([
                 'error' => 'Cannot un-release',
-                'message' => 'Only a released configuration can be taken back to reserved (once fabrication is in progress it is locked).',
+                'message' => 'Only a released or cut-released configuration can be taken back to reserved (once fabrication is in progress it is locked).',
             ], 422);
         }
 
@@ -1719,7 +1897,7 @@ class DoorFrameConfigurationController extends Controller
         DoorFrameConfiguration $config,
         \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge
     ): void {
-        if ($config->status !== 'reserved') {
+        if (! in_array($config->status, ['reserved', 'cut_released'], true)) {
             return;
         }
 
@@ -1892,6 +2070,10 @@ class DoorFrameConfigurationController extends Controller
             'hardware_parts' => $config->hardwareParts->map(fn ($p) => $this->formatPart($p) + ['section' => $sections[$p->hwlib_link_id] ?? null]),
             'is_complete' => $config->isComplete(),
             'can_edit' => $config->canEdit(),
+            'can_edit_hardware' => $config->canEditHardware(),
+            'cutflow_include_frame' => (bool) $config->cutflow_include_frame,
+            'cutflow_include_door' => (bool) $config->cutflow_include_door,
+            'applied_hardware_sets' => $config->appliedHardwareSets->map(fn ($set) => ['id' => $set->id, 'name' => $set->name, 'is_pair' => (bool) $set->is_pair])->values(),
             'cut_list' => $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder) : null,
             'validation_errors' => $config->getValidationErrors(),
             'created_at' => $config->created_at->format('Y-m-d H:i:s'),
@@ -2056,6 +2238,7 @@ class DoorFrameConfigurationController extends Controller
             'series' => $link->series,
             'leaf' => $link->leaf,
             'notes' => $link->notes,
+            'source_set_id' => $link->source_set_id,
             'functions' => $link->functions->map(fn ($f) => [
                 'id' => $f->id,
                 'code' => $f->code,
@@ -2072,7 +2255,7 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',
@@ -2164,20 +2347,58 @@ class DoorFrameConfigurationController extends Controller
     }
 
     /**
+     * Links applied from a hardware set follow that set's edits. Hand-editing one detaches the
+     * whole set from this opening (every link it created becomes an ordinary manual link and the
+     * opening stops re-syncing from the set), so it needs an explicit confirmation first.
+     * Returns a response to send back when confirmation is missing, null when it's fine to proceed.
+     */
+    private function confirmSetDecouple(Request $request, DoorFrameConfiguration $config, ConfiguratorHwlibLink $link): ?\Illuminate\Http\JsonResponse
+    {
+        if (! $link->source_set_id) {
+            return null;
+        }
+
+        if (! $request->boolean('confirm_decouple')) {
+            $setName = $link->sourceSet?->name ?? 'a hardware set';
+
+            return response()->json([
+                'error' => 'Confirmation required',
+                'code' => 'set_decouple',
+                'message' => "This item came from the hardware set \"{$setName}\". Editing it detaches the whole set from this opening: all of its hardware stays here as normal editable items, but later changes to the set will no longer update this opening.",
+                'set_id' => $link->source_set_id,
+                'set_name' => $setName,
+            ], 409);
+        }
+
+        $setId = $link->source_set_id;
+        DB::transaction(function () use ($config, $setId) {
+            ConfiguratorHwlibLink::where('configuration_id', $config->id)->where('source_set_id', $setId)->update(['source_set_id' => null]);
+            DB::table('door_frame_configuration_hwlib_sets')->where('configuration_id', $config->id)->where('set_id', $setId)->delete();
+        });
+        $link->source_set_id = null;
+
+        return null;
+    }
+
+    /**
      * Update a hardware link's quantity/series/leaf/overrides.
      */
     public function updateHardwareLink(Request $request, $id, $linkId)
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',
             ], 422);
         }
 
-        $link = ConfiguratorHwlibLink::where('configuration_id', $config->id)->findOrFail($linkId);
+        $link = ConfiguratorHwlibLink::with('sourceSet')->where('configuration_id', $config->id)->findOrFail($linkId);
+
+        if ($blocked = $this->confirmSetDecouple($request, $config, $link)) {
+            return $blocked;
+        }
 
         $validator = Validator::make($request->all(), [
             'quantity' => 'nullable|integer|min:1',
@@ -2237,14 +2458,18 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::with('doorConfigs')->findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',
             ], 422);
         }
 
-        $link = ConfiguratorHwlibLink::with('item.category.variables')->where('configuration_id', $config->id)->findOrFail($linkId);
+        $link = ConfiguratorHwlibLink::with('item.category.variables', 'sourceSet')->where('configuration_id', $config->id)->findOrFail($linkId);
+
+        if ($blocked = $this->confirmSetDecouple($request, $config, $link)) {
+            return $blocked;
+        }
 
         $validator = Validator::make($request->all(), [
             'values' => 'required|array|min:1',
@@ -2311,18 +2536,23 @@ class DoorFrameConfigurationController extends Controller
     /**
      * Remove a hardware item from a configuration.
      */
-    public function destroyHardwareLink($id, $linkId)
+    public function destroyHardwareLink(Request $request, $id, $linkId)
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',
             ], 422);
         }
 
-        $link = ConfiguratorHwlibLink::where('configuration_id', $config->id)->findOrFail($linkId);
+        $link = ConfiguratorHwlibLink::with('sourceSet')->where('configuration_id', $config->id)->findOrFail($linkId);
+
+        if ($blocked = $this->confirmSetDecouple($request, $config, $link)) {
+            return $blocked;
+        }
+
         $link->delete();
 
         return response()->json(['message' => 'Hardware item removed successfully']);
@@ -2389,7 +2619,7 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::with(['hardwareLinks.item', 'openingSpecs'])->findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',
@@ -2457,7 +2687,7 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',
@@ -2496,7 +2726,7 @@ class DoorFrameConfigurationController extends Controller
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 
-        if (! $config->canEdit()) {
+        if (! $config->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',

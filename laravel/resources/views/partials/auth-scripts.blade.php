@@ -481,7 +481,11 @@
         fullResponse: error
       });
 
-      throw new Error(error.message || `HTTP ${response.status}`);
+      // Carry the machine-readable code so callers can branch on it (e.g. 'set_decouple').
+      const failure = new Error(error.message || `HTTP ${response.status}`);
+      failure.code = error.code;
+      failure.data = error;
+      throw failure;
     }
 
     // No-content responses (e.g. DELETE returning 204) have no body to parse

@@ -583,6 +583,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/door-frame-configurations/{id}/unreserve', [DoorFrameConfigurationController::class, 'unreserveConfiguration'])->middleware('permission:configurator.release');
         Route::get('/door-frame-configurations/{id}/release-preflight', [DoorFrameConfigurationController::class, 'releasePreflight'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release'])->middleware('permission:configurator.release');
+        Route::post('/door-frame-configurations/{id}/cut-release', [DoorFrameConfigurationController::class, 'cutRelease'])->middleware('permission:configurator.release');
+        Route::put('/door-frame-configurations/{id}/cutflow-options', [DoorFrameConfigurationController::class, 'updateCutflowOptions'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/unrelease', [DoorFrameConfigurationController::class, 'unrelease'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/create-reservation', [DoorFrameConfigurationController::class, 'createReservation'])->middleware('permission:configurator.release');
         Route::get('/door-frame-configurations/{id}/export-pdf', [DoorFrameConfigurationController::class, 'exportPdf'])->middleware('permission:configurator.view');

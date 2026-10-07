@@ -159,7 +159,7 @@ class CutFlowExportService
     }
 
     /**
-     * Every released/in-progress/completed configuration's lineal (length-
+     * Every cut-released/released/in-progress/completed configuration's lineal (length-
      * based) frame + door extrusions for this work order — the same "cut
      * list only" filter DoorFrameConfigurationController::exportCsv() uses
      * (component/fastener rows and hardware are never lineal stock cuts).
@@ -170,7 +170,7 @@ class CutFlowExportService
             'doors', 'frameConfig.parts.product', 'doorConfigs.parts.product',
         ])
             ->where('work_order_id', $workOrder->id)
-            ->whereIn('status', ['released', 'in_progress', 'completed'])
+            ->whereIn('status', ['cut_released', 'released', 'in_progress', 'completed'])
             ->get();
 
         $rows = collect();
@@ -178,9 +178,10 @@ class CutFlowExportService
         foreach ($configs as $config) {
             $elevation = $config->doors->pluck('door_tag')->implode('/');
 
+            // Withheld sections (e.g. doors ordered precut) never reach CutFlow.
             $parts = collect()
-                ->concat($config->frameConfig?->parts ?? [])
-                ->concat($config->doorConfigs->flatMap(fn ($dc) => $dc->parts))
+                ->concat($config->cutflow_include_frame ? ($config->frameConfig?->parts ?? []) : [])
+                ->concat($config->cutflow_include_door ? $config->doorConfigs->flatMap(fn ($dc) => $dc->parts) : [])
                 ->filter(fn ($p) => $p->source_type !== 'component' && $p->unit_type === 'length' && $p->calculated_length > 0);
 
             foreach ($parts as $part) {

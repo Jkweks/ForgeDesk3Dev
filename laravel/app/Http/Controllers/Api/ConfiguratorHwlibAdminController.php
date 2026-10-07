@@ -658,7 +658,7 @@ class ConfiguratorHwlibAdminController extends Controller
         $reappliedTo = [];
         $skippedReleased = [];
         foreach ($set->appliedConfigurations as $configuration) {
-            if (! $configuration->canEdit()) {
+            if (! $configuration->canEditHardware()) {
                 $skippedReleased[] = $configuration->id;
 
                 continue;
@@ -699,7 +699,7 @@ class ConfiguratorHwlibAdminController extends Controller
             ], 422);
         }
 
-        $notEditable = $configurations->reject(fn ($c) => $c->canEdit())->pluck('id');
+        $notEditable = $configurations->reject(fn ($c) => $c->canEditHardware())->pluck('id');
         if ($notEditable->isNotEmpty()) {
             return response()->json([
                 'message' => 'Validation failed',
@@ -750,7 +750,7 @@ class ConfiguratorHwlibAdminController extends Controller
         $set = ConfiguratorHwlibSet::findOrFail($id);
         $configuration = DoorFrameConfiguration::findOrFail($configurationId);
 
-        if (! $configuration->canEdit()) {
+        if (! $configuration->canEditHardware()) {
             return response()->json([
                 'error' => 'Cannot edit configuration',
                 'message' => 'Configuration is not in editable status',

@@ -20,6 +20,8 @@ class DoorFrameConfiguration extends Model
         'status',
         'archived',
         'archived_at',
+        'cutflow_include_frame',
+        'cutflow_include_door',
         'notes',
         'created_by_id',
     ];
@@ -27,6 +29,8 @@ class DoorFrameConfiguration extends Model
     protected $casts = [
         'quantity' => 'integer',
         'archived' => 'boolean',
+        'cutflow_include_frame' => 'boolean',
+        'cutflow_include_door' => 'boolean',
         'archived_at' => 'datetime',
     ];
 
@@ -46,6 +50,7 @@ class DoorFrameConfiguration extends Model
     public static $statuses = [
         'draft' => 'Draft',
         'reserved' => 'Reserved',
+        'cut_released' => 'Cut Released',
         'released' => 'Released',
         'in_progress' => 'In Progress',
         'completed' => 'Completed',
@@ -243,6 +248,15 @@ class DoorFrameConfiguration extends Model
     public function canEdit()
     {
         return in_array($this->status, ['draft', 'reserved', 'on_hold']);
+    }
+
+    /**
+     * Hardware (links, prep values, BOM) stays editable once the cut list has gone to CutFlow
+     * ("cut_released"); the rest of the opening locks until it is un-released.
+     */
+    public function canEditHardware()
+    {
+        return $this->canEdit() || $this->status === 'cut_released';
     }
 
     /**

@@ -74,7 +74,8 @@
                 <div class="btn-group" role="group">
                   <button class="btn btn-outline-secondary" id="fb-reserve-toggle-btn" onclick="fbToggleReserve()" style="display:none" data-permission="configurator.release"><i class="ti ti-bookmark me-1"></i>Reserve</button>
                   <button class="btn btn-outline-secondary" id="fb-reserve-btn" onclick="fbCreateReservation()" style="display:none" data-permission="configurator.release"><i class="ti ti-package me-1"></i>Create Reservation</button>
-                  <button class="btn btn-success" id="fb-release-btn" onclick="fbOpenRelease()" data-permission="configurator.release"><i class="ti ti-lock me-1"></i>Release&hellip;</button>
+                  <button class="btn btn-outline-success" id="fb-cutrelease-btn" onclick="fbOpenRelease('cut')" style="display:none" data-permission="configurator.release" title="Send the cut list to CutFlow now; hardware stays editable"><i class="ti ti-cut me-1"></i>Release to CutFlow&hellip;</button>
+                  <button class="btn btn-success" id="fb-release-btn" onclick="fbOpenRelease('full')" data-permission="configurator.release"><i class="ti ti-lock me-1"></i>Release&hellip;</button>
                   <button class="btn btn-outline-danger" id="fb-unrelease-btn" onclick="fbUnrelease()" style="display:none" data-permission="configurator.release"><i class="ti ti-lock-open me-1"></i>Un-release</button>
                 </div>
                 <div class="btn-group" role="group">
@@ -341,6 +342,19 @@
                 </div>
 
                 <div class="tab-pane" id="fb-tab-hardware" role="tabpanel">
+                  <div class="card card-sm mb-3" id="fb-hwset-card">
+                    <div class="card-body">
+                      <div class="d-flex flex-wrap gap-2 align-items-end">
+                        <div class="flex-fill" style="min-width:220px">
+                          <label class="form-label mb-1">Apply a hardware set</label>
+                          <select class="form-select" id="fb-hwset-select"><option value="">— choose a set —</option></select>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="fb-hwset-apply-btn" onclick="fbApplyHardwareSet()" data-permission="configurator.edit"><i class="ti ti-package-import me-1"></i>Apply set</button>
+                      </div>
+                      <div class="form-text">Applying a set links all of its hardware to this opening. Those items follow later changes to the set; editing any of them detaches the set from this opening (after a confirmation) and leaves its hardware here as normal editable items.</div>
+                      <div id="fb-hwset-applied" class="mt-2"></div>
+                    </div>
+                  </div>
                   <ul class="nav nav-pills mb-3" role="tablist">
                     <li class="nav-item" role="presentation">
                       <a href="#fb-hw-sub-standard" class="nav-link active" data-bs-toggle="tab" role="tab"><i class="ti ti-checklist me-1"></i>Standard Hardware</a>
@@ -734,7 +748,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Release to production</h5>
+        <h5 class="modal-title" id="fb-release-title">Release to production</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="fb-release-body">Checking&hellip;</div>
@@ -1135,7 +1149,82 @@ function fbRenderStdHardware(links) {
   }).join('');
 }
 
+// ---- Hardware sets ----
+// Hardware applied from a set stays linked to it. Hand-editing one of those links detaches the whole
+// set from this opening, so the API asks for confirmation first (409 code 'set_decouple').
+let fbSetDecoupleConfirmed = false;
+
+function fbSetName(setId) {
+  const s = (fbSelectedDetail?.applied_hardware_sets || []).find(x => x.id == setId);
+  return s ? s.name : 'set';
+}
+
+// Runs one hardware-link request, asking before it detaches a set (asked once per user action).
+async function fbHwLinkCall(path, method, body) {
+  const send = (confirmDecouple) => authenticatedFetch(path, {
+    method, body: body || confirmDecouple ? JSON.stringify({ ...(body || {}), ...(confirmDecouple ? { confirm_decouple: true } : {}) }) : undefined,
+  });
+  try {
+    return await send(fbSetDecoupleConfirmed);
+  } catch (err) {
+    if (err.code !== 'set_decouple') throw err;
+    if (!confirm(err.message + '\n\nDetach the set and continue?')) { const cancel = new Error('Cancelled'); cancel.cancelled = true; throw cancel; }
+    fbSetDecoupleConfirmed = true;
+    return await send(true);
+  }
+}
+
+async function fbLoadHwSetOptions() {
+  const c = fbSelectedDetail;
+  const select = document.getElementById('fb-hwset-select');
+  if (!select || !c) return;
+  try {
+    const data = await authenticatedFetch(`/config/hwlib-sets?business_job_id=${c.business_job.id}`);
+    const isPair = c.opening_specs?.opening_type === 'pair';
+    const applied = new Set((c.applied_hardware_sets || []).map(x => x.id));
+    const hasType = !!c.opening_specs?.opening_type;
+    const sets = (data.sets || data || []).filter(x => !applied.has(x.id) && (!hasType || !!x.is_pair === isPair));
+    select.innerHTML = '<option value="">— choose a set —</option>' + sets.map(x => `<option value="${x.id}">${esc(x.name)}${x.is_pair ? ' (Pair)' : ''}</option>`).join('');
+  } catch (err) { /* non-fatal: the picker just stays empty */ }
+}
+
+function fbRenderHwSetCard() {
+  const c = fbSelectedDetail;
+  const card = document.getElementById('fb-hwset-card');
+  if (!card) return;
+  const canApply = !!c.can_edit_hardware;
+  document.getElementById('fb-hwset-select').disabled = !canApply;
+  document.getElementById('fb-hwset-apply-btn').disabled = !canApply;
+  const applied = c.applied_hardware_sets || [];
+  document.getElementById('fb-hwset-applied').innerHTML = applied.length
+    ? applied.map(x => `<span class="badge bg-purple-lt me-1">${esc(x.name)}${canApply ? ` <a href="#" class="text-reset ms-1" title="Remove this set and its hardware from the opening" onclick="fbRemoveHardwareSet(${x.id}); return false;"><i class="ti ti-x"></i></a>` : ''}</span>`).join('')
+    : '<span class="text-muted small">No set applied.</span>';
+  fbLoadHwSetOptions();
+}
+
+async function fbApplyHardwareSet() {
+  const setId = document.getElementById('fb-hwset-select').value;
+  if (!setId) { showNotification('Choose a hardware set first', 'warning'); return; }
+  try {
+    await authenticatedFetch(`/config/hwlib-sets/${setId}/apply`, { method: 'POST', body: JSON.stringify({ configuration_ids: [fbSelectedId] }) });
+    await fbLoadDetail();
+    const genRes = await fbGenerateWithDiffPrompt('hardware');
+    if (genRes) showNotification('Hardware set applied', 'success');
+    await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+async function fbRemoveHardwareSet(setId) {
+  if (!confirm('Remove this set from the opening? The hardware it added is removed too (hardware you added by hand stays).')) return;
+  try {
+    await authenticatedFetch(`/config/hwlib-sets/${setId}/apply/${fbSelectedId}`, { method: 'DELETE' });
+    await fbLoadDetail();
+    showNotification('Hardware set removed', 'success');
+  } catch (err) { showNotification(err.message, 'danger'); }
+}
+
 async function fbApplyStandardHardware() {
+  fbSetDecoupleConfirmed = false;
   const series = document.getElementById('fb-hws-series').value;
   const links = fbSelectedDetail?.hardware_links || [];
   const desired = new Map(); // itemId -> payload
@@ -1161,12 +1250,12 @@ async function fbApplyStandardHardware() {
       const want = desired.get(l.item.id);
       if (kept.has(l.item.id)) continue; // extra per-leaf link on the same item — leave as is
       if (!want) {
-        await authenticatedFetch(`${base}/${l.id}`, { method: 'DELETE' });
+        await fbHwLinkCall(`${base}/${l.id}`, 'DELETE');
         continue;
       }
       kept.add(l.item.id);
       // PUT without `values` so any per-link prep overrides survive.
-      await authenticatedFetch(`${base}/${l.id}`, { method: 'PUT', body: JSON.stringify(want) });
+      await fbHwLinkCall(`${base}/${l.id}`, 'PUT', want);
     }
     for (const [itemId, want] of desired) {
       if (!kept.has(itemId)) await authenticatedFetch(base, { method: 'POST', body: JSON.stringify({ item_id: itemId, ...want }) });
@@ -1175,7 +1264,7 @@ async function fbApplyStandardHardware() {
     const genRes = await fbGenerateWithDiffPrompt('hardware');
     if (genRes) showNotification('Standard hardware applied', 'success');
     await fbLoadDetail();
-  } catch (err) { showNotification(err.message, 'danger'); }
+  } catch (err) { if (err.cancelled) { await fbLoadDetail(); return; } showNotification(err.message, 'danger'); }
 }
 
 // Standard = a VOS Standard catalog item; everything else is custom. The Standard and Custom
@@ -1186,7 +1275,7 @@ const fbIsStdLink = (l) => l.section ? l.section === 'standard' : !!(l.item && l
 function fbHwLinkRowHtml(l, showStd = false) {
   return `
     <tr>
-      <td>${esc(l.item.name)}${showStd && fbIsStdLink(l) ? ' <span class="badge bg-blue-lt">Standard</span>' : ''}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
+      <td>${esc(l.item.name)}${showStd && fbIsStdLink(l) ? ' <span class="badge bg-blue-lt">Standard</span>' : ''}${l.source_set_id ? ` <span class="badge bg-purple-lt" title="Follows this hardware set; editing it detaches the set from this opening">Set: ${esc(fbSetName(l.source_set_id))}</span>` : ''}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
       <td>${esc(l.item.category.name)}${l.item.subcategory ? ' - ' + esc(l.item.subcategory.name) : ''}</td>
       <td>${esc(l.series)}</td>
       <td>${esc(l.leaf)}</td>
@@ -1229,10 +1318,11 @@ document.getElementById('fb-hardware-add-form').addEventListener('submit', async
 
 async function fbDeleteHwLink(linkId) {
   if (!confirm('Remove this hardware item?')) return;
+  fbSetDecoupleConfirmed = false;
   try {
-    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}`, { method: 'DELETE' });
+    await fbHwLinkCall(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}`, 'DELETE');
     await fbLoadDetail();
-  } catch (err) { showNotification(err.message, 'danger'); }
+  } catch (err) { if (!err.cancelled) showNotification(err.message, 'danger'); }
 }
 
 // Prep values: the effective value for each variable (override -> catalog -> formula -> default), editable
@@ -1282,7 +1372,7 @@ function fbPrepLinkHtml(l, canEdit, showStd = false) {
 async function fbLoadHwResolvedValues() {
   try {
     const data = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-values`);
-    const canEdit = !!fbSelectedDetail?.can_edit && hasPermission('configurator.edit');
+    const canEdit = !!fbSelectedDetail?.can_edit_hardware && hasPermission('configurator.edit');
     const links = (data.links || []).filter(l => l.values.length);
     [['hws', links.filter(l => l.section === 'standard'), false], ['hwc', links, true]].forEach(([prefix, subset, showStd]) => {
       document.getElementById(`fb-${prefix}-resolved`).innerHTML = subset.map(l => fbPrepLinkHtml(l, canEdit, showStd)).join('');
@@ -1292,15 +1382,15 @@ async function fbLoadHwResolvedValues() {
 }
 
 async function fbSavePrepValue(linkId, code, value) {
+  fbSetDecoupleConfirmed = false;
   try {
-    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}/values`, {
-      method: 'PUT', body: JSON.stringify({ values: { [code]: value } }),
-    });
+    await fbHwLinkCall(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}/values`, 'PUT', { values: { [code]: value } });
     fbPrepStale = true;
     fbShowBomStale();
-    await fbLoadHwResolvedValues();
+    if (fbSetDecoupleConfirmed) await fbLoadDetail(); // a set was just detached
+    else await fbLoadHwResolvedValues();
   } catch (err) {
-    showNotification(err.message, 'danger');
+    if (!err.cancelled) showNotification(err.message, 'danger');
     await fbLoadHwResolvedValues(); // put the field back to what is actually saved
   }
 }
@@ -1394,6 +1484,7 @@ async function fbLoadList() {
 
 function fbStatusBadgeClass(status) {
   if (status === 'reserved') return 'bg-blue-lt';
+  if (status === 'cut_released') return 'bg-teal-lt';
   if (status === 'released' || status === 'in_progress' || status === 'completed') return 'bg-green-lt';
   return 'bg-yellow-lt';
 }
@@ -1499,10 +1590,12 @@ function fbRenderDetail() {
     reserveToggleBtn.classList.add('btn-outline-secondary');
     reserveToggleBtn.innerHTML = '<i class="ti ti-bookmark me-1"></i>Reserve';
   }
-  document.getElementById('fb-release-btn').style.display = (isDraftOrReserved && c.is_complete) ? '' : 'none';
+  const isCutReleased = c.status === 'cut_released';
+  document.getElementById('fb-release-btn').style.display = ((isDraftOrReserved || isCutReleased) && c.is_complete) ? '' : 'none';
+  document.getElementById('fb-cutrelease-btn').style.display = (isDraftOrReserved && c.is_complete) ? '' : 'none';
   document.getElementById('fb-reserve-btn').style.display = (c.status === 'released' && !c.job_reservation) ? '' : 'none';
   const unreleaseBtn = document.getElementById('fb-unrelease-btn');
-  unreleaseBtn.style.display = c.status === 'released' ? '' : 'none';
+  unreleaseBtn.style.display = (c.status === 'released' || isCutReleased) ? '' : 'none';
   const cutStarted = !!(c.cut_list && c.cut_list.cut_started);
   unreleaseBtn.disabled = cutStarted;
   unreleaseBtn.title = cutStarted ? 'Cutting has started on this work order — it can no longer be un-released.' : 'Unlock this opening for edits (before cutting starts)';
@@ -1512,6 +1605,9 @@ function fbRenderDetail() {
     ? `<div class="alert alert-warning mb-0"><strong>Incomplete:</strong> ${c.validation_errors.map(esc).join(', ')}</div>` : '';
   if (c.status === 'released') {
     errBox.innerHTML += `<div class="alert alert-secondary mb-0 mt-2"><i class="ti ti-lock me-1"></i>Released and locked. ${cutStarted ? 'Cutting has started.' : 'Un-release to edit (until cutting starts).'}</div>`;
+  }
+  if (isCutReleased) {
+    errBox.innerHTML += `<div class="alert alert-info mb-0 mt-2"><i class="ti ti-cut me-1"></i>Released to CutFlow. The opening, frame and door are locked; <strong>hardware is still editable</strong> until the full release. ${fbCutflowSentText(c)}${cutStarted ? '' : ' <a href="#" onclick="fbOpenRelease(\'options\'); return false;">Change what is sent</a>'}</div>`;
   }
   if (c.cut_list && c.cut_list.diverged) {
     errBox.innerHTML += `<div class="alert alert-warning mb-0 mt-2"><i class="ti ti-alert-triangle me-1"></i><strong>Cut list edited by hand</strong> (${esc((c.cut_list.diverged_at || '').slice(0, 10))}) — it no longer matches this configuration's BOM. Check it before re-running this opening (e.g. after install damage).</div>`;
@@ -1597,6 +1693,7 @@ function fbRenderDetail() {
   document.getElementById('fb-hw-leaf-wrap').style.display = c.opening_specs?.opening_type === 'pair' ? '' : 'none';
   fbRenderHwCategorySelect();
   fbRenderHwLinks(c.hardware_links || []);
+  fbRenderHwSetCard();
   fbRenderStdHardware(c.hardware_links || []);
   fbRenderHwParts(c.hardware_parts || []);
   if ((c.hardware_links || []).length) {
@@ -2205,39 +2302,93 @@ async function fbUnreserveConfiguration() {
 }
 
 // ---- Release (preflight + confirmations) ----
+// Modes: 'full' = release & lock; 'cut' = release to CutFlow only (hardware stays editable);
+// 'options' = change which cut lists a cut-released opening sends.
 let fbPreflight = null;
+let fbReleaseMode = 'full';
 
-async function fbOpenRelease() {
+function fbCutflowSentText(c) {
+  const parts = [];
+  if (c.cutflow_include_frame) parts.push('frame');
+  if (c.cutflow_include_door) parts.push('door');
+  const withheld = ['frame', 'door'].filter(x => !parts.includes(x));
+  return `Sent to CutFlow: ${parts.join(' + ') || 'nothing'}${withheld.length ? ` (${withheld.join(' + ')} withheld)` : ''}.`;
+}
+
+// "Send frame / door cut list to CutFlow" checkboxes; a part that isn't in this opening's scope is off and disabled.
+function fbCutflowCheckboxesHtml(c) {
+  const includesFrame = ['door_and_frame', 'frame_only'].includes(c.job_scope);
+  const includesDoor = ['door_and_frame', 'door_only'].includes(c.job_scope);
+  const box = (id, label, scoped, checked) => `<label class="form-check"><input class="form-check-input fb-cf-flag" type="checkbox" id="${id}" ${scoped && checked ? 'checked' : ''} ${scoped ? '' : 'disabled'}><span class="form-check-label">${label}</span></label>`;
+  return `<div class="mb-3"><div class="form-label">Cut lists to send to CutFlow</div>
+    ${box('fb-cf-frame', 'Frame', includesFrame, c.cutflow_include_frame)}
+    ${box('fb-cf-door', 'Door', includesDoor, c.cutflow_include_door)}
+    <div class="form-text">Uncheck one if it is ordered precut. Withheld parts still stay in the BOM and reservation.</div></div>`;
+}
+
+async function fbOpenRelease(mode = 'full') {
+  fbReleaseMode = mode;
   const body = document.getElementById('fb-release-body');
+  const confirmBtn = document.getElementById('fb-release-confirm');
+  const c = fbSelectedDetail;
   body.textContent = 'Checking…';
-  document.getElementById('fb-release-confirm').disabled = true;
+  confirmBtn.disabled = true;
+  document.getElementById('fb-release-title').textContent = mode === 'cut' ? 'Release to CutFlow' : (mode === 'options' ? 'CutFlow cut lists' : 'Release to production');
+  confirmBtn.innerHTML = mode === 'cut' ? '<i class="ti ti-cut me-1"></i>Release to CutFlow'
+    : (mode === 'options' ? '<i class="ti ti-check me-1"></i>Save &amp; rebuild' : '<i class="ti ti-lock me-1"></i>Release &amp; lock');
   bootstrap.Modal.getOrCreateInstance(document.getElementById('fb-release-modal')).show();
+
+  if (mode === 'options') {
+    fbPreflight = { ready: true };
+    body.innerHTML = `<p>Choose what goes to CutFlow. The work order's generated cut-list lines are rebuilt to match (not possible once cutting has started).</p>${fbCutflowCheckboxesHtml(c)}`;
+    fbReleaseCheck();
+    return;
+  }
+
   try {
-    fbPreflight = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/release-preflight`);
+    fbPreflight = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/release-preflight${mode === 'cut' ? '?mode=cut' : ''}`);
   } catch (err) { body.innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`; return; }
 
   const p = fbPreflight;
   const list = (items, cls) => items.length ? `<div class="alert alert-${cls}"><ul class="mb-0 ps-3">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>` : '';
+  const intro = mode === 'cut'
+    ? `<p>Sends this opening's cut list to CutFlow so cutting can start. The opening, frame and door <strong>lock</strong>; <strong>hardware stays editable</strong> until you do the full release.</p>${fbCutflowCheckboxesHtml(c)}`
+    : `<p>Releasing <strong>locks</strong> this opening, commits its parts to the job reservation and sends its extrusions to the cut list.</p>${c.status === 'cut_released' ? `<p class="text-muted">${esc(fbCutflowSentText(c))}</p>` : fbCutflowCheckboxesHtml(c)}`;
   body.innerHTML =
     list(p.blockers, 'danger') +
     list(p.warnings, 'warning') +
-    (p.ready ? `<p>Releasing <strong>locks</strong> this opening, commits its parts to the job reservation and sends its extrusions to the cut list.</p>
-      ${p.confirmations.map(c => `<label class="form-check"><input class="form-check-input fb-rel-confirm" type="checkbox" data-key="${c.key}" onchange="fbReleaseCheck()"><span class="form-check-label">${esc(c.label)}</span></label>`).join('')}` : '<p class="text-muted mb-0">Fix the items above, then try again.</p>');
+    (p.ready ? `${intro}
+      ${p.confirmations.map(x => `<label class="form-check"><input class="form-check-input fb-rel-confirm" type="checkbox" data-key="${x.key}" onchange="fbReleaseCheck()"><span class="form-check-label">${esc(x.label)}</span></label>`).join('')}` : '<p class="text-muted mb-0">Fix the items above, then try again.</p>');
   fbReleaseCheck();
 }
 
 function fbReleaseCheck() {
   const boxes = [...document.querySelectorAll('.fb-rel-confirm')];
-  document.getElementById('fb-release-confirm').disabled = !(fbPreflight && fbPreflight.ready && boxes.length && boxes.every(b => b.checked));
+  const flags = [...document.querySelectorAll('.fb-cf-flag')];
+  const sendsSomething = !flags.length || flags.some(f => f.checked);
+  const boxesOk = fbReleaseMode === 'options' || (boxes.length && boxes.every(b => b.checked));
+  document.getElementById('fb-release-confirm').disabled = !(fbPreflight && fbPreflight.ready && boxesOk && sendsSomething);
+  document.querySelectorAll('.fb-cf-flag').forEach(f => { f.onchange = fbReleaseCheck; });
 }
 
 async function fbConfirmRelease() {
   const payload = {};
   document.querySelectorAll('.fb-rel-confirm').forEach(b => { payload[b.dataset.key] = b.checked; });
+  if (document.getElementById('fb-cf-frame')) {
+    payload.cutflow_include_frame = document.getElementById('fb-cf-frame').checked;
+    payload.cutflow_include_door = document.getElementById('fb-cf-door').checked;
+  }
+  const path = { full: 'release', cut: 'cut-release', options: 'cutflow-options' }[fbReleaseMode];
+  const method = fbReleaseMode === 'options' ? 'PUT' : 'POST';
+  const discard = !!(fbSelectedDetail.cut_list && fbSelectedDetail.cut_list.diverged);
+  if (fbReleaseMode === 'options') {
+    if (discard && !confirm('The work order\'s cut list has hand edits. Rebuilding discards edits to the generated lines. Continue?')) return;
+    payload.confirm_discard_cut_edits = discard;
+  }
   try {
-    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/release`, { method: 'POST', body: JSON.stringify(payload) });
+    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/${path}`, { method, body: JSON.stringify(payload) });
     bootstrap.Modal.getInstance(document.getElementById('fb-release-modal')).hide();
-    showNotification('Configuration released and locked', 'success');
+    showNotification({ full: 'Configuration released and locked', cut: 'Released to CutFlow — hardware is still editable', options: 'CutFlow cut lists updated' }[fbReleaseMode], 'success');
     await fbLoadList();
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }
@@ -2245,7 +2396,7 @@ async function fbConfirmRelease() {
 
 async function fbUnrelease() {
   const diverged = fbSelectedDetail.cut_list && fbSelectedDetail.cut_list.diverged;
-  const msg = 'Un-release this opening? It becomes editable again (still reserved) and its generated cut-list lines are rebuilt.'
+  const msg = 'Un-release this opening? It becomes fully editable again (still reserved) and its generated cut-list lines are rebuilt.'
     + (diverged ? '\n\nThe work order\'s cut list has hand edits — rebuilding discards edits to the generated lines.' : '');
   if (!confirm(msg)) return;
   try {

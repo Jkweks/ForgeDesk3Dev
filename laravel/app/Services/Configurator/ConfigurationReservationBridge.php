@@ -36,7 +36,7 @@ use Illuminate\Support\Facades\DB;
 class ConfigurationReservationBridge
 {
     /** Configuration statuses whose BOM is committed. */
-    public const COUNTED_STATUSES = ['reserved', 'released', 'in_progress'];
+    public const COUNTED_STATUSES = ['reserved', 'cut_released', 'released', 'in_progress'];
 
     /**
      * Never blocks — an opening with nothing generated yet (or only some sections) can still be
