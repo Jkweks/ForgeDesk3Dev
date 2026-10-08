@@ -331,6 +331,10 @@ class CategoryController extends Controller
             ], 422);
         }
 
+        if ($request->action === 'delete' && ! $request->user()->hasPermission('inventory.delete')) {
+            return response()->json(['message' => 'You do not have permission to perform this action.'], 403);
+        }
+
         $categories = Category::whereIn('id', $request->category_ids);
 
         switch ($request->action) {

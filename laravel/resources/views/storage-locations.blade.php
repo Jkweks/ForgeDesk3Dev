@@ -563,7 +563,7 @@
                 <span class="avatar avatar-sm me-2"><i class="ti ti-map-pin"></i></span>
                 <div>
                   <strong>${location.full_path || location.name}</strong>
-                  ${location.code ? `<br><small class="text-muted">${location.code}</small>` : ''}
+                  ${location.code ? `<br><small class="text-muted">${escapeHtml(location.code)}</small>` : ''}
                   ${location.full_address ? `<br><small class="text-muted">${location.full_address}</small>` : ''}
                 </div>
               </div>
@@ -619,7 +619,7 @@
           <div class="row mb-3">
             <div class="col-md-3">
               <label class="form-label fw-bold">Location Name</label>
-              <p><i class="ti ti-map-pin me-2"></i>${location.name}</p>
+              <p><i class="ti ti-map-pin me-2"></i>${escapeHtml(location.name)}</p>
             </div>
             <div class="col-md-3">
               <label class="form-label fw-bold">Code</label>
@@ -646,7 +646,7 @@
           <div class="row mb-3">
             <div class="col-md-12">
               <label class="form-label fw-bold">Description</label>
-              <p>${location.description}</p>
+              <p>${escapeHtml(location.description)}</p>
             </div>
           </div>
           ` : ''}

@@ -265,6 +265,10 @@ class SupplierController extends Controller
             ], 422);
         }
 
+        if ($request->action === 'delete' && ! $request->user()->hasPermission('inventory.delete')) {
+            return response()->json(['message' => 'You do not have permission to perform this action.'], 403);
+        }
+
         $suppliers = Supplier::whereIn('id', $request->supplier_ids);
 
         switch ($request->action) {

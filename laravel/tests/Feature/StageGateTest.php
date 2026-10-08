@@ -186,7 +186,8 @@ class StageGateTest extends TestCase
         ]);
         $frame = $elev->stages->firstWhere('name', 'Frame Fab');
 
-        $this->patchJson("/api/v1/shop/stages/{$frame->id}", ['fab_user_id' => $mgr->id, 'override' => true])
+        $this->withHeaders(['X-Kiosk-Token' => \App\Services\KioskToken::issue($mgr)])
+            ->patchJson("/api/v1/shop/stages/{$frame->id}", ['fab_user_id' => $mgr->id, 'override' => true])
             ->assertOk();
 
         $this->assertSame('in_progress', $frame->fresh()->status);

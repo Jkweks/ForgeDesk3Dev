@@ -20,8 +20,10 @@ use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 #[Layout('components.cutflow.layout')]
@@ -58,16 +60,20 @@ class Dashboard extends Component
     // actions. The red/orange/yellow/green cut state and the "awaiting cut
     // sensor" state are both computed (see currentItemState()/
     // awaitingSensor()), not stored here.
+    #[Locked]
     public string $tigerStatus = 'idle';
 
     // Last known TigerStop connection/position, from tiger-bridge's GET
     // /status — see refreshTigerBridgeStatus(). The amp has no "read
     // current position" query, so lastPosition is the last inches value
     // tiger-bridge successfully moved it to (see TigerBridgeClient).
+    #[Locked]
     public bool $tigerConnected = false;
 
+    #[Locked]
     public ?float $tigerPosition = null;
 
+    #[Locked]
     public ?string $tigerPositionAt = null;
 
     // The stop's travel limits (inches), read by tiger-bridge from the amp's
@@ -75,20 +81,25 @@ class Dashboard extends Component
     // then nothing is range-checked here and the amp's own error applies.
     // Kept across a failed status poll rather than reset, since they only
     // change if someone reconfigures the amp.
+    #[Locked]
     public ?float $tigerLimitMin = null;
 
+    #[Locked]
     public ?float $tigerLimitMax = null;
 
     // tiger-bridge's own version (from GET /status) and whether it's older
     // than TigerBridgeClient::MIN_BRIDGE_VERSION — i.e. the shop box is
     // still running a stale copy of the bridge.
+    #[Locked]
     public ?string $tigerBridgeVersion = null;
 
+    #[Locked]
     public bool $tigerBridgeOutdated = false;
 
     // Unix timestamp of the last manual move/cut action (see
     // markBridgeActivity()) — drives the fast-vs-slow status poll interval
     // in bridgePollIntervalMs() below.
+    #[Locked]
     public ?int $lastBridgeActivityAt = null;
 
     public string $lastError = '';
@@ -108,8 +119,10 @@ class Dashboard extends Component
     // a crew chip switches it without re-entering a PIN, so two people can
     // trade off the "next cut" button without signing each other out.
 
+    #[Locked]
     public array $crew = [];
 
+    #[Locked]
     public ?string $activeCrewKey = null;
 
     public function mount(Request $request, CutPlanner $planner, TigerBridgeClient $bridge): void
@@ -300,6 +313,19 @@ class Dashboard extends Component
      * everywhere else on the shop floor rather than a separate local table.
      */
     protected function findUserByPin(string $pin): ?FdUser
+    {
+        $key = 'cutflow-pin:'.request()->ip();
+        if (RateLimiter::tooManyAttempts($key, 10)) {
+            return null;
+        }
+
+        $user = $this->lookupPin($pin);
+        $user ? RateLimiter::clear($key) : RateLimiter::hit($key, 60);
+
+        return $user;
+    }
+
+    protected function lookupPin(string $pin): ?FdUser
     {
         return FdUser::where('active', true)
             ->whereNotNull('fab_pin')

@@ -723,7 +723,7 @@ const QR_PROBLEM_TYPES = [
 function qrRenderProblemTypeOptions(selectedType) {
   const known = QR_PROBLEM_TYPES.includes(selectedType) ? selectedType : (selectedType ? 'Other' : '');
   const options = ['<option value="">— Select —</option>']
-    .concat(QR_PROBLEM_TYPES.map(t => `<option value="${t}" ${t === known ? 'selected' : ''}>${t}</option>`));
+    .concat(QR_PROBLEM_TYPES.map(t => `<option value="${escapeHtml(t)}" ${t === known ? 'selected' : ''}>${escapeHtml(t)}</option>`));
   document.getElementById('qr-d-problem-type').innerHTML = options.join('');
   document.getElementById('qr-d-problem-type-other-wrap').style.display = known === 'Other' ? '' : 'none';
   document.getElementById('qr-d-problem-type-other').value = known === 'Other' ? (selectedType || '') : '';
@@ -774,7 +774,7 @@ async function qrLoadElevations() {
     qrJobs = [...jobMap.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 
     const options = ['<option value="">Not sure yet</option>']
-      .concat(qrElevations.map(el => `<option value="${el.id}">${el.label}</option>`));
+      .concat(qrElevations.map(el => `<option value="${el.id}">${escapeHtml(el.label)}</option>`));
     document.getElementById('qr-upload-elevation').innerHTML = options.join('');
   } catch (e) {
     console.error('Failed to load elevations for matching', e);
@@ -787,7 +787,7 @@ function qrRenderJobOptions(recommendedJobId) {
   if (qrPreForgeAvailable()) {
     options.push(`<option value="pre-forge" ${recommendedJobId === 'pre-forge' ? 'selected' : ''}>Pre-Forge (pre-tracking)</option>`);
   }
-  options.push(...qrJobs.map(j => `<option value="${j.id}" ${j.id === recommendedJobId ? 'selected' : ''}>${j.name}</option>`));
+  options.push(...qrJobs.map(j => `<option value="${j.id}" ${j.id === recommendedJobId ? 'selected' : ''}>${escapeHtml(j.name)}</option>`));
   document.getElementById('qr-d-job').innerHTML = options.join('');
 }
 
@@ -815,7 +815,7 @@ function qrRenderElevationOptions() {
   if (!isPreForge) {
     options.push(`<option value="manual" ${qrDetailSelectedElevationId === 'manual' ? 'selected' : ''}>Other — not tracked yet (enter manually)</option>`);
   }
-  options.push(...pool.map(el => `<option value="${el.id}" ${el.id === qrDetailSelectedElevationId ? 'selected' : ''}>${el.label}</option>`));
+  options.push(...pool.map(el => `<option value="${el.id}" ${el.id === qrDetailSelectedElevationId ? 'selected' : ''}>${escapeHtml(el.label)}</option>`));
   document.getElementById('qr-d-elevation').innerHTML = options.join('');
 }
 
@@ -880,11 +880,11 @@ function qrRenderTable() {
     return `
     <tr onclick="qrOpenDetail(${r.id})" style="cursor:pointer;">
       <td>${new Date(r.created_at).toLocaleDateString()}</td>
-      <td>${r.work_order_label || (r.is_pre_forge ? '<span class="badge bg-secondary-lt text-secondary">Pre-Forge</span>' : '<span class="text-muted">-</span>')}</td>
-      <td>${r.elevation_tag || '<span class="text-muted">Unassigned</span>'}</td>
-      <td>${r.report_date || '<span class="text-muted">-</span>'}</td>
-      <td>${r.inspector_name || '<span class="text-muted">-</span>'}</td>
-      <td>${r.problem_type || '<span class="text-muted">-</span>'}</td>
+      <td>${r.work_order_label ? escapeHtml(r.work_order_label) : (r.is_pre_forge ? '<span class="badge bg-secondary-lt text-secondary">Pre-Forge</span>' : '<span class="text-muted">-</span>')}</td>
+      <td>${r.elevation_tag ? escapeHtml(r.elevation_tag) : '<span class="text-muted">Unassigned</span>'}</td>
+      <td>${r.report_date ? escapeHtml(r.report_date) : '<span class="text-muted">-</span>'}</td>
+      <td>${r.inspector_name ? escapeHtml(r.inspector_name) : '<span class="text-muted">-</span>'}</td>
+      <td>${r.problem_type ? escapeHtml(r.problem_type) : '<span class="text-muted">-</span>'}</td>
       <td>${replacement}</td>
       <td>${confidence}</td>
       <td>${statusBadge[r.status] || r.status}</td>
@@ -957,11 +957,11 @@ async function qrOpenDetail(id) {
     const fileRows = files.map((f, i) => `
       <div class="d-flex align-items-center gap-2 mb-1">
         <i class="ti ti-file-text"></i>
-        <span class="flex-fill">${f.original_name}</span>
-        <button type="button" class="btn btn-sm ${i === 0 ? 'btn-primary' : 'btn-outline-secondary'}" id="qr-d-file-view-${f.id}" onclick="qrShowPdfInline(${r.id}, ${f.id}, '${(f.original_name || 'Report PDF').replace(/'/g, "\\'")}', '${f.download_url}')">
+        <span class="flex-fill">${escapeHtml(f.original_name)}</span>
+        <button type="button" class="btn btn-sm ${i === 0 ? 'btn-primary' : 'btn-outline-secondary'}" id="qr-d-file-view-${f.id}" onclick="qrShowPdfInline(${r.id}, ${f.id}, ${escapeHtml(JSON.stringify(f.original_name || 'Report PDF'))}, ${escapeHtml(JSON.stringify(f.download_url))})">
           <i class="ti ti-eye me-1"></i>View
         </button>
-        <a href="${f.download_url}" class="btn btn-sm btn-outline-secondary"><i class="ti ti-download"></i></a>
+        <a href="${escapeHtml(f.download_url)}" class="btn btn-sm btn-outline-secondary"><i class="ti ti-download"></i></a>
       </div>
     `).join('');
     document.getElementById('qr-d-files').innerHTML = fileRows || '<span class="text-muted">No files</span>';

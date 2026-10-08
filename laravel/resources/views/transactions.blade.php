@@ -606,7 +606,7 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label fw-bold">Reference Number</label>
-              <p>${trans.reference_number}</p>
+              <p>${escapeHtml(trans.reference_number)}</p>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-bold">Reference Type</label>
@@ -618,7 +618,7 @@
           <div class="row mb-3">
             <div class="col-md-12">
               <label class="form-label fw-bold">Notes</label>
-              <p style="white-space: pre-wrap;">${trans.notes}</p>
+              <p style="white-space: pre-wrap;">${escapeHtml(trans.notes)}</p>
             </div>
           </div>
           ` : ''}

@@ -31,11 +31,12 @@ class PasswordResetController extends Controller
             ], 200);
         }
 
-        // Check if user account is active
+        // Inactive accounts get the same generic answer as unknown ones, so this
+        // endpoint can't be used to tell which emails exist.
         if (! $user->is_active) {
             return response()->json([
-                'message' => 'Your account has been deactivated. Please contact an administrator.',
-            ], 403);
+                'message' => 'If an account exists with this email, you will receive a password reset link shortly.',
+            ], 200);
         }
 
         // Delete any existing reset tokens for this user
@@ -124,9 +125,14 @@ class PasswordResetController extends Controller
             ], 403);
         }
 
-        // Update password
-        $user->password = Hash::make($request->password);
-        $user->save();
+        // Update password. A self-chosen password also settles any pending
+        // temporary-password state, otherwise an expired invite would keep
+        // blocking sign-in even after a successful reset.
+        $user->forceFill([
+            'password' => $request->password,
+            'must_change_password' => false,
+            'password_set_at' => now(),
+        ])->save();
 
         // Delete reset token
         DB::table('password_reset_tokens')

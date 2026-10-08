@@ -1490,10 +1490,10 @@
             const label = document.createElement('label');
             label.className = 'form-check';
             label.innerHTML = `
-              <input class="form-check-input" type="checkbox" value="${permission.name}" ${isChecked ? 'checked' : ''}>
+              <input class="form-check-input" type="checkbox" value="${escapeHtml(permission.name)}" ${isChecked ? 'checked' : ''}>
               <span class="form-check-label">
-                ${permission.display_name}
-                ${permission.description ? `<br><small class="text-muted">${permission.description}</small>` : ''}
+                ${escapeHtml(permission.display_name)}
+                ${permission.description ? `<br><small class="text-muted">${escapeHtml(permission.description)}</small>` : ''}
               </span>
             `;
 
@@ -1587,8 +1587,8 @@
 
           return `
             <tr>
-              <td>${user.name}</td>
-              <td>${user.email}</td>
+              <td>${escapeHtml(user.name)}</td>
+              <td>${escapeHtml(user.email)}</td>
               <td>${roleBadge}</td>
               <td>${statusBadge}</td>
               <td>${lastLogin}</td>
@@ -1698,7 +1698,7 @@
                 <div class="card-body">
                   <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
-                      <h3 class="card-title mb-1">${role.display_name}${systemBadge}</h3>
+                      <h3 class="card-title mb-1">${escapeHtml(role.display_name)}${systemBadge}</h3>
                       <div class="text-muted">${role.description || 'No description'}</div>
                     </div>
                     <div class="dropdown">
@@ -1742,7 +1742,7 @@
 
       // Populate all role dropdowns with loaded roles
       function populateRoleDropdowns() {
-        const roleOptions = roles.map(role => `<option value="${role.name}">${role.display_name}</option>`).join('');
+        const roleOptions = roles.map(role => `<option value="${escapeHtml(role.name)}">${escapeHtml(role.display_name)}</option>`).join('');
 
         // Populate filter dropdown
         const filterRole = document.getElementById('filterRole');

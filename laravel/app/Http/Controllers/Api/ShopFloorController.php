@@ -9,6 +9,7 @@ use App\Models\FdUser;
 use App\Models\FdWoElevation;
 use App\Models\FdWorkOrder;
 use App\Models\FdWoStage;
+use App\Services\KioskToken;
 use App\Services\StageGateService;
 use App\Services\StageOverrideResolver;
 use Illuminate\Http\Request;
@@ -73,6 +74,7 @@ class ShopFloorController extends Controller
         foreach ($users as $user) {
             if (Hash::check($request->pin, $user->fab_pin)) {
                 return response()->json([
+                    'kiosk_token' => KioskToken::issue($user),
                     'user_id' => $user->id,
                     'name' => $user->name,
                     'initials' => $user->initials,

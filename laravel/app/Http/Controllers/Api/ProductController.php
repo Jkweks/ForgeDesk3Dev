@@ -482,82 +482,89 @@ class ProductController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        // Check if there's enough available quantity
-        if ($product->quantity_available < $validated['quantity']) {
-            return response()->json([
-                'message' => 'Insufficient available quantity',
-                'errors' => ['quantity' => ['Not enough available inventory']],
-            ], 422);
-        }
+        // One transaction with the product row locked: two simultaneous issues
+        // must not both pass the availability check against the same stock.
+        return DB::transaction(function () use ($validated, $product) {
+            $product = Product::whereKey($product->id)->lockForUpdate()->firstOrFail();
 
-        // Record quantity before adjustment
-        $quantityBefore = $product->quantity_on_hand;
-
-        // Deduct from storage locations (primary first, then secondary by available qty)
-        $remainingToRemove = $validated['quantity'];
-
-        $locations = $product->inventoryLocations()
-            ->orderByRaw('is_primary DESC')
-            ->orderByRaw('(quantity - quantity_committed) DESC')
-            ->get();
-
-        foreach ($locations as $location) {
-            if ($remainingToRemove <= 0) {
-                break;
+            // Check if there's enough available quantity
+            if ($product->quantity_available < $validated['quantity']) {
+                return response()->json([
+                    'message' => 'Insufficient available quantity',
+                    'errors' => ['quantity' => ['Not enough available inventory']],
+                ], 422);
             }
-            $available = $location->quantity - $location->quantity_committed;
-            $deduct = min($remainingToRemove, $available);
-            if ($deduct > 0) {
-                $location->quantity -= $deduct;
-                $location->save();
-                $remainingToRemove -= $deduct;
-            }
-        }
 
-        // Force-deduct any remainder from locations that still have stock
-        if ($remainingToRemove > 0) {
+            // Record quantity before adjustment
+            $quantityBefore = $product->quantity_on_hand;
+
+            // Deduct from storage locations (primary first, then secondary by available qty)
+            $remainingToRemove = $validated['quantity'];
+
+            $locations = $product->inventoryLocations()
+                ->orderByRaw('is_primary DESC')
+                ->orderByRaw('(quantity - quantity_committed) DESC')
+                ->lockForUpdate()
+                ->get();
+
             foreach ($locations as $location) {
                 if ($remainingToRemove <= 0) {
                     break;
                 }
-                if ($location->quantity > 0) {
-                    $deduct = min($remainingToRemove, $location->quantity);
+                $available = $location->quantity - $location->quantity_committed;
+                $deduct = min($remainingToRemove, $available);
+                if ($deduct > 0) {
                     $location->quantity -= $deduct;
                     $location->save();
                     $remainingToRemove -= $deduct;
                 }
             }
-        }
 
-        // Recalculate product totals from locations (source of truth)
-        $product->recalculateQuantitiesFromLocations();
-        $product->refresh();
+            // Force-deduct any remainder from locations that still have stock
+            if ($remainingToRemove > 0) {
+                foreach ($locations as $location) {
+                    if ($remainingToRemove <= 0) {
+                        break;
+                    }
+                    if ($location->quantity > 0) {
+                        $deduct = min($remainingToRemove, $location->quantity);
+                        $location->quantity -= $deduct;
+                        $location->save();
+                        $remainingToRemove -= $deduct;
+                    }
+                }
+            }
 
-        $quantityAfter = $product->quantity_on_hand;
+            // Recalculate product totals from locations (source of truth)
+            $product->recalculateQuantitiesFromLocations();
+            $product->refresh();
 
-        // Create inventory transaction
-        InventoryTransaction::create([
-            'product_id' => $product->id,
-            'type' => 'job_issue',
-            'quantity' => -$validated['quantity'], // Negative because it's being removed
-            'quantity_before' => $quantityBefore,
-            'quantity_after' => $quantityAfter,
-            'reference_number' => $validated['job_name'],
-            'reference_type' => 'job',
-            'reference_id' => null,
-            'notes' => "Issued to job: {$validated['job_name']}".
-                       ($validated['notes'] ? "\n".$validated['notes'] : ''),
-            'user_id' => auth()->id(),
-            'transaction_date' => now(),
-        ]);
+            $quantityAfter = $product->quantity_on_hand;
 
-        // Update product status
-        $product->updateStatus();
+            // Create inventory transaction
+            InventoryTransaction::create([
+                'product_id' => $product->id,
+                'type' => 'job_issue',
+                'quantity' => -$validated['quantity'], // Negative because it's being removed
+                'quantity_before' => $quantityBefore,
+                'quantity_after' => $quantityAfter,
+                'reference_number' => $validated['job_name'],
+                'reference_type' => 'job',
+                'reference_id' => null,
+                'notes' => "Issued to job: {$validated['job_name']}".
+                           ($validated['notes'] ? "\n".$validated['notes'] : ''),
+                'user_id' => auth()->id(),
+                'transaction_date' => now(),
+            ]);
 
-        return response()->json([
-            'message' => 'Material issued to job successfully',
-            'product' => $product->fresh(),
-        ]);
+            // Update product status
+            $product->updateStatus();
+
+            return response()->json([
+                'message' => 'Material issued to job successfully',
+                'product' => $product->fresh(),
+            ]);
+        });
     }
 
     public function getTransactions(Product $product)

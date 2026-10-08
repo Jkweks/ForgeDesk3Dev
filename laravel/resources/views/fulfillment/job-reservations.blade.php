@@ -701,11 +701,11 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
 
                 return `
                     <tr class="${rowClass}">
-                        <td><strong>${res.job_number}</strong></td>
-                        <td>${res.job_name}</td>
-                        <td>${res.release_number}</td>
+                        <td><strong>${escapeHtml(res.job_number)}</strong></td>
+                        <td>${escapeHtml(res.job_name)}</td>
+                        <td>${escapeHtml(res.release_number)}</td>
                         <td>${statusBadge}</td>
-                        <td>${res.requested_by}</td>
+                        <td>${escapeHtml(res.requested_by)}</td>
                         <td>${res.needed_by || '-'}</td>
                         <td>${res.items_count}</td>
                         <td>${fmtQty(res.total_committed)}</td>
@@ -894,10 +894,10 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                 const binHtml = buildBinPackingHtml(item);
                 return `
                 <tr>
-                    <td><code>${item.product.sku || '-'}</code></td>
-                    <td><strong>${item.product.part_number}</strong></td>
-                    <td>${item.product.finish || '-'}</td>
-                    <td>${item.product.description || '-'}</td>
+                    <td><code>${escapeHtml(item.product.sku || '-')}</code></td>
+                    <td><strong>${escapeHtml(item.product.part_number)}</strong></td>
+                    <td>${escapeHtml(item.product.finish || '-')}</td>
+                    <td>${escapeHtml(item.product.description || '-')}</td>
                     <td>${fmtQty(item.requested_qty)}</td>
                     <td>
                         <div class="d-flex align-items-center gap-2">
@@ -920,16 +920,16 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     <div class="col-md-6">
                         <dl class="row">
                             <dt class="col-5">Job Number:</dt>
-                            <dd class="col-7"><strong>${res.job_number}</strong></dd>
+                            <dd class="col-7"><strong>${escapeHtml(res.job_number)}</strong></dd>
                             <dt class="col-5">Release Number:</dt>
-                            <dd class="col-7">${res.release_number}</dd>
+                            <dd class="col-7">${escapeHtml(res.release_number)}</dd>
                             <dt class="col-5">Job Name:</dt>
-                            <dd class="col-7">${res.job_name}</dd>
+                            <dd class="col-7">${escapeHtml(res.job_name)}</dd>
                             <dt class="col-5">Status:</dt>
                             <dd class="col-7">${getStatusBadge(res.status)}</dd>
                             ${res.status === 'fulfilled' ? `
                             <dt class="col-5">Fulfilled By:</dt>
-                            <dd class="col-7">${res.fulfilled_by_name || '-'}</dd>
+                            <dd class="col-7">${escapeHtml(res.fulfilled_by_name || '-')}</dd>
                             <dt class="col-5">Fulfilled At:</dt>
                             <dd class="col-7">${res.fulfilled_at ? new Date(res.fulfilled_at).toLocaleString() : '-'}</dd>
                             ` : ''}
@@ -938,7 +938,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     <div class="col-md-6">
                         <dl class="row">
                             <dt class="col-5">Requested By:</dt>
-                            <dd class="col-7">${res.requested_by}</dd>
+                            <dd class="col-7">${escapeHtml(res.requested_by)}</dd>
                             <dt class="col-5">Needed By:</dt>
                             <dd class="col-7">${res.needed_by || '-'}</dd>
                             <dt class="col-5">Created:</dt>
@@ -948,7 +948,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                         </dl>
                     </div>
                 </div>
-                ${res.notes ? `<div class="mb-3"><strong>Notes:</strong> ${res.notes}</div>` : ''}
+                ${res.notes ? `<div class="mb-3"><strong>Notes:</strong> ${escapeHtml(res.notes)}</div>` : ''}
                 <h4>Line Items</h4>
                 <div class="table-responsive">
                     <table class="table table-sm table-vcenter">
@@ -1053,7 +1053,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
 
                         if (data.insufficient_items && data.insufficient_items.length > 0) {
                             const items = data.insufficient_items.map(item =>
-                                `${item.part_number}-${item.finish}: need ${item.shortage} more`
+                                `${escapeHtml(item.part_number)}-${escapeHtml(item.finish)}: need ${item.shortage} more`
                             ).join(', ');
                             warningsDiv.innerHTML += `<br><strong>Insufficient items:</strong> ${items}`;
                         }
@@ -1200,8 +1200,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                         const toRelease = item.committed_qty - item.consumed_qty;
                         return `
                             <tr>
-                                <td><strong>${item.product.part_number}</strong></td>
-                                <td>${item.product.finish || '-'}</td>
+                                <td><strong>${escapeHtml(item.product.part_number)}</strong></td>
+                                <td>${escapeHtml(item.product.finish || '-')}</td>
                                 <td>${fmtQty(item.committed_qty)}</td>
                                 <td>${fmtQty(item.consumed_qty)}</td>
                                 <td>
@@ -1714,12 +1714,12 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
 
                     if (data.data && data.data.length > 0) {
                         resultsDiv.innerHTML = data.data.map(product => `
-                            <button type="button" class="list-group-item list-group-item-action" onclick="selectReplaceProduct(${product.id}, '${product.sku}', '${product.part_number || ''}', '${product.finish || ''}', '${product.description.replace(/'/g, "\\'")}', ${product.quantity_on_hand}, ${product.quantity_available})">
+                            <button type="button" class="list-group-item list-group-item-action" onclick="selectReplaceProduct(${product.id}, ${escapeHtml(JSON.stringify(product.sku))}, ${escapeHtml(JSON.stringify(product.part_number || ''))}, ${escapeHtml(JSON.stringify(product.finish || ''))}, ${escapeHtml(JSON.stringify(product.description || ''))}, ${Number(product.quantity_on_hand) || 0}, ${Number(product.quantity_available) || 0})">
                                 <div class="d-flex w-100 justify-content-between">
-                                    <strong>${product.sku}</strong>
+                                    <strong>${escapeHtml(product.sku)}</strong>
                                     <span class="badge bg-${product.quantity_available > 0 ? 'success' : 'danger'}">${product.quantity_available} avail</span>
                                 </div>
-                                <small>${product.part_number || ''} ${product.finish || ''} - ${product.description}</small>
+                                <small>${escapeHtml(product.part_number || '')} ${escapeHtml(product.finish || '')} - ${escapeHtml(product.description)}</small>
                             </button>
                         `).join('');
                         resultsDiv.style.display = 'block';
@@ -1742,12 +1742,12 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             detailsDiv.innerHTML = `
                 <div class="row">
                     <div class="col-md-6">
-                        <strong>SKU:</strong> ${sku}<br>
-                        <strong>Part#:</strong> ${partNumber}<br>
+                        <strong>SKU:</strong> ${escapeHtml(sku)}<br>
+                        <strong>Part#:</strong> ${escapeHtml(partNumber)}<br>
                         <strong>Finish:</strong> ${finish || 'N/A'}
                     </div>
                     <div class="col-md-6">
-                        <strong>Description:</strong> ${description}<br>
+                        <strong>Description:</strong> ${escapeHtml(description)}<br>
                         <strong>On Hand:</strong> ${Math.floor(Number(onHand) || 0)}<br>
                         <strong>Available:</strong> <span class="badge bg-${available > 0 ? 'success' : 'danger'}">${available}</span>
                     </div>
@@ -1916,12 +1916,12 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
 
                     if (data.data && data.data.length > 0) {
                         resultsDiv.innerHTML = data.data.map(product => `
-                            <button type="button" class="list-group-item list-group-item-action" onclick="selectManualProduct(${product.id}, '${product.sku}', '${product.part_number || ''}', '${product.finish || ''}', '${product.description.replace(/'/g, "\\'")}', ${product.quantity_available})">
+                            <button type="button" class="list-group-item list-group-item-action" onclick="selectManualProduct(${product.id}, ${escapeHtml(JSON.stringify(product.sku))}, ${escapeHtml(JSON.stringify(product.part_number || ''))}, ${escapeHtml(JSON.stringify(product.finish || ''))}, ${escapeHtml(JSON.stringify(product.description || ''))}, ${Number(product.quantity_available) || 0})">
                                 <div class="d-flex w-100 justify-content-between">
-                                    <strong>${product.sku}</strong>
+                                    <strong>${escapeHtml(product.sku)}</strong>
                                     <span class="badge bg-${product.quantity_available > 0 ? 'success' : 'warning'}">${product.quantity_available} avail</span>
                                 </div>
-                                <small>${product.part_number || ''} ${product.finish || ''} - ${product.description}</small>
+                                <small>${escapeHtml(product.part_number || '')} ${escapeHtml(product.finish || '')} - ${escapeHtml(product.description)}</small>
                             </button>
                         `).join('');
                         resultsDiv.style.display = 'block';
@@ -1993,10 +1993,10 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
 
             tbody.innerHTML = manualItems.map((item, index) => `
                 <tr>
-                    <td><code>${item.sku}</code></td>
-                    <td>${item.part_number}</td>
-                    <td>${item.finish || '-'}</td>
-                    <td>${item.description}</td>
+                    <td><code>${escapeHtml(item.sku)}</code></td>
+                    <td>${escapeHtml(item.part_number)}</td>
+                    <td>${escapeHtml(item.finish || '-')}</td>
+                    <td>${escapeHtml(item.description)}</td>
                     <td class="text-end">${fmtQty(item.requested_qty)}</td>
                     <td class="text-end">${item.committed_qty ? fmtQty(item.committed_qty) : 'Auto'}</td>
                     <td class="text-end"><span class="badge bg-${item.available > 0 ? 'success' : 'warning'}">${item.available}</span></td>

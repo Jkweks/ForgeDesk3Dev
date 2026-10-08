@@ -80,6 +80,17 @@
   }
 
   // Permission helper
+  // Shared HTML escaper (text AND attribute contexts). Pages that ship their own
+  // escapeHtml() keep using it; pages without one fall back to this.
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function hasPermission(permission) {
     if (!currentUser || !currentUser.permissions) {
       return false;

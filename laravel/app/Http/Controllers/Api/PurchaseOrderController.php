@@ -354,10 +354,21 @@ class PurchaseOrderController extends Controller
 
         DB::beginTransaction();
         try {
+            // Re-check under a row lock: a double-click or two receivers must not
+            // both read the same quantity_received and book the delivery twice.
+            $purchaseOrder = PurchaseOrder::whereKey($purchaseOrder->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($purchaseOrder->status, ['approved', 'partially_received'])) {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Order must be approved before receiving',
+                ], 422);
+            }
+
             $receivedDate = $request->received_date ?? now();
 
             foreach ($request->items as $itemData) {
-                $poItem = PurchaseOrderItem::findOrFail($itemData['item_id']);
+                $poItem = PurchaseOrderItem::whereKey($itemData['item_id'])->lockForUpdate()->firstOrFail();
 
                 // Verify item belongs to this PO
                 if ($poItem->purchase_order_id !== $purchaseOrder->id) {

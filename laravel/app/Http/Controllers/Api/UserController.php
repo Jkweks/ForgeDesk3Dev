@@ -16,6 +16,20 @@ use Illuminate\Validation\Rule;
 class UserController extends Controller
 {
     /**
+     * Only an administrator may modify, reset, deactivate, delete or re-invite
+     * an admin account. Without this, anyone holding users.edit could set an
+     * admin's password and sign in as them.
+     */
+    private function denyUnlessMayManage(Request $request, User $target)
+    {
+        if ($target->role === 'admin' && ! $request->user()->isAdmin()) {
+            return response()->json(['message' => 'Only an administrator can modify an administrator account'], 403);
+        }
+
+        return null;
+    }
+
+    /**
      * Get all users with optional filtering
      */
     public function index(Request $request)
@@ -207,6 +221,10 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
+
         if (! $user->is_active) {
             return response()->json(['message' => 'Reactivate the account before sending an invitation.'], 422);
         }
@@ -252,6 +270,10 @@ class UserController extends Controller
         $failed = [];
 
         foreach ($query->get() as $user) {
+            if ($user->role === 'admin' && ! $request->user()->isAdmin()) {
+                continue;
+            }
+
             if (! $user->is_active) {
                 $skippedInactive++;
 
@@ -335,6 +357,10 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'first_name' => 'sometimes|required|string|max:255',
             'last_name' => 'sometimes|required|string|max:255',
@@ -369,11 +395,22 @@ class UserController extends Controller
         }
 
         // Remove password from update if not provided
-        if (isset($validated['password']) && empty($validated['password'])) {
+        if (array_key_exists('password', $validated) && empty($validated['password'])) {
             unset($validated['password']);
         }
 
+        // An admin-chosen password is temporary by nature (same as resetPassword()).
+        $passwordChanged = isset($validated['password']);
+        if ($passwordChanged) {
+            $validated['must_change_password'] = true;
+            $validated['password_set_at'] = now();
+        }
+
         $user->update($validated);
+
+        if ($passwordChanged) {
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'User updated successfully',
@@ -390,9 +427,13 @@ class UserController extends Controller
     /**
      * Delete a user (soft delete)
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
 
         // Prevent deleting yourself
         if ($user->id === auth()->id()) {
@@ -411,9 +452,13 @@ class UserController extends Controller
     /**
      * Restore a soft-deleted user
      */
-    public function restore($id)
+    public function restore(Request $request, $id)
     {
         $user = User::withTrashed()->findOrFail($id);
+
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
         $user->restore();
 
         return response()->json([
@@ -428,6 +473,10 @@ class UserController extends Controller
     public function resetPassword(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
 
         $validated = $request->validate([
             'password' => 'required|string|min:8|confirmed',
@@ -497,6 +546,10 @@ class UserController extends Controller
             'must_change_password' => false,
             'password_set_at' => now(),
         ]);
+
+        // Drop every other session (AuthenticateSession compares this hash) but
+        // keep the one that just changed the password signed in.
+        $request->session()->put('password_hash_web', $user->getAuthPassword());
 
         return response()->json([
             'message' => 'Password changed successfully',

@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Log;
  * Two trust contexts:
  *  - Office: an authenticated app user holding `fabrication.work-orders.edit`.
  *  - Kiosk (unauthenticated): the `fab_user_id` in the body resolves to an
- *    `FdUser` whose role is `manager` or `admin`.
+ *    `FdUser` whose role is `manager` or `admin`, and the request carries the
+ *    `X-Kiosk-Token` issued when that user signed in with their PIN.
  */
 class StageOverrideResolver
 {
@@ -41,7 +42,10 @@ class StageOverrideResolver
         $fabUserId = $request->input('fab_user_id');
         if ($fabUserId) {
             $fabUser = FdUser::find($fabUserId);
-            if ($fabUser && in_array($fabUser->role, ['manager', 'admin'], true)) {
+            // The id alone is public knowledge (GET /shop/fab-users), so a privileged
+            // override also needs the token minted by that user's PIN sign-in.
+            if ($fabUser && in_array($fabUser->role, ['manager', 'admin'], true)
+                && KioskToken::verify($request->header('X-Kiosk-Token'), $fabUser)) {
                 return [
                     'allowed' => $wants,
                     'log_user_id' => $fabUser->id,
