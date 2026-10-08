@@ -12,8 +12,14 @@ class FdWorkOrder extends Model
 {
     protected $table = 'fd_work_orders';
 
-    /** Every lifecycle status a work order may hold. */
-    public const STATUSES = ['active', 'on_hold', 'complete'];
+    /**
+     * Every lifecycle status a work order may hold. A work order is `pending` until all of its job-level steps
+     * are done, then `active` (see refreshPhase()); `on_hold` and `complete` are set by hand.
+     */
+    public const STATUSES = ['pending', 'active', 'on_hold', 'complete'];
+
+    /** Statuses of a work order that is still open (not complete) — what "open work orders" lists should include. */
+    public const OPEN_STATUSES = ['pending', 'active', 'on_hold'];
 
     /** Set true around bulk creates (seeders/importers) to skip auto-resequencing. */
     public static bool $suspendResequence = false;
@@ -23,15 +29,20 @@ class FdWorkOrder extends Model
         parent::boot();
 
         static::created(function (FdWorkOrder $wo) {
-            $defaults = ['Cut List Prepared', 'Cut List Reviewed', 'Dropbox Uploaded', 'Kanban Entered'];
-            foreach ($defaults as $i => $name) {
+            // Steps come from the admin-managed templates; later template edits don't touch existing work orders.
+            $templates = FdJobStepTemplate::where('active', true)->orderBy('sort_order')->orderBy('id')->get();
+            foreach ($templates as $i => $template) {
                 FdJobStep::create([
                     'work_order_id' => $wo->id,
-                    'name' => $name,
+                    'name' => $template->name,
                     'sort_order' => $i + 1,
                     'status' => 'pending',
                 ]);
             }
+
+            // Pending until those steps are done (no steps at all means nothing to wait for).
+            $wo->unsetRelation('steps');
+            $wo->refreshPhase(log: false);
         });
     }
 
@@ -296,6 +307,49 @@ class FdWorkOrder extends Model
     public function stepsComplete(): bool
     {
         return $this->steps->every(fn ($s) => in_array($s->status, FdJobStep::TERMINAL, true));
+    }
+
+    /**
+     * The status a work order should hold given its job steps: `pending` while any are open, `active` once all
+     * are done. Only pending/active are derived — on_hold and complete are set by hand and left alone here.
+     */
+    public function derivedPhase(): string
+    {
+        $this->unsetRelation('steps');
+
+        return $this->stepsComplete() ? 'active' : 'pending';
+    }
+
+    /**
+     * Move a pending/active work order to match its job steps (call after any step is added, changed or
+     * removed). Logs the change to the status history. Returns true when the status changed.
+     */
+    public function refreshPhase(bool $log = true): bool
+    {
+        $from = $this->status ?? 'active'; // a just-created row still carries the column default only in the DB
+        if (! in_array($from, ['pending', 'active'], true)) {
+            return false;
+        }
+
+        $to = $this->derivedPhase();
+        if ($to === $from) {
+            return false;
+        }
+
+        $this->status = $to;
+        $this->saveQuietly();
+
+        if ($log) {
+            FdWoStatusLog::create([
+                'work_order_id' => $this->id,
+                'user_id' => auth()->id(),
+                'from_status' => $from,
+                'to_status' => $to,
+                'note' => $to === 'active' ? 'All job steps complete' : 'A job step is open again',
+            ]);
+        }
+
+        return true;
     }
 
     /** True when the WO has elevations and every one of them carries a completion date. */

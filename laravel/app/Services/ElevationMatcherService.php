@@ -105,7 +105,7 @@ class ElevationMatcherService
         return FdWoElevation::query()
             ->with(['workOrder.businessJob', 'elevationType'])
             ->whereHas('workOrder', function ($q) {
-                $q->whereIn('status', ['active', 'on_hold'])
+                $q->whereIn('status', \App\Models\FdWorkOrder::OPEN_STATUSES)
                     ->orWhere(function ($q2) {
                         $q2->where('status', 'complete')
                             ->where('completed_at', '>=', now()->subDays(self::RECENTLY_COMPLETED_DAYS));

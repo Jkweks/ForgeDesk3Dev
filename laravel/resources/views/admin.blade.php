@@ -90,8 +90,8 @@
                     </li>
                     <li class="nav-item" role="presentation">
                       <a href="#tab-elevation-types" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
-                         onclick="loadElevationTypes()">
-                        <i class="ti ti-ruler-2 me-2"></i>Elevation Types
+                         onclick="loadElevationTypes(); loadJobStepTemplates()">
+                        <i class="ti ti-ruler-2 me-2"></i>Elevation Types &amp; Job Steps
                       </a>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -695,6 +695,25 @@
                             <tr><td colspan="6" class="text-muted text-center py-3">Click "Elevation Types" tab to load.</td></tr>
                           </tbody>
                         </table>
+                      </div>
+
+                      <!-- Job Steps -->
+                      <div class="mt-5">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                          <div>
+                            <h3 class="mb-1">Job Steps</h3>
+                            <p class="text-muted mb-0">Work-order-level steps, in the order they are done. New work orders start <strong>Pending</strong> with a copy of these and become <strong>Active</strong> once every step is complete. Changes apply to new work orders only.</p>
+                          </div>
+                          <button class="btn btn-primary" onclick="addJobStepTemplate()">
+                            <i class="ti ti-plus me-1"></i>Add Step
+                          </button>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-vcenter card-table">
+                            <thead><tr><th style="width:90px">Order</th><th>Name</th><th style="width:90px">Active</th><th class="w-1">Actions</th></tr></thead>
+                            <tbody id="job-step-tpl-tbody"><tr><td colspan="4" class="text-muted text-center py-3">Loading…</td></tr></tbody>
+                          </table>
+                        </div>
                       </div>
                     </div><!-- /tab-elevation-types -->
 
@@ -2266,6 +2285,95 @@
         const d = document.createElement('div');
         d.textContent = str ?? '';
         return d.innerHTML;
+      }
+
+      // ============================================================
+      // Job Steps admin (shares the Elevation Types tab)
+      // ============================================================
+      let jobStepTemplates = [];
+
+      function jobStepHeaders() {
+        return { 'X-CSRF-TOKEN': adminCsrfToken(), 'Content-Type': 'application/json', 'Accept': 'application/json' };
+      }
+
+      async function loadJobStepTemplates() {
+        try {
+          const r = await fetch('/api/v1/job-step-templates', { credentials: 'include', headers: jobStepHeaders() });
+          jobStepTemplates = (await r.json()).job_step_templates || [];
+          renderJobStepTemplates();
+        } catch (e) { console.error(e); }
+      }
+
+      function renderJobStepTemplates() {
+        const tbody = document.getElementById('job-step-tpl-tbody');
+        if (!jobStepTemplates.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-3">No job steps defined — new work orders start Active.</td></tr>';
+          return;
+        }
+        const last = jobStepTemplates.length - 1;
+        tbody.innerHTML = jobStepTemplates.map((t, i) => `
+          <tr class="${t.active ? '' : 'text-muted'}">
+            <td style="white-space:nowrap">
+              <button class="btn btn-sm btn-ghost-secondary p-0 px-1" onclick="moveJobStepTemplate(${t.id}, -1)" ${i === 0 ? 'disabled' : ''}><i class="ti ti-chevron-up"></i></button>
+              <button class="btn btn-sm btn-ghost-secondary p-0 px-1" onclick="moveJobStepTemplate(${t.id}, 1)" ${i === last ? 'disabled' : ''}><i class="ti ti-chevron-down"></i></button>
+              <span class="text-muted small ms-1">${i + 1}</span>
+            </td>
+            <td>${escAdmin(t.name)}</td>
+            <td><label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" ${t.active ? 'checked' : ''} onchange="toggleJobStepTemplate(${t.id}, this.checked)"></label></td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-sm btn-ghost-secondary" onclick="renameJobStepTemplate(${t.id})"><i class="ti ti-pencil"></i></button>
+              <button class="btn btn-sm btn-ghost-danger" onclick="deleteJobStepTemplate(${t.id})"><i class="ti ti-trash"></i></button>
+            </td>
+          </tr>`).join('');
+      }
+
+      async function jobStepRequest(url, method, body) {
+        const r = await fetch(url, { method, credentials: 'include', headers: jobStepHeaders(), body: body ? JSON.stringify(body) : undefined });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || 'Request failed');
+        return r.json();
+      }
+
+      async function addJobStepTemplate() {
+        const name = (prompt('Name of the new job step:') || '').trim();
+        if (!name) return;
+        try { await jobStepRequest('/api/v1/job-step-templates', 'POST', { name }); await loadJobStepTemplates(); }
+        catch (e) { fabToast(e.message, 'error'); }
+      }
+
+      async function renameJobStepTemplate(id) {
+        const t = jobStepTemplates.find(x => x.id === id);
+        const name = (prompt('Rename job step:', t.name) || '').trim();
+        if (!name || name === t.name) return;
+        try { await jobStepRequest(`/api/v1/job-step-templates/${id}`, 'PATCH', { name }); await loadJobStepTemplates(); }
+        catch (e) { fabToast(e.message, 'error'); }
+      }
+
+      async function toggleJobStepTemplate(id, active) {
+        try { await jobStepRequest(`/api/v1/job-step-templates/${id}`, 'PATCH', { active }); await loadJobStepTemplates(); }
+        catch (e) { fabToast(e.message, 'error'); await loadJobStepTemplates(); }
+      }
+
+      async function moveJobStepTemplate(id, dir) {
+        const ids = jobStepTemplates.map(t => t.id);
+        const i = ids.indexOf(id), j = i + dir;
+        if (j < 0 || j >= ids.length) return;
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        try {
+          jobStepTemplates = (await jobStepRequest('/api/v1/job-step-templates/order', 'PUT', { order: ids })).job_step_templates || [];
+          renderJobStepTemplates();
+        } catch (e) { fabToast(e.message, 'error'); }
+      }
+
+      async function deleteJobStepTemplate(id) {
+        const ok = await fabConfirm({
+          title: 'Delete Job Step',
+          message: 'Delete this job step? Existing work orders keep the steps they already have.',
+          confirmLabel: 'Delete',
+          confirmClass: 'btn-danger',
+        });
+        if (!ok) return;
+        try { await jobStepRequest(`/api/v1/job-step-templates/${id}`, 'DELETE'); await loadJobStepTemplates(); }
+        catch (e) { fabToast(e.message, 'error'); }
       }
 
       // ============================================================

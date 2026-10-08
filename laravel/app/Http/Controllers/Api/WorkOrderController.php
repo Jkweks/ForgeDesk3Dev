@@ -269,7 +269,7 @@ class WorkOrderController extends Controller
     /**
      * Drive the work order's lifecycle status.
      *
-     * Body: { status: active|on_hold|complete, note?: string }
+     * Body: { status: pending|active|on_hold|complete, note?: string } — pending/active resolve to whichever matches the job steps
      *  - on_hold  requires a note (the reason for the hold).
      *  - complete requires every elevation complete AND every WO step done;
      *    otherwise 422 with the outstanding items. Stamps completed_at /
@@ -296,6 +296,10 @@ class WorkOrderController extends Controller
             $wo = FdWorkOrder::with(['elevations.stages', 'steps', 'businessJob'])->findOrFail($id);
             $from = $wo->status;
             $to = $data['status'];
+            // Pending vs active follows the job steps, so releasing a hold / re-opening lands on the right one.
+            if (in_array($to, ['pending', 'active'], true)) {
+                $to = $wo->derivedPhase();
+            }
 
             if ($to === 'complete' && $from !== 'complete' && ! $wo->isReadyToComplete()) {
                 return response()->json([

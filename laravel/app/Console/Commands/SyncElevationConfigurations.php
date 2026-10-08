@@ -21,7 +21,7 @@ class SyncElevationConfigurations extends Command
     {
         $query = FdWorkOrder::query();
         if (! $this->option('all')) {
-            $query->where('archived', false)->where('status', 'active');
+            $query->where('archived', false)->whereIn('status', ['pending', 'active']);
         }
 
         $workOrders = $query->get();

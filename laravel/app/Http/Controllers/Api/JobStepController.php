@@ -61,10 +61,12 @@ class JobStepController extends Controller
             return $e->render();
         }
 
+        $wo->refreshPhase();
         $all = $wo->steps()->with('completedBy')->get();
 
         return response()->json([
             'updated' => $steps->count(),
+            'work_order_status' => $wo->status,
             'steps' => $all->map(fn ($s) => $this->fmt($s)),
         ]);
     }
@@ -83,8 +85,9 @@ class JobStepController extends Controller
             'sort_order' => $max + 1,
             'status' => 'pending',
         ]);
+        $step->workOrder->refreshPhase();
 
-        return response()->json(['step' => $this->fmt($step)], 201);
+        return response()->json(['step' => $this->fmt($step), 'work_order_status' => $step->workOrder->status], 201);
     }
 
     public function update(Request $request, int $id)
@@ -126,15 +129,19 @@ class JobStepController extends Controller
         }
 
         $step->save();
+        $step->workOrder->refreshPhase();
 
-        return response()->json(['step' => $this->fmt($step->fresh('completedBy'))]);
+        return response()->json(['step' => $this->fmt($step->fresh('completedBy')), 'work_order_status' => $step->workOrder->status]);
     }
 
     public function destroy(int $id)
     {
-        FdJobStep::findOrFail($id)->delete();
+        $step = FdJobStep::findOrFail($id);
+        $workOrder = $step->workOrder;
+        $step->delete();
+        $workOrder->refreshPhase();
 
-        return response()->json(['deleted' => $id]);
+        return response()->json(['deleted' => $id, 'work_order_status' => $workOrder->status]);
     }
 
     private function fmt(FdJobStep $s): array

@@ -777,6 +777,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/elevation-types', [\App\Http\Controllers\Api\ElevationTypeController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::put('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/elevation-types/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+            Route::get('/job-step-templates', [\App\Http\Controllers\Api\JobStepTemplateController::class, 'index']);
+            Route::post('/job-step-templates', [\App\Http\Controllers\Api\JobStepTemplateController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::put('/job-step-templates/order', [\App\Http\Controllers\Api\JobStepTemplateController::class, 'reorder'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/job-step-templates/{id}', [\App\Http\Controllers\Api\JobStepTemplateController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/job-step-templates/{id}', [\App\Http\Controllers\Api\JobStepTemplateController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/stage-templates', [\App\Http\Controllers\Api\ElevationTypeController::class, 'storeTemplate'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'updateTemplate'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/stage-templates/{id}', [\App\Http\Controllers\Api\ElevationTypeController::class, 'destroyTemplate'])->middleware('permission:fabrication.work-orders.edit');

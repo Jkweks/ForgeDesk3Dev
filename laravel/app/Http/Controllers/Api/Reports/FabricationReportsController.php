@@ -26,7 +26,7 @@ class FabricationReportsController extends Controller
         $today = Carbon::today();
 
         $workOrders = FdWorkOrder::where('archived', false)
-            ->whereIn('status', ['active', 'on_hold'])
+            ->whereIn('status', FdWorkOrder::OPEN_STATUSES)
             ->with(['businessJob', 'assignedUsers', 'elevations', 'steps'])
             ->orderBy('priority')
             ->get();
@@ -67,6 +67,7 @@ class FabricationReportsController extends Controller
             'work_orders' => $rows,
             'summary' => [
                 'total_open' => $rows->count(),
+                'pending_count' => $rows->where('status', 'pending')->count(),
                 'active_count' => $rows->where('status', 'active')->count(),
                 'on_hold_count' => $rows->where('status', 'on_hold')->count(),
                 'overdue_count' => $rows->where('is_overdue', true)->count(),

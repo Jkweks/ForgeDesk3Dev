@@ -25,6 +25,14 @@
         <div class="col-6 col-md">
           <div class="card card-sm">
             <div class="card-body">
+              <div class="text-muted">Pending</div>
+              <div class="h2 mb-0 text-warning" id="woBacklogPending">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md">
+          <div class="card card-sm">
+            <div class="card-body">
               <div class="text-muted">Active</div>
               <div class="h2 mb-0 text-success" id="woBacklogActive">-</div>
             </div>
@@ -97,6 +105,7 @@ async function loadWorkOrderBacklogReport() {
     const response = await authenticatedFetch('/reports/work-order-backlog');
 
     document.getElementById('woBacklogTotal').textContent = response.summary.total_open;
+    document.getElementById('woBacklogPending').textContent = response.summary.pending_count;
     document.getElementById('woBacklogActive').textContent = response.summary.active_count;
     document.getElementById('woBacklogOnHold').textContent = response.summary.on_hold_count;
     const overdueEl = document.getElementById('woBacklogOverdue');

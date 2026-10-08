@@ -152,6 +152,7 @@
       <div class="d-flex flex-wrap align-items-center gap-2">
         <span class="subheader mb-0">Status</span>
         <select class="form-select form-select-sm" id="d-wo-status" style="width:140px" onchange="onWoStatusSelect(this.value)">
+          <option value="pending">Pending</option>
           <option value="active">Active</option>
           <option value="on_hold">On Hold</option>
           <option value="complete">Complete</option>
@@ -1330,6 +1331,8 @@ function renderWOList(wos) {
             ? '<span class="badge bg-green-lt text-green ms-1">Complete</span>'
             : wo.status === 'on_hold'
                 ? '<span class="badge bg-orange-lt text-orange ms-1">On Hold</span>'
+                : wo.status === 'pending'
+                ? '<span class="badge bg-yellow-lt text-yellow ms-1" title="Job steps not complete">Pending</span>'
                 : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
         return `<tr style="cursor:pointer" onclick="openWODetail(${wo.id})">
             <td data-col="priority"><span class="d-flex align-items-center gap-1">${priorityCell}${pinBtn}</span></td>
@@ -2057,6 +2060,9 @@ function renderWoStatusBar(wo) {
     } else if (wo.status === 'on_hold') {
         const hold = (wo.status_log || []).find(l => l.to_status === 'on_hold');
         msg = hold && hold.note ? `On hold: ${hold.note}` : 'On hold';
+    } else if (wo.status === 'pending') {
+        const open = (wo.steps || []).filter(s => !['complete', 'not_required'].includes(s.status)).length;
+        msg = open ? `Pending — ${open} job step${open === 1 ? '' : 's'} left before it goes active` : 'Pending';
     } else if (wo.is_ready_to_complete) {
         msg = 'All elevations & steps done — ready to complete';
     }
@@ -2107,8 +2113,8 @@ async function onWoStatusSelect(next) {
         }
         return showWoCompletePrompt();
     }
-    // → active (release a hold / re-open a completed WO)
-    const ok = await applyWoStatus('active', null);
+    // → pending/active (release a hold / re-open a completed WO); the server picks whichever matches the job steps
+    const ok = await applyWoStatus(next, null);
     if (!ok) document.getElementById('d-wo-status').value = cur;
 }
 
@@ -2320,6 +2326,14 @@ async function reloadWoSteps() {
         const r = await API(`/work-orders/${currentWO.id}/steps`);
         const data = await r.json();
         renderWoSteps(currentWO.id, data.steps || []);
+        currentWO.steps = data.steps || currentWO.steps;
+        // Finishing (or re-opening) a job step can flip the work order between pending and active.
+        const fresh = await (await API(`/work-orders/${currentWO.id}`)).json();
+        if (fresh && fresh.status && fresh.status !== currentWO.status) {
+            currentWO = fresh;
+            loadWorkOrders();
+        }
+        renderWoStatusBar(currentWO);
         maybePromptWoComplete();
     } catch (e) { console.error(e); }
 }

@@ -33,7 +33,7 @@ class QualityReportController extends Controller
     public function elevationOptions()
     {
         $elevations = FdWoElevation::query()
-            ->whereHas('workOrder', fn ($q) => $q->whereIn('status', ['active', 'on_hold']))
+            ->whereHas('workOrder', fn ($q) => $q->whereIn('status', \App\Models\FdWorkOrder::OPEN_STATUSES))
             ->with(['workOrder.businessJob'])
             ->orderBy('elevation_tag')
             ->get()

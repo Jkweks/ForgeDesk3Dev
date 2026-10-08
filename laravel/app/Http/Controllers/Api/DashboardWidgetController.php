@@ -39,10 +39,10 @@ class DashboardWidgetController extends Controller
         return (int) WidgetRegistry::resolveSettings($widgetKey, $request->query())['limit'];
     }
 
-    /** Open = live (non-archived) work orders that are active or on hold. */
+    /** Open = live (non-archived) work orders that are pending, active or on hold. */
     private function openWorkOrders()
     {
-        return FdWorkOrder::where('archived', false)->whereIn('status', ['active', 'on_hold']);
+        return FdWorkOrder::where('archived', false)->whereIn('status', FdWorkOrder::OPEN_STATUSES);
     }
 
     /**
@@ -56,6 +56,7 @@ class DashboardWidgetController extends Controller
 
         return response()->json([
             'open' => $this->openWorkOrders()->count(),
+            'pending_count' => $this->openWorkOrders()->where('status', 'pending')->count(),
             'active_count' => $this->openWorkOrders()->where('status', 'active')->count(),
             'on_hold_count' => $this->openWorkOrders()->where('status', 'on_hold')->count(),
             'overdue_count' => $this->openWorkOrders()->whereNotNull('due_date')->where('due_date', '<', $today)->count(),
@@ -107,6 +108,7 @@ class DashboardWidgetController extends Controller
         $keys = WorkOrderColumns::resolve($request->user(), (string) $settings['columns_mode'], (array) $settings['columns']);
 
         $query = match ($settings['scope']) {
+            'pending' => FdWorkOrder::where('archived', false)->where('status', 'pending'),
             'active' => FdWorkOrder::where('archived', false)->where('status', 'active'),
             'on_hold' => FdWorkOrder::where('archived', false)->where('status', 'on_hold'),
             default => $this->openWorkOrders(),

@@ -110,7 +110,11 @@ class WorkOrderColumns
     {
         $label = $wo->businessJob ? "{$wo->businessJob->job_number}-{$wo->release_token}" : (string) $wo->release_token;
 
-        return $wo->status === 'on_hold' ? ['text' => $label.' · On hold', 'class' => 'bg-orange-lt'] : $label;
+        return match ($wo->status) {
+            'on_hold' => ['text' => $label.' · On hold', 'class' => 'bg-orange-lt'],
+            'pending' => ['text' => $label.' · Pending', 'class' => 'bg-yellow-lt'],
+            default => $label,
+        };
     }
 
     /** First elevation due date, else the work order's own; red once it has passed (as the page does). */

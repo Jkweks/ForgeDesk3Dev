@@ -83,7 +83,7 @@ class WidgetRegistry
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/table', [
                 $table('wo_table', 'Work Order Table', 'Open work orders in priority order. Columns follow your Work Orders page by default.', 'ti-table', [
                     ['key' => 'scope', 'label' => 'Show', 'type' => 'select', 'default' => 'open',
-                        'options' => ['open' => 'Active and on hold', 'active' => 'Active only', 'on_hold' => 'On hold only']],
+                        'options' => ['open' => 'Pending, active and on hold', 'pending' => 'Pending only', 'active' => 'Active only', 'on_hold' => 'On hold only']],
                     $limit(25, [10, 25, 50]),
                     ['key' => 'columns_mode', 'label' => 'Columns', 'type' => 'select', 'default' => 'mine',
                         'options' => ['mine' => 'Same as my Work Orders page', 'custom' => 'Choose columns for this widget']],

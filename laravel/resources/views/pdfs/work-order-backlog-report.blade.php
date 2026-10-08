@@ -39,6 +39,10 @@
                     <div class="stat-value">{{ $summary['total_open'] }}</div>
                 </td>
                 <td>
+                    <div class="stat-label">PENDING</div>
+                    <div class="stat-value">{{ $summary['pending_count'] ?? 0 }}</div>
+                </td>
+                <td>
                     <div class="stat-label">ACTIVE</div>
                     <div class="stat-value">{{ $summary['active_count'] }}</div>
                 </td>
