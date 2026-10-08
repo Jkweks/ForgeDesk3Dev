@@ -1208,10 +1208,13 @@ async function fbApplyHardwareSet() {
   try {
     await authenticatedFetch(`/config/hwlib-sets/${setId}/apply`, { method: 'POST', body: JSON.stringify({ configuration_ids: [fbSelectedId] }) });
     await fbLoadDetail();
+  } catch (err) { showNotification(err.message, 'danger'); return; }
+  // The set is linked at this point; a BOM failure (e.g. Opening tab not filled in yet) must not read as a failed apply.
+  try {
     const genRes = await fbGenerateWithDiffPrompt('hardware');
-    if (genRes) showNotification('Hardware set applied', 'success');
-    await fbLoadDetail();
-  } catch (err) { showNotification(err.message, 'danger'); }
+    showNotification(genRes ? 'Hardware set applied' : 'Hardware set applied (BOM unchanged)', 'success');
+  } catch (err) { showNotification(`Hardware set applied, but the BOM was not generated: ${err.message}`, 'warning'); }
+  await fbLoadDetail();
 }
 
 async function fbRemoveHardwareSet(setId) {

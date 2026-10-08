@@ -59,6 +59,10 @@ class HwlibBomGenerator
             }
         }
 
+        if (! $config->openingSpecs) {
+            throw new RuntimeException('Fill in and save the Opening tab first — hardware quantities and handing come from it. The hardware stays linked; click Generate / Recalculate afterwards.');
+        }
+
         $finish = strtoupper($config->openingSpecs->finish ?? '');
         $isPair = ($config->openingSpecs->opening_type ?? null) === 'pair';
         // Links are per opening; a configuration with N door tags is N openings of the same hardware.
