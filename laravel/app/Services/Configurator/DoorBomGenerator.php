@@ -11,6 +11,7 @@ use App\Models\ConfiguratorSetting;
 use App\Models\ConfiguratorSettingBlockKit;
 use App\Models\ConfiguratorTieRod;
 use App\Models\DoorFrameConfiguration;
+use App\Models\DoorFrameDoorConfig;
 use App\Models\Product;
 use RuntimeException;
 
@@ -39,19 +40,53 @@ class DoorBomGenerator
         $this->warnings = [];
 
         $doorConfig = $config->doorConfigs->first();
-        $openingSpecs = $config->openingSpecs;
 
         if (! $doorConfig) {
             throw new RuntimeException('Door configuration is required before generating parts.');
         }
-        if (! $openingSpecs) {
+        if (! $config->openingSpecs) {
             throw new RuntimeException('Opening specifications are required before generating parts.');
         }
+
+        // A merged pair has one door config per leaf; each is built as its own leaf and tagged so the
+        // controller can store the rows against the right door config.
+        $leafConfigs = $config->doorConfigs->whereNotNull('leaf')->values();
+        if ($leafConfigs->count() === 2) {
+            $rows = [];
+            foreach ($leafConfigs as $leafConfig) {
+                foreach ($this->buildRows($config, $leafConfig, $leafConfig->leaf) as $row) {
+                    $row['leaf'] = $leafConfig->leaf;
+                    $row['sort_order'] = count($rows);
+                    $rows[] = $row;
+                }
+            }
+
+            return ['rows' => $rows, 'warnings' => $this->warnings];
+        }
+
+        if ($config->isMergedPair()) {
+            throw new RuntimeException('Save both Door 1 and Door 2 before generating parts.');
+        }
+
+        return ['rows' => $this->buildRows($config, $doorConfig, null), 'warnings' => $this->warnings];
+    }
+
+    /**
+     * Rows for one door config. With $leaf ('active'/'inactive') only that single leaf of a merged pair is
+     * built — single-leaf quantities, half the opening width, and the astragal / meeting-stile split.
+     */
+    private function buildRows(DoorFrameConfiguration $config, DoorFrameDoorConfig $doorConfig, ?string $leaf): array
+    {
+        $openingSpecs = $config->openingSpecs;
 
         $qty = max(1, (int) $config->quantity);
         $series = $doorConfig->door_series;
         $stile = $doorConfig->stile_width;
         $width = (float) $openingSpecs->door_opening_width;
+        if ($leaf !== null) {
+            // Opening width is the whole pair; a leaf is built as a single door of half of it.
+            $width /= 2;
+        }
         $height = (float) $openingSpecs->door_opening_height;
         // Handing, hinge type, and glazing are driven by the Opening tab now
         // (consolidated there instead of re-entered per door/frame), and
@@ -71,7 +106,7 @@ class DoorBomGenerator
             throw new RuntimeException("No door type catalog entry for {$series} / {$stile}.");
         }
 
-        $pair = $this->isPair($handing);
+        $pair = $leaf === null && $this->isPair($handing);
         $centerPivot = $hingeType === 'CENTER PIVOTS';
         $stileHeight = (float) $doorType->stile_height;
 
@@ -112,6 +147,13 @@ class DoorBomGenerator
         $astragalStileQty = $pair ? $qty : 0;
         $inactiveStileQty = $pair ? $qty : 0;
         $astragalQty = $pair ? $qty : 0;
+        if ($leaf !== null) {
+            // Each leaf has a hinge stile; the meeting edge differs. The astragal rides on the active leaf.
+            $lockStileQty = 0;
+            $astragalStileQty = $leaf === 'active' ? $qty : 0;
+            $inactiveStileQty = $leaf === 'inactive' ? $qty : 0;
+            $astragalQty = $leaf === 'active' ? $qty : 0;
+        }
 
         $stackedBotPn = null;
         $stackedBotQty = 0;
@@ -128,7 +170,7 @@ class DoorBomGenerator
         $lockStilePn = $centerPivot ? ($doorType->cp_pn ?: $doorType->bev_pn) : $doorType->bev_pn;
         $astragalStilePn = $doorType->ast_pn;
         $inactiveStilePn = $doorType->inact_pn;
-        $astragalPn = $pair ? 'E1152' : null;
+        $astragalPn = ($pair || $leaf === 'active') ? 'E1152' : null;
 
         $glassData = $glassThk ? ConfiguratorGlassSpec::where('thickness', $glassThk)->first() : null;
         $glassStopPn = $glassData->stop_pn ?? null;
@@ -233,7 +275,7 @@ class DoorBomGenerator
         $sbk = ConfiguratorSettingBlockKit::where('series', $series)->where('glass_thickness', $glassThk)->first();
         $sbkPn = $sbk->kit1_pn ?? null;
         $sbk2Pn = $sbk->kit2_pn ?? null;
-        $handingType = in_array($handing, ['LH (INSWING)', 'LHR', 'RH (INSWING)', 'RHR', 'CP SINGLE'], true) ? 'S' : 'P';
+        $handingType = ($leaf !== null || in_array($handing, ['LH (INSWING)', 'LHR', 'RH (INSWING)', 'RHR', 'CP SINGLE'], true)) ? 'S' : 'P';
         $sbkQty = $handingType === 'S' ? $qty : $qty * 2;
         $sbk2Qty = 0;
         if ($midQty > 0) {
@@ -349,9 +391,7 @@ class DoorBomGenerator
             $addComponent('Setting Block Kit #2', $sbk2Pn, $sbk2Qty);
         }
 
-        $rows = app(KitExpander::class)->expand($rows, $this->warnings);
-
-        return ['rows' => $rows, 'warnings' => $this->warnings];
+        return app(KitExpander::class)->expand($rows, $this->warnings);
     }
 
     private function isPair(?string $handing): bool

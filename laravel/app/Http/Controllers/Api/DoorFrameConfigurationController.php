@@ -68,6 +68,9 @@ class DoorFrameConfigurationController extends Controller
                         'status_label' => $config->status_label,
                         'archived' => (bool) $config->archived,
                         'door_tags' => $config->doors->pluck('door_tag')->implode(', '),
+                        'opening_type' => $config->openingSpecs?->opening_type,
+                        'hand_single' => $config->openingSpecs?->hand_single,
+                        'is_merged_pair' => $config->isMergedPair(),
                         'is_complete' => $config->isComplete(),
                         'can_edit' => $config->canEdit(),
                         'can_edit_hardware' => $config->canEditHardware(),
@@ -628,18 +631,37 @@ class DoorFrameConfigurationController extends Controller
         return response()->json(['message' => 'Configuration unlinked successfully']);
     }
 
+    /** Opposite-hand single openings that can share a pair; LHR pairs with RHR, LH inswing with RH inswing. */
+    private const MERGE_PARTNER_HAND = ['lhr' => 'rhr', 'rhr' => 'lhr', 'lh_inswing' => 'rh_inswing', 'rh_inswing' => 'lh_inswing'];
+
+    /**
+     * The hand a configuration must have to be merged with this one into a pair. A door with a hand set needs
+     * its opposite; a door whose opening data has no hand yet is treated as the LHR leaf, so it needs an RHR.
+     */
+    private function mergePartnerHand(DoorFrameConfiguration $config): string
+    {
+        $own = $config->openingSpecs?->opening_type === 'single' ? $config->openingSpecs->hand_single : null;
+
+        return self::MERGE_PARTNER_HAND[$own] ?? 'rhr';
+    }
+
     /**
      * Merge another configuration into this one as the second leaf of a pair. For the rare pair whose
-     * leaves carry unique tags (1403 + 1409) and so were imported as two configurations: the other
-     * configuration's door tag(s) and work-order elevations move here and it is deleted, leaving one
-     * configuration with both tags that hangs in one frame. Parts must be regenerated afterwards.
+     * leaves carry unique tags (1403 + 1409) and so were imported as two configurations. The opening becomes a
+     * pair and each leaf keeps its own door config and door tag (Door 1 = active leaf, Door 2 = inactive), so both
+     * can be edited. The two must be opposite hands — the one merged in must be the partner of this one's hand
+     * (RHR when this opening has no hand set yet). Parts must be regenerated afterwards.
      */
-    public function mergePair(Request $request, $id)
+    public function mergePair(Request $request, $id, \App\Services\Configurator\ElevationConfigurationMatcher $matcher)
     {
         $data = $request->validate(['source_id' => 'required|integer|exists:door_frame_configurations,id']);
 
-        $target = DoorFrameConfiguration::with(['doors', 'openingSpecs'])->findOrFail($id);
-        $source = DoorFrameConfiguration::with(['doors', 'businessJob'])->findOrFail($data['source_id']);
+        $target = DoorFrameConfiguration::with(['doors', 'openingSpecs', 'doorConfigs'])->findOrFail($id);
+        $source = DoorFrameConfiguration::with(['doors', 'businessJob', 'openingSpecs', 'doorConfigs'])->findOrFail($data['source_id']);
+
+        $required = $this->mergePartnerHand($target);
+        $sourceHand = $source->openingSpecs?->opening_type === 'single' ? $source->openingSpecs->hand_single : null;
+        $labels = DoorFrameOpeningSpec::$handSingleOptions;
 
         $problem = match (true) {
             $source->id === $target->id => 'Pick a different configuration to merge.',
@@ -648,6 +670,11 @@ class DoorFrameConfigurationController extends Controller
             ! $target->includesDoor() || ! $source->includesDoor() => 'Both configurations must include a door.',
             ! $target->includesFrame() => 'This configuration has no frame to share. Merge into the one that has the frame.',
             (bool) ($target->duplicate_group_id || $source->duplicate_group_id) => 'Unlink these from their duplicate group first.',
+            $target->isMergedPair() || $source->isMergedPair() => 'One of these is already a merged pair.',
+            $target->openingSpecs?->opening_type === 'pair' || $source->openingSpecs?->opening_type === 'pair' => 'Both configurations must be single doors — a pair opening already covers both leaves.',
+            $target->doors->count() !== 1 || $source->doors->count() !== 1 => 'Each configuration must have exactly one door tag to become a leaf.',
+            $sourceHand !== $required => 'A pair needs opposite hands: merge a '.($labels[$required] ?? $required).' door into this one'
+                .($sourceHand ? ' (the one selected is '.($labels[$sourceHand] ?? $sourceHand).').' : ' (the one selected has no hand set on its Opening tab).'),
             default => null,
         };
         if ($problem) {
@@ -655,15 +682,61 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $wasReserved = $source->status === 'reserved';
+        $targetHand = $target->openingSpecs?->opening_type === 'single' ? $target->openingSpecs->hand_single : null;
+        // RHR Active is the default pair hand, so the right-hand leaf is Door 1 / active.
+        $targetIsActive = str_starts_with($targetHand ?? 'lhr', 'r');
+        $targetLeaf = $targetIsActive ? 'active' : 'inactive';
+        $sourceLeaf = $targetIsActive ? 'inactive' : 'active';
 
-        DB::transaction(function () use ($target, $source, $wasReserved) {
+        DB::transaction(function () use ($target, $source, $wasReserved, $targetLeaf, $sourceLeaf) {
             if ($wasReserved) {
                 $source->update(['status' => 'draft', 'job_reservation_id' => null]);
             }
 
-            foreach ($source->doors as $door) {
-                $door->update(['configuration_id' => $target->id]);
+            // ---- Opening: becomes a pair ----
+            // A target with no opening data yet starts from the other leaf's (height, finish, hinging...).
+            $specs = $target->openingSpecs
+                ?: ($source->openingSpecs ? $source->openingSpecs->replicate() : new DoorFrameOpeningSpec);
+            $widths = [(float) $target->openingSpecs?->door_opening_width, (float) $source->openingSpecs?->door_opening_width];
+            $specs->fill([
+                'opening_type' => 'pair',
+                'hand_single' => null,
+                'hand_pair' => $specs->hand_pair ?: 'rhr_active',
+            ]);
+            // Two single leaves make a pair of their combined width; one known width is a leaf, so double it.
+            $known = array_values(array_filter($widths));
+            if ($known) {
+                $specs->door_opening_width = count($known) === 2 ? array_sum($known) : $known[0] * 2;
             }
+            $specs->configuration_id = $target->id;
+            $specs->save();
+            $handing = $specs->deriveDoorHanding();
+
+            // ---- Door tags and door configs: one per leaf ----
+            $target->doors->first()->update(['leaf' => $targetLeaf]);
+            $source->doors->first()->update(['configuration_id' => $target->id, 'leaf' => $sourceLeaf]);
+
+            $targetDoorConfig = $target->doorConfigs->first();
+            $sourceDoorConfig = $source->doorConfigs->first();
+            $targetDoorConfig?->update(['leaf' => $targetLeaf, 'handing' => $handing]);
+            $sourceDoorConfig?->update(['configuration_id' => $target->id, 'leaf' => $sourceLeaf, 'handing' => $handing]);
+            // Only one side was configured: give the other the same settings to start from.
+            if ($targetDoorConfig && ! $sourceDoorConfig) {
+                $targetDoorConfig->replicate()->fill(['leaf' => $sourceLeaf])->save();
+            } elseif ($sourceDoorConfig && ! $targetDoorConfig) {
+                $sourceDoorConfig->replicate()->fill(['leaf' => $targetLeaf])->save();
+            }
+
+            // ---- Hardware: each side's links belong to its leaf; generated parts are rebuilt ----
+            $target->hardwareLinks()->update(['leaf' => $targetLeaf]);
+            $moved = $source->hardwareLinks()->get();
+            foreach ($moved as $link) {
+                $clash = $target->hardwareLinks()->where('item_id', $link->item_id)->where('leaf', $sourceLeaf)->exists();
+                $clash ? $link->delete() : $link->update(['configuration_id' => $target->id, 'leaf' => $sourceLeaf]);
+            }
+            $target->appliedHardwareSets()->syncWithoutDetaching($source->appliedHardwareSets()->pluck('configurator_hwlib_sets.id')->all());
+            $target->hardwareParts()->where('is_auto_generated', true)->delete();
+            $source->hardwareParts()->where('is_auto_generated', false)->update(['configuration_id' => $target->id]);
 
             \App\Models\FdWoElevation::where('door_frame_configuration_id', $source->id)
                 ->update(['door_frame_configuration_id' => $target->id]);
@@ -671,12 +744,9 @@ class DoorFrameConfigurationController extends Controller
             if (! $target->work_order_id && $source->work_order_id) {
                 $target->work_order_id = $source->work_order_id;
             }
-            $target->quantity = $target->doors()->count();
+            // One opening of two leaves: quantity counts openings, not leaves.
+            $target->quantity = 1;
             $target->save();
-
-            if ($target->openingSpecs && $target->openingSpecs->opening_type !== 'pair') {
-                $target->openingSpecs->update(['opening_type' => 'pair']);
-            }
 
             $source->unsetRelation('doors');
             $source->delete();
@@ -686,9 +756,19 @@ class DoorFrameConfigurationController extends Controller
             }
         });
 
+        $warnings = [];
+        try {
+            $sync = $matcher->syncElevationsForConfiguration($target->fresh(['doors', 'openingSpecs', 'workOrder']));
+            foreach ($sync['orphaned'] as $orphan) {
+                $warnings[] = "Elevation \"{$orphan->elevation_tag}\" no longer matches this opening — review it on the work order.";
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to sync elevations after merge', ['config_id' => $target->id, 'message' => $e->getMessage()]);
+        }
+
         Log::info('Configurations merged as pair', ['target_id' => $target->id, 'source_id' => $source->id, 'by' => auth()->id()]);
 
-        return response()->json(['message' => 'Merged as a pair. Regenerate the frame, door and hardware parts.']);
+        return response()->json(['message' => 'Merged as a pair. Edit Door 1 and Door 2, then regenerate the frame, door and hardware parts.', 'warnings' => $warnings]);
     }
 
     /**
@@ -724,6 +804,12 @@ class DoorFrameConfigurationController extends Controller
                 return response()->json([
                     'message' => 'Validation failed',
                     'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            if ($request->opening_type !== 'pair' && $config->isMergedPair()) {
+                return response()->json([
+                    'message' => 'This opening is a merged pair (Door 1 / Door 2). It has to stay a pair.',
                 ], 422);
             }
 
@@ -1117,6 +1203,7 @@ class DoorFrameConfigurationController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
+                'leaf' => 'nullable|in:active,inactive',
                 'door_series' => 'required|in:STANDARD,THERMAL,MONUMENTAL',
                 'stile_width' => 'required|string|exists:configurator_door_types,stile_name',
                 'opening_angle' => 'nullable|integer|min:1|max:180',
@@ -1137,8 +1224,17 @@ class DoorFrameConfigurationController extends Controller
 
             DB::beginTransaction();
 
-            // One door config per configuration — replaces any previous one.
-            DoorFrameDoorConfig::where('configuration_id', $config->id)->delete();
+            // One door config per configuration — replaces any previous one. A merged pair has one per leaf,
+            // so saving a leaf replaces only that leaf's row (and its parts, via the FK cascade).
+            $leaf = $config->isMergedPair() ? $request->input('leaf') : null;
+            if ($config->isMergedPair() && ! $leaf) {
+                DB::rollBack();
+
+                return response()->json(['message' => 'Pick which door (1 or 2) to save.'], 422);
+            }
+            DoorFrameDoorConfig::where('configuration_id', $config->id)
+                ->when($leaf, fn ($q) => $q->where('leaf', $leaf))
+                ->delete();
 
             // Handing/hinge type/glazing/bottom gap are driven by the Opening
             // tab (and the global gap settings) now, not re-entered here —
@@ -1149,6 +1245,7 @@ class DoorFrameConfigurationController extends Controller
                 'door_series' => $request->door_series,
                 'stile_width' => $request->stile_width,
                 'leaf_type' => 'single',
+                'leaf' => $leaf,
                 'handing' => $config->openingSpecs?->deriveDoorHanding(),
                 'hinge_type' => $config->openingSpecs?->deriveHingeType(),
                 'opening_angle' => $request->opening_angle ?? 90,
@@ -1161,6 +1258,11 @@ class DoorFrameConfigurationController extends Controller
                 'mid_loc2' => $request->mid_loc2,
                 'glazing' => $config->openingSpecs?->glazing,
             ]);
+
+            // Merged pair: the other leaf starts as a copy so both exist (and the BOM can be built).
+            if ($leaf && ! $config->doorConfigs()->where('leaf', $leaf === 'active' ? 'inactive' : 'active')->exists()) {
+                $doorConfig->replicate()->fill(['leaf' => $leaf === 'active' ? 'inactive' : 'active'])->save();
+            }
 
             DB::commit();
 
@@ -1226,12 +1328,15 @@ class DoorFrameConfigurationController extends Controller
         DB::beginTransaction();
 
         try {
-            DoorFrameDoorPart::where('door_config_id', $doorConfig->id)
+            // A merged pair stores each leaf's rows against its own door config.
+            DoorFrameDoorPart::whereIn('door_config_id', $config->doorConfigs->pluck('id'))
                 ->where('is_auto_generated', true)
                 ->delete();
 
             foreach ($result['rows'] as $row) {
-                $row['door_config_id'] = $doorConfig->id;
+                $leafConfig = isset($row['leaf']) ? $config->doorConfigs->firstWhere('leaf', $row['leaf']) : null;
+                unset($row['leaf']);
+                $row['door_config_id'] = ($leafConfig ?? $doorConfig)->id;
                 DoorFrameDoorPart::create($row);
             }
 
@@ -1250,12 +1355,12 @@ class DoorFrameConfigurationController extends Controller
             ], 500);
         }
 
-        $doorConfig->load('parts.product');
+        $config->load('doorConfigs.parts.product');
         $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
             'message' => 'Door parts generated successfully',
-            'parts' => $doorConfig->parts->map(fn ($p) => $this->formatPart($p)),
+            'parts' => $config->doorConfigs->flatMap(fn ($dc) => $dc->parts)->map(fn ($p) => $this->formatPart($p))->values(),
             'warnings' => $result['warnings'],
         ]);
     }
@@ -2064,6 +2169,10 @@ class DoorFrameConfigurationController extends Controller
             'opening_specs' => $config->openingSpecs ? $this->formatOpeningSpecs($config->openingSpecs) : null,
             'frame_config' => $config->frameConfig ? $this->formatFrameConfig($config->frameConfig) : null,
             'door_config' => $config->doorConfigs->first() ? $this->formatDoorConfig($config->doorConfigs->first()) : null,
+            // Merged pair: one entry per leaf (active first); door_config above is the active leaf.
+            'is_merged_pair' => $config->isMergedPair(),
+            'door_configs' => $config->doorConfigs->map(fn ($dc) => $this->formatDoorConfig($dc))->values(),
+            'door_leaves' => $config->doors->map(fn ($d) => ['tag' => $d->door_tag, 'leaf' => $d->leaf])->values(),
             'hardware_links' => $config->hardwareLinks->map(fn ($l) => $this->formatHardwareLink($l) + ['section' => $sections[$l->id] ?? 'custom']),
             // `section` is null for parts with no originating link: manual parts, or auto-generated
             // rows from before backers/fasteners were attributed (they sort themselves on Recalculate).
@@ -2142,6 +2251,7 @@ class DoorFrameConfigurationController extends Controller
             'id' => $doorConfig->id,
             'door_series' => $doorConfig->door_series,
             'stile_width' => $doorConfig->stile_width,
+            'leaf' => $doorConfig->leaf,
             'handing' => $doorConfig->handing,
             'handing_label' => DoorFrameDoorConfig::$handingOptions[$doorConfig->handing] ?? $doorConfig->handing,
             'hinge_type' => $doorConfig->hinge_type,

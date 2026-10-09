@@ -110,8 +110,8 @@ class PackageReportService
 
             foreach ($tags as $tag) {
                 if ($config->includesDoor() && $sections['doors']) {
-                    foreach ($this->leaves($config) as $leaf) {
-                        $records[] = $this->sheet($config, 'door', $tag, count($tags), $leaf, $variables);
+                    foreach ($this->leavesForTag($config, $tag) as $leaf) {
+                        $records[] = $this->sheet($config, 'door', $tag, empty($leaf['merged']) ? count($tags) : 1, $leaf, $variables);
                     }
                 }
                 if ($config->includesFrame() && $sections['frames'] && ! $framePerPair) {
@@ -187,9 +187,14 @@ class PackageReportService
             $framePerPair = $config->openingSpecs?->opening_type === 'pair' && count($tags) > 1;
 
             if ($config->includesDoor() && $sections['doors']) {
-                $doorParts = $config->doorConfigs->first()?->parts ?? collect();
                 foreach ($tags as $tag) {
-                    $emit($config, $doorParts, $tag, count($tags));
+                    // A merged pair stores each tag's leaf parts on its own door config: no dividing.
+                    $merged = $this->leavesForTag($config, $tag)[0]['door_config'] ?? null;
+                    if ($merged) {
+                        $emit($config, $merged->parts, $tag, 1);
+                    } else {
+                        $emit($config, $config->doorConfigs->first()?->parts ?? collect(), $tag, count($tags));
+                    }
                 }
             }
             if ($config->includesFrame() && $sections['frames']) {
@@ -220,6 +225,27 @@ class PackageReportService
         $tags = $config->doors->pluck('door_tag')->filter()->values()->all();
 
         return $tags ?: ["Config #{$config->id}"];
+    }
+
+    /**
+     * Leaves for one door tag's sheets. A merged pair is one leaf per tag, built from that tag's own door
+     * config (parts are already per leaf); anything else follows leaves().
+     *
+     * @return array<int, array{role: string, label: ?string, active: ?bool}>
+     */
+    private function leavesForTag(DoorFrameConfiguration $config, string $tag): array
+    {
+        $door = $config->isMergedPair() ? $config->doors->firstWhere('door_tag', $tag) : null;
+        $doorConfig = $door?->leaf ? $config->doorConfigs->firstWhere('leaf', $door->leaf) : null;
+        if (! $doorConfig) {
+            return $this->leaves($config);
+        }
+
+        $active = $door->leaf === 'active';
+        $activeIsRight = $config->openingSpecs?->deriveDoorHanding() !== 'PAIR-LHRA';
+        $right = $active === $activeIsRight;
+
+        return [['role' => $right ? 'rh' : 'lh', 'label' => $right ? 'RH' : 'LH', 'active' => $active, 'door_config' => $doorConfig, 'merged' => true]];
     }
 
     /**
@@ -258,7 +284,7 @@ class PackageReportService
         $leafText = $isPairLeaf ? $leaf['label'].' LEAF'.($leaf['active'] ? ' (ACTIVE)' : ' (INACTIVE)') : null;
 
         if ($kind === 'door') {
-            $doorConfig = $config->doorConfigs->first();
+            $doorConfig = $leaf['door_config'] ?? $config->doorConfigs->first();
             $parts = $doorConfig?->parts ?? collect();
             $pills = [
                 ['TAG', $tag], ...($isPairLeaf ? [['LEAF', $leafText]] : []),
@@ -380,7 +406,8 @@ class PackageReportService
         $total = $isRoll ? (float) $part->calculated_length * max(1.0, (float) $part->quantity) : (float) $part->quantity;
         $perTag = $total / max(1, $tagCount);
 
-        if (! $leaf || $leaf['role'] === 'single') {
+        // Merged pair: this leaf's door config already holds only this leaf's parts.
+        if (! $leaf || $leaf['role'] === 'single' || ! empty($leaf['merged'])) {
             return $perTag;
         }
 
@@ -399,7 +426,7 @@ class PackageReportService
     private function configExtrusions(DoorFrameConfiguration $config): array
     {
         $out = [];
-        foreach ([['Door', $config->includesDoor() ? ($config->doorConfigs->first()?->parts ?? collect()) : collect()], ['Frame', $config->includesFrame() ? ($config->frameConfig?->parts ?? collect()) : collect()]] as [$src, $parts]) {
+        foreach ([['Door', $config->includesDoor() ? $config->doorConfigs->flatMap(fn ($dc) => $dc->parts) : collect()], ['Frame', $config->includesFrame() ? ($config->frameConfig?->parts ?? collect()) : collect()]] as [$src, $parts]) {
             foreach ($parts as $p) {
                 if (in_array($p->source_type, ['extrusion', 'profile'], true) && $p->calculated_length !== null && $p->product) {
                     $out[] = ['pn' => $this->pn($p), 'len' => (float) $p->calculated_length, 'qty' => (float) $p->quantity, 'src' => $src, 'stock' => $p->product->configurator_length ? (float) $p->product->configurator_length : null];
