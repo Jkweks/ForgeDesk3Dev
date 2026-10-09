@@ -33,9 +33,12 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
         // Sessions die when the account's password changes (reset, admin reset,
-        // self-service change) instead of surviving it.
+        // self-service change) instead of surviving it — Sanctum's own
+        // AuthenticateSession (config/sanctum.php) does that for stateful requests.
+        // Laravel's AuthenticateSession must not be added here: under auth:sanctum
+        // the default guard is the token RequestGuard, which has no viaRemember(),
+        // so every authenticated call 500s.
         $middleware->api(append: [
-            \Illuminate\Session\Middleware\AuthenticateSession::class,
             \App\Http\Middleware\NormalizeApiErrorResponse::class,
         ]);
 
