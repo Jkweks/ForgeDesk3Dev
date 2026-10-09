@@ -86,7 +86,7 @@ class FabricationDocumentController extends Controller
             'manufacturer' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
             'tags' => 'nullable|string',
-            'file' => 'nullable|file|max:51200', // 50 MB max
+            'file' => ['nullable', 'file', 'max:51200', $this->safeExtensionRule()], // 50 MB max
         ]);
 
         $data = [
@@ -129,7 +129,7 @@ class FabricationDocumentController extends Controller
             'manufacturer' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
             'tags' => 'nullable|string',
-            'file' => 'nullable|file|max:51200',
+            'file' => ['nullable', 'file', 'max:51200', $this->safeExtensionRule()],
             'remove_file' => 'nullable|boolean',
         ]);
 
@@ -205,6 +205,22 @@ class FabricationDocumentController extends Controller
     }
 
     // -------------------------------------------------------------------------
+
+    /**
+     * Uploads land on the public disk and are served same-origin from /storage,
+     * so anything the browser would render or a server would execute (html,
+     * svg, php, ...) is refused outright.
+     */
+    private function safeExtensionRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            $blocked = ['php', 'php3', 'php4', 'php5', 'php7', 'phtml', 'phar', 'html', 'htm', 'xhtml', 'shtml', 'svg', 'svgz', 'xml', 'xsl', 'js', 'mjs', 'jsp', 'asp', 'aspx', 'cgi', 'sh', 'exe', 'bat'];
+            $ext = strtolower($value->getClientOriginalExtension());
+            if (in_array($ext, $blocked, true) || preg_match('/\.(?:'.implode('|', $blocked).')\./i', $value->getClientOriginalName())) {
+                $fail('This file type is not allowed.');
+            }
+        };
+    }
 
     private function storeFile(\Illuminate\Http\UploadedFile $file): array
     {

@@ -353,6 +353,9 @@ const API = (path, opts = {}) =>
     headers: {
       'Content-Type': 'application/json',
       'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+      // Proves the PIN sign-in happened on this device; the server only honours
+      // a manager/admin gate override when this matches the fab_user_id sent.
+      ...(typeof sfFabUser !== 'undefined' && sfFabUser?.kiosk_token ? { 'X-Kiosk-Token': sfFabUser.kiosk_token } : {}),
       ...(opts.headers || {}),
     },
   });

@@ -23,7 +23,7 @@
       $slug = \Illuminate\Support\Str::slug($section['label']);
     @endphp
     {{-- `permission` may be a list (visible with ANY of them): applyNavigationPermissions() splits on spaces. --}}
-    <li class="nav-item {{ $hasItems ? 'dropdown' : '' }} {{ $active ? 'active' : '' }}" data-nav-permission="{{ implode(' ', (array) $section['permission']) }}">
+    <li class="nav-item {{ $hasItems ? 'dropdown' : '' }} {{ $active ? 'active' : '' }}" data-nav-permission="{{ implode(' ', (array) $section['permission']) }}" @if (! empty($section['action_permission'])) data-permission="{{ $section['action_permission'] }}" @endif>
       @if ($hasItems)
         <a class="nav-link dropdown-toggle" href="#nav-{{ $set }}-{{ $mode }}-{{ $slug }}" data-bs-toggle="dropdown" data-bs-auto-close="{{ $autoClose }}" role="button" aria-expanded="false">
           <span class="nav-link-icon"><i class="ti ti-{{ $section['icon'] }} icon"></i></span>

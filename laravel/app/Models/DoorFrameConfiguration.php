@@ -150,7 +150,17 @@ class DoorFrameConfiguration extends Model
      */
     public function doorConfigs()
     {
-        return $this->hasMany(DoorFrameDoorConfig::class, 'configuration_id');
+        return $this->hasMany(DoorFrameDoorConfig::class, 'configuration_id')->orderByRaw("CASE leaf WHEN 'active' THEN 0 WHEN 'inactive' THEN 1 ELSE 2 END")->orderBy('id');
+    }
+
+    /**
+     * A pair built by merging two configurations: one door config and one door tag per leaf. Different from a
+     * pair imported under a single tag, which has one door config covering both leaves.
+     */
+    public function isMergedPair(): bool
+    {
+        return $this->doorConfigs->whereNotNull('leaf')->count() === 2
+            || $this->doors->whereNotNull('leaf')->count() === 2;
     }
 
     /**
@@ -209,7 +219,20 @@ class DoorFrameConfiguration extends Model
         $this->loadMissing(['doors', 'openingSpecs']);
         $lines = [];
 
-        foreach ($this->doors as $door) {
+        $merged = $this->doors->whereNotNull('leaf')->count() === 2;
+
+        foreach ($this->doors->sortBy(fn ($d) => $d->leaf === 'inactive' ? 1 : 0)->values() as $i => $door) {
+            if ($merged) {
+                // Each tag is its own leaf (one Door line each); the pair hangs in a single frame.
+                if ($this->includesDoor()) {
+                    $lines[] = ['type' => 'Door', 'tag' => $door->door_tag];
+                }
+                if ($this->includesFrame() && $i === 0) {
+                    $lines[] = ['type' => 'Frame', 'tag' => $door->door_tag];
+                }
+
+                continue;
+            }
             if ($this->includesDoor()) {
                 if ($this->leavesPerDoor() === 2) {
                     $lines[] = ['type' => 'Door', 'tag' => $door->door_tag.'-LH'];

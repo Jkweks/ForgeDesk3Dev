@@ -844,16 +844,16 @@
             `}
             <div class="flex-grow-1">
               <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                <span class="fw-bold fs-5">${product.sku}</span>
+                <span class="fw-bold fs-5">${escapeHtml(product.sku)}</span>
                 ${getStatusBadge(product.status, product.on_order_qty)}
                 ${product.categories && product.categories.length > 0
-                  ? product.categories.map(c => `<span class="badge text-bg-info">${c.name}</span>`).join('')
+                  ? product.categories.map(c => `<span class="badge text-bg-info">${escapeHtml(c.name)}</span>`).join('')
                   : ''}
               </div>
-              <div class="text-body-secondary mb-1">${product.description}</div>
+              <div class="text-body-secondary mb-1">${escapeHtml(product.description)}</div>
               ${product.long_description ? `<div class="text-muted small">${product.long_description}</div>` : ''}
               <div class="mt-1 small text-muted">
-                ${product.part_number ? `Part #: <strong class="text-body">${product.part_number}</strong>` : ''}
+                ${product.part_number ? `Part #: <strong class="text-body">${escapeHtml(product.part_number)}</strong>` : ''}
                 ${product.part_number && product.finish ? ' &nbsp;·&nbsp; ' : ''}
                 ${product.finish ? `Finish: <strong class="text-body">${product.finish}${product.finish_name ? ' – ' + product.finish_name : ''}</strong>` : ''}
               </div>
@@ -1161,7 +1161,7 @@
           const indent = '\u00A0'.repeat(level * 4);
           const selected = selectedCatIds.includes(c.id) ? 'selected' : '';
           const childOpts = c.children && c.children.length > 0 ? buildCategoryOptions(c.children, level + 1) : '';
-          return `<option value="${c.id}" ${selected}>${indent}${c.name}</option>${childOpts}`;
+          return `<option value="${c.id}" ${selected}>${indent}${escapeHtml(c.name)}</option>${childOpts}`;
         }).join('');
       }
       const categoryOptions = buildCategoryOptions(cats);
@@ -1202,7 +1202,7 @@
                   <label class="form-label small text-muted mb-1">Finish</label>
                   <select class="form-select form-select-sm" name="finish">
                     <option value="">None</option>
-                    ${finishes.map(f => `<option value="${f.code}" ${product.finish === f.code ? 'selected' : ''}>${f.code} – ${f.name}</option>`).join('')}
+                    ${finishes.map(f => `<option value="${escapeHtml(f.code)}" ${product.finish === f.code ? 'selected' : ''}>${escapeHtml(f.code)} – ${escapeHtml(f.name)}</option>`).join('')}
                   </select>
                 </div>
                 <div class="col-3">
@@ -1266,7 +1266,7 @@
                     <div class="col-5">
                       <label class="form-label small text-muted mb-1 required">Supplier</label>
                       <select class="form-select form-select-sm" name="supplier_id" required>
-                        ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+                        ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
                       </select>
                     </div>
                     <div class="col-4">
@@ -1352,7 +1352,7 @@
                     <div class="col-6">
                       <label class="form-label small text-muted mb-1">Stock UOM</label>
                       <select class="form-select form-select-sm" name="unit_of_measure">
-                        ${uoms.map(u => `<option value="${u.code}" ${product.unit_of_measure === u.code ? 'selected' : ''}>${u.code} – ${u.name}</option>`).join('')}
+                        ${uoms.map(u => `<option value="${escapeHtml(u.code)}" ${product.unit_of_measure === u.code ? 'selected' : ''}>${escapeHtml(u.code)} – ${escapeHtml(u.name)}</option>`).join('')}
                       </select>
                     </div>
                     <div class="col-3">
@@ -1580,7 +1580,7 @@
           return;
         }
         el.innerHTML = usages.map(u =>
-          `<span class="badge text-bg-secondary me-1 mb-1">${u.entity}: ${u.label} (${u.field})</span>`
+          `<span class="badge text-bg-secondary me-1 mb-1">${escapeHtml(u.entity)}: ${escapeHtml(u.label)} (${escapeHtml(u.field)})</span>`
         ).join('');
       } catch (error) {
         el.textContent = '';
@@ -1767,7 +1767,7 @@
           <tr>
             <td>
               <strong>${locationDisplay}</strong>${primaryBadge}
-              ${location.notes ? `<br><small class="text-muted">${location.notes}</small>` : ''}
+              ${location.notes ? `<br><small class="text-muted">${escapeHtml(location.notes)}</small>` : ''}
             </td>
             <td class="text-end">${location.quantity.toLocaleString()}</td>
             <td class="text-end">${location.quantity_committed.toLocaleString()}</td>
@@ -2045,7 +2045,7 @@
 
       // Populate modal with product info
       document.getElementById('issueJobProductInfo').innerHTML =
-        `<strong>${product.sku}</strong> - ${product.description}`;
+        `<strong>${escapeHtml(product.sku)}</strong> - ${escapeHtml(product.description)}`;
       document.getElementById('issueJobAvailable').textContent = product.quantity_available || 0;
 
       // Reset form

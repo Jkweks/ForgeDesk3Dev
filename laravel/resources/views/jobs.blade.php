@@ -2814,10 +2814,10 @@
                     <tbody>
                         ${reservationItems.map((item, index) => `
                             <tr>
-                                <td><code>${item.sku}</code></td>
-                                <td>${item.part_number}</td>
+                                <td><code>${escapeHtml(item.sku)}</code></td>
+                                <td>${escapeHtml(item.part_number)}</td>
                                 <td>${item.finish || '-'}</td>
-                                <td>${item.description}</td>
+                                <td>${escapeHtml(item.description)}</td>
                                 <td>${fmtQty(item.requested_qty)}</td>
                                 <td><span class="badge bg-${item.available > 0 ? 'success' : 'warning'}">${fmtQty(item.available)}</span></td>
                                 <td>

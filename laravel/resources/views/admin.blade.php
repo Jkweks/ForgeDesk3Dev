@@ -131,7 +131,8 @@
                           <select class="form-select" id="filterStatus">
                             <option value="">All Status</option>
                             <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                            <option value="inactive">Inactive (no login)</option>
+                            <option value="disabled">Disabled</option>
                           </select>
                         </div>
                         <div class="col-md-6">
@@ -987,8 +988,16 @@
             <div class="mb-3">
               <label class="form-check">
                 <input class="form-check-input" type="checkbox" id="editUserActive">
-                <span class="form-check-label">Active</span>
+                <span class="form-check-label">Active (can sign in)</span>
               </label>
+              <div class="form-hint">Unchecked users can't log in, but can still be picked as project manager / superintendent and still get work-order emails.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" id="editUserDisabled" onchange="if (this.checked) document.getElementById('editUserActive').checked = false">
+                <span class="form-check-label">Disabled (no longer with the company)</span>
+              </label>
+              <div class="form-hint">Removes them from the pickers and stops all emails. Also turns off sign-in.</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -1224,6 +1233,7 @@
           document.getElementById('editUserPassword').value = '';
           document.getElementById('editUserRole').value = user.role;
           document.getElementById('editUserActive').checked = user.is_active;
+          document.getElementById('editUserDisabled').checked = !!user.is_disabled;
 
           showModal(document.getElementById('editUserModal'));
         } catch (error) {
@@ -1256,7 +1266,8 @@
         const email = document.getElementById('editUserEmail').value;
         const password = document.getElementById('editUserPassword').value;
         const role = document.getElementById('editUserRole').value;
-        const active = document.getElementById('editUserActive').checked;
+        const disabled = document.getElementById('editUserDisabled').checked;
+        const active = disabled ? false : document.getElementById('editUserActive').checked;
 
         if (!firstName || !lastName || !email || !role) {
           showNotification('Please fill in all required fields', 'danger');
@@ -1269,7 +1280,8 @@
             last_name: lastName,
             email: email,
             role: role,
-            is_active: active
+            is_active: active,
+            is_disabled: disabled
           };
 
           // Only include password if it was changed
@@ -1490,10 +1502,10 @@
             const label = document.createElement('label');
             label.className = 'form-check';
             label.innerHTML = `
-              <input class="form-check-input" type="checkbox" value="${permission.name}" ${isChecked ? 'checked' : ''}>
+              <input class="form-check-input" type="checkbox" value="${escapeHtml(permission.name)}" ${isChecked ? 'checked' : ''}>
               <span class="form-check-label">
-                ${permission.display_name}
-                ${permission.description ? `<br><small class="text-muted">${permission.description}</small>` : ''}
+                ${escapeHtml(permission.display_name)}
+                ${permission.description ? `<br><small class="text-muted">${escapeHtml(permission.description)}</small>` : ''}
               </span>
             `;
 
@@ -1558,9 +1570,11 @@
         };
 
         tbody.innerHTML = users.map(user => {
-          let statusBadge = user.is_active
-            ? '<span class="badge bg-success-lt">Active</span>'
-            : '<span class="badge text-bg-secondary">Inactive</span>';
+          let statusBadge = user.is_disabled
+            ? '<span class="badge bg-red-lt" title="No longer with the company — not selectable, no emails">Disabled</span>'
+            : (user.is_active
+              ? '<span class="badge bg-success-lt">Active</span>'
+              : '<span class="badge text-bg-secondary" title="No login; still selectable and emailed">Inactive</span>');
 
           if (user.invitation_pending) {
             statusBadge += ' <span class="badge bg-azure-lt" title="Account created — welcome email not sent yet">Not invited</span>';
@@ -1587,8 +1601,8 @@
 
           return `
             <tr>
-              <td>${user.name}</td>
-              <td>${user.email}</td>
+              <td>${escapeHtml(user.name)}</td>
+              <td>${escapeHtml(user.email)}</td>
               <td>${roleBadge}</td>
               <td>${statusBadge}</td>
               <td>${lastLogin}</td>
@@ -1698,7 +1712,7 @@
                 <div class="card-body">
                   <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
-                      <h3 class="card-title mb-1">${role.display_name}${systemBadge}</h3>
+                      <h3 class="card-title mb-1">${escapeHtml(role.display_name)}${systemBadge}</h3>
                       <div class="text-muted">${role.description || 'No description'}</div>
                     </div>
                     <div class="dropdown">
@@ -1742,7 +1756,7 @@
 
       // Populate all role dropdowns with loaded roles
       function populateRoleDropdowns() {
-        const roleOptions = roles.map(role => `<option value="${role.name}">${role.display_name}</option>`).join('');
+        const roleOptions = roles.map(role => `<option value="${escapeHtml(role.name)}">${escapeHtml(role.display_name)}</option>`).join('');
 
         // Populate filter dropdown
         const filterRole = document.getElementById('filterRole');

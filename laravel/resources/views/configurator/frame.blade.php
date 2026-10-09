@@ -111,7 +111,10 @@
                   <a href="#fb-tab-frame" class="nav-link" data-bs-toggle="tab" role="tab">Frame</a>
                 </li>
                 <li class="nav-item" role="presentation" id="fb-tab-door-nav" style="display:none">
-                  <a href="#fb-tab-door" class="nav-link" data-bs-toggle="tab" role="tab">Door</a>
+                  <a href="#fb-tab-door" class="nav-link" id="fb-door-tab-link" data-bs-toggle="tab" role="tab" data-leaf="active">Door</a>
+                </li>
+                <li class="nav-item" role="presentation" id="fb-tab-door2-nav" style="display:none">
+                  <a href="#fb-tab-door" class="nav-link" id="fb-door2-tab-link" data-bs-toggle="tab" role="tab" data-leaf="inactive">Door 2</a>
                 </li>
                 <li class="nav-item" role="presentation">
                   <a href="#fb-tab-hardware" class="nav-link" data-bs-toggle="tab" role="tab">Hardware</a>
@@ -275,6 +278,7 @@
                 </div>
 
                 <div class="tab-pane" id="fb-tab-door" role="tabpanel">
+                  <div class="alert alert-info py-2" id="fb-door-leaf-note" style="display:none"></div>
                   <form id="fb-door-form" class="row g-3 mb-4">
                     <div class="col-md-4">
                       <label class="form-label">Door Series</label>
@@ -698,10 +702,12 @@
         <div class="modal-body">
           <p class="text-muted small">
             For a pair whose leaves have different tags (e.g. 1403 and 1409). The configuration you pick is
-            folded into this one: its door tag and work-order rows move here, this opening becomes a pair
-            sharing one frame, and the picked configuration is deleted. Its own frame and hardware are
-            discarded. Regenerate the parts afterwards.
+            folded into this one: this opening becomes a pair sharing one frame, with a <strong>Door 1</strong>
+            (active leaf) and <strong>Door 2</strong> tab for each leaf's door settings, and the Hardware tab
+            covers both leaves. Its door tag, work-order rows, door settings and hardware move here; its own
+            frame is discarded. Regenerate the parts afterwards.
           </p>
+          <div class="alert alert-info py-2" id="fb-merge-requirement"></div>
           <label class="form-label">Other leaf's configuration</label>
           <select class="form-select" id="fb-merge-source" required></select>
         </div>
@@ -764,6 +770,17 @@
 let fbConfigs = [];
 let fbSelectedId = null;
 let fbSelectedDetail = null;
+// Merged pair: which leaf's door config the Door tab is showing ('active' = Door 1, 'inactive' = Door 2).
+let fbDoorLeaf = 'active';
+
+// The door config the Door tab is editing: the selected leaf's on a merged pair, the one config otherwise.
+function fbDoorCfg(c = fbSelectedDetail) {
+  if (c?.is_merged_pair) return (c.door_configs || []).find(d => d.leaf === fbDoorLeaf) || null;
+  return c?.door_config || null;
+}
+function fbDoorLeafTag(leaf, c = fbSelectedDetail) {
+  return (c?.door_leaves || []).find(d => d.leaf === leaf)?.tag || '';
+}
 let fbCatalogTree = [];
 let fbProducts = [];
 let fbDoorCatalog = null;
@@ -818,13 +835,13 @@ function fbFilterDoorStiles() {
   const series = document.getElementById('fb-door-series').value;
   const stileSelect = document.getElementById('fb-door-stile');
   const stiles = (fbDoorCatalog?.door_types || []).filter(t => t.series === series);
-  const current = fbSelectedDetail?.door_config?.stile_width;
+  const current = fbDoorCfg()?.stile_width;
   stileSelect.innerHTML = stiles.map(t => `<option value="${esc(t.stile_name)}" ${t.stile_name === current ? 'selected' : ''}>${esc(fbTitleCase(t.stile_name))}</option>`).join('');
 }
 
 function fbPopulateRailSelects() {
   const rails = fbDoorCatalog?.rails || [];
-  const dc = fbSelectedDetail?.door_config;
+  const dc = fbDoorCfg();
   const byType = (type) => rails.filter(r => r.rail_type === type);
   const opts = (list, current) => list.map(r => `<option value="${esc(r.label)}" ${r.label === current ? 'selected' : ''}>${esc(r.label)}</option>`).join('');
   document.getElementById('fb-door-toprail').innerHTML = opts(byType('top'), dc?.top_rail_label);
@@ -1630,6 +1647,11 @@ function fbRenderDetail() {
   const includesDoor = ['door_and_frame', 'door_only'].includes(c.job_scope);
   document.getElementById('fb-tab-frame-nav').style.display = includesFrame ? '' : 'none';
   document.getElementById('fb-tab-door-nav').style.display = includesDoor ? '' : 'none';
+  const merged = !!c.is_merged_pair;
+  document.getElementById('fb-tab-door2-nav').style.display = includesDoor && merged ? '' : 'none';
+  if (!merged) fbDoorLeaf = 'active';
+  document.getElementById('fb-door-tab-link').textContent = merged ? `Door 1 · ${fbDoorLeafTag('active')}` : 'Door';
+  document.getElementById('fb-door2-tab-link').textContent = merged ? `Door 2 · ${fbDoorLeafTag('inactive')}` : 'Door 2';
   // If the currently-active tab just got hidden (e.g. scope changed), fall back to Opening.
   const activeTabLink = document.querySelector('#fb-detail-col .nav-link.active');
   if (activeTabLink && activeTabLink.closest('.nav-item').style.display === 'none') {
@@ -1677,7 +1699,7 @@ function fbRenderDetail() {
 
   // Door config
   if (includesDoor) {
-    const dc = c.door_config;
+    const dc = fbDoorCfg(c);
     document.getElementById('fb-door-series').value = dc?.door_series || 'STANDARD';
     fbFilterDoorStiles();
     document.getElementById('fb-door-stile').value = dc?.stile_width || '';
@@ -1690,6 +1712,10 @@ function fbRenderDetail() {
     fbToggleMidRail();
 
     fbRenderParts('fb-door-parts-tbody', 'fb-door-parts-empty', dc?.parts || [], 'door');
+    document.getElementById('fb-door-leaf-note').style.display = merged ? '' : 'none';
+    if (merged) {
+      document.getElementById('fb-door-leaf-note').innerHTML = `<i class="ti ti-arrows-join me-1"></i>Editing <strong>Door ${fbDoorLeaf === 'active' ? '1 (active leaf)' : '2 (inactive leaf)'}</strong> of the pair — tag <strong>${esc(fbDoorLeafTag(fbDoorLeaf))}</strong>. Width, handing, hinging and glazing are shared on the Opening tab.`;
+    }
   }
 
   // Hardware
@@ -1803,7 +1829,7 @@ const FB_GENERATE_ENDPOINTS = {
 function fbExistingAutoParts(kind) {
   const c = fbSelectedDetail;
   if (kind === 'frame') return (c.frame_config?.parts || []).filter(p => p.is_auto_generated);
-  if (kind === 'door') return (c.door_config?.parts || []).filter(p => p.is_auto_generated);
+  if (kind === 'door') return (c.door_configs || []).flatMap(d => d.parts || []).filter(p => p.is_auto_generated);
   return (c.hardware_parts || []).filter(p => p.is_auto_generated);
 }
 
@@ -1928,18 +1954,31 @@ document.getElementById('fb-duplicate-form').addEventListener('submit', async (e
 });
 
 // ---- Merge as pair ----
+// A pair needs opposite hands. A door with a hand set needs its opposite; one with no hand set yet is treated as
+// LHR, so it needs an RHR. (The server enforces the same rule.)
+const FB_MERGE_PARTNER_HAND = { lhr: 'rhr', rhr: 'lhr', lh_inswing: 'rh_inswing', rh_inswing: 'lh_inswing' };
+const FB_HAND_LABELS = { lh_inswing: 'LH Inswing', rh_inswing: 'RH Inswing', lhr: 'LHR', rhr: 'RHR' };
+
 function fbOpenMergeModal() {
   const c = fbSelectedDetail;
-  const others = fbConfigs.filter(o => o.id !== c.id && o.business_job_id === c.business_job.id && o.can_edit && o.job_scope !== 'frame_only');
-  if (!others.length) { showNotification('No other editable configuration on this job to merge.', 'warning'); return; }
-  document.getElementById('fb-merge-source').innerHTML = others.map(o => `<option value="${o.id}">${esc(fbEntryLabel(o, false))}</option>`).join('');
+  if (c.is_merged_pair) { showNotification('This opening is already a merged pair.', 'warning'); return; }
+  if (c.opening_specs?.opening_type === 'pair') { showNotification('This opening is already a pair — merge applies to two single doors.', 'warning'); return; }
+  const own = c.opening_specs?.opening_type === 'single' ? c.opening_specs.hand_single : null;
+  const required = FB_MERGE_PARTNER_HAND[own] || 'rhr';
+  const others = fbConfigs.filter(o => o.id !== c.id && o.business_job_id === c.business_job.id && o.can_edit && o.job_scope !== 'frame_only'
+    && !o.is_merged_pair && o.opening_type === 'single' && o.hand_single === required);
+  document.getElementById('fb-merge-requirement').innerHTML = own
+    ? `This door is <strong>${FB_HAND_LABELS[own]}</strong>, so the other leaf must be <strong>${FB_HAND_LABELS[required]}</strong>.`
+    : `This opening has no hand set, so it is treated as <strong>LHR</strong> and the other leaf must be <strong>RHR</strong>.`;
+  if (!others.length) { showNotification(`No other editable single ${FB_HAND_LABELS[required]} door on this job to merge.`, 'warning'); return; }
+  document.getElementById('fb-merge-source').innerHTML = others.map(o => `<option value="${o.id}">${esc(fbEntryLabel(o, false))} · ${FB_HAND_LABELS[o.hand_single]}</option>`).join('');
   showModal(document.getElementById('fb-merge-modal'));
 }
 
 document.getElementById('fb-merge-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const sourceId = document.getElementById('fb-merge-source').value;
-  if (!confirm('Merge the selected configuration into this one? It will be deleted.')) return;
+  if (!confirm('Merge the selected configuration into this one as a pair? The selected configuration will be deleted.')) return;
   try {
     const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/merge-pair`, { method: 'POST', body: JSON.stringify({ source_id: parseInt(sourceId, 10) }) });
     hideModal(document.getElementById('fb-merge-modal'));
@@ -2143,11 +2182,22 @@ document.getElementById('fb-frame-form').addEventListener('submit', async (e) =>
   } catch (err) { showNotification(err.message, 'danger'); }
 });
 
+// ---- Door 1 / Door 2 tabs (merged pair): both links show the one Door pane, filled for the chosen leaf ----
+['fb-door-tab-link', 'fb-door2-tab-link'].forEach(id => {
+  document.getElementById(id).addEventListener('shown.bs.tab', (e) => {
+    const leaf = e.target.dataset.leaf;
+    if (!fbSelectedDetail?.is_merged_pair || leaf === fbDoorLeaf) return;
+    fbDoorLeaf = leaf;
+    fbRenderDetail();
+  });
+});
+
 // ---- Door config ----
 document.getElementById('fb-door-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const midQty = parseInt(document.getElementById('fb-door-midqty').value || 0, 10);
   const payload = {
+    ...(fbSelectedDetail.is_merged_pair ? { leaf: fbDoorLeaf } : {}),
     door_series: document.getElementById('fb-door-series').value,
     stile_width: document.getElementById('fb-door-stile').value,
     top_rail_label: document.getElementById('fb-door-toprail').value,
@@ -2195,7 +2245,7 @@ async function fbGenerateDoorParts() {
 }
 
 function fbPartsSource(kind) {
-  return kind === 'door' ? (fbSelectedDetail.door_config?.parts || []) : (fbSelectedDetail.frame_config?.parts || []);
+  return kind === 'door' ? (fbSelectedDetail.door_configs || []).flatMap(d => d.parts || []) : (fbSelectedDetail.frame_config?.parts || []);
 }
 function fbPartsEndpoint(kind) {
   return kind === 'door' ? 'door-parts' : 'frame-parts';

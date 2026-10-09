@@ -534,8 +534,8 @@
 
         return `
           <tr onclick="viewProduct(${product.id})" style="cursor: pointer;">
-            <td><span class="text-muted">${product.sku}</span></td>
-            <td>${product.description}</td>
+            <td><span class="text-muted">${htmlEscape(product.sku)}</span></td>
+            <td>${htmlEscape(product.description)}</td>
             <td>${locationsDisplay}</td>
             <td class="text-end">${onHandDisplay}</td>
             <td class="text-end">${committedDisplay}</td>

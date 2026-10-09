@@ -16,6 +16,20 @@ use Illuminate\Validation\Rule;
 class UserController extends Controller
 {
     /**
+     * Only an administrator may modify, reset, deactivate, delete or re-invite
+     * an admin account. Without this, anyone holding users.edit could set an
+     * admin's password and sign in as them.
+     */
+    private function denyUnlessMayManage(Request $request, User $target)
+    {
+        if ($target->role === 'admin' && ! $request->user()->isAdmin()) {
+            return response()->json(['message' => 'Only an administrator can modify an administrator account'], 403);
+        }
+
+        return null;
+    }
+
+    /**
      * Get all users with optional filtering
      */
     public function index(Request $request)
@@ -29,7 +43,11 @@ class UserController extends Controller
 
         // Filter by active status
         if ($request->has('is_active') && $request->is_active !== '') {
-            $query->where('is_active', $request->is_active === 'active' || $request->is_active === '1');
+            match ($request->is_active) {
+                'disabled' => $query->where('is_disabled', true),
+                'active', '1' => $query->where('is_active', true),
+                default => $query->where('is_active', false)->where('is_disabled', false),
+            };
         }
 
         // Search by name or email
@@ -56,7 +74,8 @@ class UserController extends Controller
                 'role' => $user->role,
                 'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
                 'is_active' => $user->is_active,
-                'status' => $user->is_active ? 'active' : 'inactive',
+                'is_disabled' => (bool) $user->is_disabled,
+                'status' => $user->is_disabled ? 'disabled' : ($user->is_active ? 'active' : 'inactive'),
                 'must_change_password' => $user->must_change_password,
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
                 'temp_password_expired' => $user->temporaryPasswordExpired(),
@@ -78,12 +97,13 @@ class UserController extends Controller
     public function people()
     {
         $people = User::query()
-            ->where('is_active', true)
             ->orderByRaw('LOWER(last_name)')
             ->orderByRaw('LOWER(first_name)')
             ->orderBy('name')
-            ->get(['id', 'first_name', 'last_name', 'name'])
-            ->map(fn ($u) => ['id' => $u->id, 'label' => $u->sort_name])
+            ->get(['id', 'first_name', 'last_name', 'name', 'is_disabled'])
+            // Users without a login are still pickable; disabled ones (left the company) are
+            // returned flagged so a job that already points at one keeps showing it.
+            ->map(fn ($u) => ['id' => $u->id, 'label' => $u->sort_name, 'disabled' => (bool) $u->is_disabled])
             ->values();
 
         return response()->json($people);
@@ -125,6 +145,7 @@ class UserController extends Controller
             'role' => $user->role,
             'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
             'is_active' => $user->is_active,
+            'is_disabled' => (bool) $user->is_disabled,
             'must_change_password' => $user->must_change_password,
             'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
             'temp_password_expired' => $user->temporaryPasswordExpired(),
@@ -207,6 +228,10 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
+
         if (! $user->is_active) {
             return response()->json(['message' => 'Reactivate the account before sending an invitation.'], 422);
         }
@@ -252,6 +277,10 @@ class UserController extends Controller
         $failed = [];
 
         foreach ($query->get() as $user) {
+            if ($user->role === 'admin' && ! $request->user()->isAdmin()) {
+                continue;
+            }
+
             if (! $user->is_active) {
                 $skippedInactive++;
 
@@ -304,6 +333,7 @@ class UserController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'is_active' => $user->is_active,
+            'is_disabled' => (bool) $user->is_disabled,
             'must_change_password' => $user->must_change_password,
             'welcome_email_sent_at' => $user->welcome_email_sent_at?->toIso8601String(),
             'invitation_pending' => $user->welcome_email_sent_at === null,
@@ -335,6 +365,10 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'first_name' => 'sometimes|required|string|max:255',
             'last_name' => 'sometimes|required|string|max:255',
@@ -342,7 +376,13 @@ class UserController extends Controller
             'password' => 'sometimes|nullable|string|min:8',
             'role' => ['sometimes', 'required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
+            'is_disabled' => 'sometimes|boolean',
         ]);
+
+        // A disabled user (left the company) can't sign in either.
+        if (! empty($validated['is_disabled'])) {
+            $validated['is_active'] = false;
+        }
 
         // Only an admin may grant the admin role, or change an existing admin's role.
         if (isset($validated['role']) && $validated['role'] !== $user->role
@@ -354,7 +394,7 @@ class UserController extends Controller
         // Don't let a user deactivate or demote their own account and lock themselves out.
         if ($user->id === $request->user()->id) {
             if (array_key_exists('is_active', $validated) && ! $validated['is_active']) {
-                return response()->json(['message' => 'You cannot deactivate your own account'], 403);
+                return response()->json(['message' => 'You cannot deactivate or disable your own account'], 403);
             }
             if (isset($validated['role']) && $validated['role'] !== $user->role) {
                 return response()->json(['message' => 'You cannot change your own role'], 403);
@@ -369,11 +409,22 @@ class UserController extends Controller
         }
 
         // Remove password from update if not provided
-        if (isset($validated['password']) && empty($validated['password'])) {
+        if (array_key_exists('password', $validated) && empty($validated['password'])) {
             unset($validated['password']);
         }
 
+        // An admin-chosen password is temporary by nature (same as resetPassword()).
+        $passwordChanged = isset($validated['password']);
+        if ($passwordChanged) {
+            $validated['must_change_password'] = true;
+            $validated['password_set_at'] = now();
+        }
+
         $user->update($validated);
+
+        if ($passwordChanged) {
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'User updated successfully',
@@ -390,9 +441,13 @@ class UserController extends Controller
     /**
      * Delete a user (soft delete)
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
 
         // Prevent deleting yourself
         if ($user->id === auth()->id()) {
@@ -411,9 +466,13 @@ class UserController extends Controller
     /**
      * Restore a soft-deleted user
      */
-    public function restore($id)
+    public function restore(Request $request, $id)
     {
         $user = User::withTrashed()->findOrFail($id);
+
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
         $user->restore();
 
         return response()->json([
@@ -428,6 +487,10 @@ class UserController extends Controller
     public function resetPassword(Request $request, $id)
     {
         $user = User::findOrFail($id);
+
+        if ($denied = $this->denyUnlessMayManage($request, $user)) {
+            return $denied;
+        }
 
         $validated = $request->validate([
             'password' => 'required|string|min:8|confirmed',
@@ -497,6 +560,10 @@ class UserController extends Controller
             'must_change_password' => false,
             'password_set_at' => now(),
         ]);
+
+        // Drop every other session (AuthenticateSession compares this hash) but
+        // keep the one that just changed the password signed in.
+        $request->session()->put('password_hash_web', $user->getAuthPassword());
 
         return response()->json([
             'message' => 'Password changed successfully',

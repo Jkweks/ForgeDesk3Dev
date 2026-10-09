@@ -11,6 +11,7 @@
  *   permission  `nav.*` permission (or a list: visible if the user has ANY of them); becomes
  *               data-nav-permission so applyNavigationPermissions() can hide it.
  *   href        Leaf section (no dropdown).
+ *   action_permission  Optional data-permission on a section (hidden by applyActionPermissions()).
  *   active      Request::is() patterns that mark the section active.
  *   items       Dropdown entries (below).
  *
@@ -73,12 +74,16 @@ return [
             ['label' => 'Work Orders', 'href' => '/fabrication/work-orders', 'active' => ['fabrication/work-orders']],
             ['label' => 'Work Queue', 'href' => '/fabrication/work-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/work-queue']],
             ['label' => 'Cut Lists', 'href' => '/fabrication/cut-lists', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/cut-lists']],
-            ['label' => 'Quality Reports', 'href' => '/fabrication/quality', 'permission' => 'quality.view', 'active' => ['fabrication/quality']],
             ['label' => 'Documents', 'href' => '/fabrication/documents', 'permission' => 'fabrication.view', 'active' => ['fabrication/documents']],
             ['header' => 'Displays'],
             ['label' => 'Shop Floor Display', 'href' => '/shop', 'target' => '_blank', 'external' => true],
             ['label' => 'Cut Flow', 'href' => '/cut-station', 'target' => '_blank', 'external' => true, 'admin_only' => true],
         ],
+    ],
+    [
+        // Used to be a Fabrication item, so it keeps that section's nav permission (and its own quality.view).
+        'label' => 'Quality', 'icon' => 'certificate', 'permission' => 'nav.fabrication', 'action_permission' => 'quality.view',
+        'href' => '/fabrication/quality', 'active' => ['fabrication/quality'],
     ],
     [
         // The external Door Configurator used to sit under Fulfillment (nav.fulfillment), so it keeps that permission.

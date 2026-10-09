@@ -52,7 +52,13 @@ class DashboardWidgetDataTest extends TestCase
     {
         $job = BusinessJob::firstOrCreate(['job_number' => 'J1'], ['job_name' => 'Job One', 'status' => 'active']);
 
-        return FdWorkOrder::create($attrs + ['business_job_id' => $job->id, 'release_number' => ++$this->release]);
+        // A new work order is derived `pending` while its job steps are open, whatever status it is created with;
+        // these fixtures mean a running one unless they say otherwise, so set it after creation.
+        $status = $attrs['status'] ?? 'active';
+        $wo = FdWorkOrder::create(array_diff_key($attrs, ['status' => 1]) + ['business_job_id' => $job->id, 'release_number' => ++$this->release]);
+        FdWorkOrder::whereKey($wo->id)->update(['status' => $status]);
+
+        return $wo->fresh();
     }
 
     public function test_work_order_counts_follow_backlog_report_definitions(): void
@@ -63,9 +69,11 @@ class DashboardWidgetDataTest extends TestCase
         $this->workOrder(['due_date' => today()->addDays(20), 'status' => 'on_hold']); // on hold
         $this->workOrder(['due_date' => today()->subDays(5), 'status' => 'complete']); // closed: ignored
         $this->workOrder(['due_date' => today()->subDays(5), 'archived' => true]);    // archived: ignored
+        $this->workOrder(['status' => 'pending']);                                    // waiting on job steps: open, not active
 
         $this->getJson('/api/v1/dashboard/widgets/work-orders')->assertOk()->assertJson([
-            'open' => 3,
+            'open' => 4,
+            'pending_count' => 1,
             'active_count' => 2,
             'on_hold_count' => 1,
             'overdue_count' => 1,

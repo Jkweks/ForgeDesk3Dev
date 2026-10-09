@@ -58,6 +58,12 @@ class InventoryLocationController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        // Seeding a bin with stock changes on-hand quantity without a transaction
+        // record, so it needs the same permission as a manual adjustment.
+        if ((int) $validated['quantity'] > 0 && ! $request->user()->hasPermission('inventory.adjust')) {
+            return $this->adjustDenied();
+        }
+
         // Check if location already exists for this product
         $exists = $product->inventoryLocations()
             ->where('storage_location_id', $validated['storage_location_id'])
@@ -92,6 +98,11 @@ class InventoryLocationController extends Controller
         return response()->json($location, 201);
     }
 
+    private function adjustDenied()
+    {
+        return response()->json(['message' => 'Changing stock quantity requires the inventory.adjust permission.'], 403);
+    }
+
     /**
      * Update a specific location
      */
@@ -109,6 +120,11 @@ class InventoryLocationController extends Controller
             'is_primary' => 'nullable|boolean',
             'notes' => 'nullable|string',
         ]);
+
+        // Editing the quantity directly is a stock adjustment — gate it like one.
+        if ((int) $validated['quantity'] !== (int) $location->quantity && ! $request->user()->hasPermission('inventory.adjust')) {
+            return $this->adjustDenied();
+        }
 
         // Check if new storage location conflicts with another location
         if ($validated['storage_location_id'] !== $location->storage_location_id) {
@@ -189,16 +205,25 @@ class InventoryLocationController extends Controller
             return response()->json(['message' => 'Invalid locations'], 404);
         }
 
-        // Check if source location has enough available quantity
-        if ($fromLocation->quantity_available < $validated['quantity']) {
-            return response()->json([
-                'message' => 'Insufficient available quantity at source location',
-                'errors' => ['quantity' => ['Not enough available inventory']],
-            ], 422);
-        }
-
         DB::beginTransaction();
         try {
+            // Lock both bins (in id order, to avoid deadlocks) and re-read them so
+            // two concurrent transfers can't both spend the same stock.
+            $locked = InventoryLocation::whereIn('id', [$fromLocation->id, $toLocation->id])
+                ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $fromLocation = $locked[$fromLocation->id];
+            $toLocation = $locked[$toLocation->id];
+
+            // Check if source location has enough available quantity
+            if ($fromLocation->quantity_available < $validated['quantity']) {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Insufficient available quantity at source location',
+                    'errors' => ['quantity' => ['Not enough available inventory']],
+                ], 422);
+            }
+
             // Capture product quantity before transfer
             $quantityBefore = $product->quantity_on_hand;
 
@@ -266,10 +291,16 @@ class InventoryLocationController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        DB::beginTransaction();
+
+        // Lock the bin so concurrent adjustments apply to the current quantity.
+        $location = InventoryLocation::whereKey($location->id)->lockForUpdate()->first();
         $locationQuantityBefore = $location->quantity;
         $location->quantity += $validated['quantity'];
 
         if ($location->quantity < 0) {
+            DB::rollBack();
+
             return response()->json([
                 'message' => 'Adjustment would result in negative quantity',
                 'errors' => ['quantity' => ['Invalid adjustment']],
@@ -307,6 +338,8 @@ class InventoryLocationController extends Controller
             'user_id' => auth()->id(),
             'transaction_date' => now(),
         ]);
+
+        DB::commit();
 
         return response()->json([
             'message' => 'Quantity adjusted successfully',

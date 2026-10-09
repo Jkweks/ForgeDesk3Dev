@@ -26,7 +26,7 @@ class PersonLinkTest extends TestCase
         ]);
     }
 
-    public function test_people_endpoint_lists_active_users_last_first_and_needs_no_special_permission(): void
+    public function test_people_endpoint_lists_users_last_first_and_needs_no_special_permission(): void
     {
         $pm = User::factory()->create(['role' => 'manager', 'is_active' => true, 'first_name' => 'John', 'last_name' => 'Smith', 'name' => 'John Smith']);
         User::factory()->create(['role' => 'viewer', 'is_active' => false, 'first_name' => 'In', 'last_name' => 'Active', 'name' => 'In Active']);
@@ -39,10 +39,56 @@ class PersonLinkTest extends TestCase
 
         $this->assertContains('Smith, John', $labels);
         $this->assertContains('Office, Olive', $labels);
-        $this->assertNotContains('Active, In', $labels, 'inactive users are excluded');
+        $this->assertContains('Active, In', $labels, 'users without a login are still pickable');
         // Sorted by last name.
         $this->assertLessThan($labels->search('Smith, John'), $labels->search('Office, Olive'));
         $this->assertSame($pm->id, collect($rows)->firstWhere('label', 'Smith, John')['id']);
+    }
+
+    public function test_people_endpoint_flags_disabled_users(): void
+    {
+        User::factory()->create(['role' => 'viewer', 'is_active' => false, 'is_disabled' => true, 'first_name' => 'Gone', 'last_name' => 'Away', 'name' => 'Gone Away']);
+        $office = User::factory()->create(['role' => 'office_staff', 'is_active' => true]);
+        Sanctum::actingAs($office, ['*']);
+
+        $gone = collect($this->getJson('/api/v1/people')->assertOk()->json())->firstWhere('label', 'Away, Gone');
+        $this->assertTrue($gone['disabled']);
+    }
+
+    public function test_disabling_a_user_also_turns_off_sign_in_and_filters_separately(): void
+    {
+        $admin = $this->admin();
+        Sanctum::actingAs($admin, ['*']);
+        $user = User::factory()->create(['role' => 'viewer', 'is_active' => true]);
+        $noLogin = User::factory()->create(['role' => 'viewer', 'is_active' => false]);
+
+        $this->putJson("/api/v1/users/{$user->id}", ['is_disabled' => true])->assertOk();
+        $this->assertFalse($user->fresh()->is_active);
+        $this->assertTrue($user->fresh()->is_disabled);
+
+        $this->putJson("/api/v1/users/{$admin->id}", ['is_disabled' => true])->assertStatus(403);
+
+        $ids = fn (string $f) => collect($this->getJson("/api/v1/users?is_active={$f}")->json('users') ?? $this->getJson("/api/v1/users?is_active={$f}")->json())->pluck('id')->all();
+        $this->assertSame([$user->id], $ids('disabled'));
+        $this->assertSame([$noLogin->id], $ids('inactive'));
+    }
+
+    public function test_a_user_who_never_got_a_login_can_be_pm_and_superintendent(): void
+    {
+        Sanctum::actingAs($this->admin(), ['*']);
+        $pm = User::factory()->create(['role' => 'viewer', 'is_active' => false, 'first_name' => 'No', 'last_name' => 'Login', 'name' => 'No Login']);
+        $super = User::factory()->create(['role' => 'viewer', 'is_active' => false, 'first_name' => 'Also', 'last_name' => 'Nologin', 'name' => 'Also Nologin']);
+
+        $this->postJson('/api/v1/business-jobs', [
+            'job_number' => 'J-200', 'job_name' => 'No login', 'project_manager_id' => $pm->id, 'superintendent_id' => $super->id,
+        ])->assertCreated();
+
+        $job = BusinessJob::where('job_number', 'J-200')->first();
+        $this->assertSame([$pm->id, $super->id], [$job->project_manager_id, $job->superintendent_id]);
+        $this->assertSame('Login, No', $job->project_manager);
+
+        $this->putJson("/api/v1/business-jobs/{$job->id}", ['project_manager_id' => $super->id])->assertOk();
+        $this->assertSame($super->id, $job->fresh()->project_manager_id);
     }
 
     public function test_creating_a_job_with_a_pm_id_links_it_and_syncs_the_label(): void

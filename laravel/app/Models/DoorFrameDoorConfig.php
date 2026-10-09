@@ -14,6 +14,7 @@ class DoorFrameDoorConfig extends Model
         'door_series',
         'stile_width',
         'leaf_type',
+        'leaf',
         'handing',
         'hinge_type',
         'opening_angle',

@@ -25,10 +25,12 @@ class ShellAndThemeTest extends TestCase
             $this->assertCount(2, $blocks[0], "the {$set} menu renders in the top bar and the sidebar");
             $joined = implode("\n", $blocks[0]);
 
+            $sharing = array_count_values(array_map(fn ($s) => implode(' ', (array) $s['permission']), config($configKey)));
             foreach (config($configKey) as $section) {
                 $attr = preg_quote(implode(' ', (array) $section['permission']), '/');
+                // Sections may share a permission (Quality keeps Fabrication's); each still renders twice.
                 $this->assertSame(
-                    2,
+                    2 * $sharing[implode(' ', (array) $section['permission'])],
                     preg_match_all('/<li class="nav-item[^"]*" data-nav-permission="'.$attr.'"/', $joined),
                     "{$section['label']} ({$set}) should render once in the top bar and once in the sidebar"
                 );

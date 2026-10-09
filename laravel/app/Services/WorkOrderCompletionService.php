@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Mail;
  * Works out who hears about a completed work order and sends the notice.
  *
  * Recipients: the parent job's linked project-manager and site-superintendent
- * users (if any) plus every active admin. The list is not user-editable — see
+ * users (if any, unless disabled) plus every active admin. The list is not user-editable — see
  * the completion prompt.
  */
 class WorkOrderCompletionService
@@ -28,11 +28,12 @@ class WorkOrderCompletionService
 
         $job = $workOrder->businessJob;
 
-        if ($job?->projectManager?->email) {
-            $emails->push($job->projectManager->email);
-        }
-        if ($job?->superintendentUser?->email) {
-            $emails->push($job->superintendentUser->email);
+        // Linked people are emailed even without a login (is_active = false); only a disabled
+        // user (left the company) is skipped.
+        foreach ([$job?->projectManager, $job?->superintendentUser] as $person) {
+            if ($person?->email && ! $person->is_disabled) {
+                $emails->push($person->email);
+            }
         }
 
         $emails = $emails->merge(

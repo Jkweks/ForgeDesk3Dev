@@ -34,18 +34,6 @@ use App\Http\Controllers\Api\SupplierController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Public test route (no auth required)
-Route::get('/test', function () {
-    return response()->json(['message' => 'API is working!']);
-});
-
-Route::get('/v1/test', function () {
-    return response()->json([
-        'message' => 'ForgeDesk API is working!',
-        'version' => '1.0',
-    ]);
-});
-
 // Public authentication routes
 Route::post('/login', function (Request $request) {
     $request->validate([
@@ -132,21 +120,23 @@ Route::prefix('v1')->group(function () {
     Route::patch('/shop/work-orders/{id}/stages/bulk-complete', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteWoStage'])->middleware('throttle:120,1');
     // ─────────────────────────────────────────────────────────────────────────
 
-    Route::get('/fulfillment/test', [MaterialCheckController::class, 'test']);
-    Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials']);
-    Route::post('/fulfillment/material-check-csv', [MaterialCheckController::class, 'checkCsv']);
+    // Material checks read live stock and stage uploaded files on disk, so they
+    // need a signed-in user with jobs.view (same as the reservation reads).
+    Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials'])
+        ->middleware(['auth:sanctum', 'password.current', 'permission:jobs.view', 'throttle:30,1']);
+    Route::post('/fulfillment/material-check-csv', [MaterialCheckController::class, 'checkCsv'])
+        ->middleware(['auth:sanctum', 'password.current', 'permission:jobs.view', 'throttle:30,1']);
     // Commit-to-job creates a live (active) reservation and moves inventory —
-    // unlike the read-only material checks above it must be authenticated and
-    // permission-gated.
+    // it must be authenticated and permission-gated.
     Route::post('/fulfillment/commit-materials', [MaterialCheckController::class, 'commitMaterials'])
-        ->middleware(['auth:sanctum', 'permission:jobs.manage-reservations']);
+        ->middleware(['auth:sanctum', 'password.current', 'permission:jobs.manage-reservations']);
 
     // Job Reservations — authenticated. Reads need jobs.view, writes need
     // jobs.manage-reservations (the same mapping as /business-jobs/{id}/reservations).
     // admin/manager/fabricator hold both, so their workflow is unchanged; this
     // only closes the endpoints to anonymous callers, viewers and office staff.
     // IMPORTANT: specific routes MUST come before parameterized routes like {id}.
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'password.current'])->group(function () {
         Route::get('/job-reservations', [JobReservationController::class, 'index'])->middleware('permission:reservations.dashboard.view');
         Route::post('/job-reservations/create-manual', [JobReservationController::class, 'createManual'])->middleware('permission:jobs.manage-reservations');
         Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct'])->middleware('permission:jobs.view');
@@ -164,14 +154,11 @@ Route::prefix('v1')->group(function () {
 
     // EZ Estimate Management (admin web interface). Login required; upload is a
     // file write and the debug endpoints dump parsed data.
-    Route::get('/ez-estimate/test', [\App\Http\Controllers\Api\EzEstimateController::class, 'test']);
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/ez-estimate/debug', [\App\Http\Controllers\Api\EzEstimateController::class, 'debug']);
-        Route::get('/ez-estimate/test-pricing', [\App\Http\Controllers\Api\EzEstimateController::class, 'testPricing']);
-        Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware('throttle:20,1');
-        Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile']);
-        Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats']);
-        Route::get('/ez-estimate/part-lookup', [\App\Http\Controllers\Api\EzEstimateController::class, 'lookupPart']);
+    Route::middleware(['auth:sanctum', 'password.current'])->group(function () {
+        Route::post('/ez-estimate/upload', [\App\Http\Controllers\Api\EzEstimateController::class, 'upload'])->middleware(['permission:pricing.import', 'throttle:20,1']);
+        Route::get('/ez-estimate/current-file', [\App\Http\Controllers\Api\EzEstimateController::class, 'getCurrentFile'])->middleware('permission:inventory.view');
+        Route::get('/ez-estimate/stats', [\App\Http\Controllers\Api\EzEstimateController::class, 'getStats'])->middleware('permission:inventory.view');
+        Route::get('/ez-estimate/part-lookup', [\App\Http\Controllers\Api\EzEstimateController::class, 'lookupPart'])->middleware('permission:inventory.view');
     });
 });
 
@@ -246,7 +233,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Dashboard
         Route::get('/dashboard', [DashboardController::class, 'index']);
-        Route::get('/dashboard/inventory/{status}', [DashboardController::class, 'inventoryByStatus']);
+        Route::get('/dashboard/inventory/{status}', [DashboardController::class, 'inventoryByStatus'])->middleware('permission:inventory.view');
         Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->middleware('permission:inventory.view');
 
         // Customizable dashboard layout + widget catalog (see App\Dashboard\WidgetRegistry).
@@ -304,10 +291,10 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor('store', 'permission:inventory.create')
             ->middlewareFor('update', 'permission:inventory.edit')
             ->middlewareFor('destroy', 'permission:inventory.delete');
-        Route::get('/categories-tree', [CategoryController::class, 'tree']);
-        Route::get('/category-systems', [CategoryController::class, 'systems']);
-        Route::post('/categories/sort-order', [CategoryController::class, 'updateSortOrder']);
-        Route::post('/categories/bulk-action', [CategoryController::class, 'bulkAction']);
+        Route::get('/categories-tree', [CategoryController::class, 'tree'])->middleware('permission:inventory.view');
+        Route::get('/category-systems', [CategoryController::class, 'systems'])->middleware('permission:inventory.view');
+        Route::post('/categories/sort-order', [CategoryController::class, 'updateSortOrder'])->middleware('permission:inventory.edit');
+        Route::post('/categories/bulk-action', [CategoryController::class, 'bulkAction'])->middleware('permission:inventory.edit');
 
         // Suppliers
         Route::apiResource('suppliers', SupplierController::class)
@@ -330,12 +317,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/cutflow-bridge-settings', [CutFlowBridgeSettingController::class, 'show'])->middleware('permission:settings.view');
         Route::put('/cutflow-bridge-settings', [CutFlowBridgeSettingController::class, 'update'])->middleware('permission:settings.edit');
 
-        Route::get('/supplier-countries', [SupplierController::class, 'countries']);
-        Route::get('/supplier-statistics', [SupplierController::class, 'statistics']);
-        Route::get('/suppliers/{supplier}/products', [SupplierController::class, 'products']);
-        Route::get('/suppliers/{supplier}/contacts', [SupplierController::class, 'contacts']);
-        Route::get('/suppliers/{supplier}/low-stock-report', [SupplierController::class, 'lowStockReport']);
-        Route::post('/suppliers/bulk-action', [SupplierController::class, 'bulkAction']);
+        Route::get('/supplier-countries', [SupplierController::class, 'countries'])->middleware('permission:inventory.view');
+        Route::get('/supplier-statistics', [SupplierController::class, 'statistics'])->middleware('permission:inventory.view');
+        Route::get('/suppliers/{supplier}/products', [SupplierController::class, 'products'])->middleware('permission:inventory.view');
+        Route::get('/suppliers/{supplier}/contacts', [SupplierController::class, 'contacts'])->middleware('permission:inventory.view');
+        Route::get('/suppliers/{supplier}/low-stock-report', [SupplierController::class, 'lowStockReport'])->middleware('permission:inventory.view');
+        Route::post('/suppliers/bulk-action', [SupplierController::class, 'bulkAction'])->middleware('permission:inventory.edit');
 
         // Products
         Route::apiResource('products', ProductController::class)
@@ -343,35 +330,34 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor('store', 'permission:inventory.create')
             ->middlewareFor('update', 'permission:inventory.edit')
             ->middlewareFor('destroy', 'permission:inventory.delete');
-        Route::post('/products/refresh-statuses', [ProductController::class, 'refreshAllStatuses']);
+        Route::post('/products/refresh-statuses', [ProductController::class, 'refreshAllStatuses'])->middleware('permission:inventory.edit');
         Route::put('/products/{product}/configurator-specs', [ProductController::class, 'updateConfiguratorSpecs'])->middleware('permission:inventory.edit');
         Route::post('/products/{product}/adjust', [ProductController::class, 'adjustInventory'])->middleware('permission:inventory.adjust');
-        Route::post('/products/{product}/issue-to-job', [ProductController::class, 'issueToJob']);
-        Route::get('/products/{product}/transactions', [ProductController::class, 'getTransactions']);
-        Route::get('/products/{product}/calculate-reorder', [ProductController::class, 'calculateReorderPoint']);
-        Route::post('/products/{product}/photo', [ProductController::class, 'uploadPhoto']);
-        Route::delete('/products/{product}/photo', [ProductController::class, 'deletePhoto']);
-        Route::get('/finish-codes', [ProductController::class, 'getFinishCodes']);
-        Route::get('/unit-of-measures', [ProductController::class, 'getUnitOfMeasures']);
+        Route::post('/products/{product}/issue-to-job', [ProductController::class, 'issueToJob'])->middleware('permission:inventory.adjust,jobs.manage-transactions');
+        Route::get('/products/{product}/calculate-reorder', [ProductController::class, 'calculateReorderPoint'])->middleware('permission:inventory.view');
+        Route::post('/products/{product}/photo', [ProductController::class, 'uploadPhoto'])->middleware('permission:inventory.edit');
+        Route::delete('/products/{product}/photo', [ProductController::class, 'deletePhoto'])->middleware('permission:inventory.edit');
+        Route::get('/finish-codes', [ProductController::class, 'getFinishCodes'])->middleware('permission:inventory.view');
+        Route::get('/unit-of-measures', [ProductController::class, 'getUnitOfMeasures'])->middleware('permission:inventory.view');
 
         // Inventory Locations
-        Route::get('/products/{product}/locations', [InventoryLocationController::class, 'index']);
-        Route::post('/products/{product}/locations', [InventoryLocationController::class, 'store']);
-        Route::put('/products/{product}/locations/{location}', [InventoryLocationController::class, 'update']);
-        Route::delete('/products/{product}/locations/{location}', [InventoryLocationController::class, 'destroy']);
-        Route::post('/products/{product}/locations/transfer', [InventoryLocationController::class, 'transfer']);
+        Route::get('/products/{product}/locations', [InventoryLocationController::class, 'index'])->middleware('permission:inventory.view');
+        Route::post('/products/{product}/locations', [InventoryLocationController::class, 'store'])->middleware('permission:inventory.edit');
+        Route::put('/products/{product}/locations/{location}', [InventoryLocationController::class, 'update'])->middleware('permission:inventory.edit');
+        Route::delete('/products/{product}/locations/{location}', [InventoryLocationController::class, 'destroy'])->middleware('permission:inventory.edit');
+        Route::post('/products/{product}/locations/transfer', [InventoryLocationController::class, 'transfer'])->middleware('permission:inventory.edit');
         Route::post('/products/{product}/locations/{location}/adjust', [InventoryLocationController::class, 'adjust'])->middleware('permission:inventory.adjust');
-        Route::get('/products/{product}/locations/statistics', [InventoryLocationController::class, 'statistics']);
-        Route::get('/locations', [InventoryLocationController::class, 'getAllLocations']);
-        Route::get('/locations/by-storage/{storageLocation}', [InventoryLocationController::class, 'itemsAtLocation']);
-        Route::get('/locations/products-without-storage', [InventoryLocationController::class, 'productsWithoutStorageLocation']);
+        Route::get('/products/{product}/locations/statistics', [InventoryLocationController::class, 'statistics'])->middleware('permission:inventory.view');
+        Route::get('/locations', [InventoryLocationController::class, 'getAllLocations'])->middleware('permission:inventory.view');
+        Route::get('/locations/by-storage/{storageLocation}', [InventoryLocationController::class, 'itemsAtLocation'])->middleware('permission:inventory.view');
+        Route::get('/locations/products-without-storage', [InventoryLocationController::class, 'productsWithoutStorageLocation'])->middleware('permission:inventory.view');
 
         // Storage Locations (Master Location Management)
-        Route::get('/storage-locations-tree', [App\Http\Controllers\Api\StorageLocationController::class, 'tree']);
-        Route::get('/storage-locations-stats', [App\Http\Controllers\Api\StorageLocationController::class, 'withStats']);
-        Route::get('/storage-locations-names', [App\Http\Controllers\Api\StorageLocationController::class, 'locationNames']);
-        Route::get('/storage-locations/bulk-shelf-labels-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'bulkShelfLabelsPdf']);
-        Route::get('/storage-locations/{storageLocation}/shelf-label-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'shelfLabelPdf']);
+        Route::get('/storage-locations-tree', [App\Http\Controllers\Api\StorageLocationController::class, 'tree'])->middleware('permission:inventory.view');
+        Route::get('/storage-locations-stats', [App\Http\Controllers\Api\StorageLocationController::class, 'withStats'])->middleware('permission:inventory.view');
+        Route::get('/storage-locations-names', [App\Http\Controllers\Api\StorageLocationController::class, 'locationNames'])->middleware('permission:inventory.view');
+        Route::get('/storage-locations/bulk-shelf-labels-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'bulkShelfLabelsPdf'])->middleware('permission:inventory.view');
+        Route::get('/storage-locations/{storageLocation}/shelf-label-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'shelfLabelPdf'])->middleware('permission:inventory.view');
         Route::apiResource('storage-locations', App\Http\Controllers\Api\StorageLocationController::class)
             ->middlewareFor(['index', 'show'], 'permission:inventory.view')
             ->middlewareFor('store', 'permission:inventory.create')
@@ -379,38 +365,38 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor('destroy', 'permission:inventory.delete');
 
         // Job Reservations
-        Route::get('/products/{product}/reservations', [JobReservationController::class, 'index']);
-        Route::get('/products/{product}/reservations/active', [JobReservationController::class, 'active']);
-        Route::post('/products/{product}/reservations', [JobReservationController::class, 'store']);
-        Route::put('/products/{product}/reservations/{reservation}', [JobReservationController::class, 'update']);
-        Route::post('/products/{product}/reservations/{reservation}/fulfill', [JobReservationController::class, 'fulfill']);
-        Route::post('/products/{product}/reservations/{reservation}/release', [JobReservationController::class, 'release']);
-        Route::delete('/products/{product}/reservations/{reservation}', [JobReservationController::class, 'destroy']);
-        Route::get('/products/{product}/reservations/statistics', [JobReservationController::class, 'statistics']);
-        Route::get('/jobs', [JobReservationController::class, 'getAllJobs']);
+        Route::get('/products/{product}/reservations', [JobReservationController::class, 'index'])->middleware('permission:jobs.view');
+        Route::get('/products/{product}/reservations/active', [JobReservationController::class, 'active'])->middleware('permission:jobs.view');
+        Route::post('/products/{product}/reservations', [JobReservationController::class, 'store'])->middleware('permission:jobs.manage-reservations');
+        Route::put('/products/{product}/reservations/{reservation}', [JobReservationController::class, 'update'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/products/{product}/reservations/{reservation}/fulfill', [JobReservationController::class, 'fulfill'])->middleware('permission:jobs.manage-reservations');
+        Route::post('/products/{product}/reservations/{reservation}/release', [JobReservationController::class, 'release'])->middleware('permission:jobs.manage-reservations');
+        Route::delete('/products/{product}/reservations/{reservation}', [JobReservationController::class, 'destroy'])->middleware('permission:jobs.manage-reservations');
+        Route::get('/products/{product}/reservations/statistics', [JobReservationController::class, 'statistics'])->middleware('permission:jobs.view');
+        Route::get('/jobs', [JobReservationController::class, 'getAllJobs'])->middleware('permission:jobs.view');
 
         // Inventory Transactions (Activity & Audit Trail)
-        Route::get('/transactions', [InventoryTransactionController::class, 'index']);
+        Route::get('/transactions', [InventoryTransactionController::class, 'index'])->middleware('permission:inventory.view');
         Route::post('/transactions/manual', [InventoryTransactionController::class, 'createManual'])->middleware('permission:inventory.create');
-        Route::get('/transactions/{transaction}', [InventoryTransactionController::class, 'show']);
-        Route::match(['put', 'patch'], '/transactions/{transaction}', [InventoryTransactionController::class, 'update']);
-        Route::delete('/transactions/{transaction}', [InventoryTransactionController::class, 'destroy']);
-        Route::get('/transactions-statistics', [InventoryTransactionController::class, 'statistics']);
-        Route::get('/transactions-types', [InventoryTransactionController::class, 'types']);
-        Route::get('/transactions-export', [InventoryTransactionController::class, 'export']);
-        Route::get('/transactions-recent', [InventoryTransactionController::class, 'recentActivity']);
-        Route::get('/transactions-timeline', [InventoryTransactionController::class, 'timeline']);
-        Route::get('/products/{product}/transactions', [InventoryTransactionController::class, 'productTransactions']);
+        Route::get('/transactions/{transaction}', [InventoryTransactionController::class, 'show'])->middleware('permission:inventory.view');
+        Route::match(['put', 'patch'], '/transactions/{transaction}', [InventoryTransactionController::class, 'update'])->middleware('permission:inventory.adjust');
+        Route::delete('/transactions/{transaction}', [InventoryTransactionController::class, 'destroy'])->middleware('permission:inventory.adjust');
+        Route::get('/transactions-statistics', [InventoryTransactionController::class, 'statistics'])->middleware('permission:inventory.view');
+        Route::get('/transactions-types', [InventoryTransactionController::class, 'types'])->middleware('permission:inventory.view');
+        Route::get('/transactions-export', [InventoryTransactionController::class, 'export'])->middleware('permission:reports.export');
+        Route::get('/transactions-recent', [InventoryTransactionController::class, 'recentActivity'])->middleware('permission:inventory.view');
+        Route::get('/transactions-timeline', [InventoryTransactionController::class, 'timeline'])->middleware('permission:inventory.view');
+        Route::get('/products/{product}/transactions', [InventoryTransactionController::class, 'productTransactions'])->middleware('permission:inventory.view');
 
         // Configurator & BOM (Required Parts)
-        Route::get('/products/{product}/required-parts', [RequiredPartsController::class, 'index']);
-        Route::post('/products/{product}/required-parts', [RequiredPartsController::class, 'store']);
-        Route::put('/products/{product}/required-parts/{requiredPart}', [RequiredPartsController::class, 'update']);
-        Route::delete('/products/{product}/required-parts/{requiredPart}', [RequiredPartsController::class, 'destroy']);
-        Route::get('/products/{product}/bom-explosion', [RequiredPartsController::class, 'explosion']);
-        Route::get('/products/{product}/bom-availability', [RequiredPartsController::class, 'checkAvailability']);
-        Route::post('/products/{product}/required-parts/sort-order', [RequiredPartsController::class, 'updateSortOrder']);
-        Route::get('/products/{product}/where-used', [RequiredPartsController::class, 'whereUsed']);
+        Route::get('/products/{product}/required-parts', [RequiredPartsController::class, 'index'])->middleware('permission:inventory.view');
+        Route::post('/products/{product}/required-parts', [RequiredPartsController::class, 'store'])->middleware('permission:inventory.edit');
+        Route::put('/products/{product}/required-parts/{requiredPart}', [RequiredPartsController::class, 'update'])->middleware('permission:inventory.edit');
+        Route::delete('/products/{product}/required-parts/{requiredPart}', [RequiredPartsController::class, 'destroy'])->middleware('permission:inventory.edit');
+        Route::get('/products/{product}/bom-explosion', [RequiredPartsController::class, 'explosion'])->middleware('permission:inventory.view');
+        Route::get('/products/{product}/bom-availability', [RequiredPartsController::class, 'checkAvailability'])->middleware('permission:inventory.view');
+        Route::post('/products/{product}/required-parts/sort-order', [RequiredPartsController::class, 'updateSortOrder'])->middleware('permission:inventory.edit');
+        Route::get('/products/{product}/where-used', [RequiredPartsController::class, 'whereUsed'])->middleware('permission:inventory.view');
 
         // Reports & Analytics — all require reports.view; export/PDF/CSV routes
         // additionally require reports.export.
@@ -446,16 +432,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/purchase-orders/{purchaseOrder}/items', [PurchaseOrderController::class, 'addItem'])->middleware('permission:orders.edit');
         Route::patch('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'updateItem'])->middleware('permission:orders.edit');
         Route::delete('/purchase-orders/{purchaseOrder}/items/{item}', [PurchaseOrderController::class, 'removeItem'])->middleware('permission:orders.edit');
-        Route::get('/purchase-orders/{purchaseOrder}/ez-estimate-export', [PurchaseOrderController::class, 'exportEzEstimate']);
+        Route::get('/purchase-orders/{purchaseOrder}/ez-estimate-export', [PurchaseOrderController::class, 'exportEzEstimate'])->middleware('permission:orders.view');
         Route::get('/purchase-orders/{purchaseOrder}/pdf', [PurchaseOrderController::class, 'exportPdf'])->middleware('permission:orders.view');
-        Route::get('/purchase-orders-open', [PurchaseOrderController::class, 'open']);
-        Route::get('/purchase-orders-statistics', [PurchaseOrderController::class, 'statistics']);
+        Route::get('/purchase-orders-open', [PurchaseOrderController::class, 'open'])->middleware('permission:orders.view');
+        Route::get('/purchase-orders-statistics', [PurchaseOrderController::class, 'statistics'])->middleware('permission:orders.view');
         Route::get('/purchase-orders-eligible-approvers', [PurchaseOrderController::class, 'eligibleApprovers'])->middleware('permission:orders.edit');
 
         // Cycle Counting
         Route::apiResource('cycle-counts', CycleCountController::class)
             ->middlewareFor(['index', 'show'], 'permission:cycle-count.view')
-            ->middlewareFor('store', 'permission:cycle-count.create');
+            ->middlewareFor(['store', 'update', 'destroy'], 'permission:cycle-count.create');
         Route::post('/cycle-counts/{cycleCountSession}/start', [CycleCountController::class, 'start'])->middleware('permission:cycle-count.create');
         Route::post('/cycle-counts/{cycleCountSession}/record-count', [CycleCountController::class, 'recordCount'])->middleware('permission:cycle-count.record');
         Route::post('/cycle-counts/{cycleCountSession}/approve-variances', [CycleCountController::class, 'approveVariances'])->middleware('permission:cycle-count.approve');
@@ -463,8 +449,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/cycle-counts/{cycleCountSession}/cancel', [CycleCountController::class, 'cancel'])->middleware('permission:cycle-count.cancel');
         Route::get('/cycle-counts/{cycleCountSession}/variance-report', [CycleCountController::class, 'varianceReport'])->middleware('permission:cycle-count.view');
         Route::get('/cycle-counts/{cycleCountSession}/pdf', [CycleCountController::class, 'generatePdf'])->middleware('permission:cycle-count.export');
-        Route::get('/cycle-counts-active', [CycleCountController::class, 'active']);
-        Route::get('/cycle-counts-statistics', [CycleCountController::class, 'statistics']);
+        Route::get('/cycle-counts-active', [CycleCountController::class, 'active'])->middleware('permission:cycle-count.view');
+        Route::get('/cycle-counts-statistics', [CycleCountController::class, 'statistics'])->middleware('permission:cycle-count.view');
 
         // Orders
         Route::apiResource('orders', OrderController::class)
@@ -477,9 +463,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{order}/ship', [OrderController::class, 'shipOrder'])->middleware('permission:orders.edit');
 
         // Import/Export
-        Route::post('/import/products', [ImportExportController::class, 'importProducts']);
-        Route::get('/export/products', [ImportExportController::class, 'exportProducts']);
-        Route::get('/export/template', [ImportExportController::class, 'downloadTemplate']);
+        Route::post('/import/products', [ImportExportController::class, 'importProducts'])->middleware('permission:inventory.create');
+        Route::get('/export/products', [ImportExportController::class, 'exportProducts'])->middleware('permission:reports.export');
+        Route::get('/export/template', [ImportExportController::class, 'downloadTemplate'])->middleware('permission:inventory.create');
 
         // Maintenance
         Route::get('/maintenance/dashboard', [MaintenanceController::class, 'dashboard'])->middleware('permission:maintenance.view');

@@ -71,17 +71,6 @@ class MaterialCheckController extends Controller
     }
 
     /**
-     * Test endpoint
-     */
-    public function test()
-    {
-        return response()->json([
-            'message' => 'MaterialCheckController is working',
-            'phpspreadsheet_installed' => class_exists('PhpOffice\\PhpSpreadsheet\\IOFactory'),
-        ]);
-    }
-
-    /**
      * Commit materials to a job reservation
      */
     public function commitMaterials(Request $request)

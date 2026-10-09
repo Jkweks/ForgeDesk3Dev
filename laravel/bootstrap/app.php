@@ -23,12 +23,21 @@ return Application::configure(basePath: dirname(__DIR__))
         // Host header nginx passes through from the real request is already
         // correct and doesn't need overriding here.
         $middleware->trustProxies(
-            at: '*',
+            at: array_filter(array_map('trim', explode(',', (string) env(
+                'TRUSTED_PROXIES',
+                '127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'
+            )))),
             headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO,
         );
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
+        // Sessions die when the account's password changes (reset, admin reset,
+        // self-service change) instead of surviving it — Sanctum's own
+        // AuthenticateSession (config/sanctum.php) does that for stateful requests.
+        // Laravel's AuthenticateSession must not be added here: under auth:sanctum
+        // the default guard is the token RequestGuard, which has no viaRemember(),
+        // so every authenticated call 500s.
         $middleware->api(append: [
             \App\Http\Middleware\NormalizeApiErrorResponse::class,
         ]);

@@ -12,6 +12,7 @@ class DoorFrameConfigurationDoor extends Model
     protected $fillable = [
         'configuration_id',
         'door_tag',
+        'leaf',
     ];
 
     /**

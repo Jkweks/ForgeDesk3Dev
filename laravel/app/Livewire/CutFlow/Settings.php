@@ -5,12 +5,15 @@ namespace App\Livewire\CutFlow;
 use App\Models\CutFlow\CutFlowSetting;
 use App\Models\FdUser;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 #[Layout('components.cutflow.layout')]
 class Settings extends Component
 {
+    #[Locked]
     public bool $unlocked = false;
 
     public string $pin = '';
@@ -49,6 +52,19 @@ class Settings extends Component
     }
 
     protected function findUserByPin(string $pin): ?FdUser
+    {
+        $key = 'cutflow-pin:'.request()->ip();
+        if (RateLimiter::tooManyAttempts($key, 10)) {
+            return null;
+        }
+
+        $user = $this->lookupPin($pin);
+        $user ? RateLimiter::clear($key) : RateLimiter::hit($key, 60);
+
+        return $user;
+    }
+
+    protected function lookupPin(string $pin): ?FdUser
     {
         return FdUser::where('active', true)
             ->whereNotNull('fab_pin')
