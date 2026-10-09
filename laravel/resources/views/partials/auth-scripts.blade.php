@@ -13,7 +13,7 @@
   }
 
   // ── People picker (Requested by / Project manager) ──────────────────────
-  // Shared across pages. Populates a <select> with active users as
+  // Shared across pages. Populates a <select> with users (with or without a login) as
   // "Lastname, Firstname". Keeps an unlinked legacy label visible.
   let _peopleCache = null;
   async function fetchPeople() {
@@ -38,14 +38,16 @@
     const placeholder = options.placeholder || '— Select —';
     const sel = selectedId != null && selectedId !== '' ? String(selectedId) : '';
     const known = people.some((p) => String(p.id) === sel);
+    // Disabled users (left the company) are only listed while a record still points at them.
+    const shown = people.filter((p) => !p.disabled || String(p.id) === sel);
 
     let html = `<option value="">${esc(placeholder)}</option>`;
     // A legacy free-text value with no linked user — keep it visible but unlinked.
     if (!known && options.legacyLabel) {
       html += `<option value="" selected disabled>${esc(options.legacyLabel)} — not linked</option>`;
     }
-    html += people.map((p) =>
-      `<option value="${p.id}"${String(p.id) === sel ? ' selected' : ''}>${esc(p.label)}</option>`
+    html += shown.map((p) =>
+      `<option value="${p.id}"${String(p.id) === sel ? ' selected' : ''}>${esc(p.label)}${p.disabled ? ' (disabled)' : ''}</option>`
     ).join('');
     select.innerHTML = html;
   }

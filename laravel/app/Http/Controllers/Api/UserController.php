@@ -43,7 +43,11 @@ class UserController extends Controller
 
         // Filter by active status
         if ($request->has('is_active') && $request->is_active !== '') {
-            $query->where('is_active', $request->is_active === 'active' || $request->is_active === '1');
+            match ($request->is_active) {
+                'disabled' => $query->where('is_disabled', true),
+                'active', '1' => $query->where('is_active', true),
+                default => $query->where('is_active', false)->where('is_disabled', false),
+            };
         }
 
         // Search by name or email
@@ -70,7 +74,8 @@ class UserController extends Controller
                 'role' => $user->role,
                 'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
                 'is_active' => $user->is_active,
-                'status' => $user->is_active ? 'active' : 'inactive',
+                'is_disabled' => (bool) $user->is_disabled,
+                'status' => $user->is_disabled ? 'disabled' : ($user->is_active ? 'active' : 'inactive'),
                 'must_change_password' => $user->must_change_password,
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
                 'temp_password_expired' => $user->temporaryPasswordExpired(),
@@ -92,12 +97,13 @@ class UserController extends Controller
     public function people()
     {
         $people = User::query()
-            ->where('is_active', true)
             ->orderByRaw('LOWER(last_name)')
             ->orderByRaw('LOWER(first_name)')
             ->orderBy('name')
-            ->get(['id', 'first_name', 'last_name', 'name'])
-            ->map(fn ($u) => ['id' => $u->id, 'label' => $u->sort_name])
+            ->get(['id', 'first_name', 'last_name', 'name', 'is_disabled'])
+            // Users without a login are still pickable; disabled ones (left the company) are
+            // returned flagged so a job that already points at one keeps showing it.
+            ->map(fn ($u) => ['id' => $u->id, 'label' => $u->sort_name, 'disabled' => (bool) $u->is_disabled])
             ->values();
 
         return response()->json($people);
@@ -139,6 +145,7 @@ class UserController extends Controller
             'role' => $user->role,
             'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
             'is_active' => $user->is_active,
+            'is_disabled' => (bool) $user->is_disabled,
             'must_change_password' => $user->must_change_password,
             'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
             'temp_password_expired' => $user->temporaryPasswordExpired(),
@@ -326,6 +333,7 @@ class UserController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'is_active' => $user->is_active,
+            'is_disabled' => (bool) $user->is_disabled,
             'must_change_password' => $user->must_change_password,
             'welcome_email_sent_at' => $user->welcome_email_sent_at?->toIso8601String(),
             'invitation_pending' => $user->welcome_email_sent_at === null,
@@ -368,7 +376,13 @@ class UserController extends Controller
             'password' => 'sometimes|nullable|string|min:8',
             'role' => ['sometimes', 'required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
+            'is_disabled' => 'sometimes|boolean',
         ]);
+
+        // A disabled user (left the company) can't sign in either.
+        if (! empty($validated['is_disabled'])) {
+            $validated['is_active'] = false;
+        }
 
         // Only an admin may grant the admin role, or change an existing admin's role.
         if (isset($validated['role']) && $validated['role'] !== $user->role
@@ -380,7 +394,7 @@ class UserController extends Controller
         // Don't let a user deactivate or demote their own account and lock themselves out.
         if ($user->id === $request->user()->id) {
             if (array_key_exists('is_active', $validated) && ! $validated['is_active']) {
-                return response()->json(['message' => 'You cannot deactivate your own account'], 403);
+                return response()->json(['message' => 'You cannot deactivate or disable your own account'], 403);
             }
             if (isset($validated['role']) && $validated['role'] !== $user->role) {
                 return response()->json(['message' => 'You cannot change your own role'], 403);

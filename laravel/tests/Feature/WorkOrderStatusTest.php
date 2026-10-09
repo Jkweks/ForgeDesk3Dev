@@ -15,7 +15,7 @@ use Tests\TestCase;
 
 /**
  * Work-order lifecycle status:
- *  - PATCH /work-orders/{id}/status            — active | on_hold | complete
+ *  - PATCH /work-orders/{id}/status            — pending | active | on_hold | complete (pending/active follow the job steps)
  *  - POST  /work-orders/{id}/completion-email  — notify PM + admins (manager/admin only)
  */
 class WorkOrderStatusTest extends TestCase
@@ -62,6 +62,47 @@ class WorkOrderStatusTest extends TestCase
         return $wo->fresh(['elevations.stages', 'steps']);
     }
 
+    public function test_a_new_work_order_is_pending_until_its_job_steps_are_done(): void
+    {
+        $wo = $this->wo();
+        $this->assertSame('pending', $wo->fresh()->status);
+        $this->assertFalse($wo->fresh('steps')->stepsComplete());
+
+        $wo->steps()->update(['status' => 'complete']);
+        $this->assertTrue($wo->fresh()->refreshPhase());
+        $this->assertSame('active', $wo->fresh()->status);
+        $log = FdWoStatusLog::where('work_order_id', $wo->id)->latest('id')->first();
+        $this->assertSame(['pending', 'active'], [$log->from_status, $log->to_status]);
+
+        // A step re-opening sends it back.
+        $wo->steps()->first()->update(['status' => 'pending']);
+        $this->assertTrue($wo->fresh()->refreshPhase());
+        $this->assertSame('pending', $wo->fresh()->status);
+    }
+
+    public function test_refreshing_the_phase_leaves_on_hold_and_complete_alone(): void
+    {
+        $wo = $this->readyWo();
+        foreach (['on_hold', 'complete'] as $status) {
+            $wo->update(['status' => $status]);
+            $this->assertFalse($wo->fresh()->refreshPhase());
+            $this->assertSame($status, $wo->fresh()->status);
+        }
+    }
+
+    public function test_releasing_a_hold_lands_on_the_phase_the_steps_say(): void
+    {
+        $this->actingAdmin();
+        $open = $this->wo();
+        $open->update(['status' => 'on_hold']);
+        $done = $this->readyWo();
+        $done->update(['status' => 'on_hold']);
+
+        // Asking for either resolves to whichever matches the steps.
+        $this->patchJson("/api/v1/work-orders/{$open->id}/status", ['status' => 'active'])->assertOk()->assertJsonPath('work_order.status', 'pending');
+        $this->patchJson("/api/v1/work-orders/{$done->id}/status", ['status' => 'pending'])->assertOk()->assertJsonPath('work_order.status', 'active');
+    }
+
     public function test_on_hold_requires_a_note(): void
     {
         $this->actingAdmin();
@@ -71,7 +112,7 @@ class WorkOrderStatusTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('code', 'note_required');
 
-        $this->assertSame('active', $wo->fresh()->status);
+        $this->assertSame('pending', $wo->fresh()->status);
     }
 
     public function test_on_hold_with_a_note_is_recorded(): void
@@ -86,7 +127,7 @@ class WorkOrderStatusTest extends TestCase
 
         $this->assertSame('on_hold', $wo->fresh()->status);
         $log = FdWoStatusLog::where('work_order_id', $wo->id)->latest('id')->first();
-        $this->assertSame('active', $log->from_status);
+        $this->assertSame('pending', $log->from_status);
         $this->assertSame('on_hold', $log->to_status);
         $this->assertSame('Waiting on glass delivery', $log->note);
     }
@@ -101,7 +142,7 @@ class WorkOrderStatusTest extends TestCase
             ->assertJsonPath('code', 'not_ready')
             ->assertJsonStructure(['blockers']);
 
-        $this->assertSame('active', $wo->fresh()->status);
+        $this->assertSame('pending', $wo->fresh()->status);
     }
 
     public function test_complete_succeeds_when_everything_is_done(): void
@@ -118,6 +159,19 @@ class WorkOrderStatusTest extends TestCase
         $this->assertSame('complete', $wo->status);
         $this->assertNotNull($wo->completed_at);
         $this->assertSame($admin->id, $wo->completed_by_user_id);
+    }
+
+    public function test_completion_email_reaches_a_pm_without_a_login_but_not_a_disabled_one(): void
+    {
+        $noLogin = User::factory()->create(['role' => 'viewer', 'is_active' => false, 'email' => 'nologin@example.com']);
+        $gone = User::factory()->create(['role' => 'viewer', 'is_active' => false, 'is_disabled' => true, 'email' => 'gone@example.com']);
+        $this->job->update(['project_manager_id' => $noLogin->id, 'superintendent_id' => $gone->id]);
+
+        $wo = $this->readyWo();
+        $recipients = app(\App\Services\WorkOrderCompletionService::class)->recipientsFor($wo);
+
+        $this->assertContains('nologin@example.com', $recipients);
+        $this->assertNotContains('gone@example.com', $recipients);
     }
 
     public function test_completion_email_is_sent_to_pm_and_admins_for_a_manager(): void
