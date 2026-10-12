@@ -459,6 +459,8 @@ class DoorFrameConfigurationController extends Controller
                     'duplicate_group_id' => $groupId,
                     'status' => 'draft',
                     'notes' => $source->notes,
+                    'cutflow_include_frame' => $source->cutflow_include_frame,
+                    'cutflow_include_door' => $source->cutflow_include_door,
                     'created_by_id' => auth()->id(),
                 ]);
 
@@ -468,10 +470,7 @@ class DoorFrameConfigurationController extends Controller
 
                 if ($source->openingSpecs) {
                     DoorFrameOpeningSpec::create(array_merge(
-                        $source->openingSpecs->only([
-                            'opening_type', 'hand_single', 'hand_pair',
-                            'door_opening_width', 'door_opening_height', 'hinging', 'finish',
-                        ]),
+                        $source->openingSpecs->only(array_diff($source->openingSpecs->getFillable(), ['configuration_id'])),
                         $overrides['opening_specs'] ?? [],
                         ['configuration_id' => $new->id]
                     ));
@@ -489,13 +488,12 @@ class DoorFrameConfigurationController extends Controller
                 }
 
                 if ($source->includesDoor()) {
-                    foreach ($source->doorConfigs as $dc) {
+                    // A copy takes one door tag, so a merged pair (one config per leaf) copies as a plain pair
+                    // built from the active leaf's door config.
+                    $doorConfigsToCopy = $source->isMergedPair() ? $source->doorConfigs->where('leaf', 'active') : $source->doorConfigs;
+                    foreach ($doorConfigsToCopy as $dc) {
                         DoorFrameDoorConfig::create(array_merge(
-                            $dc->only([
-                                'door_series', 'stile_width', 'leaf_type', 'handing', 'hinge_type',
-                                'opening_angle', 'bottom_gap', 'top_rail_label', 'bot_rail_label',
-                                'mid_rail_label', 'mid_qty', 'mid_loc1', 'mid_loc2', 'glazing', 'preset',
-                            ]),
+                            $dc->only(array_diff($dc->getFillable(), ['configuration_id', 'leaf'])),
                             $overrides['door_config'] ?? [],
                             ['configuration_id' => $new->id]
                         ));
@@ -794,6 +792,7 @@ class DoorFrameConfigurationController extends Controller
                 'door_opening_width' => 'required|numeric|min:0|max:999.99',
                 'door_opening_height' => 'required|numeric|min:0|max:999.99',
                 'hinging' => 'required|in:continuous,butt,pivot_offset,pivot_center',
+                'opening_angle' => 'nullable|integer|in:'.implode(',', DoorFrameOpeningSpec::$openingAngleOptions),
                 'butt_hinge_count' => 'nullable|required_if:hinging,butt|integer|min:2|max:20',
                 'hinge_spacing_standard_id' => 'nullable|required_if:hinging,butt|exists:configurator_hinge_spacing_standards,id',
                 'finish' => 'required|in:c2,db,bl',
@@ -824,12 +823,17 @@ class DoorFrameConfigurationController extends Controller
                     'door_opening_width' => $request->door_opening_width,
                     'door_opening_height' => $request->door_opening_height,
                     'hinging' => $request->hinging,
+                    'opening_angle' => $request->opening_angle ?? 90,
                     'butt_hinge_count' => $request->hinging === 'butt' ? $request->butt_hinge_count : null,
                     'hinge_spacing_standard_id' => $request->hinging === 'butt' ? $request->hinge_spacing_standard_id : null,
                     'finish' => $request->finish,
                     'glazing' => $request->glazing,
                 ]
             );
+
+            // Opening degree drives the overhead stop matrix for both the door and the frame; keep the door
+            // config rows (which are not rebuilt on an opening save) in step.
+            $config->doorConfigs()->update(['opening_angle' => $request->opening_angle ?? 90]);
 
             $scopeChanged = $request->filled('job_scope') && $request->job_scope !== $config->job_scope;
             if ($scopeChanged) {
@@ -1239,7 +1243,6 @@ class DoorFrameConfigurationController extends Controller
                 'leaf' => 'nullable|in:active,inactive',
                 'door_series' => 'required|in:STANDARD,THERMAL,MONUMENTAL',
                 'stile_width' => 'required|string|exists:configurator_door_types,stile_name',
-                'opening_angle' => 'nullable|integer|min:1|max:180',
                 'top_rail_label' => 'required|string',
                 'bot_rail_label' => 'required|string',
                 'mid_rail_label' => 'nullable|string',
@@ -1281,7 +1284,7 @@ class DoorFrameConfigurationController extends Controller
                 'leaf' => $leaf,
                 'handing' => $config->openingSpecs?->deriveDoorHanding(),
                 'hinge_type' => $config->openingSpecs?->deriveHingeType(),
-                'opening_angle' => $request->opening_angle ?? 90,
+                'opening_angle' => $config->openingSpecs?->opening_angle ?? 90,
                 'bottom_gap' => \App\Models\ConfiguratorSetting::current()->bottom_gap,
                 'top_rail_label' => $request->top_rail_label,
                 'bot_rail_label' => $request->bot_rail_label,
@@ -2238,6 +2241,7 @@ class DoorFrameConfigurationController extends Controller
             'door_opening_height' => $specs->door_opening_height,
             'hinging' => $specs->hinging,
             'hinging_label' => $specs->hinging_label,
+            'opening_angle' => $specs->opening_angle ?? 90,
             'butt_hinge_count' => $specs->butt_hinge_count,
             'hinge_spacing_standard_id' => $specs->hinge_spacing_standard_id,
             'hinge_spacing_standard' => $specs->hingeSpacingStandard,
@@ -2623,7 +2627,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $variables = $link->item->category->variables->keyBy('code');
-        $angle = (string) ($config->doorConfigs->first()->opening_angle ?? 90);
+        $angle = (string) ($config->openingAngle());
         $operations = [];
 
         foreach ($request->input('values') as $code => $raw) {

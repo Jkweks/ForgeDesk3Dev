@@ -17,6 +17,7 @@ class DoorFrameOpeningSpec extends Model
         'door_opening_width',
         'door_opening_height',
         'hinging',
+        'opening_angle',
         'butt_hinge_count',
         'hinge_spacing_standard_id',
         'finish',
@@ -26,7 +27,10 @@ class DoorFrameOpeningSpec extends Model
     protected $casts = [
         'door_opening_width' => 'decimal:4',
         'door_opening_height' => 'decimal:4',
+        'opening_angle' => 'integer',
     ];
+
+    public static $openingAngleOptions = [85, 90, 95, 100, 105, 110];
 
     protected $appends = [
         'opening_type_label',

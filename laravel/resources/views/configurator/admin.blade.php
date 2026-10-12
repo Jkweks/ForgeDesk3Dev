@@ -1875,7 +1875,7 @@
     const backerOptions = hwBackers.map(b => `<option value="${b.id}" ${row?.backer_id == b.id ? 'selected' : ''}>${esc(b.pn)} — ${esc(b.description || '')}</option>`).join('');
     return `
       <div class="row g-2 align-items-center mb-2 hwlib-item-backer-row">
-        <div class="col-md-2"><select class="form-select form-select-sm hwlib-ib-side"><option value="active" ${row?.side === 'active' ? 'selected' : ''}>Active</option><option value="inactive" ${row?.side === 'inactive' ? 'selected' : ''}>Inactive</option><option value="both" ${!row || row?.side === 'both' ? 'selected' : ''}>Both</option></select></div>
+        <div class="col-md-2"><select class="form-select form-select-sm hwlib-ib-side"><option value="door" ${!row || row?.side === 'door' ? 'selected' : ''}>Door</option><option value="frame" ${row?.side === 'frame' ? 'selected' : ''}>Frame</option></select></div>
         <div class="col-md-2"><select class="form-select form-select-sm hwlib-ib-series"><option value="Standard" ${!row || row?.series === 'Standard' ? 'selected' : ''}>Standard</option><option value="Thermal" ${row?.series === 'Thermal' ? 'selected' : ''}>Thermal</option><option value="Monumental" ${row?.series === 'Monumental' ? 'selected' : ''}>Monumental</option></select></div>
         <div class="col-md-4"><select class="form-select form-select-sm hwlib-ib-backer"><option value="">— none —</option>${backerOptions}</select></div>
         <div class="col-md-2"><input type="number" step="0.001" class="form-control form-control-sm hwlib-ib-qty" placeholder="qty" value="${row?.qty ?? 1}"></div>

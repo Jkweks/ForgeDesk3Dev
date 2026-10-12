@@ -60,7 +60,7 @@ class HwlibResolver
         $this->variablesByCode = ConfiguratorHwlibVariable::all()->keyBy('code')->all();
 
         $links = $this->config->hardwareLinks()->with(['item.category.variables', 'item.values', 'values'])->get();
-        $angle = $this->config->doorConfigs->first()->opening_angle ?? 90;
+        $angle = $this->config->openingAngle();
 
         $linkIds = $links->pluck('id')->all();
 
