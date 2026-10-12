@@ -545,7 +545,7 @@ class PackageReportService
         if ($config->hardwareLinks->isEmpty()) {
             return [];
         }
-        $resolver = new HwlibResolver($config);
+        $resolver = new HwlibResolver($config, enteredOnly: true);
         $out = [];
         foreach ($resolver->resolveAll() as $linkId => $byCode) {
             $rows = [];

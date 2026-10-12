@@ -2,6 +2,7 @@
 
 namespace App\Services\Configurator;
 
+use App\Models\ConfiguratorFrameProfile;
 use App\Models\ConfiguratorFrameSeries;
 use App\Models\DoorFrameConfiguration;
 use App\Models\Product;
@@ -22,9 +23,13 @@ class FrameBomGenerator
     ) {}
 
     /**
+     * @param  bool  $honorSwaps  Use the section height of any profile part that has been swapped to a
+     *                            different extrusion, so dimensions that depend on it (other profiles'
+     *                            cut lengths, total frame height) follow the swap. Off for a normal
+     *                            generate, which always produces the standard parts.
      * @return array{rows: array<int, array>, warnings: array<int, string>}
      */
-    public function generate(DoorFrameConfiguration $config): array
+    public function generate(DoorFrameConfiguration $config, bool $honorSwaps = false): array
     {
         $this->warnings = [];
 
@@ -76,6 +81,10 @@ class FrameBomGenerator
                     $applicableRoles[$role] = true;
                 }
             }
+        }
+
+        if ($honorSwaps) {
+            $sectionHeights = $this->swappedSectionHeights($frameConfig, $series, $sectionHeights);
         }
 
         $totalHeight = $this->evaluator->resolveTotalHeight(
@@ -179,6 +188,33 @@ class FrameBomGenerator
         $rows = app(KitExpander::class)->expand($rows, $this->warnings);
 
         return ['rows' => $rows, 'warnings' => $this->warnings];
+    }
+
+    /**
+     * For each role whose saved part now holds a different part number than the series profile's own,
+     * takes the section height of the catalog profile that uses the new part number (any series).
+     * Roles with no known profile for the new part keep the series' height.
+     *
+     * @param  array<string, float>  $sectionHeights
+     * @return array<string, float>
+     */
+    private function swappedSectionHeights($frameConfig, ConfiguratorFrameSeries $series, array $sectionHeights): array
+    {
+        $parts = $frameConfig->parts()->with('product')->where('source_type', 'profile')->get();
+        foreach ($series->profiles as $profile) {
+            $part = $parts->firstWhere('part_label', $profile->role_label);
+            $pn = $part?->product?->part_number;
+            if (! $pn || $pn === $profile->product?->part_number) {
+                continue;
+            }
+            $height = ConfiguratorFrameProfile::whereHas('product', fn ($q) => $q->where('part_number', $pn))
+                ->whereNotNull('section_height')->value('section_height');
+            if ($height !== null) {
+                $sectionHeights[$profile->role_label] = (float) $height;
+            }
+        }
+
+        return $sectionHeights;
     }
 
     /**

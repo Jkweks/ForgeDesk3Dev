@@ -1166,7 +1166,7 @@ async function loadWorkOrders() {
     }
 }
 
-const WO_STATUS_SORT = { active: 0, on_hold: 1, complete: 2 };
+const WO_STATUS_SORT = { active: 0, pending: 1, on_hold: 2, complete: 3 };
 
 // ── Sortable table headers ──
 // Default: priority ascending (the normal shop-floor work order). Any other
@@ -1283,7 +1283,7 @@ function compareWO(a, b) {
             cmp = aVal - bVal;
             break;
         default: { // 'priority'
-            // Status grouping (active, then on hold, then complete) takes
+            // Status grouping (active, pending, on hold, then complete) takes
             // precedence over priority — priority only orders within a
             // status group, same as before sortable headers existed. This
             // grouping is fixed regardless of the asc/desc toggle; only the
@@ -1291,7 +1291,10 @@ function compareWO(a, b) {
             const statusDiff = (WO_STATUS_SORT[a.status] ?? 99) - (WO_STATUS_SORT[b.status] ?? 99);
             if (statusDiff !== 0) return statusDiff;
             aVal = a.priority ?? Infinity; bVal = b.priority ?? Infinity;
-            cmp = aVal - bVal;
+            cmp = aVal === bVal ? 0 : (aVal < bVal ? -1 : 1);
+            if (cmp === 0) { // same (or no) priority: earliest due date first
+                cmp = String(a.due_date_first || a.due_date || '9999-99-99').localeCompare(String(b.due_date_first || b.due_date || '9999-99-99'));
+            }
         }
     }
     if (cmp !== 0) return cmp * dir;

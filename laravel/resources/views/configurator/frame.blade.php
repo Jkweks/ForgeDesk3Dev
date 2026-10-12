@@ -282,7 +282,7 @@
                   <form id="fb-door-form" class="row g-3 mb-4">
                     <div class="col-md-4">
                       <label class="form-label">Door Series</label>
-                      <select class="form-select" id="fb-door-series" onchange="fbFilterDoorStiles()" required>
+                      <select class="form-select" id="fb-door-series" onchange="fbFilterDoorStiles(true)" required>
                         <option value="STANDARD">Standard</option>
                         <option value="THERMAL">Thermal</option>
                         <option value="MONUMENTAL">Monumental</option>
@@ -290,7 +290,7 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Stile Width</label>
-                      <select class="form-select" id="fb-door-stile" required></select>
+                      <select class="form-select" id="fb-door-stile" onchange="fbApplyStandardRails()" required></select>
                     </div>
                     <div class="col-md-4 text-muted small d-flex align-items-end pb-2">
                       Handing, hinging, glazing and bottom gap are set on the Opening tab.
@@ -730,7 +730,13 @@
           <input type="hidden" id="fb-part-id">
           <input type="hidden" id="fb-part-kind" value="frame">
           <div class="mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="fb-part-label" required></div>
-          <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="fb-part-product" required></select></div>
+          <div class="mb-3"><label class="form-label">Product</label><input type="hidden" id="fb-part-product">
+            <div class="position-relative">
+              <input type="search" class="form-control" id="fb-part-product-search" placeholder="Search part number, SKU or description…" autocomplete="off">
+              <div class="list-group position-absolute w-100 shadow" id="fb-part-product-results" style="z-index:1060;max-height:260px;overflow-y:auto;display:none"></div>
+            </div>
+            <div class="form-hint mt-1" id="fb-part-product-picked"></div>
+          </div>
           <div class="row">
             <div class="col-md-6 mb-3"><label class="form-label">Unit Type</label>
               <select class="form-select" id="fb-part-unittype">
@@ -799,6 +805,37 @@ async function fbLoadProducts() {
   } catch (e) { fbProducts = []; }
   return fbProducts;
 }
+// Product picker for the part modal: type to search, click a result to pick it.
+let fbPartSearchTimer = null;
+function fbSetPartProduct(product) {
+  document.getElementById('fb-part-product').value = product?.id ?? '';
+  document.getElementById('fb-part-product-search').value = '';
+  document.getElementById('fb-part-product-results').style.display = 'none';
+  document.getElementById('fb-part-product-picked').innerHTML = product
+    ? `<strong>${esc(product.part_number || product.sku)}</strong> — ${esc(product.description || '')}` : '<span class="text-danger">No product selected</span>';
+}
+async function fbSearchPartProducts(term) {
+  const box = document.getElementById('fb-part-product-results');
+  if (!term.trim()) { box.style.display = 'none'; return; }
+  let items = [];
+  try {
+    items = (await authenticatedFetch(`/products?per_page=25&search=${encodeURIComponent(term.trim())}`)).data || [];
+  } catch (e) { items = []; }
+  fbPartSearchResults = items;
+  box.innerHTML = items.length
+    ? items.map((p, i) => `<button type="button" class="list-group-item list-group-item-action py-1" onclick="fbSetPartProduct(fbPartSearchResults[${i}])"><strong>${esc(p.part_number || p.sku)}</strong>${p.finish ? ' · ' + esc(p.finish) : ''}<div class="text-muted small">${esc(p.description || '')}</div></button>`).join('')
+    : '<div class="list-group-item text-muted">No matching products</div>';
+  box.style.display = '';
+}
+let fbPartSearchResults = [];
+document.getElementById('fb-part-product-search').addEventListener('input', (e) => {
+  clearTimeout(fbPartSearchTimer);
+  fbPartSearchTimer = setTimeout(() => fbSearchPartProducts(e.target.value), 250);
+});
+document.getElementById('fb-part-product-search').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') e.preventDefault();
+});
+
 function fbProductOptions(selectedId) {
   return '<option value="">— select —</option>' + fbProducts.map(p =>
     `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${esc(p.part_number || p.sku)} — ${esc(p.description || '')}</option>`
@@ -831,12 +868,26 @@ function fbTitleCase(str) {
   return String(str ?? '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function fbFilterDoorStiles() {
+// Pre-select the catalog's standard top/bottom rail for the chosen stile (user can still change them).
+function fbApplyStandardRails() {
+  const series = document.getElementById('fb-door-series').value;
+  const stile = document.getElementById('fb-door-stile').value;
+  const type = (fbDoorCatalog?.door_types || []).find(t => t.series === series && t.stile_name === stile);
+  const setIfListed = (id, label) => {
+    const sel = document.getElementById(id);
+    if (label && [...sel.options].some(o => o.value === label)) sel.value = label;
+  };
+  setIfListed('fb-door-toprail', type?.std_top_rail_label);
+  setIfListed('fb-door-botrail', type?.std_bot_rail_label);
+}
+
+function fbFilterDoorStiles(applyStandard = false) {
   const series = document.getElementById('fb-door-series').value;
   const stileSelect = document.getElementById('fb-door-stile');
   const stiles = (fbDoorCatalog?.door_types || []).filter(t => t.series === series);
   const current = fbDoorCfg()?.stile_width;
   stileSelect.innerHTML = stiles.map(t => `<option value="${esc(t.stile_name)}" ${t.stile_name === current ? 'selected' : ''}>${esc(fbTitleCase(t.stile_name))}</option>`).join('');
+  if (applyStandard) fbApplyStandardRails();
 }
 
 function fbPopulateRailSelects() {
@@ -858,7 +909,9 @@ function fbPopulateGlazingSelect() {
 
 function fbPopulateHingeStandardSelect() {
   const standards = fbDoorCatalog?.hinge_spacing_standards || [];
-  const current = fbSelectedDetail?.opening_specs?.hinge_spacing_standard_id;
+  // Default to the "Standard" spacing until one has been saved for this opening.
+  const current = fbSelectedDetail?.opening_specs?.hinge_spacing_standard_id
+    ?? standards.find(s => String(s.name).trim().toLowerCase() === 'standard')?.id;
   document.getElementById('fb-op-hinge-standard').innerHTML =
     '<option value="">— select —</option>' + standards.map(s => `<option value="${s.id}" ${s.id == current ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
 }
@@ -1670,7 +1723,7 @@ function fbRenderDetail() {
   document.getElementById('fb-op-hand-single').value = os?.hand_single || 'lh_inswing';
   document.getElementById('fb-op-hand-pair').value = os?.hand_pair || 'rhr_active';
   document.getElementById('fb-op-hinging').value = os?.hinging || 'continuous';
-  document.getElementById('fb-op-butt-hinge-count').value = os?.butt_hinge_count ?? 2;
+  document.getElementById('fb-op-butt-hinge-count').value = os?.butt_hinge_count ?? 3;
   fbPopulateHingeStandardSelect();
   fbToggleButtHingeFields();
   fbRenderHingeLocations();
@@ -1704,6 +1757,7 @@ function fbRenderDetail() {
     fbFilterDoorStiles();
     document.getElementById('fb-door-stile').value = dc?.stile_width || '';
     fbPopulateRailSelects();
+    if (!dc?.top_rail_label && !dc?.bot_rail_label) fbApplyStandardRails(); // nothing saved yet: start from the stile's standard rails
     document.getElementById('fb-door-midqty').value = dc?.mid_qty ?? 0;
     document.getElementById('fb-door-midloc1').value = dc?.mid_loc1 ?? '';
     fdRefresh('fb-door-midloc1');
@@ -1849,6 +1903,16 @@ async function fbGenerateWithDiffPrompt(kind) {
   const diff = fbDiffParts(existing, preview.parts || []);
   if (!diff) {
     return null; // nothing changed — leave the saved BOM alone
+  }
+  // Parts someone swapped to a different profile/product: the regenerate would put the standard one back.
+  const standardPn = new Map((preview.parts || []).map(p => [p.part_label, p.product?.part_number]));
+  const swapped = existing.filter(p => standardPn.has(p.part_label) && standardPn.get(p.part_label) !== p.product?.part_number);
+  if (swapped.length) {
+    const list = swapped.map(p => `• ${p.part_label}: ${p.product?.part_number} (standard: ${standardPn.get(p.part_label)})`).join('\n');
+    if (!confirm(`Custom part changes have already been saved on this ${kind}:\n\n${list}\n\nDo you wish to continue and reset to standard parts? Cancel keeps your custom parts.`)) {
+      return null;
+    }
+    return authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/${endpoint}`, { method: 'POST' });
   }
   if (!confirm(`The generated ${kind} BOM has changed based on your updated inputs:\n\n${diff}\n\nApply the updated BOM? Cancel keeps the current parts list.`)) {
     return null;
@@ -2134,7 +2198,7 @@ document.getElementById('fb-opening-form').addEventListener('submit', async (e) 
     door_opening_width: parseFloat(document.getElementById('fb-op-width').value),
     door_opening_height: parseFloat(document.getElementById('fb-op-height').value),
     hinging: document.getElementById('fb-op-hinging').value,
-    butt_hinge_count: isButt ? parseInt(document.getElementById('fb-op-butt-hinge-count').value || 2, 10) : null,
+    butt_hinge_count: isButt ? parseInt(document.getElementById('fb-op-butt-hinge-count').value || 3, 10) : null,
     hinge_spacing_standard_id: isButt ? (document.getElementById('fb-op-hinge-standard').value || null) : null,
     finish: document.getElementById('fb-op-finish').value,
     glazing: document.getElementById('fb-op-glazing').value || null,
@@ -2252,30 +2316,29 @@ function fbPartsEndpoint(kind) {
 }
 
 async function fbOpenPartModal(kind, id) {
-  await fbLoadProducts();
   const part = fbPartsSource(kind).find(p => p.id == id);
   document.getElementById('fb-part-id').value = id;
   document.getElementById('fb-part-kind').value = kind;
   document.getElementById('fb-part-label').value = part.part_label;
   document.getElementById('fb-part-label').disabled = part.is_auto_generated;
-  document.getElementById('fb-part-product').innerHTML = fbProductOptions(part.product?.id);
+  fbSetPartProduct(part.product);
   document.getElementById('fb-part-unittype').value = part.unit_type;
   document.getElementById('fb-part-unittype').disabled = part.is_auto_generated;
   document.getElementById('fb-part-amount').value = part.unit_type === 'length' ? part.calculated_length : part.quantity;
   showModal(document.getElementById('fb-part-modal'));
 }
 function fbAddManualPart(kind) {
-  fbLoadProducts().then(() => {
+  {
     document.getElementById('fb-part-id').value = '';
     document.getElementById('fb-part-kind').value = kind;
     document.getElementById('fb-part-label').value = '';
     document.getElementById('fb-part-label').disabled = false;
-    document.getElementById('fb-part-product').innerHTML = fbProductOptions(null);
+    fbSetPartProduct(null);
     document.getElementById('fb-part-unittype').value = 'length';
     document.getElementById('fb-part-unittype').disabled = false;
     document.getElementById('fb-part-amount').value = '';
     showModal(document.getElementById('fb-part-modal'));
-  });
+  }
 }
 document.getElementById('fb-part-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -2284,6 +2347,7 @@ document.getElementById('fb-part-form').addEventListener('submit', async (e) => 
   const endpoint = fbPartsEndpoint(kind);
   const unitType = document.getElementById('fb-part-unittype').value;
   const amount = parseFloat(document.getElementById('fb-part-amount').value || 0);
+  if (!document.getElementById('fb-part-product').value) { showNotification('Search for and select a product', 'warning'); return; }
   try {
     if (id) {
       await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/${endpoint}/${id}`, {
@@ -2319,6 +2383,7 @@ document.getElementById('fb-part-form').addEventListener('submit', async (e) => 
     }
     hideModal(document.getElementById('fb-part-modal'));
     await fbLoadDetail();
+    if (id && kind === 'frame') showNotification('Part saved — related frame dimensions were recalculated for the new profile', 'info');
   } catch (err) { showNotification(err.message, 'danger'); }
 });
 async function fbDeletePart(kind, id) {

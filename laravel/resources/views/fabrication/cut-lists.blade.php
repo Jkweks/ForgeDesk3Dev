@@ -47,7 +47,7 @@
           </div>
           <div class="table-responsive">
             <table class="table table-vcenter card-table">
-              <thead><tr><th>Cut list</th><th>Work order</th><th class="text-end">Lines</th><th class="text-end">Cut / Total</th><th>Status</th><th>Updated</th></tr></thead>
+              <thead><tr><th>Job</th><th>Work order</th><th class="text-end">Lines</th><th class="text-end">Cut / Total</th><th>Status</th><th>Updated</th></tr></thead>
               <tbody id="cl-list-body"><tr><td colspan="6" class="text-center text-muted py-4">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -161,10 +161,10 @@ async function clLoadList() {
 function clRenderList() {
   const q = document.getElementById('cl-filter').value.trim().toLowerCase();
   const st = document.getElementById('cl-status').value;
-  const rows = clLists.filter(l => (!q || l.name.toLowerCase().includes(q)) && (!st || l.status === st));
+  const rows = clLists.filter(l => (!q || [l.name, l.job_name, l.work_order_label].some(v => (v || '').toLowerCase().includes(q))) && (!st || l.status === st));
   document.getElementById('cl-list-body').innerHTML = rows.length ? rows.map(l => `
     <tr style="cursor:pointer" onclick="clOpen(${l.id})">
-      <td class="fw-medium">${esc(l.name)}</td>
+      <td class="fw-medium">${esc(l.job_name || l.name)}${l.job_name ? `<div class="text-muted small fw-normal">${esc(l.name)}</div>` : ''}</td>
       <td>${esc(l.work_order_label) || '<span class="text-muted">—</span>'}</td>
       <td class="text-end">${l.parts_count}</td>
       <td class="text-end">${l.qty_cut} / ${l.qty_original}</td>

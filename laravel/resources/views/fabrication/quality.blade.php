@@ -375,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('qr-status-filter').addEventListener('change', qrLoadReports);
   document.getElementById('qr-upload-btn').addEventListener('click', () => {
     document.getElementById('qr-upload-elevation').value = '';
+    qrSearchSelectSync('qr-upload-elevation');
     qrShowModal('qr-upload-modal');
   });
 });
@@ -753,6 +754,68 @@ function qrToggleDetailPreForgeFields() {
   document.getElementById('qr-d-preforge-date-wrap').style.display = isPreForge ? '' : 'none';
 }
 
+// ── Searchable elevation pickers ──
+// Layers a type-to-search box over a <select>. The select stays in the DOM (hidden) and remains the
+// source of truth, so existing code reading .value / .selectedIndex and onchange handlers keep working.
+function qrSearchSelectInit(id) {
+  const sel = document.getElementById(id);
+  if (!sel || sel._qrSearch) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'position-relative';
+  wrap.innerHTML = '<input type="search" class="form-control" autocomplete="off" placeholder="Search elevation, work order or job…">'
+    + '<div class="list-group position-absolute w-100 shadow" style="z-index:1060;max-height:260px;overflow-y:auto;display:none"></div>';
+  sel.style.display = 'none';
+  sel.after(wrap);
+  const input = wrap.querySelector('input');
+  const list = wrap.querySelector('.list-group');
+  sel._qrSearch = { input, list };
+
+  const render = (query) => {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = [...sel.options].filter(o => {
+      const hay = ((o.dataset.search || '') + ' ' + o.text).toLowerCase();
+      return terms.every(t => hay.includes(t));
+    });
+    list.innerHTML = '';
+    matches.slice(0, 50).forEach(o => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'list-group-item list-group-item-action py-1' + (o.value === '' || o.value === 'manual' ? ' text-muted' : '');
+      b.textContent = o.text;
+      b.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change'));
+        qrSearchSelectSync(id);
+        list.style.display = 'none';
+        input.blur();
+      });
+      list.appendChild(b);
+    });
+    if (matches.length > 50) {
+      const more = document.createElement('div');
+      more.className = 'list-group-item text-muted small py-1';
+      more.textContent = `${matches.length - 50} more — keep typing to narrow`;
+      list.appendChild(more);
+    }
+    if (!matches.length) list.innerHTML = '<div class="list-group-item text-muted">No matches</div>';
+    list.style.display = '';
+  };
+  input.addEventListener('focus', () => { input.select(); render(''); });
+  input.addEventListener('input', () => render(input.value));
+  input.addEventListener('blur', () => { list.style.display = 'none'; qrSearchSelectSync(id); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+  qrSearchSelectSync(id);
+}
+/** Re-reads the select (after its options were rebuilt or its value set) into the visible box. */
+function qrSearchSelectSync(id) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  if (!sel._qrSearch) { qrSearchSelectInit(id); return; }
+  const opt = sel.options[sel.selectedIndex];
+  sel._qrSearch.input.value = opt ? opt.text : '';
+}
+
 async function qrLoadElevations() {
   try {
     const data = await qrApiJson('/quality-reports/elevation-options');
@@ -761,7 +824,8 @@ async function qrLoadElevations() {
       jobId: el.business_job_id ?? null,
       jobName: el.business_job_name || '',
       elevationTag: el.elevation_tag,
-      label: `${el.elevation_tag} (${qrWorkOrderSuffix(el.work_order_label, el.work_order_id)})`,
+      search: el.business_job_name || '',
+      label: `${el.elevation_tag} (${qrWorkOrderSuffix(el.work_order_label, el.work_order_id)})${el.work_order_status === 'complete' ? ' – completed' : (el.work_order_archived ? ' – archived' : '')}`,
     })).sort((a, b) => a.elevationTag.localeCompare(b.elevationTag, undefined, { numeric: true, sensitivity: 'base' }));
 
     // Every in-flight job goes in the picker, not just ones with a tracked
@@ -774,8 +838,9 @@ async function qrLoadElevations() {
     qrJobs = [...jobMap.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 
     const options = ['<option value="">Not sure yet</option>']
-      .concat(qrElevations.map(el => `<option value="${el.id}">${escapeHtml(el.label)}</option>`));
+      .concat(qrElevations.map(el => `<option value="${el.id}" data-search="${escapeHtml(el.search)}">${escapeHtml(el.label)}</option>`));
     document.getElementById('qr-upload-elevation').innerHTML = options.join('');
+    qrSearchSelectSync('qr-upload-elevation');
   } catch (e) {
     console.error('Failed to load elevations for matching', e);
   }
@@ -815,8 +880,9 @@ function qrRenderElevationOptions() {
   if (!isPreForge) {
     options.push(`<option value="manual" ${qrDetailSelectedElevationId === 'manual' ? 'selected' : ''}>Other — not tracked yet (enter manually)</option>`);
   }
-  options.push(...pool.map(el => `<option value="${el.id}" ${el.id === qrDetailSelectedElevationId ? 'selected' : ''}>${escapeHtml(el.label)}</option>`));
+  options.push(...pool.map(el => `<option value="${el.id}" data-search="${escapeHtml(el.search)}" ${el.id === qrDetailSelectedElevationId ? 'selected' : ''}>${escapeHtml(el.label)}</option>`));
   document.getElementById('qr-d-elevation').innerHTML = options.join('');
+  qrSearchSelectSync('qr-d-elevation');
 }
 
 /** Toggles asc/desc on repeat clicks of the same column; switching columns starts asc. */

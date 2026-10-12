@@ -22,10 +22,10 @@ use Illuminate\Support\Str;
 class QualityReportController extends Controller
 {
     /**
-     * Flat list of elevations on open (active/on_hold) work orders, for the
+     * Flat list of elevations on every work order (open, completed and archived), for the
      * manual elevation picker on upload/edit. Kept lightweight — no stage
      * detail — since it's only used to populate a dropdown. Also returns
-     * every in-flight business job (not just ones with a tracked
+     * every active, on-hold or completed business job (not just ones with a tracked
      * elevation) — a large job mid-flight may have no elevations entered
      * yet at all, and it still needs to be pickable so the report can be
      * pinned to the real job with a manually-typed elevation.
@@ -33,7 +33,7 @@ class QualityReportController extends Controller
     public function elevationOptions()
     {
         $elevations = FdWoElevation::query()
-            ->whereHas('workOrder', fn ($q) => $q->whereIn('status', \App\Models\FdWorkOrder::OPEN_STATUSES))
+            ->whereHas('workOrder')
             ->with(['workOrder.businessJob'])
             ->orderBy('elevation_tag')
             ->get()
@@ -42,13 +42,15 @@ class QualityReportController extends Controller
                 'elevation_tag' => $e->elevation_tag,
                 'work_order_id' => $e->work_order_id,
                 'work_order_label' => $e->workOrder?->releaseLabel(),
+                'work_order_status' => $e->workOrder?->status,
+                'work_order_archived' => (bool) $e->workOrder?->archived,
                 'business_job_id' => $e->workOrder?->business_job_id,
                 'business_job_name' => $e->workOrder?->businessJob?->job_name,
             ])
             ->values();
 
         $jobs = BusinessJob::query()
-            ->whereIn('status', ['active', 'on_hold'])
+            ->whereIn('status', ['active', 'on_hold', 'completed'])
             ->orderBy('job_name')
             ->get(['id', 'job_name'])
             ->map(fn (BusinessJob $j) => ['id' => $j->id, 'job_name' => $j->job_name]);

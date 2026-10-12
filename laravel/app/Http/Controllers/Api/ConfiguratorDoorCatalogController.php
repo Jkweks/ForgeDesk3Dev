@@ -177,6 +177,8 @@ class ConfiguratorDoorCatalogController extends Controller
             'series' => 'required|in:STANDARD,THERMAL,MONUMENTAL',
             'stile_name' => 'required|string|max:50',
             'stile_height' => 'required|numeric|min:0',
+            'std_top_rail_label' => 'nullable|string|max:50|exists:configurator_rails,label',
+            'std_bot_rail_label' => 'nullable|string|max:50|exists:configurator_rails,label',
             'bev_pn' => 'nullable|string|max:20',
             'rab_pn' => 'nullable|string|max:20',
             'cp_pn' => 'nullable|string|max:20',
