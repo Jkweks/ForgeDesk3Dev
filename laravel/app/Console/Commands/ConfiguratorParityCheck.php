@@ -129,7 +129,7 @@ class ConfiguratorParityCheck extends Command
             try {
                 $job = \App\Models\BusinessJob::create(['job_number' => 'PARITY', 'job_name' => 'parity', 'status' => 'active']);
                 $config = DoorFrameConfiguration::create(['business_job_id' => $job->id, 'job_scope' => 'door_and_frame', 'quantity' => 1, 'status' => 'draft']);
-                DoorFrameOpeningSpec::create(['configuration_id' => $config->id, 'opening_type' => 'single', 'hand_single' => 'rhr', 'door_opening_width' => 36, 'door_opening_height' => 84, 'hinging' => 'butt', 'finish' => 'c2']);
+                DoorFrameOpeningSpec::create(['configuration_id' => $config->id, 'opening_type' => 'single', 'hand_single' => 'rhr', 'door_opening_width' => 36, 'door_opening_height' => 84, 'hinging' => 'butt', 'opening_angle' => $combo['angle'], 'finish' => 'c2']);
                 $series = $combo['frame'] ? ConfiguratorFrameSeries::whereRaw('lower(name) = ?', [strtolower($combo['frame']['seriesName'])])
                     ->whereHas('frameSystem', fn ($q) => $q->whereRaw('lower(name) = ?', [strtolower($combo['frame']['sysName'])]))->first() : null;
                 DoorFrameFrameConfig::create(['configuration_id' => $config->id, 'frame_series_id' => $series?->id]);

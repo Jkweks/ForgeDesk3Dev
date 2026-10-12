@@ -399,8 +399,8 @@ class ConfiguratorHwlibAdminController extends Controller
         $item = ConfiguratorHwlibItem::findOrFail($id);
         $data = $this->validateOrFail($request, [
             'backers' => 'present|array',
-            'backers.*.side' => 'required|string|max:50',
-            'backers.*.series' => 'required|string|max:50',
+            'backers.*.side' => 'required|in:door,frame',
+            'backers.*.series' => 'required|in:Standard,Thermal,Monumental',
             'backers.*.backer_id' => 'nullable|integer|exists:configurator_hwlib_backers,id',
             'backers.*.pn' => 'nullable|string|max:255',
             'backers.*.description' => 'nullable|string|max:255',

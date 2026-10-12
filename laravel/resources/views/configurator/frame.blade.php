@@ -186,6 +186,17 @@
                         <option value="pivot_center">Pivot Center</option>
                       </select>
                     </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Opening Degree <span class="text-muted small">(overhead stop)</span></label>
+                      <select class="form-select" id="fb-op-angle">
+                        <option value="85">85°</option>
+                        <option value="90">90°</option>
+                        <option value="95">95°</option>
+                        <option value="100">100°</option>
+                        <option value="105">105°</option>
+                        <option value="110">110°</option>
+                      </select>
+                    </div>
                     <div class="col-md-4" id="fb-op-butt-hinge-count-wrap" style="display:none">
                       <label class="form-label">Number of Hinges</label>
                       <input type="number" step="1" min="2" max="20" class="form-control" id="fb-op-butt-hinge-count">
@@ -667,11 +678,11 @@
           <p class="text-muted small mb-3">
             Each door tag creates its own full copy of this configuration's opening, frame, door and
             hardware data. Type several tags in a row, separated by commas, to make one copy of each.
-            Check "Flip Hand" on a row to swap LH/RH throughout its copies instead of duplicating exactly.
+            Check "Flip Hand" on a row to swap LH/RH throughout its copies, or pick a Degree to change the opening degree on them.
           </p>
           <div class="table-responsive">
             <table class="table table-sm align-middle">
-              <thead><tr><th style="width:55%">New Door Tag(s) &mdash; one copy per tag</th><th style="width:25%">Flip Hand</th><th></th></tr></thead>
+              <thead><tr><th style="width:45%">New Door Tag(s) &mdash; one copy per tag</th><th style="width:20%">Degree</th><th style="width:20%">Flip Hand</th><th></th></tr></thead>
               <tbody id="fb-duplicate-rows"></tbody>
             </table>
           </div>
@@ -1723,6 +1734,7 @@ function fbRenderDetail() {
   document.getElementById('fb-op-hand-single').value = os?.hand_single || 'lh_inswing';
   document.getElementById('fb-op-hand-pair').value = os?.hand_pair || 'rhr_active';
   document.getElementById('fb-op-hinging').value = os?.hinging || 'continuous';
+  document.getElementById('fb-op-angle').value = os?.opening_angle ?? 90;
   document.getElementById('fb-op-butt-hinge-count').value = os?.butt_hinge_count ?? 3;
   fbPopulateHingeStandardSelect();
   fbToggleButtHingeFields();
@@ -1949,6 +1961,12 @@ function fbAddDuplicateRow() {
   tr.id = `fb-dup-row-${id}`;
   tr.innerHTML = `
     <td><input type="text" class="form-control form-control-sm fb-dup-tags" placeholder="e.g. 105A or 105A, 106A"></td>
+    <td>
+      <select class="form-select form-select-sm fb-dup-angle">
+        <option value="">Same</option>
+        ${[85, 90, 95, 100, 105, 110].map(d => `<option value="${d}">${d}°</option>`).join('')}
+      </select>
+    </td>
     <td class="text-center"><input type="checkbox" class="form-check-input fb-dup-flip"></td>
     <td class="text-end">
       <button type="button" class="btn btn-sm btn-ghost-danger" onclick="document.getElementById('fb-dup-row-${id}').remove()">
@@ -1993,8 +2011,15 @@ document.getElementById('fb-duplicate-form').addEventListener('submit', async (e
     const tags = row.querySelector('.fb-dup-tags').value.split(',').map(s => s.trim()).filter(Boolean);
     if (!tags.length) return;
     const flip = row.querySelector('.fb-dup-flip').checked;
+    const angle = parseInt(row.querySelector('.fb-dup-angle').value, 10);
+    const overrides = flip ? fbFlipHandOverrides() : {};
+    if (angle) {
+      // Opening degree drives the overhead stop for the door and the frame; the door config row mirrors it.
+      overrides.opening_specs = { ...overrides.opening_specs, opening_angle: angle };
+      overrides.door_config = { ...overrides.door_config, opening_angle: angle };
+    }
     // One configuration per door tag: a comma list in a row becomes several copies.
-    tags.forEach(tag => duplicates.push({ door_tags: [tag], overrides: flip ? fbFlipHandOverrides() : {} }));
+    tags.forEach(tag => duplicates.push({ door_tags: [tag], overrides }));
   });
   if (!duplicates.length) { showNotification('Enter at least one door tag', 'warning'); return; }
 
@@ -2164,6 +2189,11 @@ async function fbDeleteConfig() {
 async function fbOpenNewModal() {
   await fbLoadJobsInto(document.getElementById('fb-new-job'));
   document.getElementById('fb-new-form').reset();
+  const jobSelect = document.getElementById('fb-new-job');
+  const currentJobId = document.getElementById('fb-list-job-filter').value || fbSelectedDetail?.business_job?.id;
+  if (currentJobId && [...jobSelect.options].some(o => o.value === String(currentJobId))) {
+    jobSelect.value = String(currentJobId);
+  }
   showModal(document.getElementById('fb-new-modal'));
 }
 document.getElementById('fb-new-form').addEventListener('submit', async (e) => {
@@ -2198,6 +2228,7 @@ document.getElementById('fb-opening-form').addEventListener('submit', async (e) 
     door_opening_width: parseFloat(document.getElementById('fb-op-width').value),
     door_opening_height: parseFloat(document.getElementById('fb-op-height').value),
     hinging: document.getElementById('fb-op-hinging').value,
+    opening_angle: parseInt(document.getElementById('fb-op-angle').value, 10) || 90,
     butt_hinge_count: isButt ? parseInt(document.getElementById('fb-op-butt-hinge-count').value || 3, 10) : null,
     hinge_spacing_standard_id: isButt ? (document.getElementById('fb-op-hinge-standard').value || null) : null,
     finish: document.getElementById('fb-op-finish').value,
@@ -2214,14 +2245,7 @@ document.getElementById('fb-opening-form').addEventListener('submit', async (e) 
     }
     await fbLoadDetail();
 
-    const hasButtHingeHw = (fbSelectedDetail?.hardware_links || []).some(l => /butt hinge/i.test(l.item?.category?.name || ''));
-    if (payload.butt_hinge_count && !hasButtHingeHw && confirm(`Number of hinges set to ${payload.butt_hinge_count}. Select butt hinge hardware now?`)) {
-      const hwTabLink = document.querySelector('a[href="#fb-tab-hardware"]');
-      if (hwTabLink && window.bootstrap?.Tab) new bootstrap.Tab(hwTabLink).show();
-      fbSelectButtHingeCategory();
-    } else {
-      fbAdvanceTab('opening');
-    }
+    fbAdvanceTab('opening');
   } catch (err) { showNotification(err.message, 'danger'); }
 });
 

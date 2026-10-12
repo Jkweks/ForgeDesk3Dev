@@ -29,21 +29,6 @@ class ElevationMatcherService
             $candidates = $this->candidatePool(self::FALLBACK_COMPLETED_DAYS);
         }
 
-        // The report's "Elevation / Door Opening" field frequently just says
-        // "Door" or "Door 3" rather than naming an elevation tag — when it
-        // does, narrow the pool to Door-type elevations first so a door
-        // opening can't get matched against an unrelated SF/CW elevation
-        // that merely happens to share more characters. Falls back to the
-        // full pool if that leaves nothing to match against.
-        if ($elevationTagText !== null && str_contains(mb_strtolower($elevationTagText), 'door')) {
-            $doorCandidates = $candidates->filter(
-                fn (FdWoElevation $elevation) => in_array('door', $elevation->elevationType?->matchTerms() ?? [], true)
-            );
-            if ($doorCandidates->isNotEmpty()) {
-                $candidates = $doorCandidates->values();
-            }
-        }
-
         if ($candidates->isEmpty()) {
             return ['elevation_id' => null, 'work_order_id' => null, 'confidence' => null, 'candidates' => []];
         }
@@ -153,9 +138,70 @@ class ElevationMatcherService
             return 70.0;
         }
 
+        // Punctuation/spacing-insensitive containment: "Door transom 3-e2"
+        // contains the tag "3/E2" once separators are stripped.
+        $na = preg_replace('/[^a-z0-9]+/', '', $a);
+        $nb = preg_replace('/[^a-z0-9]+/', '', $b);
+        if ($na !== '' && $na === $nb) {
+            return 95.0;
+        }
+        if (min(strlen($na), strlen($nb)) >= 3 && (str_contains($nb, $na) || str_contains($na, $nb))) {
+            return 70.0;
+        }
+
         similar_text($a, $b, $percent);
 
-        return round($percent, 2);
+        return max(round($percent, 2), $this->tokenSimilarity($a, $b));
+    }
+
+    /**
+     * Word-level match that tolerates plural/suffix differences and ignores
+     * extra words on the longer side: every word of the shorter text finding
+     * a stem-equivalent in the longer one ("kent company" vs "Kent Companies
+     * - Addition #4") scores high, partial coverage scales down.
+     */
+    private function tokenSimilarity(string $a, string $b): float
+    {
+        $ta = preg_split('/[^a-z0-9]+/', $a, -1, PREG_SPLIT_NO_EMPTY);
+        $tb = preg_split('/[^a-z0-9]+/', $b, -1, PREG_SPLIT_NO_EMPTY);
+        if ($ta === [] || $tb === []) {
+            return 0.0;
+        }
+
+        [$short, $long] = count($ta) <= count($tb) ? [$ta, $tb] : [$tb, $ta];
+
+        $matched = 0;
+        foreach ($short as $s) {
+            foreach ($long as $l) {
+                if ($this->tokensEquivalent($s, $l)) {
+                    $matched++;
+                    break;
+                }
+            }
+        }
+
+        $coverage = $matched / count($short);
+        // A lone short word ("door", "a") matching is weak evidence.
+        $cap = count($short) >= 2 || strlen($short[0]) >= 5 ? 85.0 : 50.0;
+
+        return round($coverage * $cap, 2);
+    }
+
+    private function tokensEquivalent(string $x, string $y): bool
+    {
+        if ($x === $y) {
+            return true;
+        }
+        $min = min(strlen($x), strlen($y));
+        if ($min < 4) {
+            return false;
+        }
+        $prefix = 0;
+        while ($prefix < $min && $x[$prefix] === $y[$prefix]) {
+            $prefix++;
+        }
+
+        return $prefix >= max(4, (int) ceil($min * 0.8));
     }
 
     /**
