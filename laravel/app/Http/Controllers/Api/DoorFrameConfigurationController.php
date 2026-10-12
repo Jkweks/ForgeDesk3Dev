@@ -1139,7 +1139,13 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $part->fill($validator->validated());
+        $productChanged = $part->isDirty('product_id');
         $part->save();
+
+        if ($productChanged && $part->source_type === 'profile') {
+            $this->recalculateFrameDimensions($config, $part);
+        }
+
         $part->load('product');
         $this->syncReservationIfReserved($config, $reservationBridge);
 
@@ -1147,6 +1153,33 @@ class DoorFrameConfigurationController extends Controller
             'message' => 'Part updated successfully',
             'part' => $this->formatPart($part),
         ]);
+    }
+
+    /**
+     * After a profile part is swapped for a different extrusion, re-derive the lengths/quantities of
+     * the other generated parts that depend on its section height (e.g. jamb lengths follow the head's
+     * height). The swapped part itself keeps whatever the user entered.
+     */
+    private function recalculateFrameDimensions(DoorFrameConfiguration $config, DoorFrameFramePart $swapped): void
+    {
+        $config->load(['frameConfig', 'openingSpecs']);
+
+        try {
+            $result = app(FrameBomGenerator::class)->generate($config, honorSwaps: true);
+        } catch (RuntimeException $e) {
+            return;
+        }
+
+        $existing = DoorFrameFramePart::where('frame_config_id', $config->frameConfig->id)
+            ->where('is_auto_generated', true)->where('id', '!=', $swapped->id)->get();
+
+        foreach ($result['rows'] as $row) {
+            $match = $existing->first(fn ($p) => $p->sort_order === $row['sort_order']
+                && $p->part_label === $row['part_label'] && $p->source_type === $row['source_type']);
+            if ($match) {
+                $match->update(['calculated_length' => $row['calculated_length'], 'quantity' => $row['quantity']]);
+            }
+        }
     }
 
     /**

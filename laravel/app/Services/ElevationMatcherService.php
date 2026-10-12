@@ -16,12 +16,18 @@ class ElevationMatcherService
     /** How far past a work order's newest elevation completion to still consider it a candidate. */
     private const RECENTLY_COMPLETED_DAYS = 45;
 
+    /** Wider window tried only when the normal one yields no candidates at all (e.g. a late report on an old job). */
+    private const FALLBACK_COMPLETED_DAYS = 365;
+
     /**
      * @return array{elevation_id: ?int, work_order_id: ?int, confidence: ?float, candidates: array}
      */
     public function match(?string $jobText, ?string $elevationTagText, ?string $reportDate = null): array
     {
-        $candidates = $this->candidatePool();
+        $candidates = $this->candidatePool(self::RECENTLY_COMPLETED_DAYS);
+        if ($candidates->isEmpty()) {
+            $candidates = $this->candidatePool(self::FALLBACK_COMPLETED_DAYS);
+        }
 
         // The report's "Elevation / Door Opening" field frequently just says
         // "Door" or "Door 3" rather than naming an elevation tag — when it
@@ -100,15 +106,15 @@ class ElevationMatcherService
         ];
     }
 
-    private function candidatePool()
+    private function candidatePool(int $completedWithinDays)
     {
         return FdWoElevation::query()
             ->with(['workOrder.businessJob', 'elevationType'])
-            ->whereHas('workOrder', function ($q) {
+            ->whereHas('workOrder', function ($q) use ($completedWithinDays) {
                 $q->whereIn('status', \App\Models\FdWorkOrder::OPEN_STATUSES)
-                    ->orWhere(function ($q2) {
+                    ->orWhere(function ($q2) use ($completedWithinDays) {
                         $q2->where('status', 'complete')
-                            ->where('completed_at', '>=', now()->subDays(self::RECENTLY_COMPLETED_DAYS));
+                            ->where('completed_at', '>=', now()->subDays($completedWithinDays));
                     });
             })
             ->get();

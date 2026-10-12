@@ -170,7 +170,7 @@
                         </div>
                         <div class="table-responsive">
                           <table class="table table-vcenter card-table">
-                            <thead><tr><th>Series</th><th>Stile</th><th>Height</th><th>Bevel PN</th><th>Rabbet PN</th><th>Center Pivot PN</th><th>Astragal PN</th><th>Inactive PN</th><th class="w-1"></th></tr></thead>
+                            <thead><tr><th>Series</th><th>Stile</th><th>Height</th><th>Std Top Rail</th><th>Std Bot Rail</th><th>Bevel PN</th><th>Rabbet PN</th><th>Center Pivot PN</th><th>Astragal PN</th><th>Inactive PN</th><th class="w-1"></th></tr></thead>
                             <tbody id="dc-doorType-tbody"></tbody>
                           </table>
                         </div>
@@ -488,6 +488,8 @@
             <div class="col-md-4 mb-3"><label class="form-label">Stile Height (in)</label><input type="number" step="0.0001" class="form-control" id="dc-doorType-stileHeight" required></div>
           </div>
           <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Standard Top Rail</label><select class="form-select" id="dc-doorType-stdTopRail"></select></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Standard Bottom Rail</label><select class="form-select" id="dc-doorType-stdBotRail"></select></div>
             <div class="col-md-4 mb-3"><label class="form-label">Bevel PN</label><input type="text" class="form-control" id="dc-doorType-bevPn"></div>
             <div class="col-md-4 mb-3"><label class="form-label">Rabbet PN <span class="text-muted">(continuous hinge)</span></label><input type="text" class="form-control" id="dc-doorType-rabPn"></div>
             <div class="col-md-4 mb-3"><label class="form-label">Center Pivot PN</label><input type="text" class="form-control" id="dc-doorType-cpPn"></div>
@@ -1275,7 +1277,7 @@
   const DC_ENTITIES = {
     doorType: {
       api: 'door-types', dataKey: 'door_type', listKey: 'door_types',
-      fields: [['series', 'series', 'text'], ['stileName', 'stile_name', 'text'], ['stileHeight', 'stile_height', 'number'],
+      fields: [['series', 'series', 'text'], ['stileName', 'stile_name', 'text'], ['stileHeight', 'stile_height', 'number'], ['stdTopRail', 'std_top_rail_label', 'text'], ['stdBotRail', 'std_bot_rail_label', 'text'],
                ['bevPn', 'bev_pn', 'text'], ['rabPn', 'rab_pn', 'text'], ['cpPn', 'cp_pn', 'text'], ['astPn', 'ast_pn', 'text'], ['inactPn', 'inact_pn', 'text']],
     },
     rail: {
@@ -1328,7 +1330,7 @@
     const tbody = document.getElementById(`dc-${type}-tbody`);
     if (!tbody) return;
     const renderers = {
-      doorType: r => `<td>${esc(r.series)}</td><td>${esc(r.stile_name)}</td><td>${r.stile_height}</td><td>${esc(r.bev_pn||'')}</td><td>${esc(r.rab_pn||'')}</td><td>${esc(r.cp_pn||'')}</td><td>${esc(r.ast_pn||'')}</td><td>${esc(r.inact_pn||'')}</td>`,
+      doorType: r => `<td>${esc(r.series)}</td><td>${esc(r.stile_name)}</td><td>${r.stile_height}</td><td>${esc(r.std_top_rail_label||'')}</td><td>${esc(r.std_bot_rail_label||'')}</td><td>${esc(r.bev_pn||'')}</td><td>${esc(r.rab_pn||'')}</td><td>${esc(r.cp_pn||'')}</td><td>${esc(r.ast_pn||'')}</td><td>${esc(r.inact_pn||'')}</td>`,
       rail: r => `<td><span class="badge bg-blue-lt">${esc(r.rail_type)}</span></td><td>${esc(r.label)}</td><td>${r.value_in}"</td><td>${esc(r.std_pn||'')}</td><td>${esc(r.thermal_pn||'')}</td><td>${esc(r.mon_pn||'')}</td><td class="small text-muted">${[r.stacked_std_pn,r.stacked_thermal_pn,r.stacked_mon_pn].filter(Boolean).join(', ')}</td>`,
       railLug: r => `<td>${esc(r.rail_pn)}</td><td>${esc(r.lug_pn)}</td>`,
       midLug: r => `<td>${esc(r.rail_pn)}</td><td>${esc(r.lug_pn)}</td><td>${esc(r.f1_pn||'')} ${r.f1_pn?`(${r.f1_qty})`:''}</td><td>${esc(r.f2_pn||'')} ${r.f2_pn?`(${r.f2_qty})`:''}</td>`,
@@ -1351,6 +1353,12 @@
   function dcOpenModal(type, id) {
     const entity = DC_ENTITIES[type];
     const row = id ? dcFind(type, id) : null;
+    if (type === 'doorType') {
+      const railOpts = (t) => '<option value="">— none —</option>' + dcData.rails.filter(r => r.rail_type === t)
+        .map(r => `<option value="${esc(r.label)}">${esc(r.label)}</option>`).join('');
+      document.getElementById('dc-doorType-stdTopRail').innerHTML = railOpts('top');
+      document.getElementById('dc-doorType-stdBotRail').innerHTML = railOpts('bot');
+    }
     document.getElementById(`dc-${type}-id`).value = id || '';
     entity.fields.forEach(([dom, key, kind]) => {
       const el = document.getElementById(`dc-${type}-${dom}`);

@@ -45,7 +45,12 @@ class HwlibResolver
 
     private ?float $lockStopZ = null;
 
-    public function __construct(private DoorFrameConfiguration $config)
+    /**
+     * @param bool $enteredOnly Report mode: only values someone actually entered (link override or item
+     *                          catalog value) count. Global/category defaults are ignored, and a calculated
+     *                          value is dropped if any variable it uses has no entered value.
+     */
+    public function __construct(private DoorFrameConfiguration $config, private bool $enteredOnly = false)
     {
         $this->build();
     }
@@ -159,7 +164,7 @@ class HwlibResolver
                 if ($computed['value'] !== null) {
                     return $computed;
                 }
-            } elseif ($raw->default_value !== null && $raw->default_value !== '') {
+            } elseif (! $this->enteredOnly && $raw->default_value !== null && $raw->default_value !== '') {
                 return ['value' => $raw->default_value, 'overridden' => false];
             }
         }
@@ -182,7 +187,7 @@ class HwlibResolver
                     return $computed;
                 }
             }
-            if ($otherRaw->default_value !== null && $otherRaw->default_value !== '') {
+            if (! $this->enteredOnly && $otherRaw->default_value !== null && $otherRaw->default_value !== '') {
                 return ['value' => $otherRaw->default_value, 'overridden' => false];
             }
         }
@@ -192,7 +197,7 @@ class HwlibResolver
         }
 
         $globalVar = $this->variablesByCode[$code] ?? null;
-        if ($globalVar && $globalVar->default_value !== null && $globalVar->default_value !== '') {
+        if (! $this->enteredOnly && $globalVar && $globalVar->default_value !== null && $globalVar->default_value !== '') {
             return ['value' => $globalVar->default_value, 'overridden' => false];
         }
 
@@ -207,13 +212,18 @@ class HwlibResolver
         $formula = $raw->formula ?? '';
         $anyOverridden = false;
 
-        $resolveNum = function (string $code) use ($linkId, &$seen, &$anyOverridden) {
+        $missing = false;
+        $resolveNum = function (string $code) use ($linkId, &$seen, &$anyOverridden, &$missing) {
             $r = $this->resolveVar($code, $linkId, $seen);
             if ($r['overridden']) {
                 $anyOverridden = true;
             }
+            $num = $this->toNum($r['value']);
+            if ($num === null) {
+                $missing = true;
+            }
 
-            return $this->toNum($r['value']);
+            return $num;
         };
         $resolveRaw = function (string $code) use ($linkId, &$seen) {
             return $this->resolveVar($code, $linkId, $seen)['value'];
@@ -229,7 +239,7 @@ class HwlibResolver
             $result = $this->evalExpr($formula, $resolveNum);
         }
 
-        if ($result === null) {
+        if ($result === null || ($this->enteredOnly && $missing)) {
             return ['value' => null, 'overridden' => false];
         }
 

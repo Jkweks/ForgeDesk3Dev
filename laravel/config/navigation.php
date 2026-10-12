@@ -96,7 +96,7 @@ return [
             ['divider' => true],
             ['label' => 'Configurator Admin', 'href' => '/config/admin', 'permission' => 'configurator.catalog.manage', 'active' => ['config/admin'], 'nav' => 'nav.configurator'],
             ['divider' => true],
-            ['label' => 'Door Configurator', 'href' => 'http://fab.vosglassintra.net/configurator', 'target' => '_blank', 'external' => true, 'badge' => ['Beta', 'bg-yellow-lt text-yellow'], 'nav' => 'nav.fulfillment'],
+            ['label' => 'Door Configurator', 'href' => 'http://fab.vosglassintra.net/configurator', 'target' => '_blank', 'external' => true, 'badge' => ['Old', 'bg-secondary-lt text-secondary'], 'nav' => 'nav.fulfillment'],
         ],
     ],
     [
