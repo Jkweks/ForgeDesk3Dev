@@ -291,7 +291,7 @@ class PackageReportService
                 ['SERIES', $doorConfig?->door_series ?: '—'], ['STILE', $doorConfig?->stile_width ?: '—'],
                 ['W × H', $wh], ['HANDING', $handing], ['GLASS', $spec?->glazing ?: '—'],
                 ['BOT GAP', $this->fmtNum(ConfiguratorSetting::current()->bottom_gap).'"'],
-                ['OPENING DEGREE', $config->openingAngle().'°'],
+                ['OPENING DEGREE', $config->openingAngle($isPairLeaf && ! $leaf['active'] ? 'inactive' : null).'°'],
                 ...($finish ? [['FINISH', $finish]] : []),
             ];
             $title = 'DOOR — '.$tag.($leafText ? ' · '.$leafText : '');

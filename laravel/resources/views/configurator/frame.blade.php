@@ -197,6 +197,18 @@
                         <option value="110">110°</option>
                       </select>
                     </div>
+                    <div class="col-md-4" id="fb-op-angle-inactive-wrap" style="display:none">
+                      <label class="form-label">Inactive Leaf Degree <span class="text-muted small">(overhead stop)</span></label>
+                      <select class="form-select" id="fb-op-angle-inactive">
+                        <option value="">Same as active</option>
+                        <option value="85">85°</option>
+                        <option value="90">90°</option>
+                        <option value="95">95°</option>
+                        <option value="100">100°</option>
+                        <option value="105">105°</option>
+                        <option value="110">110°</option>
+                      </select>
+                    </div>
                     <div class="col-md-4" id="fb-op-butt-hinge-count-wrap" style="display:none">
                       <label class="form-label">Number of Hinges</label>
                       <input type="number" step="1" min="2" max="20" class="form-control" id="fb-op-butt-hinge-count">
@@ -853,9 +865,17 @@ function fbProductOptions(selectedId) {
   ).join('');
 }
 
-async function fbLoadJobsInto(select) {
+// Active jobs only, A-Z by name. keepId keeps one non-active job (the entry's current job) so it still displays.
+async function fbFetchJobs(keepId) {
   const data = await authenticatedFetch('/business-jobs');
-  select.innerHTML = (data.jobs || []).map(j => `<option value="${j.id}">${esc(j.job_number)} — ${esc(j.job_name)}</option>`).join('');
+  return (data.jobs || [])
+    .filter(j => j.status === 'active' || (keepId && j.id == keepId))
+    .sort((a, b) => (a.job_name || '').localeCompare(b.job_name || '', undefined, { sensitivity: 'base', numeric: true }));
+}
+
+async function fbLoadJobsInto(select, keepId) {
+  const jobs = await fbFetchJobs(keepId);
+  select.innerHTML = jobs.map(j => `<option value="${j.id}">${esc(j.job_name)} (${esc(j.job_number)})</option>`).join('');
 }
 
 async function fbLoadCatalogTree() {
@@ -1552,9 +1572,15 @@ function fbFilterSeries() {
 async function fbLoadJobFilterOptions() {
   const select = document.getElementById('fb-list-job-filter');
   const current = select.value;
-  const data = await authenticatedFetch('/business-jobs');
+  // Only jobs that have configurations (the picker in New Configuration lists every active job).
+  const [allJobs, cfgData] = await Promise.all([
+    fbFetchJobs(fbSelectedDetail?.business_job?.id),
+    authenticatedFetch('/door-frame-configurations?archived=0'),
+  ]);
+  const withConfigs = new Set((cfgData.configurations || []).map(c => String(c.business_job_id)));
+  const jobs = allJobs.filter(j => withConfigs.has(String(j.id)));
   select.innerHTML = '<option value="">All Jobs</option>' +
-    (data.jobs || []).map(j => `<option value="${j.id}">${esc(j.job_number)} — ${esc(j.job_name)}</option>`).join('');
+    jobs.map(j => `<option value="${j.id}">${esc(j.job_name)} (${esc(j.job_number)})</option>`).join('');
   select.value = current;
 }
 
@@ -1735,6 +1761,7 @@ function fbRenderDetail() {
   document.getElementById('fb-op-hand-pair').value = os?.hand_pair || 'rhr_active';
   document.getElementById('fb-op-hinging').value = os?.hinging || 'continuous';
   document.getElementById('fb-op-angle').value = os?.opening_angle ?? 90;
+  document.getElementById('fb-op-angle-inactive').value = os?.opening_angle_inactive ?? '';
   document.getElementById('fb-op-butt-hinge-count').value = os?.butt_hinge_count ?? 3;
   fbPopulateHingeStandardSelect();
   fbToggleButtHingeFields();
@@ -1815,6 +1842,7 @@ function fbToggleHand() {
   document.getElementById('fb-op-hand-single-wrap').style.display = isPair ? 'none' : '';
   document.getElementById('fb-op-hand-pair-wrap').style.display = isPair ? '' : 'none';
   document.getElementById('fb-hw-leaf-wrap').style.display = isPair ? '' : 'none';
+  document.getElementById('fb-op-angle-inactive-wrap').style.display = isPair ? '' : 'none';
 
   // If the width is still sitting at the untouched default for the other
   // opening type, flip it to this type's default too — never overwrites a
@@ -2072,6 +2100,7 @@ document.getElementById('fb-merge-form').addEventListener('submit', async (e) =>
     const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/merge-pair`, { method: 'POST', body: JSON.stringify({ source_id: parseInt(sourceId, 10) }) });
     hideModal(document.getElementById('fb-merge-modal'));
     showNotification(res.message, 'success');
+    await fbLoadJobFilterOptions();
     await fbLoadList();
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }
@@ -2109,7 +2138,7 @@ document.getElementById('fb-settings-form').addEventListener('submit', async (e)
 async function fbOpenEditModal() {
   const c = fbSelectedDetail;
   if (!c) return;
-  await fbLoadJobsInto(document.getElementById('fb-edit-job'));
+  await fbLoadJobsInto(document.getElementById('fb-edit-job'), c.business_job.id);
   const jobSelect = document.getElementById('fb-edit-job');
   jobSelect.value = String(c.business_job.id);
   const jobLocked = c.status !== 'draft' || !!c.duplicate_group_id;
@@ -2151,6 +2180,7 @@ document.getElementById('fb-edit-form').addEventListener('submit', async (e) => 
     hideModal(document.getElementById('fb-edit-modal'));
     if (payload.business_job_id) document.getElementById('fb-list-job-filter').value = String(payload.business_job_id);
     showNotification('Details saved', 'success');
+    await fbLoadJobFilterOptions();
     await fbLoadList();
     await fbLoadDetail();
   } catch (err) {
@@ -2179,6 +2209,7 @@ async function fbDeleteConfig() {
     document.getElementById('fb-detail-col').style.display = 'none';
     document.getElementById('fb-empty').style.display = '';
     showNotification('Configuration deleted', 'success');
+    await fbLoadJobFilterOptions();
     await fbLoadList();
   } catch (err) {
     showNotification(err.message, 'danger');
@@ -2210,6 +2241,7 @@ document.getElementById('fb-new-form').addEventListener('submit', async (e) => {
   try {
     const res = await authenticatedFetch('/door-frame-configurations', { method: 'POST', body: JSON.stringify(payload) });
     hideModal(document.getElementById('fb-new-modal'));
+    await fbLoadJobFilterOptions();
     await fbLoadList();
     await fbSelect(res.configuration.id);
   } catch (err) { showNotification(err.message, 'danger'); }
@@ -2229,6 +2261,7 @@ document.getElementById('fb-opening-form').addEventListener('submit', async (e) 
     door_opening_height: parseFloat(document.getElementById('fb-op-height').value),
     hinging: document.getElementById('fb-op-hinging').value,
     opening_angle: parseInt(document.getElementById('fb-op-angle').value, 10) || 90,
+    opening_angle_inactive: isPair ? (parseInt(document.getElementById('fb-op-angle-inactive').value, 10) || null) : null,
     butt_hinge_count: isButt ? parseInt(document.getElementById('fb-op-butt-hinge-count').value || 3, 10) : null,
     hinge_spacing_standard_id: isButt ? (document.getElementById('fb-op-hinge-standard').value || null) : null,
     finish: document.getElementById('fb-op-finish').value,

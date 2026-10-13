@@ -60,12 +60,11 @@ class HwlibResolver
         $this->variablesByCode = ConfiguratorHwlibVariable::all()->keyBy('code')->all();
 
         $links = $this->config->hardwareLinks()->with(['item.category.variables', 'item.values', 'values'])->get();
-        $angle = $this->config->openingAngle();
 
         $linkIds = $links->pluck('id')->all();
 
         foreach ($links as $link) {
-            $this->angleByLink[$link->id] = $angle;
+            $this->angleByLink[$link->id] = $this->config->openingAngle($link->leaf);
             $this->sameComboLinkIds[$link->id] = array_values(array_diff($linkIds, [$link->id]));
             $this->sameComboCategories[$link->id] = $links->where('id', '!=', $link->id)
                 ->map(fn ($l) => $l->item->category->name)->unique()->values()->all();

@@ -460,6 +460,10 @@
                     <input type="number" step="0.0001" min="0" class="form-control" id="configuratorWeightPerInch">
                   </div>
                   <div class="col-md-3">
+                    <label class="form-label">Face Width (in)</label>
+                    <input type="number" step="0.0001" min="0" class="form-control" id="configuratorWidth" title="Jamb / vertical face width — used by the sill quarter-point report (blank = 2&quot; default)">
+                  </div>
+                  <div class="col-md-3">
                     <label class="form-label"><strong>Dimensions</strong></label>
                     <div id="configuratorDimensions" class="text-muted">-</div>
                   </div>
@@ -1049,6 +1053,7 @@
         document.getElementById('configuratorDimensions').textContent = dimensions.length > 0 ? dimensions.join(', ') : '-';
         document.getElementById('configuratorLength').value = product.configurator_length ?? '';
         document.getElementById('configuratorWeightPerInch').value = product.configurator_weight_per_inch ?? '';
+        document.getElementById('configuratorWidth').value = product.dimension_width ?? '';
         document.getElementById('configuratorMinDropLength').value = product.minimum_drop_length ?? '';
         document.getElementById('configuratorDropRack').checked = !!product.drop_rack_enabled;
         document.getElementById('configuratorDropMinSplit').value = product.drop_min_split ?? '';
@@ -1615,6 +1620,7 @@
       try {
         const length = document.getElementById('configuratorLength').value;
         const weightPerInch = document.getElementById('configuratorWeightPerInch').value;
+        const faceWidth = document.getElementById('configuratorWidth').value;
         const minDropLength = document.getElementById('configuratorMinDropLength').value;
         const dropMinSplit = document.getElementById('configuratorDropMinSplit').value;
         const dropMaxLength = document.getElementById('configuratorDropMaxLength').value;
@@ -1625,6 +1631,7 @@
           body: JSON.stringify({
             configurator_length: length === '' ? null : length,
             configurator_weight_per_inch: weightPerInch === '' ? null : weightPerInch,
+            dimension_width: faceWidth === '' ? null : faceWidth,
             minimum_drop_length: minDropLength === '' ? null : minDropLength,
             drop_rack_enabled: document.getElementById('configuratorDropRack').checked,
             drop_min_split: dropMinSplit === '' ? null : dropMinSplit,

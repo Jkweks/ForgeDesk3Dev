@@ -59,10 +59,13 @@
         <div class="card mb-3">
           <div class="card-header">
             <h3 class="card-title mb-0"><span id="cl-d-name"></span> <span id="cl-d-status" class="badge ms-2"></span></h3>
-            <div class="card-actions" data-permission="fabrication.work-orders.edit">
+            <div class="card-actions">
+              <a class="btn btn-sm btn-outline-primary" id="cl-sill-btn" style="display:none" target="_blank" rel="noopener"><i class="ti ti-file-type-pdf me-1"></i>Sill quarter points</a>
+              <span data-permission="fabrication.work-orders.edit">
               <button class="btn btn-sm btn-outline-secondary" onclick="clRename()"><i class="ti ti-pencil me-1"></i>Rename</button>
               <button class="btn btn-sm btn-primary" onclick="clOpenPart()"><i class="ti ti-plus me-1"></i>Add line</button>
               <button class="btn btn-sm btn-outline-danger" id="cl-delete-btn" onclick="clDeleteList()"><i class="ti ti-trash me-1"></i>Delete list</button>
+              </span>
             </div>
           </div>
           <div id="cl-d-warning" class="alert alert-warning mb-0 rounded-0 border-0 border-bottom small" style="display:none">
@@ -203,6 +206,9 @@ function clRenderDetail(log) {
   sb.textContent = c.status;
   document.getElementById('cl-d-warning').style.display = c.work_order_id ? '' : 'none';
   document.getElementById('cl-delete-btn').style.display = c.can_delete ? '' : 'none';
+  const sillBtn = document.getElementById('cl-sill-btn');
+  sillBtn.style.display = c.has_sill_report ? '' : 'none';
+  sillBtn.href = `/api/v1/cut-lists/${c.id}/sill-quarter-points`;
 
   document.getElementById('cl-parts-body').innerHTML = c.parts.length ? c.parts.map(p => `
     <tr class="${p.editable ? '' : 'cl-row-locked'}">

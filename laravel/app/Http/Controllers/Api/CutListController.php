@@ -7,6 +7,7 @@ use App\Models\CutFlow\CutJob;
 use App\Models\CutFlow\CutLogEntry;
 use App\Models\CutFlow\Part;
 use App\Models\FdWorkOrder;
+use App\Services\CutFlow\SillQuarterPointService;
 use App\Support\Dimension;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -59,7 +60,7 @@ class CutListController extends Controller
         ]);
     }
 
-    public function show(int $id)
+    public function show(int $id, SillQuarterPointService $sillReport)
     {
         $job = CutJob::findOrFail($id);
         $parts = $job->parts()->withCount(['cutLogEntries', 'stickItems'])
@@ -74,6 +75,7 @@ class CutListController extends Controller
                 'name' => $job->name,
                 'work_order_id' => $job->work_order_id,
                 'bom_diverged' => $job->bom_diverged_at !== null,
+                'has_sill_report' => $sillReport->hasStoredUpload($job->id),
                 'status' => $this->jobStatus($original, $remaining),
                 'can_delete' => $parts->every(fn (Part $p) => $this->isEditable($p)),
                 'parts' => $parts->map(fn (Part $p) => [
@@ -93,6 +95,19 @@ class CutListController extends Controller
                 ])->values(),
             ],
         ]);
+    }
+
+    /** PDF of sill start/end/quarter points (and receptor check) built from the CSV stored at upload. */
+    public function sillQuarterPoints(int $id, SillQuarterPointService $service)
+    {
+        $job = CutJob::findOrFail($id);
+        $report = $service->buildForCutJob($job->id);
+        abort_if($report === null, 404, 'No sill data was stored for this cut list. Re-upload the cut list CSV.');
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.sill-quarter-points', ['report' => $report, 'title' => $job->name]);
+        $pdf->setPaper('letter', 'portrait');
+
+        return $pdf->download('SillQuarterPoints_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $job->name).'.pdf');
     }
 
     /** Cut history for a list — what's been cut, by whom, when. */

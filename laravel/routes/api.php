@@ -725,6 +725,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/cut-lists', [$cl, 'index']);
             Route::get('/cut-lists/{id}', [$cl, 'show']);
             Route::get('/cut-lists/{id}/log', [$cl, 'log']);
+            Route::get('/cut-lists/{id}/sill-quarter-points', [$cl, 'sillQuarterPoints']);
             Route::put('/cut-lists/{id}', [$cl, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/cut-lists/{id}', [$cl, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/cut-lists/{id}/parts', [$cl, 'storePart'])->middleware('permission:fabrication.work-orders.edit');
@@ -775,7 +776,8 @@ Route::middleware('auth:sanctum')->group(function () {
             // Complexity tiers (stage template sets)
             Route::get('/stage-template-sets', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'index']);
             Route::post('/stage-template-sets', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
-            Route::patch('/stage-template-sets/{id}', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/stage-template-sets/{id}/duplicate', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'duplicate'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/stage-template-sets/{id}',[\App\Http\Controllers\Api\StageTemplateSetController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/stage-template-sets/{id}', [\App\Http\Controllers\Api\StageTemplateSetController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
 
             Route::get('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'index']);

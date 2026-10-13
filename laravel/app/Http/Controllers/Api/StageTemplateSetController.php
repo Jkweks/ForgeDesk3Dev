@@ -64,6 +64,41 @@ class StageTemplateSetController extends Controller
         return response()->json(['id' => $set->id, 'stage_template_set' => $this->fmt($set->load('templates'))], 201);
     }
 
+    /** Copy a tier and all of its steps under a new name. */
+    public function duplicate(Request $request, int $id)
+    {
+        $source = FdStageTemplateSet::with('templates')->findOrFail($id);
+        $data = $request->validate(['name' => 'sometimes|nullable|string|max:100']);
+
+        $name = trim($data['name'] ?? '') ?: "{$source->name} (copy)";
+        if ($this->nameTaken($source->elevation_type_id, $name)) {
+            return response()->json(['message' => 'A tier with that name already exists for this type.'], 422);
+        }
+
+        $set = DB::transaction(function () use ($source, $name) {
+            $max = FdStageTemplateSet::where('elevation_type_id', $source->elevation_type_id)->max('sort_order') ?? -1;
+
+            $copy = $source->replicate();
+            $copy->name = $name;
+            $copy->sort_order = $max + 1;
+            $copy->is_default = false;
+            $copy->save();
+
+            foreach ($source->templates as $t) {
+                $tc = $t->replicate();
+                $tc->template_set_id = $copy->id;
+                $tc->save();
+            }
+
+            return $copy;
+        });
+
+        return response()->json([
+            'id' => $set->id,
+            'stage_template_set' => $this->fmt($set->load('templates.defaultUser')),
+        ], 201);
+    }
+
     public function update(Request $request, int $id)
     {
         $set = FdStageTemplateSet::findOrFail($id);
