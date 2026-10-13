@@ -409,6 +409,7 @@ class ProductController extends Controller
             'drop_rack_enabled' => 'nullable|boolean',
             'drop_min_split' => 'nullable|numeric|min:0',
             'drop_max_length' => 'nullable|numeric|min:0',
+            'dimension_width' => 'nullable|numeric|min:0|max:999',
         ]);
 
         if (! empty($validated['drop_rack_enabled'])) {

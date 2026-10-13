@@ -414,7 +414,7 @@ class WorkOrderController extends Controller
      * estimating tool) and merges it into the same CutFlow job the
      * configurator's own released-opening export uses.
      */
-    public function uploadCutlist(Request $request, int $id, \App\Services\Configurator\CutFlowExportService $cutFlow)
+    public function uploadCutlist(Request $request, int $id, \App\Services\Configurator\CutFlowExportService $cutFlow, \App\Services\CutFlow\SillQuarterPointService $sillReport)
     {
         $request->validate([
             'csv' => 'required|file|mimes:csv,txt',
@@ -433,9 +433,13 @@ class WorkOrderController extends Controller
 
             $result = $cutFlow->sendRows($wo, $rows);
 
+            $sill = $sillReport->storeUpload($request->file('csv'), $result['cut_job_id']);
+            $note = $sill ? " Sill quarter-point report ready ({$sill['elevations']} elevation(s)".($sill['needs_review'] ? ", {$sill['needs_review']} need review" : '').').' : '';
+
             return response()->json([
-                'message' => "Sent {$result['line_count']} cut-list line(s) to CutFlow.",
+                'message' => "Sent {$result['line_count']} cut-list line(s) to CutFlow.".$note,
                 'cutflow' => $result,
+                'sill_report_url' => $sill ? url("/api/v1/cut-lists/{$result['cut_job_id']}/sill-quarter-points") : null,
             ]);
         } catch (\Throwable $e) {
             Log::error('WorkOrderController@uploadCutlist failed', ['id' => $id, 'message' => $e->getMessage()]);

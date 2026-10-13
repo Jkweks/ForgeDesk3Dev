@@ -4601,6 +4601,14 @@ async function saveCutlistUpload() {
         if (!r.ok) throw new Error(body.message || body.error || `HTTP ${r.status}`);
         hideModal(document.getElementById('cutlistUploadModal'));
         fabToast(body.message || 'Sent to CutFlow.', 'success');
+        if (body.sill_report_url) {
+            const a = document.createElement('a');
+            a.href = body.sill_report_url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
     } catch (e) {
         console.error(e);
         fabToast(`Failed to send cutlist: ${e.message}`, 'error');

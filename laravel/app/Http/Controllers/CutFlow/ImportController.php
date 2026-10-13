@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CutFlow;
 
 use App\Http\Controllers\Controller;
 use App\Services\CutFlow\CutlistIngestService;
+use App\Services\CutFlow\SillQuarterPointService;
 use Illuminate\Http\Request;
 
 class ImportController extends Controller
@@ -25,7 +26,7 @@ class ImportController extends Controller
      * column, falling back to the uploaded filename) — one job per upload.
      * See CutlistIngestService::ingest() for the identity/merge rules.
      */
-    public function store(Request $request, CutlistIngestService $ingest)
+    public function store(Request $request, CutlistIngestService $ingest, SillQuarterPointService $sillReport)
     {
         $request->validate([
             'csv' => 'required|file|mimes:csv,txt',
@@ -37,7 +38,10 @@ class ImportController extends Controller
 
         $result = $ingest->ingest($rawRows, $fallbackJobName);
 
+        $sill = $sillReport->storeUpload($file, $result['job']->id);
+        $note = $sill ? ' Sill quarter-point report is available from Fabrication > Cut Lists.' : '';
+
         return redirect()->route('cutflow.dashboard', ['job' => $result['job']->id])
-            ->with('status', "Imported {$result['line_count']} cut-list lines into \"{$result['job']->name}\".");
+            ->with('status', "Imported {$result['line_count']} cut-list lines into \"{$result['job']->name}\".".$note);
     }
 }

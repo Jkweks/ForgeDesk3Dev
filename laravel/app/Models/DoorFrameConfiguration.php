@@ -151,9 +151,14 @@ class DoorFrameConfiguration extends Model
     /**
      * Opening degree for the overhead stop matrix — set on the Opening tab and shared by the door and the frame.
      */
-    public function openingAngle(): int
+    public function openingAngle(?string $leaf = null): int
     {
-        return (int) ($this->openingSpecs?->opening_angle ?? $this->doorConfigs->first()?->opening_angle ?? 90);
+        $specs = $this->openingSpecs;
+        if ($leaf === 'inactive' && $specs?->opening_type === 'pair' && $specs->opening_angle_inactive) {
+            return (int) $specs->opening_angle_inactive;
+        }
+
+        return (int) ($specs?->opening_angle ?? $this->doorConfigs->first()?->opening_angle ?? 90);
     }
 
     public function doorConfigs()

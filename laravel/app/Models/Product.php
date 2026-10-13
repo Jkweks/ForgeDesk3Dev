@@ -26,7 +26,7 @@ class Product extends Model
         'is_active', 'is_discontinued', 'status',
         'configurator_length', 'configurator_weight_per_inch', 'is_length_based', 'minimum_drop_length',
         'drop_rack_enabled', 'drop_min_split', 'drop_max_length',
-        'dimension_height', 'dimension_depth',
+        'dimension_height', 'dimension_depth', 'dimension_width',
         'tool_type', 'tool_life_max', 'tool_life_unit', 'tool_life_warning_threshold',
         'compatible_machine_types', 'tool_specifications',
     ];
@@ -43,6 +43,7 @@ class Product extends Model
         'average_daily_use' => 'decimal:2',
         'dimension_height' => 'decimal:2',
         'dimension_depth' => 'decimal:2',
+        'dimension_width' => 'decimal:4',
         'is_active' => 'boolean',
         'is_discontinued' => 'boolean',
         'nonsof' => 'boolean',

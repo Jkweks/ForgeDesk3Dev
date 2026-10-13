@@ -2805,6 +2805,9 @@
           <button class="btn btn-sm btn-ghost-secondary" onclick="renameTplSet(${set.id})" title="Rename tier">
             <i class="ti ti-pencil"></i>
           </button>
+          <button class="btn btn-sm btn-ghost-secondary" onclick="duplicateTplSet(${set.id})" title="Duplicate tier">
+            <i class="ti ti-copy"></i>
+          </button>
           ${set.is_default ? '' : `<button class="btn btn-sm btn-ghost-secondary" onclick="setDefaultTplSet(${set.id})" title="Make default tier"><i class="ti ti-star"></i></button>`}
           ${tplSets.length > 1 ? `<button class="btn btn-sm btn-ghost-danger" onclick="deleteTplSet(${set.id})" title="Delete tier"><i class="ti ti-trash"></i></button>` : ''}
         ` : '';
@@ -3052,6 +3055,22 @@
           tplActiveSetId = data.id;
           await reloadTplModal();
         } catch (e) { console.error(e); fabToast('Failed to add tier.', 'error'); }
+      }
+
+      async function duplicateTplSet(setId) {
+        const current = tplSets.find(s => s.id === setId);
+        const name = (prompt('Name for the duplicated tier:', `${current?.name || ''} (copy)`) || '').trim();
+        if (!name) return;
+        try {
+          const r = await fetch(`/api/v1/stage-template-sets/${setId}/duplicate`, {
+            method: 'POST', credentials: 'include', headers: tplSetHeaders(),
+            body: JSON.stringify({ name }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) { fabToast(data.message || 'Failed to duplicate tier.', 'error'); return; }
+          tplActiveSetId = data.id;
+          await reloadTplModal();
+        } catch (e) { console.error(e); fabToast('Failed to duplicate tier.', 'error'); }
       }
 
       async function renameTplSet(setId) {

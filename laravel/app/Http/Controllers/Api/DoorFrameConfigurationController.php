@@ -793,6 +793,7 @@ class DoorFrameConfigurationController extends Controller
                 'door_opening_height' => 'required|numeric|min:0|max:999.99',
                 'hinging' => 'required|in:continuous,butt,pivot_offset,pivot_center',
                 'opening_angle' => 'nullable|integer|in:'.implode(',', DoorFrameOpeningSpec::$openingAngleOptions),
+                'opening_angle_inactive' => 'nullable|integer|in:'.implode(',', DoorFrameOpeningSpec::$openingAngleOptions),
                 'butt_hinge_count' => 'nullable|required_if:hinging,butt|integer|min:2|max:20',
                 'hinge_spacing_standard_id' => 'nullable|required_if:hinging,butt|exists:configurator_hinge_spacing_standards,id',
                 'finish' => 'required|in:c2,db,bl',
@@ -824,6 +825,7 @@ class DoorFrameConfigurationController extends Controller
                     'door_opening_height' => $request->door_opening_height,
                     'hinging' => $request->hinging,
                     'opening_angle' => $request->opening_angle ?? 90,
+                    'opening_angle_inactive' => $request->opening_type === 'pair' ? $request->opening_angle_inactive : null,
                     'butt_hinge_count' => $request->hinging === 'butt' ? $request->butt_hinge_count : null,
                     'hinge_spacing_standard_id' => $request->hinging === 'butt' ? $request->hinge_spacing_standard_id : null,
                     'finish' => $request->finish,
@@ -833,7 +835,11 @@ class DoorFrameConfigurationController extends Controller
 
             // Opening degree drives the overhead stop matrix for both the door and the frame; keep the door
             // config rows (which are not rebuilt on an opening save) in step.
+            $inactiveAngle = $request->opening_type === 'pair' ? $request->opening_angle_inactive : null;
             $config->doorConfigs()->update(['opening_angle' => $request->opening_angle ?? 90]);
+            if ($inactiveAngle) {
+                $config->doorConfigs()->where('leaf', 'inactive')->update(['opening_angle' => $inactiveAngle]);
+            }
 
             $scopeChanged = $request->filled('job_scope') && $request->job_scope !== $config->job_scope;
             if ($scopeChanged) {
@@ -1284,7 +1290,7 @@ class DoorFrameConfigurationController extends Controller
                 'leaf' => $leaf,
                 'handing' => $config->openingSpecs?->deriveDoorHanding(),
                 'hinge_type' => $config->openingSpecs?->deriveHingeType(),
-                'opening_angle' => $config->openingSpecs?->opening_angle ?? 90,
+                'opening_angle' => $config->openingAngle($leaf),
                 'bottom_gap' => \App\Models\ConfiguratorSetting::current()->bottom_gap,
                 'top_rail_label' => $request->top_rail_label,
                 'bot_rail_label' => $request->bot_rail_label,
@@ -2242,6 +2248,7 @@ class DoorFrameConfigurationController extends Controller
             'hinging' => $specs->hinging,
             'hinging_label' => $specs->hinging_label,
             'opening_angle' => $specs->opening_angle ?? 90,
+            'opening_angle_inactive' => $specs->opening_angle_inactive,
             'butt_hinge_count' => $specs->butt_hinge_count,
             'hinge_spacing_standard_id' => $specs->hinge_spacing_standard_id,
             'hinge_spacing_standard' => $specs->hingeSpacingStandard,
@@ -2627,7 +2634,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $variables = $link->item->category->variables->keyBy('code');
-        $angle = (string) ($config->openingAngle());
+        $angle = (string) ($config->openingAngle($link->leaf));
         $operations = [];
 
         foreach ($request->input('values') as $code => $raw) {
