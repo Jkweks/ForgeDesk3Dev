@@ -2,9 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Mail\BackupAlertMail;
 use App\Models\BackupRun;
 use App\Models\SystemNotification;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * Records the result of one backup.sh run so the /status page can show
@@ -55,27 +58,65 @@ class RecordBackupRun extends Command
     }
 
     /**
-     * Raises (or auto-clears) the "backups are failing" nav bar alert.
-     * Fires when the last 3 *consecutive* calendar days each landed on
-     * 'failed' (red) or 'remote_failed' (orange) — local_failed (yellow)
-     * alone never triggers it. Clears automatically the next time a day's
-     * worst run is 'success', so nobody has to remember to dismiss it once
-     * the underlying problem is fixed.
+     * Raises (or auto-clears) the backup alerts, each with a bell notification
+     * AND an email to config('backup.alert_email'):
+     *
+     *  - 'backup_local_failed': the newest run had a local failure (DB dump,
+     *    storage archive, cutflow/fab_utils dumps). Fires on the FIRST day.
+     *  - 'backup_failing': the offsite copy failed (while local succeeded) on
+     *    3 consecutive calendar days.
+     *
+     * Each is created/emailed once per episode and auto-clears when the latest
+     * run no longer has that problem.
      */
     private function evaluateBackupHealth(): void
     {
-        $type = 'backup_failing';
-        $alertStatuses = ['failed', 'remote_failed'];
-        $severity = ['failed' => 3, 'remote_failed' => 2, 'local_failed' => 1, 'success' => 0];
+        $latest = BackupRun::orderByDesc('run_date')->orderByDesc('started_at')->first();
+        if (! $latest) {
+            return;
+        }
 
-        // Worst status per calendar day, most recent days first. A small
-        // buffer (20 rows) comfortably covers multiple runs on the same day.
+        $this->evaluateLocalFailure($latest);
+        $this->evaluateRemoteFailure();
+    }
+
+    private function evaluateLocalFailure(BackupRun $latest): void
+    {
+        $type = 'backup_local_failed';
+
+        if ($this->localFailed($latest)) {
+            if (! SystemNotification::active()->ofType($type)->exists()) {
+                $title = 'Local backup failed';
+                $message = 'The local backup on '.$latest->run_date->toDateString()
+                    .' failed ('.$this->failedComponentNames($latest, false).'). Check backup.sh on the production host.';
+
+                SystemNotification::create([
+                    'type' => $type,
+                    'level' => 'danger',
+                    'title' => $title,
+                    'message' => $message,
+                    'data' => ['date' => $latest->run_date->toDateString(), 'status' => $latest->status],
+                ]);
+                $this->sendAlertEmail($title, $message, $latest->components ?? []);
+            }
+        } else {
+            SystemNotification::active()->ofType($type)->update(['dismissed_at' => now()]);
+        }
+    }
+
+    private function evaluateRemoteFailure(): void
+    {
+        $type = 'backup_failing';
+
+        // Per calendar day (most recent first): did the offsite copy fail
+        // while local succeeded? A small buffer (20 rows) covers multiple runs
+        // on the same day.
         $byDate = [];
         foreach (BackupRun::orderByDesc('run_date')->orderByDesc('started_at')->limit(20)->get() as $run) {
             $date = $run->run_date->toDateString();
-            if (! isset($byDate[$date]) || $severity[$run->status] > $severity[$byDate[$date]]) {
-                $byDate[$date] = $run->status;
-            }
+            $byDate[$date] ??= ['local' => false, 'remote' => false, 'run' => $run];
+            $byDate[$date]['local'] = $byDate[$date]['local'] || $this->localFailed($run);
+            $byDate[$date]['remote'] = $byDate[$date]['remote'] || $this->remoteFailed($run);
         }
 
         $dates = array_keys($byDate);
@@ -86,29 +127,64 @@ class RecordBackupRun extends Command
             && (int) \Carbon\Carbon::parse($latestThree[1])->diffInDays(\Carbon\Carbon::parse($latestThree[0])) === 1
             && (int) \Carbon\Carbon::parse($latestThree[2])->diffInDays(\Carbon\Carbon::parse($latestThree[1])) === 1;
 
-        $allAlerting = $consecutive && collect($latestThree)->every(fn ($d) => in_array($byDate[$d], $alertStatuses, true));
+        $allRemoteOnly = $consecutive && collect($latestThree)->every(fn ($d) => $byDate[$d]['remote'] && ! $byDate[$d]['local']);
 
-        if ($allAlerting) {
+        if ($allRemoteOnly) {
             if (! SystemNotification::active()->ofType($type)->exists()) {
                 $orderedDates = array_reverse($latestThree);
+                $title = 'Offsite backups are failing';
+                $message = 'The offsite backup copy has failed for 3 consecutive days ('
+                    .$orderedDates[0].' → '.$orderedDates[2].
+                    ') while local backups succeeded. Check the remote host / backup.sh on the production host.';
+
                 SystemNotification::create([
                     'type' => $type,
                     'level' => 'danger',
-                    'title' => 'Backups are failing',
-                    'message' => 'The backup process has failed or lost its offsite copy for 3 consecutive days ('
-                        .$orderedDates[0].' → '.$orderedDates[2].
-                        '). Check backup.sh on the production host.',
-                    'data' => [
-                        'dates' => $orderedDates,
-                        'statuses' => array_map(fn ($d) => $byDate[$d], $orderedDates),
-                    ],
+                    'title' => $title,
+                    'message' => $message,
+                    'data' => ['dates' => $orderedDates],
                 ]);
+                $this->sendAlertEmail($title, $message, $byDate[$latestThree[0]]['run']->components ?? []);
             }
-        } elseif (($byDate[$dates[0] ?? ''] ?? null) === 'success') {
-            // Most recent day succeeded — auto-resolve any standing alert.
-            SystemNotification::active()->ofType($type)->update([
-                'dismissed_at' => now(),
-            ]);
+        } elseif (isset($dates[0]) && ! $byDate[$dates[0]]['remote']) {
+            // Most recent day's offsite copy worked — auto-resolve any standing alert.
+            SystemNotification::active()->ofType($type)->update(['dismissed_at' => now()]);
+        }
+    }
+
+    /** Anything other than the remote_* components (or a 'failed'/'local_failed' status) counts as local. */
+    private function localFailed(BackupRun $run): bool
+    {
+        return in_array($run->status, ['failed', 'local_failed'], true)
+            || $this->failedComponentNames($run, false) !== '';
+    }
+
+    private function remoteFailed(BackupRun $run): bool
+    {
+        return $run->status === 'remote_failed' || $this->failedComponentNames($run, true) !== '';
+    }
+
+    /** Comma-separated names of failed components, remote_* ones or the rest. */
+    private function failedComponentNames(BackupRun $run, bool $remote): string
+    {
+        return collect($run->components ?? [])
+            ->filter(fn ($c, $name) => ! ($c['success'] ?? true) && str_starts_with($name, 'remote_') === $remote)
+            ->keys()
+            ->implode(', ');
+    }
+
+    private function sendAlertEmail(string $title, string $message, array $components): void
+    {
+        $to = config('backup.alert_email');
+        if (! $to) {
+            return;
+        }
+
+        try {
+            Mail::to($to)->send(new BackupAlertMail($title, $message, $components));
+        } catch (\Throwable $e) {
+            // Never let a mail problem break recording the run itself.
+            Log::warning('Backup alert email failed: '.$e->getMessage());
         }
     }
 }

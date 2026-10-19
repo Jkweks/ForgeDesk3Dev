@@ -745,7 +745,7 @@ document.getElementById('addToolingProductForm')?.addEventListener('submit', asy
     // Inventory
     quantity_on_hand: parseInt(document.getElementById('newToolQuantity').value) || 0,
     unit_cost: parseFloat(document.getElementById('newToolUnitCost').value) || 0,
-    unit_price: parseFloat(document.getElementById('newToolUnitPrice').value) || 0,
+    net_cost: parseFloat(document.getElementById('newToolNetCost').value) || 0,
     minimum_quantity: parseInt(document.getElementById('newToolMinQuantity').value) || 0,
     reorder_point: parseInt(document.getElementById('newToolReorderPoint').value) || 0,
     supplier_id: document.getElementById('newToolSupplier').value || null,

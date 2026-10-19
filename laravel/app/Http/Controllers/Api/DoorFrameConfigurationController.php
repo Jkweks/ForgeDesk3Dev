@@ -1923,6 +1923,85 @@ class DoorFrameConfigurationController extends Controller
      * reservation (see syncReservationIfReserved()). Also usable to manually
      * re-trigger a sync while already reserved.
      */
+    /**
+     * Preview the stock a draft opening would consume if reserved — the same quantities the
+     * reservation bridge would commit (stick fractions, roll inches, units), against current
+     * availability. Read-only; nothing is reserved.
+     *
+     * scope=this   just this opening.
+     * scope=drafts every draft opening on the job, computed together (offcuts shared, so this is
+     *              less than the sum of the individual openings).
+     * No scope: if the job has more than one draft, answers {needs_scope: true, drafts: [...]} so
+     * the UI can ask which to check; otherwise treats it as scope=this.
+     */
+    public function materialConsumption(Request $request, $id, \App\Services\Configurator\ConfigurationReservationBridge $bridge)
+    {
+        $config = DoorFrameConfiguration::with('doors')->findOrFail($id);
+
+        if ($config->status !== 'draft') {
+            return response()->json([
+                'error' => 'Not a draft',
+                'message' => 'Material consumption preview is for draft openings; reserved and released openings are already committed.',
+            ], 422);
+        }
+
+        $drafts = DoorFrameConfiguration::with('doors')
+            ->where('business_job_id', $config->business_job_id)
+            ->where('status', 'draft')
+            ->notArchived()
+            ->orderBy('id')
+            ->get();
+
+        $label = fn ($c) => ['id' => $c->id, 'label' => trim($c->doors->pluck('door_tag')->implode(', ')) ?: $c->scope_label, 'current' => $c->id === $config->id];
+
+        $scope = $request->query('scope');
+        if (! in_array($scope, ['this', 'drafts'], true)) {
+            if ($drafts->count() > 1) {
+                return response()->json(['needs_scope' => true, 'drafts' => $drafts->map($label)->values()]);
+            }
+            $scope = 'this';
+        }
+
+        $included = $scope === 'drafts' ? $drafts : new \Illuminate\Database\Eloquent\Collection([$config]);
+        $included->load(['frameConfig.parts.product', 'doorConfigs.parts.product', 'hardwareParts.product']);
+
+        $warnings = [];
+        $desired = $bridge->desiredQuantities($included, $warnings);
+        $products = \App\Models\Product::whereIn('id', $desired->keys())->get()->keyBy('id');
+
+        $rows = $desired->map(function ($needed, $pid) use ($products) {
+            $p = $products[$pid];
+            $available = (float) $p->quantity_available;
+
+            return [
+                'product_id' => $pid,
+                'part_number' => $p->part_number ?: $p->sku,
+                'description' => $p->description,
+                'finish' => $p->finish,
+                'uom' => $p->unit_of_measure,
+                'needed' => round((float) $needed, 2),
+                'available' => round($available, 2),
+                'short' => max(0, round((float) $needed - $available, 2)),
+            ];
+        })->sortBy('part_number')->values();
+
+        $special = $included->flatMap(fn ($c) => $c->hardwareParts)->whereNull('product_id')->count();
+        if ($special) {
+            $warnings[] = "{$special} special-order hardware item(s) are not stocked and are excluded.";
+        }
+        if ($included->every(fn ($c) => ! $c->frameConfig?->parts->count() && $c->doorConfigs->flatMap(fn ($dc) => $dc->parts)->isEmpty() && $c->hardwareParts->isEmpty())) {
+            $warnings[] = 'No parts have been generated for the selected opening(s) yet.';
+        }
+
+        return response()->json([
+            'scope' => $scope,
+            'openings' => $included->map($label)->values(),
+            'rows' => $rows,
+            'short_count' => $rows->where('short', '>', 0)->count(),
+            'warnings' => array_values(array_unique($warnings)),
+        ]);
+    }
+
     public function reserveConfiguration($id, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::findOrFail($id);

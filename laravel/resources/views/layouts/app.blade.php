@@ -37,6 +37,11 @@
     :root { --fd-nav-offset: 0px; }
     html[data-bs-navbar=sticky]:not([data-bs-navbar-position=vertical]) { --fd-nav-offset: 3.5rem; }
 
+    /* Type-to-search pickers float a .list-group over the page; Tabler's list-group bg is `inherit`, which renders see-through. */
+    .list-group.position-absolute { background: var(--tblr-bg-surface); border: var(--tblr-border-width) solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); }
+    .list-group.position-absolute .list-group-item { background: var(--tblr-bg-surface); }
+    .list-group.position-absolute .list-group-item-action:hover { background: var(--tblr-hover-bg); }
+
     /* Menu organization: both menu structures are rendered, the user's choice (Customize) shows one. */
     [data-nav-set] { display: contents; }
     html:not([data-bs-nav-menu=classic]) [data-nav-set=classic],
