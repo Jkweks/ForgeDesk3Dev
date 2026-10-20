@@ -261,7 +261,7 @@ class CutListController extends Controller
         ];
     }
 
-    /** Mirrors the parts table's unique profile+dimension+use identity. */
+    /** Mirrors the parts table's unique profile+dimension+use+elevation identity (hand-added lines have no row/column). */
     private function assertUnique(int $jobId, array $data, ?int $ignorePartId = null): void
     {
         $dupe = Part::where('cut_job_id', $jobId)
@@ -269,12 +269,15 @@ class CutListController extends Controller
             ->where('finish', $data['finish'])
             ->where('dimension_inches', $data['dimension_inches'])
             ->where('description', $data['description'])
+            ->where('phase', $data['phase'])
+            ->whereNull('row')
+            ->whereNull('column')
             ->when($ignorePartId, fn ($q) => $q->where('id', '!=', $ignorePartId))
             ->exists();
 
         if ($dupe) {
             throw ValidationException::withMessages([
-                'name' => 'A line with the same profile, finish, length and use already exists — edit its quantity instead.',
+                'name' => 'A line with the same profile, finish, length, use and elevation already exists — edit its quantity instead.',
             ]);
         }
     }
