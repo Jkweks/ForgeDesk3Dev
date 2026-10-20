@@ -741,7 +741,7 @@
           <div class="modal-body">
             <input type="hidden" id="completeResId">
             <div class="alert alert-info">
-              Enter the actual consumed quantities for each item. Items will be deducted from inventory.
+              Enter the actual consumed quantities for each item. Items will be deducted from inventory. If nothing has been fulfilled yet, quantities start at the committed amounts.
             </div>
             <div class="table-responsive">
               <table class="table table-sm">
@@ -3087,8 +3087,11 @@
                 completeResItems = items;
 
                 const tbody = document.getElementById('completeResItemsTable');
+                // Nothing fulfilled yet on any line: prefill the expected usage (the committed qty) so the user only edits exceptions.
+                const nothingFulfilled = items.every(item => !(parseFloat(item.consumed_qty) > 0));
                 tbody.innerHTML = items.map(item => {
-                    const toRelease = item.committed_qty - item.consumed_qty;
+                    const prefill = nothingFulfilled ? item.committed_qty : item.consumed_qty;
+                    const toRelease = Math.round((item.committed_qty - prefill) * 10) / 10;
                     return `
                         <tr>
                             <td><strong>${escapeHtml(item.product.part_number)}</strong></td>
@@ -3101,7 +3104,7 @@
                                     data-product-id="${item.product_id}"
                                     data-committed="${item.committed_qty}"
                                     data-already-consumed="${item.consumed_qty}"
-                                    value="${item.consumed_qty}"
+                                    value="${prefill}"
                                     min="${item.consumed_qty}"
                                     step="0.1"
                                     onchange="updateResRelease(${item.product_id})"

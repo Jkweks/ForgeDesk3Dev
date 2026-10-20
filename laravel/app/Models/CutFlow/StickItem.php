@@ -49,7 +49,7 @@ class StickItem extends Model
     public function getPhotoUrlAttribute(): ?string
     {
         return $this->part?->photo_url
-            ?? Part::resolveProductFor($this->stickSession->part_name, $this->stickSession->finish)?->photo_url;
+            ?? Part::photoProductFor($this->stickSession->part_name, $this->stickSession->finish)?->photo_url;
     }
 
     public function isLabelPrinted(): bool

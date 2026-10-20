@@ -79,14 +79,22 @@ class Part extends Model
      */
     public function getPhotoUrlAttribute(): ?string
     {
-        [$partNumber, $finish] = static::profileKey($this->name, $this->finish);
+        return static::photoProductFor($this->name, $this->finish)?->photo_url;
+    }
 
-        $product = Product::where('part_number', $partNumber)
-            ->where('finish', $finish)
+    /**
+     * The product whose photo represents this profile. The picture depends on the shape, not the
+     * finish, so any finish of the part number will do — the exact finish just wins when it has one.
+     */
+    public static function photoProductFor(?string $name, ?string $finish): ?Product
+    {
+        [$partNumber, $finish] = static::profileKey($name, $finish);
+
+        return Product::where('part_number', $partNumber)
             ->whereNotNull('photo_path')
+            ->get()
+            ->sortByDesc(fn (Product $p) => $p->finish === $finish)
             ->first();
-
-        return $product?->photo_url;
     }
 
     /**
@@ -107,7 +115,8 @@ class Part extends Model
     /**
      * Normalises how CutFlow spells a profile into products.part_number + products.finish: strips a
      * baked-in finish suffix off the name ("E14025-BL" -> E14025 / BL) and maps a finish label
-     * ("Black Anodized") back to its code.
+     * ("Black Anodized") back to its code. A CSV-style "DB DARK BRONZE : ANODIZED" resolves via its
+     * leading code token.
      *
      * @return array{0: ?string, 1: ?string}
      */
@@ -123,7 +132,8 @@ class Part extends Model
         }
 
         if ($finish && ! array_key_exists($finish, Product::$finishCodes)) {
-            $finish = array_search($finish, Product::$finishCodes, true) ?: $finish;
+            $finish = array_search($finish, Product::$finishCodes, true)
+                ?: (array_key_exists($lead = strtoupper(strtok(trim($finish), ' ')), Product::$finishCodes) ? $lead : $finish);
         }
 
         return [$partNumber, $finish];
