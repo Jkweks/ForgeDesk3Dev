@@ -72,6 +72,7 @@
               <div class="card-actions d-flex flex-wrap align-items-center gap-2">
                 <span class="badge" id="fb-status-badge"></span>
                 <div class="btn-group" role="group">
+                  <button class="btn btn-outline-secondary" id="fb-material-btn" onclick="fbOpenMaterial()" style="display:none" data-permission="configurator.view" title="Preview the stock this draft would consume before reserving"><i class="ti ti-list-details me-1"></i>Material</button>
                   <button class="btn btn-outline-secondary" id="fb-reserve-toggle-btn" onclick="fbToggleReserve()" style="display:none" data-permission="configurator.release"><i class="ti ti-bookmark me-1"></i>Reserve</button>
                   <button class="btn btn-outline-secondary" id="fb-reserve-btn" onclick="fbCreateReservation()" style="display:none" data-permission="configurator.release"><i class="ti ti-package me-1"></i>Create Reservation</button>
                   <button class="btn btn-outline-success" id="fb-cutrelease-btn" onclick="fbOpenRelease('cut')" style="display:none" data-permission="configurator.release" title="Send the cut list to CutFlow now; hardware stays editable"><i class="ti ti-cut me-1"></i>Release to CutFlow&hellip;</button>
@@ -775,6 +776,21 @@
           <button type="submit" class="btn btn-primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="fb-material-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Material consumption (draft preview)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="fb-material-body">Loading&hellip;</div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1691,6 +1707,7 @@ function fbRenderDetail() {
   const isDraftOrReserved = c.status === 'draft' || c.status === 'reserved';
   const reserveToggleBtn = document.getElementById('fb-reserve-toggle-btn');
   reserveToggleBtn.style.display = isDraftOrReserved ? '' : 'none';
+  document.getElementById('fb-material-btn').style.display = c.status === 'draft' ? '' : 'none';
   if (c.status === 'reserved') {
     reserveToggleBtn.classList.remove('btn-outline-secondary');
     reserveToggleBtn.classList.add('btn-outline-warning');
@@ -2449,6 +2466,40 @@ async function fbDeletePart(kind, id) {
     await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/${fbPartsEndpoint(kind)}/${id}`, { method: 'DELETE' });
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }
+}
+
+// ---- Material consumption preview (draft, before reserving) ----
+async function fbOpenMaterial(scope) {
+  const body = document.getElementById('fb-material-body');
+  if (!scope) {
+    body.textContent = 'Loading…';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('fb-material-modal')).show();
+  }
+  try {
+    const d = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/material-consumption${scope ? '?scope=' + scope : ''}`);
+    if (d.needs_scope) {
+      // More than one draft on this job: ask which to check.
+      body.innerHTML = `<p>This job has <strong>${d.drafts.length}</strong> draft openings. Which should be checked?</p>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <button class="btn btn-primary" onclick="fbOpenMaterial('this')">This opening only</button>
+          <button class="btn btn-outline-primary" onclick="fbOpenMaterial('drafts')">All ${d.drafts.length} drafts for this job</button>
+        </div>
+        <div class="text-muted small">Drafts: ${d.drafts.map(x => esc(x.label) + (x.current ? ' (this one)' : '')).join(', ')}</div>`;
+      return;
+    }
+    const rows = d.rows.map(r => `<tr class="${r.short > 0 ? 'table-danger' : ''}">
+        <td>${esc(r.part_number)}${r.finish ? ' <span class="text-muted">' + esc(r.finish) + '</span>' : ''}<div class="text-muted small">${esc(r.description || '')}</div></td>
+        <td class="text-end">${r.needed}</td><td class="text-end">${r.available}</td>
+        <td class="text-end">${r.short > 0 ? '<span class="badge bg-red-lt">short ' + r.short + '</span>' : '<span class="text-success">OK</span>'}</td></tr>`).join('');
+    body.innerHTML = `<div class="mb-2 text-muted">${d.scope === 'drafts' ? 'All drafts' : 'This opening'}: ${d.openings.map(o => esc(o.label)).join(', ')}
+        ${d.scope === 'drafts' ? '<a href="#" class="ms-2" onclick="fbOpenMaterial(\'this\');return false">this opening only</a>' : ''}</div>
+      ${d.warnings.map(w => `<div class="alert alert-warning py-2">${esc(w)}</div>`).join('')}
+      ${d.rows.length ? `<table class="table table-sm"><thead><tr><th>Part</th><th class="text-end">Needed</th><th class="text-end">Available</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="text-muted small">Needed is what reserving would commit (extrusions in tenths of a stick). Available is current stock less other reservations. ${d.short_count ? '<strong>' + d.short_count + ' part(s) short.</strong>' : ''}</div>`
+        : '<div class="text-muted">Nothing to consume yet.</div>'}`;
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">' + esc(e.message || 'Could not load material consumption.') + '</div>';
+  }
 }
 
 // ---- Reserve ----

@@ -16,14 +16,16 @@ use App\Support\Dimension;
  * A profile (part_id + finish) is a raw extrusion SKU — the same part_id in
  * two different finishes is physically different stock and can't be cut
  * from one another, so identity within a job is (cut_job_id, name, finish,
- * dimension, description). Description ("use", e.g. Head/Sill/Jamb) is part
- * of that identity on purpose — a head and a sill of the same profile can
- * easily land on the same dimension, and without it they'd merge into one
- * Part row, so the printed label would show one piece's use on both pieces'
- * stickers. The same profile+dimension+use appearing on multiple lines
- * within one job (e.g. split across phases) has its quantities summed
- * rather than overwritten; the same profile+dimension on two different jobs
- * stays two separate rows since they're not interchangeable stock pulls.
+ * dimension, description, phase, row, column). Each line of an upload is its
+ * own Part: description ("use", e.g. Head/Sill/Jamb) and phase (the
+ * elevation / door tag) with the opening's row/column position are part of
+ * the identity on purpose, so a head and a sill that land on the same
+ * dimension — or the same part in two different elevations — stay separate
+ * lines and each keeps its own use, elevation and quantity on the printed
+ * label. Only a line repeated exactly (same everything, including
+ * elevation and position) has its quantities summed rather than overwritten;
+ * the same profile+dimension on two different jobs stays two separate rows
+ * since they're not interchangeable stock pulls.
  */
 class CutlistIngestService
 {
@@ -70,7 +72,7 @@ class CutlistIngestService
             $leftAngle = is_numeric($data['leftcutangle'] ?? null) ? (float) $data['leftcutangle'] : null;
             $rightAngle = is_numeric($data['rightcutangle'] ?? null) ? (float) $data['rightcutangle'] : null;
 
-            $key = $name.'|'.$finish.'|'.$dimension.'|'.$description;
+            $key = $name.'|'.$finish.'|'.$dimension.'|'.$description.'|'.$phase.'|'.$rowNum.'|'.$column;
 
             $lines->put($key, [
                 'name' => $name,
@@ -100,6 +102,9 @@ class CutlistIngestService
                 'finish' => $line['finish'],
                 'dimension_inches' => $line['dimension_inches'],
                 'description' => $line['description'],
+                'phase' => $line['phase'],
+                'row' => $line['row'],
+                'column' => $line['column'],
             ];
 
             // Preserve already-recorded cut progress on a re-import: only a
@@ -118,9 +123,6 @@ class CutlistIngestService
                 'qty_original' => $line['qty'],
                 'qty_remaining' => $qtyRemaining,
                 'work_order' => $line['work_order'],
-                'phase' => $line['phase'],
-                'row' => $line['row'],
-                'column' => $line['column'],
                 'left_cut_angle' => $line['left_cut_angle'],
                 'right_cut_angle' => $line['right_cut_angle'],
             ]);
@@ -143,12 +145,12 @@ class CutlistIngestService
 
     /**
      * Column order of the ForgeDesk fabrication-package cut-list CSV, used when the file has no header
-     * row: SKU, finish code, length, quantity, job, work order, door tag, 0, 0, part use, 0, 0. The
-     * zero columns are not read.
+     * row: SKU, finish code, length, quantity, job, work order, door tag, opening row, opening column,
+     * part use, 0, 0. The trailing zero columns are not read.
      */
     private const FORGEDESK_COLUMNS = [
         0 => 'part_id', 1 => 'finish', 2 => 'dimension_in', 3 => 'qty', 4 => 'job', 5 => 'work_order',
-        6 => 'phase', 9 => 'description',
+        6 => 'phase', 7 => 'row', 8 => 'column', 9 => 'description',
     ];
 
     private function normaliseHeader(string $h): string
@@ -164,7 +166,7 @@ class CutlistIngestService
      * expects. Accepts either CutFlow's own header-row format (any column
      * order) or the ForgeDesk fabrication-package cut list, with or without
      * a header row: SKU, finish code, length, quantity, job, work order,
-     * door tag, 0, 0, part use, 0, 0. A first row with no recognised header
+     * door tag, opening row, opening column, part use, 0, 0. A first row with no recognised header
      * name is treated as data and read by that fixed column order.
      *
      * @return array<int, array>

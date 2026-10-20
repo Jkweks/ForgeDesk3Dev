@@ -565,6 +565,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/door-frame-configurations/{id}/hardware-parts/generate', [DoorFrameConfigurationController::class, 'generateHardwareParts'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'updateHardwarePart'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyHardwarePart'])->middleware('permission:configurator.edit');
+        Route::get('/door-frame-configurations/{id}/material-consumption', [DoorFrameConfigurationController::class, 'materialConsumption'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations/{id}/reserve', [DoorFrameConfigurationController::class, 'reserveConfiguration'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/unreserve', [DoorFrameConfigurationController::class, 'unreserveConfiguration'])->middleware('permission:configurator.release');
         Route::get('/door-frame-configurations/{id}/release-preflight', [DoorFrameConfigurationController::class, 'releasePreflight'])->middleware('permission:configurator.view');
