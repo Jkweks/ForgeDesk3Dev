@@ -52,6 +52,17 @@
     }
     .pill.active { background: var(--tblr-primary); border-color: var(--tblr-primary); color: var(--tblr-primary-fg); }
 
+    .pill { min-height: 2.5rem; }   /* comfortable touch target */
+    .sf-search {
+      border: 1.5px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius-pill);
+      background: var(--tblr-bg-surface); color: var(--tblr-body-color);
+      padding: .3rem .9rem; min-height: 2.5rem; width: 12rem; font-size: .9rem; outline: none;
+    }
+    .sf-search:focus { border-color: var(--tblr-primary); }
+    .wo-due { font-size: .78rem; color: var(--tblr-secondary); }
+    .wo-due.late { color: var(--tblr-danger); font-weight: 600; }
+    #sf-summary .sf-chip { margin-left: .25rem; }
+
     /* ── WO table ── */
     .sf-table { width: 100%; border-collapse: collapse; }
     .sf-table th {
@@ -273,7 +284,9 @@
   <div class="sf-logo">Forge<span class="accent">Desk</span><span class="sub">Shop Floor</span></div>
   <div class="ms-auto d-flex align-items-center gap-3">
     <span class="text-secondary" id="sf-clock"></span>
+    <span id="sf-summary" class="d-none d-md-inline"></span>
     <span class="text-secondary" id="sf-wo-count"></span>
+    <span class="text-secondary small d-none d-lg-inline" id="sf-updated" title="Board refreshes every minute"></span>
     <button type="button" class="sf-theme-toggle" id="sf-theme-toggle" onclick="sfToggleTheme()" title="Toggle light / dark" aria-label="Toggle light / dark">
       <i class="ti ti-sun-moon"></i>
     </button>
@@ -296,7 +309,10 @@
   <div id="user-pills" class="d-flex gap-1 flex-wrap">
     <button class="pill active" data-uid="" onclick="setUser('', this)">All</button>
   </div>
-  <div class="ms-auto d-flex gap-1">
+  <div class="ms-auto d-flex gap-1 align-items-center">
+    <input type="search" class="sf-search" id="sf-search" placeholder="Search job / release / tag" autocomplete="off" oninput="sfOnSearch()">
+    <button class="pill" id="btn-expand-all" onclick="sfSetAllExpanded(true)" title="Expand all"><i class="ti ti-arrows-diagonal"></i></button>
+    <button class="pill" id="btn-collapse-all" onclick="sfSetAllExpanded(false)" title="Collapse all"><i class="ti ti-arrows-diagonal-minimize-2"></i></button>
     <button class="pill" id="btn-hide-done" onclick="toggleHideDone(this)">Hide Complete</button>
   </div>
 </div>
@@ -343,6 +359,15 @@ let sfFabUser  = null;  // { user_id, name, initials, role }
 let sfView     = 'all'; // 'all' | 'mine'
 let sfQueue    = [];
 const expandedWOs = new Set();
+let sfSearch = '';
+let sfVisibleWoIds = [];
+let sfSearchTimer = null;
+
+// Remember the board filters on this device (kiosk reloads / tablet sleeps)
+const sfPref = {
+  get(k) { try { return localStorage.getItem('sf_' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('sf_' + k, v); } catch (e) { /* private mode */ } },
+};
 
 const STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', complete: 'Complete', blocked: 'Blocked', not_required: 'N/R', on_hold: 'On Hold' };
 
@@ -457,6 +482,12 @@ async function init() {
   sfWOs   = (await woRes.json()).work_orders || [];
   sfUsers = (await userRes.json()).users      || [];
   buildUserPills();
+  if (sfPref.get('hide_done') === '1') { hideDone = true; document.getElementById('btn-hide-done').classList.add('active'); }
+  const savedUser = sfPref.get('user');
+  if (savedUser && sfUsers.some(u => String(u.id) === savedUser)) {
+    const btn = document.querySelector(`.pill[data-uid="${savedUser}"]`);
+    if (btn) { activeUser = savedUser; document.querySelectorAll('.pill[data-uid]').forEach(p => p.classList.remove('active')); btn.classList.add('active'); }
+  }
   document.getElementById('sf-loading').style.display  = 'none';
   document.getElementById('sf-content').style.display  = '';
   render();
@@ -479,6 +510,7 @@ function buildUserPills() {
 
 function setUser(uid, btn) {
   activeUser = String(uid);
+  sfPref.set('user', activeUser);
   document.querySelectorAll('.pill[data-uid]').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   render();
@@ -502,6 +534,7 @@ function sfSetView(view, btn) {
 
 function toggleHideDone(btn) {
   hideDone = !hideDone;
+  sfPref.set('hide_done', hideDone ? '1' : '0');
   btn.classList.toggle('active', hideDone);
   render();
 }
@@ -513,6 +546,8 @@ function render() {
   const tbody = document.getElementById('sf-tbody');
   let   woCount = 0;
   const rows = [];
+  const sum = { active: 0, blocked: 0, hold: 0 };
+  sfVisibleWoIds = [];
 
   sfWOs.forEach(wo => {
     const allStages = wo.elevations.flatMap(e => e.stages.map(s => ({ ...s, elev: e })));
@@ -528,16 +563,25 @@ function render() {
     }
     if (!woVisible) return;
 
+    if (sfSearch) {
+      const hay = `${wo.release_label} ${wo.job_name} ${wo.job_number} ${wo.elevations.map(e => e.elevation_tag).join(' ')}`.toLowerCase();
+      if (!sfSearch.split(/\s+/).every(t => hay.includes(t))) return;
+    }
+
     const visStages = allStages.filter(s => !(hideDone && ['complete','not_required'].includes(s.status)));
     if (!visStages.length && hideDone) return;
 
     woCount++;
+    sfVisibleWoIds.push(wo.id);
     const totalStages = allStages.length;
     const doneStages  = allStages.filter(s => ['complete','not_required'].includes(s.status)).length;
     const inProg      = allStages.filter(s => s.status === 'in_progress').length;
     const blocked     = allStages.filter(s => s.status === 'blocked').length;
     const onHold      = allStages.filter(s => s.status === 'on_hold').length;
     const pct         = totalStages ? Math.round((doneStages / totalStages) * 100) : 0;
+    sum.active += inProg; sum.blocked += blocked; sum.hold += onHold;
+    const dueHtml = wo.due_date
+      ? `<div class="wo-due${pct < 100 && isPast(wo.due_date) ? ' late' : ''}">${pct < 100 && isPast(wo.due_date) ? 'Overdue · ' : 'Due '}${wo.due_date}</div>` : '';
 
     const chips = [
       inProg  ? `<span class="sf-chip in_progress">${inProg} active</span>` : '',
@@ -561,7 +605,7 @@ function render() {
         </td>
         <td class="hide-sm">${priorityBadge}</td>
         <td><strong>${esc(wo.release_label)}</strong></td>
-        <td>${esc(wo.job_name)}</td>
+        <td>${esc(wo.job_name)}${dueHtml}</td>
         <td class="hide-sm">${assignedBadges}</td>
         <td>${wo.elevations.length} elevation${wo.elevations.length !== 1 ? 's' : ''}</td>
         <td>
@@ -580,6 +624,12 @@ function render() {
   });
 
   document.getElementById('sf-wo-count').textContent = `${woCount} WO${woCount !== 1 ? 's' : ''}`;
+  document.getElementById('sf-summary').innerHTML = [
+    sum.active  ? `<span class="sf-chip in_progress">${sum.active} active</span>` : '',
+    sum.blocked ? `<span class="sf-chip blocked">${sum.blocked} blocked</span>` : '',
+    sum.hold    ? `<span class="sf-chip on_hold">${sum.hold} on hold</span>` : '',
+  ].join('');
+  document.getElementById('sf-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   if (!rows.length) {
     tbody.innerHTML = '';
@@ -1125,8 +1175,33 @@ function renderMyQueue() {
   }).join('');
 }
 
+function sfOnSearch() {
+  clearTimeout(sfSearchTimer);
+  sfSearchTimer = setTimeout(() => {
+    sfSearch = document.getElementById('sf-search').value.trim().toLowerCase();
+    if (sfView === 'all') render();
+  }, 200);
+}
+
+function sfSetAllExpanded(open) {
+  if (sfView !== 'all') return;
+  expandedWOs.clear();
+  if (open) sfVisibleWoIds.forEach(id => expandedWOs.add(id));
+  render();
+}
+
+// Don't rebuild the board under an operator who is mid-interaction
+function sfBusy() {
+  return ['sf-elev-complete-prompt', 'sf-elev-reopen-prompt', 'sf-hold-prompt', 'sf-stage-menu', 'sf-pin-overlay']
+    .some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; })
+    || document.activeElement === document.getElementById('sf-search');
+}
+async function sfAutoRefresh() { if (!sfBusy()) await reload(); }
+
 // ── Auto-refresh every 60 s ────────────────────────────────────────────────
-setInterval(reload, 60000);
+setInterval(sfAutoRefresh, 60000);
+// A tablet that slept shows stale data — refresh as soon as it wakes
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sfAutoRefresh(); });
 
 init();
 </script>

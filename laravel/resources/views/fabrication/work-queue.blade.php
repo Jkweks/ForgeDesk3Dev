@@ -11,6 +11,10 @@
 .wq-col-head { display:flex; align-items:center; gap:.4rem; font-weight:600; padding:.25rem .35rem .5rem; }
 .wq-card { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); border-radius:var(--tblr-border-radius); padding:.5rem .6rem; margin-bottom:.4rem; cursor:grab; font-size:.85rem; }
 .wq-card:active { cursor:grabbing; }
+.wq-card.overdue { border-left:3px solid var(--tblr-danger); }
+.wq-strip .wq-stat { display:flex; align-items:baseline; gap:6px; }
+.wq-strip .n { font-size:1.4rem; font-weight:600; line-height:1; }
+.wq-strip .l { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--tblr-secondary-color); }
 .wq-card.dragging { opacity:.4; }
 .wq-card.locked { opacity:.6; border-style:dashed; }
 .wq-card.locked .wq-lock { color:var(--tblr-danger); }
@@ -37,9 +41,8 @@
         </div>
       </div>
       <div class="text-secondary small mt-1">
-        Every stage grouped by operator. Drag a card to reassign it — including
-        <span class="text-danger">locked</span> stages (still waiting on an earlier step), so the
-        workflow can be planned ahead.
+        Every stage grouped by operator. Drag a card to reassign it — <span class="text-danger">locked</span> stages
+        (waiting on an earlier step) can be moved too, so work can be planned ahead.
       </div>
       <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
         <select id="wq-job" class="form-select form-select-sm" style="width:auto" onchange="wqOnJobChange()">
@@ -48,19 +51,40 @@
         <select id="wq-wo" class="form-select form-select-sm" style="width:auto" onchange="loadBoard()">
           <option value="">All work orders</option>
         </select>
-        <label class="form-check form-switch mb-0 ms-2">
+        <select id="wq-step" class="form-select form-select-sm" style="width:auto" onchange="renderBoard()">
+          <option value="">All steps</option>
+        </select>
+        <div class="input-icon" style="min-width:180px">
+          <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+          <input type="text" id="wq-search" class="form-control form-control-sm" placeholder="Search cards…" oninput="wqSearchDebounce()" autocomplete="off">
+        </div>
+        <label class="form-check form-switch mb-0 ms-1">
+          <input class="form-check-input" type="checkbox" id="wq-overdue-only" onchange="renderBoard()">
+          <span class="form-check-label small">Overdue only</span>
+        </label>
+        <label class="form-check form-switch mb-0">
           <input class="form-check-input" type="checkbox" id="wq-hide-locked" onchange="renderBoard()">
           <span class="form-check-label small">Hide locked</span>
         </label>
-        <button class="btn btn-sm btn-outline-primary ms-2" onclick="wqOpenBulk()">
+        <button class="btn btn-sm btn-outline-primary ms-auto" onclick="wqOpenBulk()">
           <i class="ti ti-users-group me-1"></i>Bulk assign steps
         </button>
+        <span class="text-muted small" id="wq-updated"></span>
       </div>
     </div>
   </div>
 
   <div class="page-body">
     <div class="container-xl">
+      <div class="card mb-3 wq-strip" id="wq-strip" style="display:none">
+        <div class="card-body py-2 d-flex flex-wrap gap-4 align-items-center">
+          <div class="wq-stat"><span class="n" id="wq-s-unassigned">-</span><span class="l">Unassigned</span></div>
+          <div class="wq-stat"><span class="n text-success" id="wq-s-ready">-</span><span class="l">Ready</span></div>
+          <div class="wq-stat"><span class="n text-secondary" id="wq-s-locked">-</span><span class="l">Locked</span></div>
+          <div class="wq-stat"><span class="n text-danger" id="wq-s-overdue">-</span><span class="l">Overdue</span></div>
+          <div class="wq-stat ms-auto"><span class="n" id="wq-s-ops">-</span><span class="l">Operators with work</span></div>
+        </div>
+      </div>
       <div id="wq-loading" class="text-center text-muted py-5">
         <div class="spinner-border" role="status"></div>
       </div>
@@ -132,6 +156,57 @@ let wqData = null;
 let wqDragStageId = null;
 let wqJobs = [];
 let wqWOs = [];
+
+let wqSearchTimer;
+let pendingStep = '';
+function wqSearchDebounce() { clearTimeout(wqSearchTimer); wqSearchTimer = setTimeout(renderBoard, 200); }
+
+// Filters the board applies client-side (job / work order are server-side)
+function wqCardVisible(c) {
+  const q = (document.getElementById('wq-search')?.value || '').trim().toLowerCase();
+  const step = document.getElementById('wq-step')?.value;
+  if (step && c.name !== step) return false;
+  if (document.getElementById('wq-overdue-only')?.checked && !isPast(c.due_date)) return false;
+  if (document.getElementById('wq-hide-locked')?.checked && c.gated) return false;
+  if (q) {
+    const hay = `${c.name} ${c.release_label || ''} ${c.elevation_tag || ''} ${c.job_name || ''}`.toLowerCase();
+    if (!q.split(/\s+/).every(t => hay.includes(t))) return false;
+  }
+  return true;
+}
+
+function wqUpdateStrip() {
+  const all = wqAllCards();
+  const unassigned = (wqData?.unassigned?.stages || []).length;
+  document.getElementById('wq-s-unassigned').textContent = unassigned;
+  document.getElementById('wq-s-ready').textContent = all.filter(c => !c.gated).length;
+  document.getElementById('wq-s-locked').textContent = all.filter(c => c.gated).length;
+  document.getElementById('wq-s-overdue').textContent = all.filter(c => isPast(c.due_date)).length;
+  document.getElementById('wq-s-ops').textContent = (wqData?.operators || []).filter(o => (o.stages || []).length).length;
+  document.getElementById('wq-strip').style.display = '';
+  document.getElementById('wq-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  // Step filter lists whichever step names exist on the board right now
+  const sel = document.getElementById('wq-step');
+  const cur = sel.value;
+  const names = [...new Set(all.map(c => c.name))].sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="">All steps</option>' + names.map(n => `<option value="${esc(n).replace(/"/g, '&quot;')}">${esc(n)}</option>`).join('');
+  const want = cur || pendingStep;
+  if (want && names.includes(want)) sel.value = want;
+  pendingStep = '';
+}
+
+function wqSyncUrl() {
+  const q = new URLSearchParams();
+  const set = (k, v) => v && q.set(k, v);
+  set('job', document.getElementById('wq-job').value);
+  set('wo', document.getElementById('wq-wo').value);
+  set('step', document.getElementById('wq-step').value);
+  set('q', document.getElementById('wq-search').value.trim());
+  if (document.getElementById('wq-overdue-only').checked) q.set('overdue', '1');
+  if (document.getElementById('wq-hide-locked').checked) q.set('hidelocked', '1');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+}
 
 function esc(s) { if (s == null) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 function isPast(d) { return d && new Date(d) < new Date(new Date().toDateString()); }
@@ -216,7 +291,7 @@ function cardHtml(c) {
     ? `<span class="badge bg-purple-lt text-purple" title="Shared with ${esc(names.join(', '))}">
          <i class="ti ti-users" style="font-size:.75rem"></i> ${names.length}
        </span>` : '';
-  return `<div class="wq-card${c.gated ? ' locked' : ''}" draggable="true" data-stage="${c.stage_id}"
+  return `<div class="wq-card${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" draggable="true" data-stage="${c.stage_id}"
       ondragstart="wqDragStart(event, ${c.stage_id})" ondragend="wqDragEnd(event)">
     <div class="d-flex align-items-start gap-1">
       <div class="flex-fill"><strong>${esc(c.name)}</strong>${active}${lock} ${shared}</div>
@@ -233,8 +308,7 @@ function cardHtml(c) {
 }
 
 function colHtml(opId, title, oldest, stages, initials, muted) {
-  const hideLocked = document.getElementById('wq-hide-locked')?.checked;
-  const shown = hideLocked ? stages.filter(s => !s.gated) : stages;
+  const shown = stages.filter(wqCardVisible);
   const ready = stages.filter(s => !s.gated).length;
   const countLabel = ready === stages.length ? `${stages.length}` : `${ready} ready · ${stages.length}`;
   return `<div class="wq-col" data-op="${opId}"
@@ -274,6 +348,8 @@ function renderBoard() {
   });
 
   board.innerHTML = cols.join('');
+  wqUpdateStrip();
+  wqSyncUrl();
   wqSyncTopScroll();
 }
 
@@ -505,8 +581,17 @@ async function wqSaveAssignees() {
   }
 }
 
-wqLoadFilters();
-loadBoard();
+(async function wqInit() {
+  const u = new URLSearchParams(location.search);
+  await wqLoadFilters();
+  if (u.get('job')) { document.getElementById('wq-job').value = u.get('job'); wqFillWorkOrderOptions(); }
+  if (u.get('wo')) document.getElementById('wq-wo').value = u.get('wo');
+  if (u.get('q')) document.getElementById('wq-search').value = u.get('q');
+  document.getElementById('wq-overdue-only').checked = u.get('overdue') === '1';
+  document.getElementById('wq-hide-locked').checked = u.get('hidelocked') === '1';
+  if (u.get('step')) pendingStep = u.get('step');
+  await loadBoard();
+})();
 setInterval(() => loadBoard(true), 30000);
 </script>
 @endpush
