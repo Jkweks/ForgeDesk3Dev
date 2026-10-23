@@ -141,7 +141,7 @@ class DashboardController extends Controller
             'pending_orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
         ];
 
-        $inventoryQuery = Product::with(['inventoryLocations.storageLocation', 'categories'])
+        $inventoryQuery = Product::with(['inventoryLocations', 'categories'])
             ->where('is_active', true)
             ->excludeMaintenanceConsumables();
         $excludeIdleSpecialOrder($inventoryQuery);
@@ -260,7 +260,7 @@ class DashboardController extends Controller
                         ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
                 });
             })
-            ->with(['categories', 'inventoryLocations.storageLocation']);
+            ->with(['categories', 'inventoryLocations']);
         $this->applyNoLocationFilter($query, $request);
 
         $enrich = function ($product) use ($committedByProduct) {

@@ -41,11 +41,11 @@ class ProductListFiltersTest extends TestCase
         $this->assertCount(2, $both);
     }
 
-    public function test_status_tabs_filter_and_include_location_names(): void
+    public function test_status_tabs_filter_and_include_location_rows(): void
     {
         $res = $this->getJson('/api/v1/dashboard/inventory/critical')->assertOk();
         $placed = collect($res->json('data'))->firstWhere('sku', 'PLACED');
-        $this->assertSame('A.1', $placed['inventory_locations'][0]['storage_location']['name']);
+        $this->assertCount(1, $placed['inventory_locations']);
 
         $only = $this->getJson('/api/v1/dashboard/inventory/critical?no_location=1')->assertOk()->json('data');
         $this->assertSame(['LOOSE'], array_column($only, 'sku'));

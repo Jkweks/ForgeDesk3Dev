@@ -7,10 +7,10 @@
       .prod-scroll { max-height: calc(100vh - 380px); min-height: 320px; overflow: auto; }
       .prod-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); white-space: nowrap; }
       .prod-table tbody tr { cursor: pointer; }
+      .prod-table { font-size: .8125rem; }
+      .prod-table > :not(caption) > * > * { padding: .25rem .6rem; line-height: 1.3; }
       .prod-table td { vertical-align: middle; }
-      .prod-table .sku { font-family: var(--tblr-font-monospace, monospace); font-weight: 600; }
-      .prod-table .desc { max-width: 380px; }
-      .prod-table .sub { font-size: .75rem; color: var(--tblr-secondary-color); }
+      .prod-table .badge { font-size: .7rem; padding: .15rem .4rem; }
       .prod-loading { opacity: .5; pointer-events: none; transition: opacity .15s; }
       .prod-stat { display: flex; align-items: baseline; gap: 6px; }
       .prod-stat .n { font-size: 1.4rem; font-weight: 600; line-height: 1; }
@@ -96,10 +96,10 @@
               <table class="table table-vcenter table-hover card-table prod-table mb-0">
                 <thead>
                   <tr>
-                    <th class="sortable" data-sort="sku" style="cursor:pointer">Product <span class="sort-icon"></span></th>
-                    <th>Category</th>
-                    <th>Location</th>
-                    <th class="text-end sortable" data-sort="quantity_on_hand" style="cursor:pointer">On hand <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="sku" style="cursor:pointer">SKU <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="description" style="cursor:pointer">Description <span class="sort-icon"></span></th>
+                    <th>Locations</th>
+                    <th class="text-end sortable" data-sort="quantity_on_hand" style="cursor:pointer">On Hand <span class="sort-icon"></span></th>
                     <th class="text-end sortable" data-sort="quantity_committed" style="cursor:pointer">Committed <span class="sort-icon"></span></th>
                     <th class="text-end sortable" data-sort="quantity_available" style="cursor:pointer">Available <span class="sort-icon"></span></th>
                     <th class="sortable" data-sort="status" style="cursor:pointer">Status <span class="sort-icon"></span></th>
@@ -511,23 +511,6 @@
       searchDebounceTimer = setTimeout(() => { currentSearch = term; reloadFromFirstPage(); }, 300);
     }
 
-    function locationCell(product) {
-      const locs = (product.inventory_locations || []).filter(l => l.storage_location);
-      if (!locs.length) return '<span class="badge bg-red-lt">No location</span>';
-      const primary = locs.find(l => l.is_primary) || locs[0];
-      const name = primary.storage_location.full_path || primary.storage_location.name;
-      const more = locs.length > 1 ? ` <span class="badge bg-azure-lt" title="${htmlEscape(locs.map(l => l.storage_location.full_path || l.storage_location.name).join('\n'))}">+${locs.length - 1}</span>` : '';
-      return `<span class="text-truncate d-inline-block align-middle" style="max-width:180px" title="${htmlEscape(name)}">${htmlEscape(name)}</span>${more}`;
-    }
-
-    function categoryCell(product) {
-      const cats = product.categories || [];
-      if (!cats.length) return '<span class="text-muted">—</span>';
-      const main = cats.find(c => c.pivot && c.pivot.is_primary) || cats[0];
-      return `<span class="badge bg-secondary-lt">${htmlEscape(main.name)}</span>` +
-        (cats.length > 1 ? ` <span class="text-muted small" title="${htmlEscape(cats.map(c => c.name).join(', '))}">+${cats.length - 1}</span>` : '');
-    }
-
     function renderInventoryTable(products) {
       const tbody = document.getElementById('inventoryTableBody');
       if (!products.length) {
@@ -540,16 +523,16 @@
       }
 
       tbody.innerHTML = products.map(product => {
-        const meta = [product.part_number, product.finish].filter(Boolean).map(htmlEscape).join(' · ');
+        const locationCount = product.inventory_locations?.length || 0;
+        const locationsDisplay = locationCount > 0
+          ? `<span class="badge text-bg-azure">${locationCount} <i class="ti ti-map-pin"></i></span>`
+          : '<span class="text-muted">-</span>';
+
         return `
           <tr onclick="viewProduct(${product.id})">
-            <td class="desc">
-              <div class="sku">${htmlEscape(product.sku)}</div>
-              <div class="text-truncate" title="${htmlEscape(product.description)}">${htmlEscape(product.description)}</div>
-              ${meta ? `<div class="sub">${meta}</div>` : ''}
-            </td>
-            <td>${categoryCell(product)}</td>
-            <td>${locationCell(product)}</td>
+            <td><span class="text-muted">${htmlEscape(product.sku)}</span></td>
+            <td>${htmlEscape(product.description)}</td>
+            <td>${locationsDisplay}</td>
             <td class="text-end">${formatOnHandDisplay(product)}</td>
             <td class="text-end">${formatCommittedDisplay(product, true)}</td>
             <td class="text-end">${formatAvailableDisplay(product)}</td>
