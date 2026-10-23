@@ -265,6 +265,7 @@ Route::middleware('auth:sanctum')->group(function () {
         });
         Route::get('/dashboard/widgets/storage', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'storage'])->middleware('permission:inventory.view');
         Route::get('/dashboard/widgets/cutflow', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cutflow'])->middleware('permission:fabrication.work-orders.view');
+        Route::get('/dashboard/widgets/cutflow/cuts', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cutflowCuts'])->middleware('permission:fabrication.work-orders.view');
         Route::middleware('permission:orders.view')->group(function () {
             Route::get('/dashboard/widgets/purchase-orders', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'purchaseOrders']);
             Route::get('/dashboard/widgets/purchase-orders/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'purchaseOrdersDue']);

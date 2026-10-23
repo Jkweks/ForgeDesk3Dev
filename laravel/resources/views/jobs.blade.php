@@ -940,7 +940,14 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             initJobsColumnPrefs();
-            loadJobs();
+            loadJobs().then(() => {
+                // Deep link from dashboard widgets: ?job=<id>
+                const deepJob = parseInt(new URLSearchParams(location.search).get('job'), 10);
+                if (deepJob && allJobs.some(j => j.id === deepJob)) {
+                    toggleJobRow(deepJob);
+                    document.querySelector(`tr[data-job-id="${deepJob}"]`)?.scrollIntoView({ block: 'center' });
+                }
+            });
 
             // Search and filter
             document.getElementById('searchInput').addEventListener('input', filterJobs);

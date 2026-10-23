@@ -593,6 +593,9 @@ async function fabLoadAll(){
     const data = await fabApiJson('/fabrication-documents?per_page=all');
     fabDocs = data?.data ?? [];
     fabRenderAll();
+    // Deep link from dashboard widgets: ?doc=<id>
+    const deepDoc = parseInt(new URLSearchParams(location.search).get('doc'), 10);
+    if (deepDoc && fabDocs.some(d => d.id === deepDoc)) fabOpenDetail(deepDoc);
   } catch(e){
     console.error('Failed to load documents:', e);
     showNotification('Failed to load documents', 'danger');

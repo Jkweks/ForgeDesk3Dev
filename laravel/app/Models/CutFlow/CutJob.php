@@ -58,6 +58,22 @@ class CutJob extends Model
         ])->values();
     }
 
+    /**
+     * Ids of cut lists with nothing left to cut: has parts, and every part's qty_remaining is 0.
+     * A list with no parts yet is not "completed".
+     *
+     * @return array<int>
+     */
+    public static function completedIds(): array
+    {
+        return Part::query()
+            ->groupBy('cut_job_id')
+            ->havingRaw('sum(qty_remaining) <= 0')
+            ->pluck('cut_job_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
     public function parts()
     {
         return $this->hasMany(Part::class);

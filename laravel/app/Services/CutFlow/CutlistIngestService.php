@@ -4,6 +4,7 @@ namespace App\Services\CutFlow;
 
 use App\Models\CutFlow\CutJob;
 use App\Models\CutFlow\Part;
+use App\Models\Product;
 use App\Support\Dimension;
 
 /**
@@ -51,15 +52,23 @@ class CutlistIngestService
     {
         $lines = collect();
         $jobName = null;
+        $warnings = [];
 
         foreach ($rawRows as $data) {
             $name = trim((string) ($data['part_id'] ?? $data['name'] ?? ''));
-            $finish = trim((string) ($data['finish'] ?? '')) ?: null;
+            $rawFinish = trim((string) ($data['finish'] ?? '')) ?: null;
+            $finish = static::normaliseFinish($rawFinish);
             $qty = (int) ($data['qty'] ?? 0);
             $dimension = round(Dimension::parse((string) ($data['dimension_in'] ?? $data['dimension'] ?? '0')), 3);
 
             if ($name === '' || $qty <= 0 || $dimension <= 0) {
                 continue;
+            }
+
+            if ($finish !== null && ! array_key_exists($finish, Product::$finishCodes)) {
+                $warnings[$name.'|'.$finish] = "{$name}: unrecognised finish \"{$rawFinish}\"";
+            } elseif (! Part::resolveProductFor($name, $finish)) {
+                $warnings[$name.'|'.$finish] = "{$name}".($finish ? " ({$finish})" : '').': no matching inventory product';
             }
 
             $jobName ??= trim((string) ($data['job'] ?? '')) ?: $fallbackJobName;
@@ -128,7 +137,34 @@ class CutlistIngestService
             ]);
         }
 
-        return ['job' => $job, 'line_count' => $lines->count()];
+        return ['job' => $job, 'line_count' => $lines->count(), 'warnings' => array_values($warnings)];
+    }
+
+    /**
+     * Cut-list finish cells are a 2-letter code, sometimes followed by a label ("BL Black Anodized"),
+     * or a bare label. A full label is matched first (its first two letters aren't its code — "Clear"
+     * is C2, not CL), then the first two letters are taken as the code. "#00 Undefined" (the estimating
+     * system's placeholder) means mill finish, 0R. Anything else is returned as-is, uppercased, so the
+     * caller can flag it.
+     */
+    public static function normaliseFinish(?string $finish): ?string
+    {
+        $finish = trim((string) $finish);
+        if ($finish === '') {
+            return null;
+        }
+
+        if (preg_match('/^#?0+(\b|$)/', $finish) || stripos($finish, 'undefined') !== false) {
+            return '0R';
+        }
+
+        foreach (Product::$finishCodes as $code => $label) {
+            if (strcasecmp($finish, $label) === 0) {
+                return $code;
+            }
+        }
+
+        return strtoupper(substr($finish, 0, 2));
     }
 
     /** Header names CutFlow understands, once normalised (see normaliseHeader()). */

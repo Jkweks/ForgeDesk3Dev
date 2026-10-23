@@ -41,7 +41,11 @@ class ImportController extends Controller
         $sill = $sillReport->storeUpload($file, $result['job']->id);
         $note = $sill ? ' Sill quarter-point report is available from Fabrication > Cut Lists.' : '';
 
-        return redirect()->route('cutflow.dashboard', ['job' => $result['job']->id])
+        $redirect = redirect()->route('cutflow.dashboard', ['job' => $result['job']->id])
             ->with('status', "Imported {$result['line_count']} cut-list lines into \"{$result['job']->name}\".".$note);
+
+        return $result['warnings']
+            ? $redirect->with('finish_warnings', $result['warnings'])
+            : $redirect;
     }
 }

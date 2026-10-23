@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Reports\CutStationReportsController;
 use App\Http\Controllers\Api\Reports\FabricationReportsController;
 use App\Http\Controllers\Api\Reports\InventoryReportsController;
 use App\Http\Controllers\Api\Reports\JobReportsController;
@@ -39,6 +40,9 @@ return [
         ['key' => 'storageLocation', 'title' => 'Storage Locations', 'icon' => 'building-warehouse', 'color' => 'teal', 'category' => 'inventory', 'controller' => InventoryReportsController::class, 'data' => ['storage-locations' => 'storageLocationReport'], 'export' => ['storage-locations/pdf' => 'storageLocationPdf']],
         ['key' => 'workOrderBacklog', 'title' => 'WO Backlog', 'icon' => 'list-details', 'color' => 'orange', 'category' => 'fabrication', 'controller' => FabricationReportsController::class, 'data' => ['work-order-backlog' => 'workOrderBacklogReport'], 'export' => ['work-order-backlog/pdf' => 'workOrderBacklogPdf'], 'csv' => 'work_order_backlog'],
         ['key' => 'jointsCompleted', 'title' => 'Joints Completed', 'icon' => 'git-merge', 'color' => 'lime', 'category' => 'fabrication', 'controller' => FabricationReportsController::class, 'data' => ['joints-completed' => 'jointsCompletedReport'], 'export' => ['joints-completed/pdf' => 'jointsCompletedPdf'], 'csv' => 'joints_completed'],
+        ['key' => 'cutStationProductivity', 'title' => 'Cut Station Productivity', 'icon' => 'scissors', 'color' => 'red', 'category' => 'fabrication', 'permission' => 'fabrication.work-orders.view', 'controller' => CutStationReportsController::class, 'data' => ['cut-station/productivity' => 'productivityReport'], 'export' => [], 'csv' => 'cut_station_productivity'],
+        ['key' => 'cutStationRecuts', 'title' => 'Recut Analysis', 'icon' => 'refresh-alert', 'color' => 'pink', 'category' => 'fabrication', 'permission' => 'fabrication.work-orders.view', 'controller' => CutStationReportsController::class, 'data' => ['cut-station/recuts' => 'recutReport'], 'export' => [], 'csv' => 'cut_station_recuts'],
+        ['key' => 'cutStationWaste', 'title' => 'Stock & Waste', 'icon' => 'ruler-measure-2', 'color' => 'yellow', 'category' => 'fabrication', 'permission' => 'fabrication.work-orders.view', 'controller' => CutStationReportsController::class, 'data' => ['cut-station/waste' => 'wasteReport'], 'export' => [], 'csv' => 'cut_station_waste'],
         ['key' => 'jobStatusSummary', 'title' => 'Job Status', 'icon' => 'clipboard-list', 'color' => 'indigo', 'category' => 'jobs', 'controller' => JobReportsController::class, 'data' => ['job-status-summary' => 'jobStatusSummaryReport'], 'export' => ['job-status-summary/pdf' => 'jobStatusSummaryPdf'], 'csv' => 'job_status_summary'],
         ['key' => 'materialUsage', 'title' => 'Material Usage', 'icon' => 'ruler-measure', 'color' => 'azure', 'category' => 'jobs', 'controller' => JobReportsController::class, 'data' => ['work-order-material-usage' => 'workOrderMaterialUsageReport'], 'export' => []],
     ],
