@@ -194,6 +194,10 @@ let wqDragStageId = null;
 let wqJobs = [];
 let wqWOs = [];
 
+// Job names and release numbers are what people go by; the job number is only a trailing reference
+const jobLabel = (name, num) => name ? (num ? `${name} (${num})` : name) : (num || 'No job');
+const woLabel = (name, token) => name ? `${name} – ${token ?? ''}`.replace(/ – $/, '') : String(token ?? '');
+
 let wqSearchTimer;
 let pendingStep = '';
 function wqSearchDebounce() { clearTimeout(wqSearchTimer); wqSearchTimer = setTimeout(renderBoard, 200); }
@@ -270,7 +274,7 @@ async function wqLoadFilters() {
   jobSel.innerHTML = '<option value="">All jobs</option>' +
     wqJobs
       .filter(j => activeJobIds.has(String(j.id)))
-      .map(j => `<option value="${j.id}">${esc(j.job_number)} – ${esc(j.job_name)}</option>`)
+      .map(j => `<option value="${j.id}">${esc(jobLabel(j.job_name, j.job_number))}</option>`)
       .join('');
   wqFillWorkOrderOptions();
 }
@@ -282,7 +286,7 @@ function wqFillWorkOrderOptions() {
   let list = wqWOs.filter(isActiveWo);
   if (jobId) list = list.filter(w => String(w.business_job_id) === jobId);
   woSel.innerHTML = '<option value="">All work orders</option>' +
-    list.map(w => `<option value="${w.id}">${esc(w.release_label)}${w.job?.job_name ? ' – ' + esc(w.job.job_name) : ''}</option>`).join('');
+    list.map(w => `<option value="${w.id}">${esc(woLabel(w.job?.job_name, w.release_token ?? w.release_label))}</option>`).join('');
 }
 
 function wqOnJobChange() {
@@ -336,7 +340,7 @@ function cardHtml(c) {
       <button class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Edit assignees"
           onclick="event.stopPropagation(); wqEditAssignees(${c.stage_id})"><i class="ti ti-user-plus"></i></button>
     </div>
-    <div class="text-secondary">${esc(c.release_label)} · ${esc(c.elevation_tag)}${c.job_name ? ' · ' + esc(c.job_name) : ''}</div>
+    <div class="text-secondary">${esc(woLabel(c.job_name, c.release_token ?? c.release_label))} · ${esc(c.elevation_tag)}</div>
     <div class="wq-meta">
       <span class="text-secondary">${prio}</span>
       ${due}
@@ -383,7 +387,7 @@ function groupedCardHtml(c, users, mode) {
     ? ` <i class="ti ti-lock wq-lock" title="Blocked by &quot;${esc(c.blocking_stage_name || 'an earlier step')}&quot;"></i>` : '';
   // The column/sub-header already names the step (or job), so the card leads with what's left
   const lead = c.elevation_tag;
-  const where = esc(c.release_label);
+  const where = esc(c.release_token ?? c.release_label);
   return `<div class="wq-card static${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" data-stage="${c.stage_id}">
     <div class="d-flex align-items-start gap-1">
       <div class="flex-fill"><strong>${esc(lead)}</strong>${active}${lock}
@@ -421,13 +425,13 @@ function renderGrouped(board) {
   const stepOrder = wqStepOrder(all);
   const by = (list, keyFn) => list.reduce((m, c) => { const k = keyFn(c); (m.get(k) || m.set(k, []).get(k)).push(c); return m; }, new Map());
   const jobKey = c => c.business_job_id ?? 0;
-  const jobTitle = c => c.job_number ? `${c.job_number} – ${c.job_name || ''}` : (c.job_name || 'No job');
+  const jobTitle = c => jobLabel(c.job_name, c.job_number);
   const prio = list => Math.min(...list.map(c => c.priority ?? Infinity));
   const cols = [];
 
   if (wqGroup === 'job') {
     const jobs = [...by(cards, jobKey).values()].sort((a, b) =>
-      prio(a) - prio(b) || String(a[0].job_number).localeCompare(String(b[0].job_number), undefined, { numeric: true }));
+      prio(a) - prio(b) || String(a[0].job_name || '').localeCompare(String(b[0].job_name || '')));
     jobs.forEach(list => {
       const steps = by(list, c => c.name);
       const jid = list[0].business_job_id;
@@ -592,7 +596,7 @@ function wqOpenBulk() {
   // "Job name – release" (the release token alone, not the job-number prefix)
   cards.forEach(c => {
     if (c.work_order_id && !byWo.has(c.work_order_id)) {
-      byWo.set(c.work_order_id, c.job_name ? `${c.job_name} – ${c.release_token ?? c.release_label}` : (c.release_token ?? c.release_label));
+      byWo.set(c.work_order_id, woLabel(c.job_name, c.release_token ?? c.release_label));
     }
   });
 
@@ -725,7 +729,7 @@ function wqGrpOpenJob(jobId, presetStep) {
   });
   const j = cards[0];
   wqGrp = { mode: 'job', jobId, items };
-  wqGrpShow(`Assign ${j.job_number ? j.job_number + ' – ' : ''}${j.job_name || 'job'}`,
+  wqGrpShow(`Assign ${jobLabel(j.job_name, j.job_number)}`,
     (wo ? 'Limited to the work order selected in the filter.' : 'All work orders of this job.') + ' Includes locked steps; finished steps are left alone.',
     'Steps to include', presetStep ? [presetStep] : items.map(i => i.key));
 }
@@ -738,7 +742,7 @@ function wqGrpOpenStep(stepName, presetJob) {
   cards.forEach(c => { const k = c.business_job_id ?? 0; (byJob.get(k) || byJob.set(k, []).get(k)).push(c); });
   const items = [...byJob.entries()].filter(([k]) => k).map(([k, g]) => ({
     key: String(k), jobId: k, count: g.length, ready: g.filter(c => !c.gated).length,
-    label: g[0].job_number ? `${g[0].job_number} – ${g[0].job_name || ''}` : (g[0].job_name || 'Job'),
+    label: jobLabel(g[0].job_name, g[0].job_number),
   }));
   wqGrp = { mode: 'step', stepName, items };
   wqGrpShow(`Assign "${stepName}"`, 'Across the jobs you tick below. Includes locked steps; finished steps are left alone.', 'Jobs to include',
