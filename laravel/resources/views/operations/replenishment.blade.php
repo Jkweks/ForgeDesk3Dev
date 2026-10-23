@@ -6,6 +6,21 @@
 .status-pill { transition: opacity .15s; opacity: .55; }
 .status-pill.active { opacity: 1; }
 .status-pill[data-status=""].active { background: var(--tblr-secondary); color: #fff; border-color: var(--tblr-secondary); }
+.pill-cnt:not(:empty) { font-size: .7rem; opacity: .85; }
+.rp-stat { display: flex; align-items: baseline; gap: 6px; }
+.rp-stat .n { font-size: 1.4rem; font-weight: 600; line-height: 1; }
+.rp-stat .l { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+#vendorSections table { font-size: .8125rem; }
+#vendorSections table > :not(caption) > * > * { padding: .2rem .5rem; line-height: 1.3; }
+#vendorSections .badge { font-size: .68rem; padding: .12rem .35rem; }
+#vendorSections input[type=number].form-control-sm { padding: .1rem .4rem; height: 1.7rem; }
+.vendor-toggle { cursor: pointer; user-select: none; }
+.vendor-toggle .vt-chev { transition: transform .15s; }
+.vendor-card.collapsed .vt-chev { transform: rotate(-90deg); }
+.vendor-card.collapsed .table-responsive { display: none; }
+#selectionBar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; display: none; background: var(--tblr-bg-surface, #fff); border-top: 1px solid var(--tblr-border-color); box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
+#selectionBar.visible { display: block; }
+.page-body { padding-bottom: 4.5rem; }
 @endsection
 
 @section('content')
@@ -18,7 +33,7 @@
           <h1 class="page-title">
             <i class="ti ti-refresh-alert me-2"></i>Vendor Replenishment
           </h1>
-          <p class="text-muted mb-0">Review critical and low-stock items, set order quantities, and create POs by vendor.</p>
+          <p class="text-muted mb-0">Set order quantities for low and critical items, then create POs by vendor.</p>
         </div>
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
@@ -38,86 +53,42 @@
     <div class="container-xl">
 
       <!-- Stats -->
-      <div class="row row-deck row-cards mb-3">
-        <div class="col-6 col-lg">
-          <div class="card">
-            <div class="card-body">
-              <div class="subheader">Out of Stock</div>
-              <div class="h1 mb-1 text-dark" id="statOutOfStock">-</div>
-              <div class="text-muted small">Zero available, max qty set</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-lg">
-          <div class="card">
-            <div class="card-body">
-              <div class="subheader">Critical</div>
-              <div class="h1 mb-1 text-danger" id="statCritical">-</div>
-              <div class="text-muted small">Need immediate order</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-lg">
-          <div class="card">
-            <div class="card-body">
-              <div class="subheader">Very Low</div>
-              <div class="h1 mb-1 text-warning" id="statVeryLow">-</div>
-              <div class="text-muted small">Below safety stock</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-lg">
-          <div class="card">
-            <div class="card-body">
-              <div class="subheader">Low</div>
-              <div class="h1 mb-1 text-info" id="statLow">-</div>
-              <div class="text-muted small">Below reorder point</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-lg">
-          <div class="card">
-            <div class="card-body">
-              <div class="subheader">Estimated PO Total</div>
-              <div class="h1 mb-1 text-success" id="statEstTotal">$0.00</div>
-              <div class="text-muted small">Selected items only</div>
-            </div>
-          </div>
+      <div class="card mb-3">
+        <div class="card-body py-2 d-flex flex-wrap gap-4 align-items-center">
+          <div class="rp-stat" title="Zero available, max qty set"><span class="n text-dark" id="statOutOfStock">-</span><span class="l">Out of stock</span></div>
+          <div class="rp-stat" title="Need immediate order"><span class="n text-danger" id="statCritical">-</span><span class="l">Critical</span></div>
+          <div class="rp-stat" title="Below safety stock"><span class="n text-warning" id="statVeryLow">-</span><span class="l">Very low</span></div>
+          <div class="rp-stat" title="Below reorder point"><span class="n text-info" id="statLow">-</span><span class="l">Low</span></div>
+          <div class="rp-stat ms-auto" title="Selected items only"><span class="l">Est. PO total</span><span class="n text-success" id="statEstTotal">$0.00</span></div>
         </div>
       </div>
 
       <!-- Filters -->
       <div class="card mb-3">
         <div class="card-body py-2">
-          <div class="d-flex flex-wrap gap-3 align-items-end">
-            <div>
-              <div class="form-label mb-1">Status</div>
-              <div class="d-flex flex-wrap gap-1" id="statusPills">
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="d-flex flex-wrap gap-1" id="statusPills">
                 <button class="btn btn-sm status-pill active" data-status="" onclick="setStatusPill(this)">All</button>
-                <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40)">Out of Stock</button>
-                <button class="btn btn-sm status-pill" data-status="critical"     onclick="setStatusPill(this)" style="background:var(--tblr-danger);color:#fff;border-color:var(--tblr-danger)">Critical</button>
-                <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning)">Very Low</button>
-                <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info)">Low</button>
-                <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success)">In Stock</button>
-                <button class="btn btn-sm status-pill" data-status="__special_order__" onclick="setStatusPill(this)" title="Special-order parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-purple,#ae3ec9);color:#fff;border-color:var(--tblr-purple,#ae3ec9)">Special Order</button>
-                <button class="btn btn-sm status-pill" data-status="__boneyard__" onclick="setStatusPill(this)" title="Boneyard parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-gray-600,#868e96);color:#fff;border-color:var(--tblr-gray-600,#868e96)">Boneyard</button>
-              </div>
+                <button class="btn btn-sm status-pill" data-status="out_of_stock" onclick="setStatusPill(this)" style="background:var(--tblr-gray-800,#343a40);color:#fff;border-color:var(--tblr-gray-800,#343a40)">Out of Stock<span class="pill-cnt ms-1" data-pill-cnt="out_of_stock"></span></button>
+                <button class="btn btn-sm status-pill" data-status="critical"     onclick="setStatusPill(this)" style="background:var(--tblr-danger);color:#fff;border-color:var(--tblr-danger)">Critical<span class="pill-cnt ms-1" data-pill-cnt="critical"></span></button>
+                <button class="btn btn-sm status-pill" data-status="very_low"     onclick="setStatusPill(this)" style="background:var(--tblr-warning);color:#fff;border-color:var(--tblr-warning)">Very Low<span class="pill-cnt ms-1" data-pill-cnt="very_low"></span></button>
+                <button class="btn btn-sm status-pill" data-status="low"          onclick="setStatusPill(this)" style="background:var(--tblr-info);color:#fff;border-color:var(--tblr-info)">Low<span class="pill-cnt ms-1" data-pill-cnt="low"></span></button>
+                <button class="btn btn-sm status-pill" data-status="in_stock"     onclick="setStatusPill(this)" style="background:var(--tblr-success);color:#fff;border-color:var(--tblr-success)">In Stock<span class="pill-cnt ms-1" data-pill-cnt="in_stock"></span></button>
+                <button class="btn btn-sm status-pill" data-status="__special_order__" onclick="setStatusPill(this)" title="Special-order parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-purple,#ae3ec9);color:#fff;border-color:var(--tblr-purple,#ae3ec9)">Special Order<span class="pill-cnt ms-1" data-pill-cnt="__special_order__"></span></button>
+                <button class="btn btn-sm status-pill" data-status="__boneyard__" onclick="setStatusPill(this)" title="Boneyard parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-gray-600,#868e96);color:#fff;border-color:var(--tblr-gray-600,#868e96)">Boneyard<span class="pill-cnt ms-1" data-pill-cnt="__boneyard__"></span></button>
             </div>
-            <div style="min-width:180px">
-              <div class="form-label mb-1">Vendor</div>
-              <select class="form-select form-select-sm" id="filterVendor" onchange="applyFilters()">
-                <option value="">All Vendors</option>
-              </select>
+            <select class="form-select form-select-sm ms-auto" id="filterVendor" onchange="applyFilters()" style="width:auto;max-width:220px">
+              <option value="">All vendors</option>
+            </select>
+            <div class="input-icon" style="min-width:200px">
+              <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="filterSearch" placeholder="SKU, description…" oninput="debounceSearch()" autocomplete="off">
             </div>
-            <div style="flex:1;min-width:200px">
-              <div class="form-label mb-1">Search</div>
-              <input type="text" class="form-control form-control-sm" id="filterSearch" placeholder="SKU, description..." oninput="debounceSearch()">
+            <div class="btn-group">
+              <button class="btn btn-sm btn-icon" title="Expand all vendors" onclick="setAllVendors(false)"><i class="ti ti-arrows-diagonal"></i></button>
+              <button class="btn btn-sm btn-icon" title="Collapse all vendors" onclick="setAllVendors(true)"><i class="ti ti-arrows-diagonal-minimize-2"></i></button>
             </div>
-            <div>
-              <button class="btn btn-sm btn-secondary" onclick="clearFilters()">
-                <i class="ti ti-x me-1"></i>Clear
-              </button>
-            </div>
+            <button class="btn btn-sm btn-link" id="clearFiltersBtn" onclick="clearFilters()" style="display:none"><i class="ti ti-x me-1"></i>Clear</button>
           </div>
         </div>
       </div>
@@ -143,6 +114,15 @@
       <div id="vendorSections"></div>
 
     </div>
+  </div>
+</div>
+
+<!-- Selection bar -->
+<div id="selectionBar">
+  <div class="container-xl py-2 d-flex align-items-center gap-3">
+    <div><strong id="selCount">0</strong> <span class="text-muted">items selected across</span> <strong id="selVendors">0</strong> <span class="text-muted">vendor(s)</span></div>
+    <div class="ms-auto text-muted">Est. <strong class="text-body" id="selTotal">$0.00</strong></div>
+    <button class="btn btn-primary" onclick="createAllPendingPOs()"><i class="ti ti-shopping-cart-plus me-1"></i>Create All POs</button>
   </div>
 </div>
 
@@ -279,13 +259,65 @@ let selectionState = {};
 const URGENT_STATUSES  = ['out_of_stock', 'critical', 'very_low', 'low'];
 let activeStatuses = new Set(URGENT_STATUSES);  // multi-select; all urgent active by default
 
+let collapsedVendors = new Set();
+let pendingVendor = '';
+
+function toggleVendor(sid) {
+  collapsedVendors.has(sid) ? collapsedVendors.delete(sid) : collapsedVendors.add(sid);
+  document.getElementById(`vendor-card-${sid}`)?.classList.toggle('collapsed', collapsedVendors.has(sid));
+}
+
+function setAllVendors(collapse) {
+  collapsedVendors = new Set();
+  document.querySelectorAll('.vendor-card').forEach(card => {
+    const sid = Number(card.id.replace('vendor-card-', ''));
+    if (collapse) collapsedVendors.add(sid);
+    card.classList.toggle('collapsed', collapse);
+  });
+}
+
+function pillCounts() {
+  const counts = {};
+  allItems.forEach(p => {
+    if (p.is_special_order && !isOvercommitted(p)) return;
+    if (p.nonsof && !isOvercommitted(p)) return;
+    counts[p.status] = (counts[p.status] || 0) + 1;
+  });
+  document.querySelectorAll('[data-pill-cnt]').forEach(el => {
+    const n = counts[el.dataset.pillCnt];
+    el.textContent = n ? n : '';
+  });
+}
+
+function writeState() {
+  const q = new URLSearchParams();
+  const vendor = document.getElementById('filterVendor').value;
+  const search = document.getElementById('filterSearch').value.trim();
+  const def = [...URGENT_STATUSES].sort().join(',');
+  const cur = [...activeStatuses].sort().join(',');
+  if (cur !== def && !(cur === [...URGENT_STATUSES, 'in_stock'].sort().join(',') && allInStockItems.length)) q.set('st', [...activeStatuses].join(','));
+  if (vendor) q.set('vendor', vendor);
+  if (search) q.set('q', search);
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+  const any = vendor || search || cur !== def;
+  document.getElementById('clearFiltersBtn').style.display = any ? '' : 'none';
+}
+
 const URGENCY_ORDER = { out_of_stock: 0, critical: 1, very_low: 2, low: 3 };
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('confirmOrderDate').value = todayDate();
-  loadReplenishmentItems();
+  const q = new URLSearchParams(location.search);
+  if (q.get('q')) document.getElementById('filterSearch').value = q.get('q');
+  pendingVendor = q.get('vendor') || '';
+  const st = (q.get('st') || '').split(',').filter(Boolean);
+  if (st.length) {
+    activeStatuses = new Set(st);
+    if (activeStatuses.has('in_stock')) await loadInStockItems();
+  }
+  await loadReplenishmentItems();
 });
 
 function todayDate() {
@@ -334,8 +366,8 @@ function buildVendorFilter(items) {
   });
 
   const select = document.getElementById('filterVendor');
-  const current = select.value;
-  select.innerHTML = '<option value="">All Vendors</option>';
+  const current = select.value || pendingVendor;
+  select.innerHTML = '<option value="">All vendors</option>';
   Object.entries(vendors).sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, name]) => {
     const opt = document.createElement('option');
     opt.value = id;
@@ -451,7 +483,10 @@ async function applyFilters() {
     return true;
   });
 
+  pendingVendor = '';
   updateStats(filteredItems);
+  pillCounts();
+  writeState();
   const savedSelections = snapshotSelections();
   renderVendorSections(filteredItems, savedSelections);
   updateGlobalEstimate();
@@ -577,7 +612,7 @@ function renderVendorCard(container, group, savedSelections = {}) {
   const items = [...group.items].sort(compareItems);
 
   const card = document.createElement('div');
-  card.className = 'card mb-3';
+  card.className = 'card mb-3 vendor-card' + (collapsedVendors.has(sid) ? ' collapsed' : '');
   card.id = `vendor-card-${sid}`;
 
   card.innerHTML = `
@@ -585,13 +620,13 @@ function renderVendorCard(container, group, savedSelections = {}) {
       <div class="d-flex align-items-center gap-2">
         <input type="checkbox" class="form-check-input mt-0" id="selectAll-${sid}"
           onchange="toggleVendorAll(${sid}, this.checked)" title="Select all items for this vendor">
-        <h3 class="card-title mb-0">
-          <i class="ti ti-truck me-2 text-primary"></i>${escapeHtml(supplier.name)}
+        <h3 class="card-title mb-0 vendor-toggle" onclick="toggleVendor(${sid})" title="Collapse / expand">
+          <i class="ti ti-chevron-down vt-chev me-1 text-muted"></i><i class="ti ti-truck me-2 text-primary"></i>${escapeHtml(supplier.name)}
         </h3>
         <span class="badge bg-secondary-lt text-secondary ms-1" id="vendorCount-${sid}">${items.length} item${items.length !== 1 ? 's' : ''}</span>
       </div>
       <div class="card-options">
-        <span class="text-muted small me-3">Est: <strong id="vendorTotal-${sid}">$0.00</strong></span>
+        <span class="text-muted small me-3"><span id="vendorSel-${sid}">0</span> selected · Est: <strong id="vendorTotal-${sid}">$0.00</strong></span>
         <button class="btn btn-sm btn-primary" onclick="showConfirmPO(${sid})" id="createPOBtn-${sid}" disabled>
           <i class="ti ti-shopping-cart-plus me-1"></i>Create PO
         </button>
@@ -791,6 +826,9 @@ function updateVendorTotal(supplierId) {
   });
   const el = document.getElementById(`vendorTotal-${supplierId}`);
   if (el) el.textContent = formatCurrency(total);
+  const selected = document.querySelectorAll(`[data-supplier-id="${supplierId}"][type="checkbox"]:checked:not([id^="selectAll"])`).length;
+  const selEl = document.getElementById(`vendorSel-${supplierId}`);
+  if (selEl) selEl.textContent = selected;
 }
 
 function updateVendorButtonState(supplierId) {
@@ -835,11 +873,15 @@ function updateGlobalEstimate() {
   });
   document.getElementById('statEstTotal').textContent = formatCurrency(total);
 
-  // Enable/disable "Create All POs" button
-  const anyChecked = Array.from(
+  // Enable/disable "Create All POs" and drive the floating selection bar
+  const checked = Array.from(
     document.querySelectorAll('[data-product-id][type="checkbox"]:not([id^="selectAll"])')
-  ).some(cb => cb.checked);
-  document.getElementById('createAllPOsBtn').disabled = !anyChecked;
+  ).filter(cb => cb.checked);
+  document.getElementById('createAllPOsBtn').disabled = checked.length === 0;
+  document.getElementById('selCount').textContent = checked.length;
+  document.getElementById('selVendors').textContent = new Set(checked.map(cb => cb.dataset.supplierId)).size;
+  document.getElementById('selTotal').textContent = formatCurrency(total);
+  document.getElementById('selectionBar').classList.toggle('visible', checked.length > 0);
 }
 
 // ─── PO Creation ──────────────────────────────────────────────────────────────
