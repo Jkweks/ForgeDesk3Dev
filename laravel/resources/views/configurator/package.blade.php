@@ -6,7 +6,8 @@
 <style>
   .pk-pages { max-width: 900px; margin: 0 auto; padding-bottom: 48px; }
   .xpage { background: #fff; color: #111; margin-bottom: 20px; padding: 28px 36px; box-shadow: 0 1px 6px rgba(0,0,0,.14); font-family: 'Calibri','Carlito',Arial,Helvetica,sans-serif; font-size: 13px; line-height: 1.5; }
-  .xpage-hdr { border-bottom: 2.5px solid #1a1a2e; padding-bottom: 8px; margin-bottom: 14px; }
+  .xpage-hdr { border-bottom: 2.5px solid #1a1a2e; padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .xpage-job { font-size: .85rem; font-weight: 700; color: #444; text-align: right; }
   .xpage-title { font-size: 1rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #1a1a2e; }
   /* block grid: 12 columns, native wrap — ported from fab_utils' ReportBlocks */
   .rb-grid { display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-flow: row dense; gap: 8px 14px; margin-bottom: 6px; }
@@ -176,20 +177,28 @@ function pkHasData(kind, key, record, blocks) {
   return !!(record.data[key] && record.data[key].length);
 }
 
+let pkJobName = '';
+
+function pkHdr(title) {
+  return `<div class="xpage-hdr"><div class="xpage-title">${pkEsc(title)}</div>${pkJobName ? `<div class="xpage-job">${pkEsc(pkJobName)}</div>` : ''}</div>`;
+}
+
 function pkRecordPage(record, layouts, blocks) {
   const layout = layouts[record.kind] || [];
   const cells = layout.filter(it => blocks[record.kind][it.key] && it.enabled !== false && pkHasData(record.kind, it.key, record, blocks))
     .map(it => `<div class="rb-cell" style="grid-column: span ${Math.min(12, Math.max(1, it.span || 12))};">${pkBlock(record.kind, it.key, record, blocks, it.cols)}</div>`).join('');
-  return `<div class="xpage"><div class="xpage-hdr"><div class="xpage-title">${pkEsc(record.title)}</div></div><div class="rb-grid">${cells}</div></div>`;
+  return `<div class="xpage">${pkHdr(record.title)}<div class="rb-grid">${cells}</div></div>`;
 }
 
 function pkSimplePage(title, inner) {
-  return `<div class="xpage"><div class="xpage-hdr"><div class="xpage-title">${pkEsc(title)}</div></div>${inner}</div>`;
+  return `<div class="xpage">${pkHdr(title)}${inner}</div>`;
 }
 
 function pkRender(data) {
   const m = data.meta;
-  let html = pkSimplePage('Fabrication Package — Export Summary',
+  pkJobName = m.job || '';
+  // The summary page only earns its own sheet when it carries the cut list or stock tables.
+  let html = !data.cut_list.length && !data.stock.length ? '' : pkSimplePage('Fabrication Package — Export Summary',
     pkPills([['JOB', m.job || '—'], ['WORK ORDER', m.work_order || '—'], ['DATE', m.date], ['OPENINGS', String(m.records)]])
     + (data.cut_list.length ? pkTable('CUT LIST — ALL EXTRUSIONS', ['Part Number', 'Cut Length', 'Qty', 'Source'], data.cut_list) : '')
     + (data.stock.length ? pkTable('STOCK LENGTH REQUIREMENTS', ['Part Number', 'Stock Length', 'Total Lineal', 'Sticks Required'], data.stock) : ''));

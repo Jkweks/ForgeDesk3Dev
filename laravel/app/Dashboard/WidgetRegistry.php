@@ -34,9 +34,9 @@ class WidgetRegistry
     /** @return array<string, array<string, mixed>> keyed by widget key */
     public static function all(): array
     {
-        $stat = fn (string $key, string $title, string $description, string $icon, string $field, string $link, string $suffix = '') => [
+        $stat = fn (string $key, string $title, string $description, string $icon, string $field, string $link, string $suffix = '', array $schema = []) => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
-            'type' => 'stat', 'field' => $field, 'link' => $link, 'suffix' => $suffix,
+            'type' => 'stat', 'field' => $field, 'link' => $link, 'suffix' => $suffix, 'settings_schema' => $schema,
             'default_size' => ['w' => 3, 'h' => 2], 'min_size' => ['w' => 2, 'h' => 2],
             'refresh_seconds' => 120,
         ];
@@ -148,6 +148,12 @@ class WidgetRegistry
                 $stat('cutflow_open_jobs', 'Open Cut Lists', 'Cut lists with parts still to cut.', 'ti-cut', 'open_jobs', '/fabrication/cut-lists'),
                 $stat('cutflow_active_sticks', 'Sticks Being Cut', 'Stock lengths currently on the saw.', 'ti-ruler-measure', 'active_sticks', '/fabrication/cut-lists'),
                 $stat('cutflow_cuts_week', 'Cuts This Week', 'Pieces logged by the cut station since Monday.', 'ti-scissors', 'cuts_this_week', '/fabrication/cut-lists'),
+            ]],
+            ['Fabrication', ['fabrication.work-orders.view'], '/dashboard/widgets/cutflow/cuts', [
+                $stat('cutflow_cuts_total', 'Total Cuts', 'Pieces cut at the cut station for the chosen period. Excludes drops, scrap and label reprints.', 'ti-scissors', 'total', '/fabrication/cut-lists', '', [
+                    ['key' => 'period', 'label' => 'Period', 'type' => 'select', 'default' => 'day',
+                        'options' => ['day' => 'Today', 'month' => 'This calendar month', 'year' => 'This calendar year']],
+                ]),
             ]],
             ['Configurator', ['configurator.view'], '/dashboard/widgets/configurator', [
                 $stat('configurator_open', 'Open Configurations', 'Door/frame configurations not yet archived.', 'ti-adjustments-horizontal', 'open', '/config'),

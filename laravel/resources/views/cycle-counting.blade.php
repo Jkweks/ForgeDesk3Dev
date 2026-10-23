@@ -788,6 +788,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCycleCounts();
   loadStatistics();
 
+  // Deep link from dashboard widgets: ?session=<id>
+  const deepSession = parseInt(new URLSearchParams(location.search).get('session'), 10);
+  if (deepSession) viewSessionDetails(deepSession);
+
   // Set today's date as default
   document.getElementById('sessionDate').value = new Date().toISOString().split('T')[0];
 

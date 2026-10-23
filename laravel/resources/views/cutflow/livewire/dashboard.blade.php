@@ -125,7 +125,7 @@
                                     <div class="dim mono">{{ $p->length_count }} length{{ $p->length_count === 1 ? '' : 's' }}</div>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:10px;">
-                                    <span class="mono" style="font-size:12px;">{{ $p->qty_remaining_total }} pcs</span>
+                                    <span class="mono" style="font-size:12px;">{{ $p->qty_remaining_total > 0 ? "{$p->qty_remaining_total} pcs" : 'done' }}</span>
                                     <span style="font-size:13px;color:var(--faint);">{!! $isActive ? '&#9662;' : '&#9656;' !!}</span>
                                 </div>
                             </div>
@@ -165,7 +165,7 @@
                                     @else
                                         <table class="dim-table">
                                             <thead>
-                                                <tr><th>Length</th><th>Qty</th><th>Elevation</th><th>Use</th><th></th></tr>
+                                                <tr><th>Length</th><th>Qty</th><th>Elevation</th><th>Use</th><th></th><th></th></tr>
                                             </thead>
                                             <tbody>
                                                 @foreach ($parts as $part)
@@ -183,6 +183,13 @@
                                                         <td class="mono" style="color:var(--muted);">{{ $part->phase }}</td>
                                                         <td style="color:var(--muted-2);">{{ $part->description }}</td>
                                                         <td><span class="badge {{ $statusClass }}">{{ $part->status_label }}</span></td>
+                                                        <td>
+                                                            @if ($part->qty_remaining < $part->qty_original)
+                                                                <span wire:click="recutPart({{ $part->id }})"
+                                                                      wire:confirm="Flag one {{ number_format($part->dimension_inches, 3) }}&quot; piece for recut?"
+                                                                      title="Flag one piece for recut" style="cursor:pointer;font-size:14px;color:var(--accent);">&#8635;</span>
+                                                            @endif
+                                                        </td>
                                                     </tr>
                                                 @endforeach
                                             </tbody>
@@ -205,6 +212,18 @@
         {{-- Right: manual override, stick flow, cut log --}}
         <div class="main" @if (! $signedIn) style="flex-grow:1;" @endif>
 
+            @if ($importWarnings)
+                <div style="padding:12px 16px;border-radius:10px;background:var(--warning-bg, #FFF4D6);color:var(--text-2);font-size:12.5px;">
+                    <div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:4px;">
+                        <span>&#9888; Check finishes on the imported cut list</span>
+                        <span wire:click="dismissImportWarnings" style="cursor:pointer;">&times;</span>
+                    </div>
+                    @foreach ($importWarnings as $warning)
+                        <div class="mono">{{ $warning }}</div>
+                    @endforeach
+                </div>
+            @endif
+
             <div class="override-bar" wire:click="openManual">
                 <span style="width:28px;height:28px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;">&#9000;</span>
                 <span class="title">Manual Override</span>
@@ -223,22 +242,32 @@
                     <button class="btn btn-accent" wire:click="openLogin" style="margin-top:4px;">Sign In</button>
                 </div>
             @elseif (! $stick)
-                <div class="empty-state">
-                    <span style="width:52px;height:52px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:24px;">&#128207;</span>
+                <div class="empty-state" @if ($activeProfileName) style="flex-direction:row;align-items:stretch;gap:24px;padding:24px;" @endif>
                     @if ($activeProfileName)
-                        <div>
-                            <div class="title">No Active Stick</div>
-                            <p>
-                                Enter the length of the {{ $activeProfileFinish ? "{$activeProfileName} · {$activeProfileFinish}" : $activeProfileName }}
-                                stick or drop you're loading. CutFlow will pull the best combination of that profile's remaining parts out of it.
-                            </p>
+                        <div style="flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;background:var(--surface);border-radius:12px;padding:12px;">
+                            @if ($profilePhotoUrl)
+                                <img src="{{ $profilePhotoUrl }}" alt="{{ $activeProfileName }}" style="max-width:100%;max-height:240px;object-fit:contain;">
+                            @else
+                                <span style="font-size:13px;color:var(--muted);">No photo for {{ $activeProfileName }}</span>
+                            @endif
                         </div>
-                        <button class="btn btn-accent" wire:click="openStick" style="margin-top:4px;">Enter Stick Length</button>
+                        <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+                            <div>
+                                <div class="title">No Active Stick</div>
+                                <p>
+                                    Enter the length of the {{ $activeProfileFinish ? "{$activeProfileName} · {$activeProfileFinish}" : $activeProfileName }}
+                                    stick or drop you're loading. CutFlow will pull the best combination of that profile's remaining parts out of it.
+                                </p>
+                            </div>
+                            <button class="btn btn-accent" wire:click="openStick" style="margin-top:4px;">Enter Stick Length</button>
+                        </div>
                     @else
+                        <span style="width:52px;height:52px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:24px;">&#128207;</span>
                         <div>
                             <div class="title">No Profile Selected</div>
                             <p>Select at least one job above and pick a profile from the left to start entering sticks.</p>
                         </div>
+                        <button class="btn btn-accent" disabled style="margin-top:4px;opacity:.45;cursor:not-allowed;">Enter Stick Length</button>
                     @endif
                 </div>
             @else
@@ -466,8 +495,16 @@
                        style="padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:14px;">
 
                 <div style="display:flex;gap:10px;">
-                    <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="selectVisibleJobs">Select all shown</button>
+                    <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="selectVisibleJobs">Select all open</button>
                     <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="clearJobSelection">Clear selection</button>
+                </div>
+
+                <div wire:click="toggleShowCompletedJobs"
+                     style="cursor:pointer;align-self:flex-start;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:11.5px;font-weight:600;
+                            background: {{ $showCompletedJobs ? 'var(--accent-bg)' : 'var(--surface)' }};
+                            color: {{ $showCompletedJobs ? 'var(--accent)' : 'var(--muted-2)' }};">
+                    <span style="width:8px;height:8px;border-radius:50%;background: {{ $showCompletedJobs ? 'var(--accent)' : 'var(--muted)' }};"></span>
+                    {{ $showCompletedJobs ? 'Showing completed lists (pick one at a time)' : 'Show completed lists' }}
                 </div>
 
                 <div style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
@@ -482,12 +519,18 @@
                                          border: 1.5px solid {{ $isSelected ? 'var(--accent)' : 'var(--border)' }};
                                          color:#fff;font-size:12px;">{{ $isSelected ? '✓' : '' }}</span>
                             <span style="font-size:13.5px;font-weight:600;flex-grow:1;">{{ $job->job_title }}</span>
+                            @if ($job->is_completed)
+                                <span class="badge done">DONE</span>
+                            @endif
                             @if ($job->release_label)
                                 <span class="mono" style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--panel);border:1px solid var(--border);color:var(--muted-2);">{{ $job->release_label }}</span>
                             @endif
                         </div>
                     @empty
-                        <div style="font-size:12.5px;color:var(--muted);padding:10px 2px;">No jobs match "{{ $jobSearch }}".</div>
+                        <div style="font-size:12.5px;color:var(--muted);padding:10px 2px;">
+                            {{ $jobSearch !== '' ? "No jobs match \"{$jobSearch}\"." : 'No open cut lists.' }}
+                            @unless ($showCompletedJobs) Use &ldquo;Show completed lists&rdquo; to find a finished one. @endunless
+                        </div>
                     @endforelse
                 </div>
 

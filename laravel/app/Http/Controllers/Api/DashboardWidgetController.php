@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Dashboard\WidgetRegistry;
 use App\Dashboard\WorkOrderColumns;
 use App\Models\BusinessJob;
-use App\Models\CutFlow\CutLogEntry;
 use App\Models\CutFlow\Part;
 use App\Models\CutFlow\StickSession;
 use App\Models\CycleCountSession;
@@ -23,6 +22,7 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\QualityReport;
 use App\Models\StorageLocation;
+use App\Services\CutFlow\CutStationStats;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -88,7 +88,7 @@ class DashboardWidgetController extends Controller
                         default => "Due in {$days}d",
                     },
                     'meta_class' => $days < 0 ? 'bg-red-lt' : ($days <= 7 ? 'bg-yellow-lt' : 'bg-secondary-lt'),
-                    'link' => '/fabrication/work-orders',
+                    'link' => '/fabrication/work-orders?wo='.$wo->id,
                 ];
             })->values();
 
@@ -139,7 +139,7 @@ class DashboardWidgetController extends Controller
             ->get();
 
         $rows = $workOrders->values()->map(fn (FdWorkOrder $wo, int $i) => [
-            'link' => '/fabrication/work-orders',
+            'link' => '/fabrication/work-orders?wo='.$wo->id,
             'cells' => collect($keys)->mapWithKeys(fn ($k) => [$k => WorkOrderColumns::cell($k, $wo, $i + 1)])->all(),
         ]);
 
@@ -215,7 +215,7 @@ class DashboardWidgetController extends Controller
                     'sub' => trim(($t->machine?->name ?? 'Unassigned machine').' · '.ucfirst($t->priority)),
                     'meta' => $meta,
                     'meta_class' => $class,
-                    'link' => '/maintenance#tab-tasks',
+                    'link' => '/maintenance?task='.$t->id,
                 ];
             })->values();
 
@@ -234,7 +234,7 @@ class DashboardWidgetController extends Controller
                 'sub' => $r->task?->title ?? Str::limit((string) $r->notes, 60),
                 'meta' => $r->performed_at?->format('M j'),
                 'meta_class' => 'bg-secondary-lt',
-                'link' => '/maintenance#tab-records',
+                'link' => '/maintenance?record='.$r->id,
             ])->values();
 
         return response()->json(['items' => $items]);
@@ -284,7 +284,7 @@ class DashboardWidgetController extends Controller
                     'sub' => trim(($s->location ?: 'All locations').' · '.$s->progress_percentage.'% counted'.($s->assignedUser ? ' · '.$s->assignedUser->name : '')),
                     'meta' => $inProgress ? 'In progress' : ($s->scheduled_date ? $s->scheduled_date->format('M j') : 'Unscheduled'),
                     'meta_class' => $inProgress ? 'bg-blue-lt' : ($overdue ? 'bg-red-lt' : 'bg-secondary-lt'),
-                    'link' => '/cycle-counting',
+                    'link' => '/cycle-counting?session='.$s->id,
                 ];
             })->values();
 
@@ -314,7 +314,7 @@ class DashboardWidgetController extends Controller
                 'sub' => ucfirst($d->type).($d->file_name ? ' · '.$d->file_name : ''),
                 'meta' => $d->created_at?->format('M j'),
                 'meta_class' => 'bg-secondary-lt',
-                'link' => '/fabrication/documents',
+                'link' => '/fabrication/documents?doc='.$d->id,
             ])->values();
 
         return response()->json(['items' => $items]);
@@ -353,7 +353,7 @@ class DashboardWidgetController extends Controller
                     'sub' => $c->businessJob?->job_name,
                     'meta' => $c->status_label,
                     'meta_class' => $badge[$c->status] ?? 'bg-secondary-lt',
-                    'link' => '/config',
+                    'link' => '/config?config='.$c->id,
                 ];
             })->values();
 
@@ -387,7 +387,7 @@ class DashboardWidgetController extends Controller
                 'open_jobs' => Part::where('qty_remaining', '>', 0)->distinct()->count('cut_job_id'),
                 'active_sticks' => StickSession::where('status', 'active')->whereNull('cancelled_at')->count(),
                 'sticks_completed_this_week' => StickSession::where('status', 'complete')->where('updated_at', '>=', now()->startOfWeek())->count(),
-                'cuts_this_week' => CutLogEntry::where('created_at', '>=', now()->startOfWeek())->count(),
+                'cuts_this_week' => CutStationStats::totalSince(now()->startOfWeek()),
             ]);
         } catch (\Throwable $e) {
             report($e);
@@ -399,6 +399,25 @@ class DashboardWidgetController extends Controller
                 'sticks_completed_this_week' => null,
                 'cuts_this_week' => null,
             ]);
+        }
+    }
+
+    /** Cuts for the chosen period (day / calendar month / calendar year, shop-local), drops and reprints excluded. */
+    public function cutflowCuts(Request $request)
+    {
+        $period = WidgetRegistry::resolveSettings('cutflow_cuts_total', $request->query())['period'];
+
+        try {
+            return response()->json([
+                'available' => true,
+                'period' => $period,
+                'caption' => CutStationStats::periodCaption($period),
+                'total' => CutStationStats::totalSince(CutStationStats::periodStart($period)),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['available' => false, 'period' => $period, 'caption' => null, 'total' => null]);
         }
     }
 
@@ -435,7 +454,7 @@ class DashboardWidgetController extends Controller
                     'sub' => ($po->supplier?->name ?? 'No supplier').' · '.str_replace('_', ' ', ucfirst($po->status)),
                     'meta' => $meta,
                     'meta_class' => $class,
-                    'link' => '/purchase-orders',
+                    'link' => '/purchase-orders?po='.$po->id,
                 ];
             })->values();
 
@@ -474,7 +493,7 @@ class DashboardWidgetController extends Controller
                     'sub' => $j->job_name.($j->status === 'on_hold' ? ' · On hold' : ''),
                     'meta' => $meta,
                     'meta_class' => $class,
-                    'link' => '/jobs',
+                    'link' => '/jobs?job='.$j->id,
                 ];
             })->values();
 
@@ -548,7 +567,7 @@ class DashboardWidgetController extends Controller
             'sub' => Str::limit((string) $p->description, 48),
             'meta' => rtrim(rtrim(number_format((float) $p->quantity_on_hand, 1, '.', ''), '0'), '.').' on hand',
             'meta_class' => $style[$p->status] ?? 'bg-secondary-lt',
-            'link' => $p->status === 'critical' ? '/critical-stock' : '/low-stock',
+            'link' => ($p->status === 'critical' ? '/critical-stock' : '/low-stock').'?product='.$p->id,
         ])->values();
 
         return response()->json(['items' => $items]);

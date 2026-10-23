@@ -29,6 +29,7 @@
       const value = typeof raw === 'number' ? raw.toLocaleString() : (raw ?? '-');
       const shown = typeof raw === 'number' ? value + (def.suffix || '') : value;
       body.innerHTML = `
+        ${data && data.caption ? `<div class="small text-secondary">${esc(data.caption)}</div>` : ''}
         <div class="h1 mb-1">${esc(shown)}</div>
         ${def.link ? `<a href="${esc(def.link)}" class="small text-secondary">View details</a>` : ''}`;
     },

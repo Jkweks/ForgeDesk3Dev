@@ -41,6 +41,18 @@ async function initApp() {
   await loadTasksTable();
   await loadRecords();
   renderCalendar();
+
+  // Deep links from dashboard widgets: ?task=<id> or ?record=<id>
+  const params = new URLSearchParams(window.location.search);
+  const taskId = parseInt(params.get('task'), 10);
+  const recordId = parseInt(params.get('record'), 10);
+  if (taskId && tasks.some(t => t.id === taskId)) {
+    document.querySelector('a[href="#tab-tasks"]')?.click();
+    editTask(taskId);
+  } else if (recordId && records.some(r => r.id === recordId)) {
+    document.querySelector('a[href="#tab-records"]')?.click();
+    editRecord(recordId);
+  }
 }
 
 // Maintenance Alerts (overdue / due soon)

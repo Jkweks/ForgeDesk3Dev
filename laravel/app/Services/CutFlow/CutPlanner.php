@@ -256,7 +256,7 @@ class CutPlanner
      * the collapsed bubble summary (cheap aggregate query, not a full
      * bin-pack per profile).
      */
-    public function activeProfiles(array $cutJobIds): Collection
+    public function activeProfiles(array $cutJobIds, bool $includeDone = false): Collection
     {
         if (empty($cutJobIds)) {
             return collect();
@@ -264,7 +264,7 @@ class CutPlanner
 
         return Part::selectRaw('name, finish, sum(qty_remaining) as qty_remaining_total, count(*) as length_count')
             ->whereIn('cut_job_id', $cutJobIds)
-            ->where('qty_remaining', '>', 0)
+            ->when(! $includeDone, fn ($q) => $q->where('qty_remaining', '>', 0))
             ->groupBy('name', 'finish')
             ->orderBy('name')
             ->orderBy('finish')

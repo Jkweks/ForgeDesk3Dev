@@ -126,6 +126,10 @@
       loadLowStockItems();
       loadCategories();
 
+      // Deep link from dashboard widgets: ?product=<id>
+      const deepProduct = parseInt(new URLSearchParams(location.search).get('product'), 10);
+      if (deepProduct) viewProduct(deepProduct);
+
       document.getElementById('searchInput').addEventListener('input', debounce(loadLowStockItems, 300));
       document.getElementById('categoryFilter').addEventListener('change', loadLowStockItems);
 

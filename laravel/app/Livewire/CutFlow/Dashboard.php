@@ -32,6 +32,9 @@ class Dashboard extends Component
     // null | 'manual' | 'stick' | 'login' | 'jobs'
     public ?string $modal = null;
 
+    /** Finish problems found by the last cut-list import (flashed by ImportController). */
+    public array $importWarnings = [];
+
     public string $keypadValue = '';
 
     public ?int $activeStickId = null;
@@ -54,6 +57,10 @@ class Dashboard extends Component
     // finished job's list is mostly completed pieces, which buries the
     // handful still pending under noise.
     public bool $showCompleted = true;
+
+    // The job picker lists only lists with work left (pending / in progress). Completed lists stay
+    // hidden until asked for, and only one can be selected at a time. Reset each time the picker opens.
+    public bool $showCompletedJobs = false;
 
     // idle | positioning | printing — just tracks whether a move/print
     // request is in flight, to disable buttons and block concurrent
@@ -129,6 +136,7 @@ class Dashboard extends Component
     {
         $this->refreshTigerBridgeStatus($bridge);
 
+        $this->importWarnings = session('finish_warnings', []);
         $this->crew = session('cutflow_crew', []);
         $this->activeCrewKey = session('cutflow_active_crew_key');
 
@@ -144,15 +152,16 @@ class Dashboard extends Component
             $jobId = (int) $request->query('job');
 
             if (CutJob::whereKey($jobId)->exists() && ! in_array($jobId, $this->activeJobIds, true)) {
-                $this->activeJobIds[] = $jobId;
+                // A completed list is only ever selected on its own.
+                $this->activeJobIds = in_array($jobId, CutJob::completedIds(), true) ? [$jobId] : [...$this->activeJobIds, $jobId];
             }
         }
 
         // drop any job ids that no longer exist
-        $this->activeJobIds = CutJob::whereIn('id', $this->activeJobIds)->pluck('id')->all();
+        $this->activeJobIds = $this->normalizedSelection(CutJob::whereIn('id', $this->activeJobIds)->pluck('id')->all());
 
         if (empty($this->activeJobIds)) {
-            $first = CutJob::orderBy('id')->first();
+            $first = CutJob::whereNotIn('id', CutJob::completedIds())->orderBy('id')->first();
             $this->activeJobIds = $first ? [$first->id] : [];
         }
 
@@ -168,7 +177,7 @@ class Dashboard extends Component
             return;
         }
 
-        $firstProfile = $planner->activeProfiles($this->activeJobIds)->first();
+        $firstProfile = $planner->activeProfiles($this->activeJobIds, $this->viewingCompleted())->first();
         $this->activeProfileName = $firstProfile?->name;
         $this->activeProfileFinish = $firstProfile?->finish;
     }
@@ -189,13 +198,43 @@ class Dashboard extends Component
             return;
         }
 
+        $completed = CutJob::completedIds();
+
         if (in_array($jobId, $this->activeJobIds, true)) {
             $this->activeJobIds = array_values(array_diff($this->activeJobIds, [$jobId]));
+        } elseif (in_array($jobId, $completed, true)) {
+            // A completed list replaces whatever was selected: one at a time, never mixed with open lists.
+            $this->activeJobIds = [$jobId];
         } else {
-            $this->activeJobIds[] = $jobId;
+            $this->activeJobIds = [...array_diff($this->activeJobIds, $completed), $jobId];
         }
 
         $this->persistJobSelection();
+    }
+
+    /**
+     * A selection is either any number of open lists or exactly one completed list. Mixed selections
+     * (e.g. left over in the session) keep the open lists; several completed lists keep the first.
+     */
+    protected function normalizedSelection(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $completed = array_values(array_intersect($ids, CutJob::completedIds()));
+
+        if (! $completed) {
+            return $ids;
+        }
+
+        return count($ids) > count($completed)
+            ? array_values(array_diff($ids, $completed))
+            : [$completed[0]];
+    }
+
+    /** True when every selected list is completed: the cut list then shows finished pieces so one can be recut. */
+    protected function viewingCompleted(): bool
+    {
+        return $this->activeJobIds !== []
+            && count(array_intersect($this->activeJobIds, CutJob::completedIds())) === count($this->activeJobIds);
     }
 
     /**
@@ -211,11 +250,26 @@ class Dashboard extends Component
 
         $this->modal = 'jobs';
         $this->jobSearch = '';
+        $this->showCompletedJobs = false;
+    }
+
+    public function toggleShowCompletedJobs(): void
+    {
+        $this->showCompletedJobs = ! $this->showCompletedJobs;
     }
 
     protected function filteredJobs()
     {
-        $jobs = CutJob::withDisplayLabels(CutJob::all());
+        $completed = CutJob::completedIds();
+
+        // Completed lists are hidden unless asked for; a completed list that is already selected stays
+        // visible so it can be deselected.
+        $jobs = CutJob::withDisplayLabels(
+            CutJob::all()->reject(fn ($job) => ! $this->showCompletedJobs
+                && in_array($job->id, $completed, true)
+                && ! in_array($job->id, $this->activeJobIds, true))
+        );
+        $jobs->each(fn ($job) => $job->setAttribute('is_completed', in_array($job->id, $completed, true)));
 
         if ($this->jobSearch === '') {
             return $jobs;
@@ -239,8 +293,9 @@ class Dashboard extends Component
      */
     public function selectVisibleJobs(): void
     {
-        $ids = $this->filteredJobs()->pluck('id')->all();
-        $this->activeJobIds = array_values(array_unique([...$this->activeJobIds, ...$ids]));
+        // Open lists only: completed lists are selected one at a time.
+        $ids = $this->filteredJobs()->reject(fn ($job) => $job->is_completed)->pluck('id')->all();
+        $this->activeJobIds = array_values(array_unique([...array_diff($this->activeJobIds, CutJob::completedIds()), ...$ids]));
         $this->persistJobSelection();
     }
 
@@ -382,12 +437,17 @@ class Dashboard extends Component
 
     public function openStick(): void
     {
-        if (! $this->signedIn()) {
+        if (! $this->signedIn() || ! $this->activeProfileName) {
             return;
         }
 
         $this->modal = 'stick';
         $this->keypadValue = '';
+    }
+
+    public function dismissImportWarnings(): void
+    {
+        $this->importWarnings = [];
     }
 
     public function closeModal(): void
@@ -1342,6 +1402,44 @@ class Dashboard extends Component
     }
 
     /**
+     * Flags one already-cut piece of a cut list part for recut, straight from the cut list (the
+     * counterpart of recutEntry(), which starts from a cut-log row). The piece goes back into the
+     * unassigned pool, so the next stick built for this profile picks it up; it works the same on a
+     * completed list. Logged as a recut for the reports.
+     */
+    public function recutPart(int $partId): void
+    {
+        if (! $this->signedIn()) {
+            return;
+        }
+
+        $part = Part::with('cutJob')->find($partId);
+
+        if (! $part || ! in_array($part->cut_job_id, $this->activeJobIds, true) || $part->qty_remaining >= $part->qty_original) {
+            return; // not on a selected list, or no piece of it has been cut yet
+        }
+
+        $part->increment('qty_remaining');
+
+        CutLogEntry::create([
+            'uuid' => (string) Str::uuid(),
+            'part_id' => $part->id,
+            'part_name' => $part->name,
+            'finish' => $part->finish,
+            'operator_id' => $this->activeOperatorId(),
+            'operator_name' => $this->activeOperatorName(),
+            'cut_job_id' => $part->cut_job_id,
+            'job_name' => $part->cutJob?->name,
+            'work_order' => $part->work_order,
+            'phase' => $part->phase,
+            'description' => $part->description,
+            'dimension_inches' => $part->dimension_inches,
+            'type' => 'planned',
+            'is_recut' => true,
+        ]);
+    }
+
+    /**
      * Reprints a past cut's label unchanged and logs a linked entry (same
      * uuid family via the original entry's data) with is_reprint set, so
      * there's a record a second label went out for this cut.
@@ -1418,8 +1516,10 @@ class Dashboard extends Component
             : collect();
 
         $completedCount = $parts->where('status_label', 'Done')->count();
+        $viewingCompleted = $signedIn && $this->viewingCompleted();
 
-        if (! $this->showCompleted) {
+        // Finished pieces are the whole point of a completed list, so they are never hidden there.
+        if (! $this->showCompleted && ! $viewingCompleted) {
             $parts = $parts->reject(fn ($part) => $part->status_label === 'Done')->values();
         }
 
@@ -1435,11 +1535,15 @@ class Dashboard extends Component
             'jobs' => $this->modal === 'jobs' ? $this->filteredJobs() : collect(),
             'selectedJobs' => $signedIn ? CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get()) : collect(),
             'totalJobCount' => CutJob::count(),
-            'profiles' => $signedIn ? $planner->activeProfiles($this->activeJobIds) : collect(),
+            'profiles' => $signedIn ? $planner->activeProfiles($this->activeJobIds, $viewingCompleted) : collect(),
+            'viewingCompleted' => $viewingCompleted,
             'parts' => $parts,
             'completedCount' => $completedCount,
             'projection' => $projection,
             'stick' => ($signedIn && $this->activeStickId) ? StickSession::with('items.part')->find($this->activeStickId) : null,
+            'profilePhotoUrl' => ($signedIn && $this->activeProfileName && ! $this->activeStickId)
+                ? Part::photoProductFor($this->activeProfileName, $this->activeProfileFinish)?->photo_url
+                : null,
             'currentItem' => $currentItem,
             'currentItemState' => $currentItem ? $this->currentItemState($currentItem) : null,
             'awaitingSensor' => $this->awaitingSensor(),

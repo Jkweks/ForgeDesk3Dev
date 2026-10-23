@@ -562,6 +562,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPurchaseOrders();
   loadStatistics();
 
+  // Deep link from dashboard widgets: ?po=<id>
+  const deepPO = parseInt(new URLSearchParams(location.search).get('po'), 10);
+  if (deepPO) viewPODetails(deepPO);
+
   // Set today's date as default
   document.getElementById('poOrderDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('receiveDate').value = new Date().toISOString().split('T')[0];

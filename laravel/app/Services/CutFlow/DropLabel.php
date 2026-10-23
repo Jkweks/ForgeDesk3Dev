@@ -31,7 +31,7 @@ class DropLabel
     {
         $payload = $this->payload($kind, $name, $finish, $length, withImage: false);
 
-        return $payload + ['photoUrl' => Part::resolveProductFor($name, $finish)?->photo_url];
+        return $payload + ['photoUrl' => Part::photoProductFor($name, $finish)?->photo_url];
     }
 
     public function payload(string $kind, ?string $name, ?string $finish, float $length, bool $withImage = true): array
@@ -45,7 +45,7 @@ class DropLabel
                 ? Dimension::toFraction(DropPlanner::tagFor($length))
                 : 'SCRAP',
             'detail' => $isRack ? null : 'too short - '.Dimension::toFraction($length).'"',
-            'image' => $withImage ? $this->image(Part::resolveProductFor($name, $finish)?->photo_path) : null,
+            'image' => $withImage ? $this->image(Part::photoProductFor($name, $finish)?->photo_path) : null,
         ], fn ($v) => $v !== null);
     }
 
