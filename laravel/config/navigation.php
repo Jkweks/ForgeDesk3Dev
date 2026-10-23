@@ -38,7 +38,7 @@ return [
         // Stock and purchasing. Purchasing + stock control used to live under "Operations" (nav.operations).
         'label' => 'Inventory', 'icon' => 'package', 'permission' => ['nav.inventory', 'nav.operations'],
         'active' => ['inventory/*', 'low-stock', 'critical-stock', 'transactions', 'categories', 'suppliers',
-            'purchase-orders', 'cycle-counting', 'storage-locations', 'operations/*', 'admin/location-assignment'],
+            'purchase-orders', 'cycle-counting', 'storage-locations', 'operations/*'],
         'items' => [
             ['header' => 'Catalog'],
             ['label' => 'All Products', 'href' => '/inventory/products', 'active' => ['inventory/products'], 'nav' => 'nav.inventory'],
@@ -49,7 +49,6 @@ return [
             ['label' => 'Critical Stock', 'href' => '/critical-stock', 'nav' => 'nav.inventory'],
             ['label' => 'Cycle Counting', 'href' => '/cycle-counting', 'nav' => 'nav.operations'],
             ['label' => 'Storage Locations', 'href' => '/storage-locations', 'nav' => 'nav.operations'],
-            ['label' => 'Assign Locations', 'href' => '/admin/location-assignment', 'permission' => 'inventory.edit', 'nav' => 'nav.operations'],
             ['header' => 'Activity'],
             ['label' => 'Transaction History', 'href' => '/transactions', 'nav' => 'nav.inventory'],
             ['header' => 'Purchasing'],

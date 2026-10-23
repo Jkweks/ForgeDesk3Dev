@@ -70,7 +70,7 @@ class NavigationConfigTest extends TestCase
             ->flatMap(fn ($s) => array_merge([$s['href'] ?? null], array_column($s['items'] ?? [], 'href')))
             ->filter()->all();
 
-        foreach (['/fabrication/documents', '/fabrication/quality', '/admin/location-assignment', '/inventory/products', '/reports', '/admin'] as $page) {
+        foreach (['/fabrication/documents', '/fabrication/quality', '/inventory/products', '/reports', '/admin'] as $page) {
             $this->assertContains($page, $hrefs, "{$page} should be reachable from the nav");
         }
     }

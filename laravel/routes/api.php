@@ -359,6 +359,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/storage-locations-names', [App\Http\Controllers\Api\StorageLocationController::class, 'locationNames'])->middleware('permission:inventory.view');
         Route::get('/storage-locations/bulk-shelf-labels-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'bulkShelfLabelsPdf'])->middleware('permission:inventory.view');
         Route::get('/storage-locations/{storageLocation}/shelf-label-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'shelfLabelPdf'])->middleware('permission:inventory.view');
+        Route::post('/inventory-locations/transfer', [InventoryLocationController::class, 'transferToStorageLocation'])->middleware('permission:inventory.adjust');
+        Route::post('/storage-locations/bulk-children', [App\Http\Controllers\Api\StorageLocationController::class, 'storeBulk'])->middleware('permission:inventory.create');
         Route::apiResource('storage-locations', App\Http\Controllers\Api\StorageLocationController::class)
             ->middlewareFor(['index', 'show'], 'permission:inventory.view')
             ->middlewareFor('store', 'permission:inventory.create')
