@@ -351,6 +351,16 @@ class Product extends Model
         return (int) floor($this->quantity_on_hand - $this->committed_from_reservations);
     }
 
+    /**
+     * Jobs are holding stock for this part but none is on the shelf. That is a
+     * real shortage whatever the part's flags say (special order, boneyard, no
+     * reorder point), so it is always treated as critical and always needs ordering.
+     */
+    public function hasCommitmentsWithNothingOnHand(): bool
+    {
+        return (float) $this->quantity_on_hand <= 0 && $this->committed_from_reservations > 0;
+    }
+
     public function updateStatus()
     {
         $available = $this->quantity_available;
@@ -359,8 +369,9 @@ class Product extends Model
         $onOrder = $this->on_order_qty ?? 0;
 
         if ($available <= 0) {
-            // Zero or overcommitted — critical if a reorder point is set, otherwise out_of_stock
-            $status = ($reorderPoint > 0) ? 'critical' : 'out_of_stock';
+            // Zero or overcommitted — critical if a reorder point is set, or if jobs are
+            // committed against nothing on hand; otherwise a plain out_of_stock
+            $status = ($reorderPoint > 0 || $this->hasCommitmentsWithNothingOnHand()) ? 'critical' : 'out_of_stock';
         } elseif ($available > $reorderPoint) {
             $status = 'in_stock';
         } elseif ($available > $safetyStock) {
@@ -436,38 +447,52 @@ class Product extends Model
      */
     public function getSuggestedOrderQtyAttribute()
     {
-        if (! $this->reorder_point) {
-            return 0;
-        }
-
         $onOrder = $this->on_order_qty ?? 0;
+
+        // Committed against nothing on hand: at minimum, order what the jobs need
+        // (net of what is already inbound), even when no reorder point is set.
+        $commitmentShortfall = $this->hasCommitmentsWithNothingOnHand()
+            ? max(0, $this->committed_from_reservations - $onOrder)
+            : 0;
+
+        if (! $this->reorder_point) {
+            return $commitmentShortfall > 0 ? $this->roundToOrderRules($commitmentShortfall) : 0;
+        }
 
         // Trigger condition matches needsReorder(): available + on_order vs reorder_point
         if (($this->quantity_available + $onOrder) <= $this->reorder_point) {
             $targetQty = $this->maximum_quantity ?: ($this->reorder_point * 2);
 
             // Order enough to bring available + on_order up to target (not on_hand up to target)
-            $suggestedQty = $targetQty - $this->quantity_available - $onOrder;
+            $suggestedQty = max($targetQty - $this->quantity_available - $onOrder, $commitmentShortfall);
 
-            // Round up to order multiple if specified
-            if ($this->order_multiple && $this->order_multiple > 1) {
-                $suggestedQty = ceil($suggestedQty / $this->order_multiple) * $this->order_multiple;
-            }
-
-            // Enforce minimum order quantity
-            if ($this->min_order_qty && $suggestedQty < $this->min_order_qty) {
-                $suggestedQty = $this->min_order_qty;
-            }
-
-            // For pack products, always round up to a whole number of packs (ceiling)
-            if ($this->pack_size && $this->pack_size > 1) {
-                $suggestedQty = (int) ceil($suggestedQty / $this->pack_size) * $this->pack_size;
-            }
-
-            return max(0, $suggestedQty);
+            return $this->roundToOrderRules($suggestedQty);
         }
 
         return 0;
+    }
+
+    /**
+     * Apply order multiple, minimum order qty and whole-pack rounding to a raw quantity.
+     */
+    private function roundToOrderRules($suggestedQty)
+    {
+        // Round up to order multiple if specified
+        if ($this->order_multiple && $this->order_multiple > 1) {
+            $suggestedQty = ceil($suggestedQty / $this->order_multiple) * $this->order_multiple;
+        }
+
+        // Enforce minimum order quantity
+        if ($this->min_order_qty && $suggestedQty < $this->min_order_qty) {
+            $suggestedQty = $this->min_order_qty;
+        }
+
+        // For pack products, always round up to a whole number of packs (ceiling)
+        if ($this->pack_size && $this->pack_size > 1) {
+            $suggestedQty = (int) ceil($suggestedQty / $this->pack_size) * $this->pack_size;
+        }
+
+        return max(0, $suggestedQty);
     }
 
     /**
