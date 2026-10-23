@@ -84,15 +84,15 @@
                   <i class="ti ti-map-pin" style="font-size:3rem"></i>
                   <p class="mt-2 mb-0">Select a location to see its contents</p>
                 </div>
-                <div id="detailBody" style="display:none" class="d-flex flex-column h-100">
+                <div id="detailBody" class="d-none flex-column h-100 sl-detail">
                   <div class="card-header flex-column align-items-stretch">
                     <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1" id="detailCrumbs"></ol></nav>
                     <div class="d-flex align-items-start gap-2">
-                      <div class="flex-fill">
-                        <h3 class="mb-1" id="detailName"></h3>
+                      <div class="flex-fill min-w-0">
+                        <h3 class="mb-1 text-truncate" id="detailName"></h3>
                         <div id="detailMeta" class="d-flex flex-wrap gap-1 align-items-center"></div>
                       </div>
-                      <div class="btn-list flex-nowrap">
+                      <div class="btn-list">
                         <button class="btn btn-sm" id="detailAddChild"><i class="ti ti-plus me-1"></i>Child</button>
                         <button class="btn btn-sm" id="detailEdit"><i class="ti ti-edit me-1"></i>Edit</button>
                         <button class="btn btn-sm" id="printShelfTagBtn" onclick="printShelfLabel()"><i class="ti ti-file-type-pdf me-1"></i>Label</button>
@@ -115,7 +115,7 @@
                       </label>
                     </div>
                     <div class="table-responsive">
-                      <table class="table table-vcenter table-sm">
+                      <table class="table table-vcenter table-sm sl-items">
                         <thead><tr>
                           <th>SKU</th><th>Description</th><th id="locColHeader" style="display:none">Location</th>
                           <th class="text-end">Qty</th><th class="text-end">Committed</th>
@@ -273,7 +273,13 @@
 @push('scripts')
   <style>
     .sl-pane { height: calc(100vh - 330px); min-height: 480px; display: flex; flex-direction: column; }
-    .sl-scroll { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+    .sl-pane { overflow: hidden; min-width: 0; }
+    .sl-scroll { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; min-width: 0; }
+    .sl-detail { min-height: 0; min-width: 0; flex: 1 1 auto; }
+    .sl-items td, .sl-items th { white-space: nowrap; }
+    .sl-items td.sl-desc { white-space: normal; min-width: 120px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .sl-items td.sl-loc { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+    .min-w-0 { min-width: 0; }
     .tree-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--tblr-border-radius); cursor: pointer; }
     .tree-row:hover { background: var(--tblr-bg-surface-secondary); }
     .tree-row.active { background: var(--tblr-primary-lt); }
@@ -475,8 +481,8 @@
     // ---------- Detail panel ----------
     function clearSelection() {
       selectedId = null; currentViewLocationId = null;
-      document.getElementById('detailBody').style.display = 'none';
-      document.getElementById('detailEmpty').style.display = '';
+      document.getElementById('detailBody').classList.replace('d-flex', 'd-none');
+      document.getElementById('detailEmpty').classList.remove('d-none');
       renderTree();
     }
 
@@ -490,8 +496,9 @@
       if (reveal) document.querySelector(`.tree-row[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
 
       const st = location.stats || {};
-      document.getElementById('detailEmpty').style.display = 'none';
-      document.getElementById('detailBody').style.display = '';
+      document.getElementById('detailEmpty').classList.add('d-none');
+      const body = document.getElementById('detailBody');
+      body.classList.remove('d-none'); body.classList.add('d-flex');
 
       // Breadcrumb from ancestor chain
       const chain = [];
@@ -555,8 +562,8 @@
           const value = (p?.pack_size > 1 ? qty / p.pack_size : qty) * cost;
           return `<tr>
             <td class="text-nowrap">${escapeHtml(p?.sku || '-')}</td>
-            <td>${escapeHtml(p?.description || '-')}</td>
-            ${showSub ? `<td class="text-nowrap small">${item.storage_location_id === id ? '<span class="text-muted">(this location)</span>' : escapeHtml(item.storage_location?.name || '')}</td>` : ''}
+            <td class="sl-desc" title="${escapeHtml(p?.description || '')}">${escapeHtml(p?.description || '-')}</td>
+            ${showSub ? `<td class="text-nowrap small sl-loc">${item.storage_location_id === id ? '<span class="text-muted">(this location)</span>' : escapeHtml(item.storage_location?.name || '')}</td>` : ''}
             <td class="text-end">${num(qty)}</td>
             <td class="text-end">${num(committed)}</td>
             <td class="text-end text-success">${num(qty - committed)}</td>
