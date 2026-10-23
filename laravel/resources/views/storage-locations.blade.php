@@ -10,18 +10,12 @@
             <div class="col">
               <div class="page-pretitle">Operations Management</div>
               <h1 class="page-title">Storage Locations</h1>
-              <p class="text-muted">Manage warehouse locations and inventory distribution</p>
             </div>
             <div class="col-auto ms-auto d-print-none">
               <div class="btn-list">
-                <button class="btn" onclick="exportLocations()">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
-                  Export
-                </button>
-                <button class="btn btn-primary d-none d-sm-inline-block" onclick="showAddLocationModal()">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
-                  Add Location
-                </button>
+                <button class="btn" onclick="exportLocations()"><i class="ti ti-download me-1"></i>Export CSV</button>
+                <button class="btn" id="bulkShelfPrintBtn" onclick="printAllShelfLabels()"><i class="ti ti-printer me-1"></i>Print All Shelf Labels</button>
+                <button class="btn btn-primary" onclick="showAddLocationModal()"><i class="ti ti-plus me-1"></i>Add Location</button>
               </div>
             </div>
           </div>
@@ -30,92 +24,100 @@
 
       <main id="content" class="page-body">
         <div class="container-xl">
-          <!-- Stats Cards -->
-          <div class="row row-deck row-cards mb-3">
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Total Locations</div>
-                  <div class="h1 mb-3" id="statTotalLocations">-</div>
-                  <div>Active storage locations</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Locations in Use</div>
-                  <div class="h1 mb-3 text-success" id="statInUse">-</div>
-                  <div>With inventory assigned</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Total Capacity</div>
-                  <div class="h1 mb-3" id="statTotalCapacity">-</div>
-                  <div>Units across all locations</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Capacity Utilization</div>
-                  <div class="h1 mb-3 text-info" id="statUtilization">-</div>
-                  <div>Percentage in use</div>
-                </div>
-              </div>
-            </div>
+          <div class="row row-cards mb-3">
+            <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+              <div class="subheader">Locations</div><div class="h1 mb-0" id="statTotalLocations">-</div>
+            </div></div></div>
+            <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+              <div class="subheader">In Use</div><div class="h1 mb-0 text-success" id="statInUse">-</div>
+              <div class="progress progress-sm mt-2"><div class="progress-bar bg-success" id="statUtilBar" style="width:0%"></div></div>
+            </div></div></div>
+            <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+              <div class="subheader">Units Stored</div><div class="h1 mb-0" id="statUnits">-</div>
+            </div></div></div>
+            <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+              <div class="subheader">Inventory Value</div><div class="h1 mb-0" id="statValue">-</div>
+            </div></div></div>
           </div>
 
-          <!-- Locations Table -->
-          <div class="row">
-            <div class="col-12">
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title">Storage Locations</h3>
-                  <div class="ms-auto d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-secondary" id="bulkShelfPrintBtn" onclick="printAllShelfLabels()">
-                      <i class="ti ti-printer me-1"></i> Print All Shelves
-                    </button>
-                    <div class="btn-group" role="group">
-                      <input type="radio" class="btn-check" name="view-mode" id="view-tree" autocomplete="off" checked>
-                      <label class="btn btn-sm" for="view-tree">Tree View</label>
-                      <input type="radio" class="btn-check" name="view-mode" id="view-list" autocomplete="off">
-                      <label class="btn btn-sm" for="view-list">List View</label>
+          <div class="row row-cards">
+            <!-- Browser -->
+            <div class="col-lg-5">
+              <div class="card sl-pane">
+                <div class="card-header flex-column align-items-stretch gap-2">
+                  <div class="input-icon">
+                    <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search name, code or path..." id="searchInput" autocomplete="off">
+                  </div>
+                  <div class="d-flex gap-2">
+                    <select class="form-select form-select-sm" id="typeFilter">
+                      <option value="">All types</option>
+                      <option value="warehouse">Warehouse</option><option value="zone">Zone</option>
+                      <option value="aisle">Aisle</option><option value="rack">Rack</option>
+                      <option value="shelf">Shelf</option><option value="bin">Bin</option><option value="other">Other</option>
+                    </select>
+                    <select class="form-select form-select-sm" id="usageFilter">
+                      <option value="">In use + empty</option>
+                      <option value="used">In use only</option>
+                      <option value="empty">Empty only</option>
+                    </select>
+                    <div class="btn-group">
+                      <button class="btn btn-sm btn-icon" title="Expand all" onclick="setAllExpanded(true)"><i class="ti ti-arrows-diagonal"></i></button>
+                      <button class="btn btn-sm btn-icon" title="Collapse all" onclick="setAllExpanded(false)"><i class="ti ti-arrows-diagonal-minimize-2"></i></button>
                     </div>
-                    <input type="text" class="form-control form-control-sm" placeholder="Search locations..." id="searchInput" style="min-width: 200px;">
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="loading" id="loadingIndicator">
-                    <div class="spinner-border" role="status"></div>
-                    <div>Loading locations...</div>
+                <div class="card-body p-2 sl-scroll">
+                  <div class="text-center text-muted py-5" id="loadingIndicator">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading locations...
                   </div>
+                  <div id="locationsTree"></div>
+                </div>
+                <div class="card-footer text-muted small" id="resultCount"></div>
+              </div>
+            </div>
 
-                  <!-- Tree View -->
-                  <div id="treeViewContainer" style="display: none;">
-                    <div id="locationsTree"></div>
+            <!-- Detail -->
+            <div class="col-lg-7">
+              <div class="card sl-pane" id="detailCard">
+                <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted" id="detailEmpty">
+                  <i class="ti ti-map-pin" style="font-size:3rem"></i>
+                  <p class="mt-2 mb-0">Select a location to see its contents</p>
+                </div>
+                <div id="detailBody" style="display:none" class="d-flex flex-column h-100">
+                  <div class="card-header flex-column align-items-stretch">
+                    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1" id="detailCrumbs"></ol></nav>
+                    <div class="d-flex align-items-start gap-2">
+                      <div class="flex-fill">
+                        <h3 class="mb-1" id="detailName"></h3>
+                        <div id="detailMeta" class="d-flex flex-wrap gap-1 align-items-center"></div>
+                      </div>
+                      <div class="btn-list flex-nowrap">
+                        <button class="btn btn-sm" id="detailAddChild"><i class="ti ti-plus me-1"></i>Child</button>
+                        <button class="btn btn-sm" id="detailEdit"><i class="ti ti-edit me-1"></i>Edit</button>
+                        <button class="btn btn-sm" id="printShelfTagBtn" onclick="printShelfLabel()"><i class="ti ti-file-type-pdf me-1"></i>Label</button>
+                        <button class="btn btn-sm btn-outline-danger" id="detailDelete"><i class="ti ti-trash"></i></button>
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- List View -->
-                  <div class="table-responsive" id="locationsTableContainer" style="display: none;">
-                    <table class="table table-vcenter card-table table-striped">
-                      <thead>
-                        <tr>
-                          <th>Location Path</th>
-                          <th>Type</th>
-                          <th class="text-end">Products Stored</th>
-                          <th class="text-end">Total Quantity</th>
-                          <th class="text-end">Total Value</th>
-                          <th>Status</th>
-                          <th class="w-1"></th>
-                        </tr>
-                      </thead>
-                      <tbody id="locationsTableBody"></tbody>
-                    </table>
+                  <div class="card-body sl-scroll">
+                    <div class="row g-2 mb-3" id="detailStats"></div>
+                    <div id="detailAddress" class="mb-3"></div>
+                    <div id="detailChildrenWrap" class="mb-3" style="display:none">
+                      <div class="subheader mb-2">Child locations</div>
+                      <div class="d-flex flex-wrap gap-2" id="detailChildren"></div>
+                    </div>
+                    <div class="subheader mb-2">Stored here</div>
+                    <div class="table-responsive">
+                      <table class="table table-vcenter table-sm">
+                        <thead><tr>
+                          <th>SKU</th><th>Description</th>
+                          <th class="text-end">Qty</th><th class="text-end">Committed</th>
+                          <th class="text-end">Available</th><th class="text-end">Value</th><th></th>
+                        </tr></thead>
+                        <tbody id="locationProductsTableBody"></tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -201,676 +203,405 @@
     </div>
   </div>
 
-  <!-- View Location Details Modal -->
-  <div class="modal modal-blur fade" id="viewLocationModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="viewLocationModalTitle">Location Details</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div id="locationDetailsView"></div>
-
-          <hr class="my-4">
-
-          <h5 class="mb-3">Products at this Location</h5>
-          <div class="table-responsive">
-            <table class="table table-vcenter">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Description</th>
-                  <th class="text-end">Quantity</th>
-                  <th class="text-end">Committed</th>
-                  <th class="text-end">Available</th>
-                  <th class="text-end">Value</th>
-                  <th>Primary</th>
-                </tr>
-              </thead>
-              <tbody id="locationProductsTableBody">
-                <tr>
-                  <td colspan="7" class="text-center text-muted">Loading...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-link" data-bs-dismiss="modal">Close</button>
-          <button type="button" class="btn btn-secondary ms-auto" id="printShelfTagBtn" onclick="printShelfLabel()">
-            <i class="ti ti-file-type-pdf me-1"></i> Download Shelf Label
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
 @endsection
 
 
 @push('scripts')
   <style>
-    .tree-node {
-      padding: 0;
-    }
-    .tree-node-content {
-      display: flex;
-      align-items: center;
-      padding: 4px 8px;
-      border-radius: var(--tblr-border-radius-sm);
-      transition: background 0.2s;
-      min-height: 36px;
-    }
-    .tree-node-content:hover {
-      background: var(--tblr-bg-surface-secondary);
-    }
-    .tree-node-toggle {
-      width: 16px;
-      height: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-right: 6px;
-      cursor: pointer;
-      user-select: none;
-      font-weight: bold;
-      font-size: 12px;
-    }
-    .tree-node-toggle.empty {
-      visibility: hidden;
-    }
-    .tree-node-icon {
-      margin-right: 6px;
-      color: var(--tblr-secondary-color);
-      font-size: 16px;
-    }
-    .tree-children {
-      margin-left: 20px;
-      border-left: 1px dashed var(--tblr-border-color);
-      padding-left: 6px;
-    }
-    .tree-children.collapsed {
-      display: none;
-    }
-    .tree-node-actions {
-      margin-left: auto;
-      display: flex;
-      gap: 2px;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-    .tree-node-content:hover .tree-node-actions {
-      opacity: 1;
-    }
-    .tree-node-actions .btn {
-      padding: 2px 4px;
-      font-size: 14px;
-    }
-    .type-badge {
-      font-size: 0.7rem;
-      padding: 1px 4px;
-      border-radius: var(--tblr-border-radius-sm);
-      margin-left: 6px;
-    }
-    .tree-node-info {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-width: 0;
-    }
-    .tree-node-info strong {
-      font-size: 0.9rem;
-      line-height: 1.3;
-    }
-    .tree-node-info .small {
-      font-size: 0.75rem;
-      line-height: 1.2;
-      margin-top: 1px;
-    }
+    .sl-pane { height: calc(100vh - 330px); min-height: 480px; display: flex; flex-direction: column; }
+    .sl-scroll { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+    .tree-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--tblr-border-radius); cursor: pointer; }
+    .tree-row:hover { background: var(--tblr-bg-surface-secondary); }
+    .tree-row.active { background: var(--tblr-primary-lt); }
+    .tree-toggle { width: 18px; text-align: center; color: var(--tblr-secondary-color); flex: none; }
+    .tree-toggle.leaf { visibility: hidden; }
+    .tree-toggle i { transition: transform .15s; }
+    .tree-node.collapsed > .tree-row .tree-toggle i { transform: rotate(-90deg); }
+    .tree-node.collapsed > .tree-children { display: none; }
+    .tree-children { margin-left: 17px; padding-left: 4px; border-left: 1px solid var(--tblr-border-color); }
+    .tree-label { flex: 1; min-width: 0; }
+    .tree-label .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .tree-label .path { font-size: .75rem; color: var(--tblr-secondary-color); }
+    .tree-count { font-size: .75rem; color: var(--tblr-secondary-color); flex: none; }
+    .tree-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--tblr-border-color); }
+    .tree-dot.used { background: var(--tblr-success); }
+    .tree-dot.inactive { background: var(--tblr-danger); }
+    mark { padding: 0; background: var(--tblr-yellow-lt); color: inherit; }
   </style>
 
   <script>
+    const TYPE_ICONS = { warehouse: 'ti-building-warehouse', zone: 'ti-map-2', aisle: 'ti-road', rack: 'ti-columns', shelf: 'ti-layout-rows', bin: 'ti-box', other: 'ti-dots' };
     let currentLocations = [];
     let locationTree = [];
+    let statsById = new Map();
+    let childrenById = new Map();
+    let expanded = new Set();
+    let selectedId = null;
     let editingLocationId = null;
-    let currentViewMode = 'tree';
+    let currentViewLocationId = null;
 
-    // Utility function to escape HTML
+    const money = (n, d = 2) => '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    const num = n => Number(n || 0).toLocaleString();
+
     function escapeHtml(text) {
-      if (!text) return '';
-      const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-      };
-      return text.toString().replace(/[&<>"']/g, m => map[m]);
+      if (text === null || text === undefined) return '';
+      return text.toString().replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func(...args), wait); };
     }
 
     document.addEventListener('DOMContentLoaded', () => {
       loadLocations();
-
-      // View mode toggle
-      document.querySelectorAll('input[name="view-mode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-          currentViewMode = e.target.id === 'view-tree' ? 'tree' : 'list';
-          renderCurrentView();
-        });
-      });
-
-      // Search functionality
-      document.getElementById('searchInput').addEventListener('input', debounce(filterLocations, 300));
-
-      // Form submission
+      document.getElementById('searchInput').addEventListener('input', debounce(renderTree, 200));
+      document.getElementById('typeFilter').addEventListener('change', renderTree);
+      document.getElementById('usageFilter').addEventListener('change', renderTree);
       document.getElementById('locationForm').addEventListener('submit', handleLocationFormSubmit);
+
+      // One delegated handler for the tree instead of inline onclick strings
+      document.getElementById('locationsTree').addEventListener('click', e => {
+        const row = e.target.closest('.tree-row');
+        if (!row) return;
+        const id = Number(row.dataset.id);
+        if (e.target.closest('.tree-toggle')) { toggleNode(id); return; }
+        selectLocation(id);
+      });
+      document.getElementById('detailChildren').addEventListener('click', e => {
+        const chip = e.target.closest('[data-id]');
+        if (chip) selectLocation(Number(chip.dataset.id), true);
+      });
+      document.getElementById('detailCrumbs').addEventListener('click', e => {
+        const a = e.target.closest('[data-id]');
+        if (a) { e.preventDefault(); selectLocation(Number(a.dataset.id), true); }
+      });
     });
 
     async function loadLocations() {
       try {
-        currentLocations = await authenticatedFetch(`/storage-locations-stats`);
-        locationTree = await authenticatedFetch(`/storage-locations-tree`);
+        const firstLoad = currentLocations.length === 0;
+        [currentLocations, locationTree] = await Promise.all([
+          authenticatedFetch('/storage-locations-stats'),
+          authenticatedFetch('/storage-locations-tree'),
+        ]);
+        statsById = new Map(currentLocations.map(l => [l.id, l.stats || {}]));
+        childrenById = new Map();
+        (function walk(nodes) { nodes.forEach(n => { childrenById.set(n.id, n.children || []); walk(n.children || []); }); })(locationTree);
 
-        // Calculate aggregated stats
-        const totalLocations = currentLocations.length;
+        if (firstLoad) locationTree.forEach(n => expanded.add(n.id));
+
+        const total = currentLocations.length;
         const inUse = currentLocations.filter(l => l.stats && l.stats.products_count > 0).length;
-        const totalCapacity = currentLocations.reduce((sum, l) => sum + ((l.stats && l.stats.total_quantity_eaches) || 0), 0);
-        const utilization = totalLocations > 0 ? ((inUse / totalLocations) * 100).toFixed(1) : 0;
-
-        document.getElementById('statTotalLocations').textContent = totalLocations.toLocaleString();
-        document.getElementById('statInUse').textContent = inUse.toLocaleString();
-        document.getElementById('statTotalCapacity').textContent = totalCapacity.toLocaleString();
-        document.getElementById('statUtilization').textContent = `${utilization}%`;
-
-        renderCurrentView();
-        populateParentDropdown();
+        // Root totals already include descendants, so summing roots avoids double counting
+        const rootIds = new Set(locationTree.map(n => n.id));
+        const roots = currentLocations.filter(l => rootIds.has(l.id));
+        document.getElementById('statTotalLocations').textContent = num(total);
+        document.getElementById('statInUse').textContent = `${num(inUse)} / ${num(total)}`;
+        document.getElementById('statUtilBar').style.width = (total ? inUse / total * 100 : 0) + '%';
+        document.getElementById('statUnits').textContent = num(roots.reduce((s, l) => s + (l.stats?.total_quantity_eaches || 0), 0));
+        document.getElementById('statValue').textContent = money(roots.reduce((s, l) => s + (l.stats?.total_value || 0), 0), 0);
 
         document.getElementById('loadingIndicator').style.display = 'none';
+        populateParentDropdown();
+        renderTree();
+        if (selectedId && statsById.has(selectedId)) selectLocation(selectedId); else if (selectedId) clearSelection();
       } catch (error) {
         console.error('Error loading locations:', error);
+        document.getElementById('loadingIndicator').style.display = 'none';
         showNotification('Failed to load locations', 'danger');
       }
     }
 
-    function renderCurrentView() {
-      if (currentViewMode === 'tree') {
-        document.getElementById('treeViewContainer').style.display = 'block';
-        document.getElementById('locationsTableContainer').style.display = 'none';
-        renderTreeView(locationTree);
-      } else {
-        document.getElementById('treeViewContainer').style.display = 'none';
-        document.getElementById('locationsTableContainer').style.display = 'block';
-        renderLocationsTable(currentLocations);
+    // ---------- Tree ----------
+    function nodeMatches(node, f) {
+      const loc = currentLocations.find(l => l.id === node.id) || node;
+      const st = statsById.get(node.id) || {};
+      if (f.type && node.type !== f.type) return false;
+      if (f.usage === 'used' && !(st.products_count > 0)) return false;
+      if (f.usage === 'empty' && st.products_count > 0) return false;
+      if (f.q) {
+        const hay = `${node.name} ${node.code || ''} ${loc.full_path || ''} ${node.description || ''}`.toLowerCase();
+        if (!hay.includes(f.q)) return false;
       }
+      return true;
     }
 
-    function renderTreeView(nodes) {
-      const container = document.getElementById('locationsTree');
-
-      if (!nodes || nodes.length === 0) {
-        container.innerHTML = '<div class="text-center text-muted py-5">No locations found. Click "Add Location" to create one.</div>';
-        return;
-      }
-
-      container.innerHTML = nodes.map(node => renderTreeNode(node)).join('');
-    }
-
-    function renderTreeNode(node) {
-      const hasChildren = node.children && node.children.length > 0;
-      const location = currentLocations.find(l => l.id === node.id);
-      const stats = location?.stats || { products_count: 0, total_quantity_eaches: 0, total_value: 0 };
-
-      const toggleIcon = hasChildren ? '▼' : '';
-      const typeIcons = {
-        aisle: 'ti-road',
-        rack: 'ti-building-warehouse',
-        shelf: 'ti-layout-rows',
-        bin: 'ti-box',
-        warehouse: 'ti-building',
-        zone: 'ti-map-pin',
-        other: 'ti-dots'
+    function renderTree() {
+      const f = {
+        q: document.getElementById('searchInput').value.trim().toLowerCase(),
+        type: document.getElementById('typeFilter').value,
+        usage: document.getElementById('usageFilter').value,
       };
-      const icon = typeIcons[node.type] || 'ti-map-pin';
+      const filtering = !!(f.q || f.type || f.usage);
+      let shown = 0;
 
-      const statusBadge = stats.products_count > 0
-        ? '<span class="badge badge-sm bg-success-lt">In Use</span>'
-        : '<span class="badge badge-sm bg-secondary-lt">Empty</span>';
+      // Returns html for node (or '' if neither it nor a descendant matches)
+      function build(node) {
+        const kids = (node.children || []).map(build).filter(Boolean);
+        const self = nodeMatches(node, f);
+        if (filtering && !self && kids.length === 0) return '';
+        if (self) shown++;
+        return rowHtml(node, kids, filtering, f.q);
+      }
 
+      const html = locationTree.map(build).filter(Boolean).join('');
+      document.getElementById('locationsTree').innerHTML = html ||
+        `<div class="text-center text-muted py-5">${currentLocations.length ? 'No locations match your filters.' : 'No locations yet. Click "Add Location" to create one.'}</div>`;
+      document.getElementById('resultCount').textContent = filtering
+        ? `${shown} of ${currentLocations.length} locations match` : `${currentLocations.length} locations`;
+    }
+
+    function highlight(text, q) {
+      const safe = escapeHtml(text);
+      if (!q) return safe;
+      const i = text.toLowerCase().indexOf(q);
+      if (i < 0) return safe;
+      return escapeHtml(text.slice(0, i)) + '<mark>' + escapeHtml(text.slice(i, i + q.length)) + '</mark>' + escapeHtml(text.slice(i + q.length));
+    }
+
+    function rowHtml(node, kidsHtml, filtering, q) {
+      const st = statsById.get(node.id) || {};
+      const used = st.products_count > 0;
+      const hasKids = kidsHtml.length > 0;
+      const open = filtering || expanded.has(node.id);
+      const dot = !node.is_active ? 'inactive' : (used ? 'used' : '');
       return `
-        <div class="tree-node" data-id="${node.id}">
-          <div class="tree-node-content">
-            <span class="tree-node-toggle ${!hasChildren ? 'empty' : ''}" onclick="toggleTreeNode(event, ${node.id})">
-              ${toggleIcon}
+        <div class="tree-node ${hasKids && !open ? 'collapsed' : ''}" data-node="${node.id}">
+          <div class="tree-row ${node.id === selectedId ? 'active' : ''}" data-id="${node.id}">
+            <span class="tree-toggle ${hasKids ? '' : 'leaf'}"><i class="ti ti-chevron-down"></i></span>
+            <i class="ti ${TYPE_ICONS[node.type] || 'ti-map-pin'} text-secondary"></i>
+            <span class="tree-label">
+              <span class="name">${highlight(node.name, q)}${node.code ? ` <span class="text-muted small">${highlight(node.code, q)}</span>` : ''}</span>
             </span>
-            <i class="ti ${icon} tree-node-icon"></i>
-            <div class="tree-node-info">
-              <div>
-                <strong>${escapeHtml(node.name)}</strong>
-                <span class="type-badge badge bg-azure-lt">${node.type}</span>
-                ${node.code ? `<span class="text-muted ms-1 small">${escapeHtml(node.code)}</span>` : ''}
-              </div>
-              <div class="small text-muted">
-                ${stats.products_count} products | ${stats.total_quantity_eaches} units | $${stats.total_value.toLocaleString(undefined, {minimumFractionDigits: 2})}
-              </div>
-            </div>
-            ${statusBadge}
-            <div class="tree-node-actions">
-              <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="addChildLocation(${node.id}, '${escapeHtml(node.name).replace(/'/g, "\\'")}')" title="Add Child">
-                <i class="ti ti-plus"></i>
-              </button>
-              <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editLocation(${node.id})" title="Edit">
-                <i class="ti ti-edit"></i>
-              </button>
-              <button class="btn btn-sm btn-icon btn-ghost-info" onclick="viewLocationDetails(${node.id})" title="View">
-                <i class="ti ti-eye"></i>
-              </button>
-              <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteLocation(${node.id}, '${escapeHtml(node.name).replace(/'/g, "\\'")}')" title="Delete">
-                <i class="ti ti-trash"></i>
-              </button>
-            </div>
+            ${used ? `<span class="tree-count" title="Products stored (including children)">${num(st.products_count)} items</span>` : ''}
+            <span class="tree-dot ${dot}" title="${!node.is_active ? 'Inactive' : used ? 'In use' : 'Empty'}"></span>
           </div>
-          ${hasChildren ? `
-            <div class="tree-children" id="children-${node.id}">
-              ${node.children.map(child => renderTreeNode(child)).join('')}
-            </div>
-          ` : ''}
-        </div>
-      `;
+          ${hasKids ? `<div class="tree-children">${kidsHtml.join('')}</div>` : ''}
+        </div>`;
     }
 
-    function toggleTreeNode(event, nodeId) {
-      event.stopPropagation();
-      const childrenEl = document.getElementById(`children-${nodeId}`);
-      const toggle = event.target;
-
-      if (childrenEl) {
-        childrenEl.classList.toggle('collapsed');
-        toggle.textContent = childrenEl.classList.contains('collapsed') ? '▶' : '▼';
-      }
+    function toggleNode(id) {
+      expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+      renderTree();
     }
 
-    function addChildLocation(parentId, parentName) {
-      editingLocationId = null;
-      document.getElementById('locationForm').reset();
-      document.getElementById('locationModalTitle').textContent = `Add Child Location under "${parentName}"`;
-      document.getElementById('locationName').value = '';
-      document.getElementById('locationParent').value = parentId;
-      document.getElementById('locationActive').checked = true;
-
-      // Suggest type based on parent
-      const parent = currentLocations.find(l => l.id === parentId);
-      if (parent) {
-        const typeHierarchy = { aisle: 'rack', rack: 'shelf', shelf: 'bin' };
-        const suggestedType = typeHierarchy[parent.type] || 'bin';
-        document.getElementById('locationType').value = suggestedType;
-      }
-
-      showModal(document.getElementById('addLocationModal'));
+    function setAllExpanded(open) {
+      expanded = new Set();
+      if (open) childrenById.forEach((kids, id) => { if (kids.length) expanded.add(id); });
+      renderTree();
     }
 
-    function populateParentDropdown() {
-      const select = document.getElementById('locationParent');
-      const currentValue = select.value;
-
-      select.innerHTML = '<option value="">None (Root Level)</option>';
-
-      // Flatten tree for dropdown
-      function addOptions(nodes, indent = '') {
-        nodes.forEach(node => {
-          const option = document.createElement('option');
-          option.value = node.id;
-          option.textContent = `${indent}${node.name} (${node.type})`;
-          select.appendChild(option);
-
-          if (node.children && node.children.length > 0) {
-            addOptions(node.children, indent + '  ');
-          }
-        });
-      }
-
-      addOptions(locationTree);
-
-      if (currentValue) {
-        select.value = currentValue;
-      }
+    function expandAncestors(id) {
+      let loc = currentLocations.find(l => l.id === id);
+      while (loc && loc.parent_id) { expanded.add(loc.parent_id); loc = currentLocations.find(l => l.id === loc.parent_id); }
     }
 
-    function renderLocationsTable(locations) {
-      const tbody = document.getElementById('locationsTableBody');
-      tbody.innerHTML = '';
+    // ---------- Detail panel ----------
+    function clearSelection() {
+      selectedId = null; currentViewLocationId = null;
+      document.getElementById('detailBody').style.display = 'none';
+      document.getElementById('detailEmpty').style.display = '';
+      renderTree();
+    }
 
-      if (locations.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5">No locations found</td></tr>';
-        return;
-      }
+    async function selectLocation(id, reveal = false) {
+      const location = currentLocations.find(l => l.id === id);
+      if (!location) return;
+      selectedId = id;
+      currentViewLocationId = id;
+      if (reveal) expandAncestors(id);
+      renderTree();
+      if (reveal) document.querySelector(`.tree-row[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
 
-      // Sort by sort_order then name
-      locations.sort((a, b) => {
-        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-        return a.name.localeCompare(b.name);
-      });
+      const st = location.stats || {};
+      document.getElementById('detailEmpty').style.display = 'none';
+      document.getElementById('detailBody').style.display = '';
 
-      tbody.innerHTML = locations.map(location => {
-        const statusBadge = location.stats.products_count > 0
-          ? '<span class="badge text-bg-success">In Use</span>'
-          : '<span class="badge text-bg-secondary">Empty</span>';
+      // Breadcrumb from ancestor chain
+      const chain = [];
+      for (let l = location; l; l = currentLocations.find(x => x.id === l.parent_id)) chain.unshift(l);
+      document.getElementById('detailCrumbs').innerHTML = chain.map((l, i) => i === chain.length - 1
+        ? `<li class="breadcrumb-item active">${escapeHtml(l.name)}</li>`
+        : `<li class="breadcrumb-item"><a href="#" data-id="${l.id}">${escapeHtml(l.name)}</a></li>`).join('');
 
-        return `
-          <tr>
-            <td>
-              <div class="d-flex align-items-center">
-                <span class="avatar avatar-sm me-2"><i class="ti ti-map-pin"></i></span>
-                <div>
-                  <strong>${location.full_path || location.name}</strong>
-                  ${location.code ? `<br><small class="text-muted">${escapeHtml(location.code)}</small>` : ''}
-                  ${location.full_address ? `<br><small class="text-muted">${location.full_address}</small>` : ''}
-                </div>
-              </div>
-            </td>
-            <td><span class="badge bg-azure-lt">${location.type}</span></td>
-            <td class="text-end">${location.stats.products_count.toLocaleString()}</td>
-            <td class="text-end">${location.stats.total_quantity_eaches.toLocaleString()}</td>
-            <td class="text-end">$${location.stats.total_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-            <td>${statusBadge}</td>
-            <td class="table-actions">
-              <button class="btn btn-sm btn-icon btn-ghost-primary" onclick="viewLocationDetails(${location.id})" title="View">
-                <i class="ti ti-eye"></i>
-              </button>
-              <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editLocation(${location.id})" title="Edit">
-                <i class="ti ti-edit"></i>
-              </button>
-              <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteLocation(${location.id}, '${location.name.replace(/'/g, "\\'")}')" title="Delete">
-                <i class="ti ti-trash"></i>
-              </button>
-            </td>
-          </tr>
-        `;
+      document.getElementById('detailName').innerHTML = `<i class="ti ${TYPE_ICONS[location.type] || 'ti-map-pin'} me-2 text-secondary"></i>${escapeHtml(location.name)}`;
+      document.getElementById('detailMeta').innerHTML = `
+        <span class="badge bg-azure-lt">${escapeHtml(location.type)}</span>
+        ${location.code ? `<span class="badge bg-secondary-lt">${escapeHtml(location.code)}</span>` : ''}
+        ${location.is_active ? '<span class="badge bg-success-lt">Active</span>' : '<span class="badge bg-danger-lt">Inactive</span>'}
+        ${location.description ? `<span class="text-muted small ms-1">${escapeHtml(location.description)}</span>` : ''}`;
+
+      document.getElementById('detailAddChild').onclick = () => addChildLocation(id, location.name);
+      document.getElementById('detailEdit').onclick = () => editLocation(id);
+      document.getElementById('detailDelete').onclick = () => deleteLocation(id, location.name);
+
+      const tile = (label, value, cls = '') => `<div class="col-6 col-md-3"><div class="border rounded p-2 h-100"><div class="subheader">${label}</div><div class="h3 mb-0 ${cls}">${value}</div></div></div>`;
+      document.getElementById('detailStats').innerHTML =
+        tile('Products', num(st.products_count)) +
+        tile('Units', num(st.total_quantity_eaches)) +
+        tile('Available', num(st.total_available_eaches), 'text-success') +
+        tile('Value', money(st.total_value, 0));
+
+      const addr = [['Aisle', location.aisle], ['Bay', location.bay], ['Level', location.level], ['Position', location.position]].filter(a => a[1]);
+      document.getElementById('detailAddress').innerHTML = addr.length
+        ? `<div class="subheader mb-1">Address</div>` + addr.map(a => `<span class="badge bg-secondary-lt me-1">${a[0]}: ${escapeHtml(a[1])}</span>`).join('')
+        : '';
+
+      const kids = childrenById.get(id) || [];
+      document.getElementById('detailChildrenWrap').style.display = kids.length ? '' : 'none';
+      document.getElementById('detailChildren').innerHTML = kids.map(k => {
+        const ks = statsById.get(k.id) || {};
+        return `<button type="button" class="btn btn-sm" data-id="${k.id}"><i class="ti ${TYPE_ICONS[k.type] || 'ti-map-pin'} me-1"></i>${escapeHtml(k.name)}${ks.products_count ? ` <span class="badge bg-green-lt ms-1">${num(ks.products_count)}</span>` : ''}</button>`;
       }).join('');
-    }
 
-    function filterLocations() {
-      const search = document.getElementById('searchInput').value.toLowerCase();
-
-      let filteredLocations = currentLocations;
-
-      if (search) {
-        filteredLocations = currentLocations.filter(loc =>
-          loc.name.toLowerCase().includes(search) ||
-          (loc.code && loc.code.toLowerCase().includes(search)) ||
-          (loc.description && loc.description.toLowerCase().includes(search))
-        );
-      }
-
-      renderLocationsTable(filteredLocations);
-    }
-
-    let currentViewLocationId = null;
-
-    async function viewLocationDetails(locationId) {
-      currentViewLocationId = locationId;
+      const tbody = document.getElementById('locationProductsTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading...</td></tr>';
       try {
-        const location = currentLocations.find(l => l.id === locationId);
-        if (!location) return;
-
-        document.getElementById('viewLocationModalTitle').textContent = `Location: ${location.name}`;
-
-        document.getElementById('locationDetailsView').innerHTML = `
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Location Name</label>
-              <p><i class="ti ti-map-pin me-2"></i>${escapeHtml(location.name)}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Code</label>
-              <p>${location.code || '-'}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Type</label>
-              <p><span class="badge text-bg-azure">${location.type}</span></p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Status</label>
-              <p>${location.is_active ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</p>
-            </div>
-          </div>
-          ${location.full_address ? `
-          <div class="row mb-3">
-            <div class="col-md-12">
-              <label class="form-label fw-bold">Full Address</label>
-              <p>${location.full_address}</p>
-            </div>
-          </div>
-          ` : ''}
-          ${location.description ? `
-          <div class="row mb-3">
-            <div class="col-md-12">
-              <label class="form-label fw-bold">Description</label>
-              <p>${escapeHtml(location.description)}</p>
-            </div>
-          </div>
-          ` : ''}
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Products Stored</label>
-              <p>${location.stats.products_count.toLocaleString()}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Total Quantity (Eaches)</label>
-              <p>${location.stats.total_quantity_eaches.toLocaleString()}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Available (Eaches)</label>
-              <p class="text-success">${location.stats.total_available_eaches.toLocaleString()}</p>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold">Total Value</label>
-              <p>$${location.stats.total_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-            </div>
-          </div>
-        `;
-
-        // Render products table - fetch full location details with inventory
-        const tbody = document.getElementById('locationProductsTableBody');
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading products...</td></tr>';
-
-        // Fetch detailed inventory for this location
-        const locationDetails = await authenticatedFetch(`/storage-locations/${locationId}`);
-        const inventoryLocs = locationDetails?.inventory_locations || [];
-
-        if (inventoryLocs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No products at this location</td></tr>';
-        } else {
-          tbody.innerHTML = inventoryLocs.map(item => {
-            const product = item.product;
-            const qtyEaches = parseFloat(item.quantity || 0);
-            const committedEaches = parseFloat(item.quantity_committed || 0);
-            const available = qtyEaches - committedEaches;
-
-            // Pack-aware value calculation
-            let value;
-            if (product?.pack_size && product.pack_size > 1) {
-              const qtyPacks = qtyEaches / product.pack_size;
-              value = qtyPacks * parseFloat(product?.unit_cost || 0);
-            } else {
-              value = qtyEaches * parseFloat(product?.unit_cost || 0);
-            }
-
-            const isPrimary = item.is_primary ? '<i class="ti ti-check text-success"></i>' : '';
-
-            return `
-              <tr>
-                <td><span class="text-muted">${product?.sku || '-'}</span></td>
-                <td>${product?.description || '-'}</td>
-                <td class="text-end">${qtyEaches.toLocaleString()}</td>
-                <td class="text-end">${committedEaches.toLocaleString()}</td>
-                <td class="text-end text-success">${available.toLocaleString()}</td>
-                <td class="text-end">$${value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                <td class="text-center">${isPrimary}</td>
-              </tr>
-            `;
-          }).join('');
+        const details = await authenticatedFetch(`/storage-locations/${id}`);
+        if (selectedId !== id) return; // user clicked elsewhere meanwhile
+        const items = details?.inventory_locations || [];
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nothing stored directly at this location</td></tr>';
+          return;
         }
-
-        showModal(document.getElementById('viewLocationModal'));
+        tbody.innerHTML = items.map(item => {
+          const p = item.product;
+          const qty = parseFloat(item.quantity || 0);
+          const committed = parseFloat(item.quantity_committed || 0);
+          const cost = parseFloat(p?.unit_cost || 0);
+          const value = (p?.pack_size > 1 ? qty / p.pack_size : qty) * cost;
+          return `<tr>
+            <td class="text-nowrap">${escapeHtml(p?.sku || '-')}</td>
+            <td>${escapeHtml(p?.description || '-')}</td>
+            <td class="text-end">${num(qty)}</td>
+            <td class="text-end">${num(committed)}</td>
+            <td class="text-end text-success">${num(qty - committed)}</td>
+            <td class="text-end">${money(value)}</td>
+            <td>${item.is_primary ? '<span class="badge bg-primary-lt">Primary</span>' : ''}</td>
+          </tr>`;
+        }).join('');
       } catch (error) {
         console.error('Error loading location details:', error);
-        showNotification('Failed to load location details', 'danger');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Failed to load products</td></tr>';
       }
     }
 
-    async function printShelfLabel() {
+    // ---------- PDFs ----------
+    async function downloadPdf(url, filename, btn, errorMsg) {
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating…';
+      try {
+        const response = await fetch(url, { headers: { 'Accept': 'application/pdf' } });
+        if (!response.ok) { showNotification(errorMsg, 'danger'); return; }
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const a = document.createElement('a');
+        a.href = blobUrl; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        showNotification(errorMsg, 'danger');
+      } finally {
+        btn.disabled = false; btn.innerHTML = original;
+      }
+    }
+
+    function printShelfLabel() {
       if (!currentViewLocationId) return;
-
-      const btn = document.getElementById('printShelfTagBtn');
-      const originalText = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating…';
-
-      try {
-        const response = await fetch(`${API_BASE}/storage-locations/${currentViewLocationId}/shelf-label-pdf`, {
-          headers: {
-            'Accept': 'application/pdf',
-          }
-        });
-
-        if (!response.ok) {
-          showNotification('Failed to generate shelf label PDF', 'danger');
-          return;
-        }
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const location = currentLocations.find(l => l.id === currentViewLocationId);
-        a.download = `shelf-label-${(location?.code || location?.name || currentViewLocationId).replace(/[^A-Za-z0-9\-_.]/g, '_')}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-      } catch (e) {
-        showNotification('Failed to generate shelf label PDF', 'danger');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-      }
+      const loc = currentLocations.find(l => l.id === currentViewLocationId);
+      const name = String(loc?.code || loc?.name || currentViewLocationId).replace(/[^A-Za-z0-9\-_.]/g, '_');
+      downloadPdf(`${API_BASE}/storage-locations/${currentViewLocationId}/shelf-label-pdf`, `shelf-label-${name}.pdf`,
+        document.getElementById('printShelfTagBtn'), 'Failed to generate shelf label PDF');
     }
 
-    async function printAllShelfLabels() {
-      const btn = document.getElementById('bulkShelfPrintBtn');
-      const originalText = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating…';
+    function printAllShelfLabels() {
+      downloadPdf(`${API_BASE}/storage-locations/bulk-shelf-labels-pdf`, 'shelf-labels-all.pdf',
+        document.getElementById('bulkShelfPrintBtn'), 'Failed to generate shelf labels PDF');
+    }
 
-      try {
-        const response = await fetch(`${API_BASE}/storage-locations/bulk-shelf-labels-pdf`, {
-          headers: {
-            'Accept': 'application/pdf',
-          }
+    // ---------- Add / edit ----------
+    function populateParentDropdown() {
+      const select = document.getElementById('locationParent');
+      const current = select.value;
+      select.innerHTML = '<option value="">None (Root Level)</option>';
+      (function add(nodes, indent) {
+        nodes.forEach(node => {
+          const o = document.createElement('option');
+          o.value = node.id;
+          o.textContent = `${indent}${node.name} (${node.type})`;
+          select.appendChild(o);
+          add(node.children || [], indent + '\u00A0\u00A0\u00A0');
         });
-
-        if (!response.ok) {
-          showNotification('Failed to generate shelf labels PDF', 'danger');
-          return;
-        }
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'shelf-labels-all.pdf';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-      } catch (e) {
-        showNotification('Failed to generate shelf labels PDF', 'danger');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-      }
+      })(locationTree, '');
+      if (current) select.value = current;
     }
 
     function showAddLocationModal() {
       editingLocationId = null;
       document.getElementById('locationForm').reset();
       document.getElementById('locationModalTitle').textContent = 'Add Storage Location';
-      document.getElementById('locationName').value = '';
       document.getElementById('locationActive').checked = true;
       showModal(document.getElementById('addLocationModal'));
     }
 
-    async function editLocation(locationId) {
-      try {
-        const location = currentLocations.find(l => l.id === locationId);
-        if (!location) return;
+    function addChildLocation(parentId, parentName) {
+      showAddLocationModal();
+      document.getElementById('locationModalTitle').textContent = `Add Child under "${parentName}"`;
+      document.getElementById('locationParent').value = parentId;
+      const parent = currentLocations.find(l => l.id === parentId);
+      const next = { warehouse: 'zone', zone: 'aisle', aisle: 'rack', rack: 'shelf', shelf: 'bin' };
+      document.getElementById('locationType').value = next[parent?.type] || 'bin';
+    }
 
-        editingLocationId = locationId;
-        document.getElementById('locationModalTitle').textContent = 'Edit Storage Location';
-
-        // Populate form
-        document.getElementById('locationName').value = location.name || '';
-        document.getElementById('locationParent').value = location.parent_id || '';
-        document.getElementById('locationDescription').value = location.description || '';
-        document.getElementById('locationType').value = location.type || 'bin';
-        document.getElementById('locationAisle').value = location.aisle || '';
-        document.getElementById('locationBay').value = location.bay || '';
-        document.getElementById('locationLevel').value = location.level || '';
-        document.getElementById('locationPosition').value = location.position || '';
-        document.getElementById('locationActive').checked = location.is_active;
-
-        showModal(document.getElementById('addLocationModal'));
-      } catch (error) {
-        console.error('Error loading location for edit:', error);
-        showNotification('Failed to load location', 'danger');
-      }
+    function editLocation(locationId) {
+      const location = currentLocations.find(l => l.id === locationId);
+      if (!location) return;
+      editingLocationId = locationId;
+      document.getElementById('locationModalTitle').textContent = 'Edit Storage Location';
+      document.getElementById('locationName').value = location.name || '';
+      document.getElementById('locationParent').value = location.parent_id || '';
+      document.getElementById('locationDescription').value = location.description || '';
+      document.getElementById('locationType').value = location.type || 'bin';
+      document.getElementById('locationAisle').value = location.aisle || '';
+      document.getElementById('locationBay').value = location.bay || '';
+      document.getElementById('locationLevel').value = location.level || '';
+      document.getElementById('locationPosition').value = location.position || '';
+      document.getElementById('locationActive').checked = !!location.is_active;
+      showModal(document.getElementById('addLocationModal'));
     }
 
     async function handleLocationFormSubmit(e) {
       e.preventDefault();
-
-      const formData = new FormData(e.target);
+      const fd = new FormData(e.target);
       const data = {
-        name: formData.get('name'),
-        parent_id: formData.get('parent_id') || null,
-        type: formData.get('type'),
-        description: formData.get('description'),
-        aisle: formData.get('aisle'),
-        bay: formData.get('bay'),
-        level: formData.get('level'),
-        position: formData.get('position'),
-        is_active: formData.get('is_active') === 'on',
+        name: fd.get('name'),
+        parent_id: fd.get('parent_id') || null,
+        type: fd.get('type'),
+        description: fd.get('description'),
+        aisle: fd.get('aisle'),
+        bay: fd.get('bay'),
+        level: fd.get('level'),
+        position: fd.get('position'),
+        is_active: fd.get('is_active') === 'on',
       };
-
       try {
-        let response;
-        if (editingLocationId) {
-          // Update existing location
-          response = await apiCall(`/storage-locations/${editingLocationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
-        } else {
-          // Create new location
-          response = await apiCall(`/storage-locations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
-        }
-
-        if (response.ok) {
-          showNotification(editingLocationId ? 'Location updated successfully' : 'Location created successfully', 'success');
-          hideModal(document.getElementById('addLocationModal'));
-          loadLocations(); // Reload the list
-        } else {
+        const response = await apiCall(editingLocationId ? `/storage-locations/${editingLocationId}` : `/storage-locations`, {
+          method: editingLocationId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (!response.ok) {
           const error = await response.json();
-          throw new Error(error.message || 'Failed to save location');
+          throw new Error(error.message || Object.values(error.errors || {}).flat().join(' ') || 'Failed to save location');
         }
+        const saved = await response.json().catch(() => null);
+        showNotification(editingLocationId ? 'Location updated' : 'Location created', 'success');
+        hideModal(document.getElementById('addLocationModal'));
+        if (data.parent_id) expanded.add(Number(data.parent_id));
+        const newId = saved?.id ?? saved?.data?.id ?? saved?.location?.id;
+        if (!editingLocationId && newId) selectedId = newId;
+        await loadLocations();
       } catch (error) {
         console.error('Error saving location:', error);
         showNotification('Failed to save location: ' + error.message, 'danger');
@@ -878,74 +609,36 @@
     }
 
     async function deleteLocation(locationId, locationName) {
-      if (!confirm(`Are you sure you want to delete location "${locationName}"? This action cannot be undone.`)) {
-        return;
-      }
-
+      if (!confirm(`Delete location "${locationName}"? This cannot be undone.`)) return;
       try {
-        const response = await apiCall(`/storage-locations/${locationId}`, {
-          method: 'DELETE'
-        });
-
-        if (response.ok) {
-          showNotification('Location deleted successfully', 'success');
-          loadLocations(); // Reload the list
-        } else {
+        const response = await apiCall(`/storage-locations/${locationId}`, { method: 'DELETE' });
+        if (!response.ok) {
           const error = await response.json();
           throw new Error(error.message || 'Failed to delete location');
         }
+        showNotification('Location deleted', 'success');
+        if (selectedId === locationId) selectedId = null;
+        await loadLocations();
       } catch (error) {
         console.error('Error deleting location:', error);
         showNotification('Failed to delete location: ' + error.message, 'danger');
       }
     }
 
-    async function exportLocations() {
-      try {
-        // Create CSV
-        const headers = ['Name', 'Code', 'Type', 'Aisle', 'Bay', 'Level', 'Position', 'Products Stored', 'Total Quantity', 'Total Value', 'Status'];
-        const rows = currentLocations.map(loc => [
-          loc.name,
-          loc.code || '',
-          loc.type,
-          loc.aisle || '',
-          loc.bay || '',
-          loc.level || '',
-          loc.position || '',
-          loc.stats.products_count,
-          loc.stats.total_quantity,
-          loc.stats.total_value.toFixed(2),
-          loc.is_active ? 'Active' : 'Inactive'
-        ]);
-
-        const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `storage_locations_${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-
-        showNotification('Locations exported successfully', 'success');
-      } catch (error) {
-        console.error('Export failed:', error);
-        showNotification('Export failed: ' + error.message, 'danger');
-      }
-    }
-
-    function debounce(func, wait) {
-      let timeout;
-      return function executedFunction(...args) {
-        const later = () => {
-          clearTimeout(timeout);
-          func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-      };
+    function exportLocations() {
+      const headers = ['Path', 'Name', 'Code', 'Type', 'Aisle', 'Bay', 'Level', 'Position', 'Products Stored', 'Total Quantity', 'Total Value', 'Status'];
+      const rows = currentLocations.map(l => [
+        l.full_path || l.name, l.name, l.code || '', l.type, l.aisle || '', l.bay || '', l.level || '', l.position || '',
+        l.stats.products_count, l.stats.total_quantity_eaches, Number(l.stats.total_value).toFixed(2), l.is_active ? 'Active' : 'Inactive'
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `storage_locations_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showNotification('Locations exported', 'success');
     }
   </script>
 @endpush

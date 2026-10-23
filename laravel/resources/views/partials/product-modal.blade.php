@@ -122,10 +122,14 @@
                       <div class="row mb-3">
                         <div class="col-md-6">
                           <label class="form-label required">Storage Location</label>
-                          <select class="form-select" id="storageLocationSelect" onchange="handleStorageLocationSelect()">
-                            <option value="">Select a storage location...</option>
-                          </select>
-                          <small class="form-text">Select from configured storage locations</small>
+                          <div class="position-relative">
+                            <input type="text" class="form-control" id="storageLocationSelect" autocomplete="off"
+                                   placeholder="Type to search locations..." oninput="searchStorageLocations(this.value)"
+                                   onfocus="searchStorageLocations(this.value)" onkeydown="storageLocationKeydown(event)">
+                            <div class="list-group position-absolute w-100 shadow" id="storageLocationResults"
+                                 style="display:none; z-index:1060; max-height:260px; overflow-y:auto;"></div>
+                          </div>
+                          <small class="form-text">Start typing a name, code or path, then pick a match</small>
                         </div>
                         <div class="col-md-3">
                           <label class="form-label required">Quantity</label>
@@ -1710,38 +1714,79 @@
       }
     }
 
+    let allStorageLocations = [];
+    let storageLocationActiveIdx = -1;
+
     async function loadAllLocations() {
       try {
-        // Load hierarchical storage locations
-        const response = await apiCall('/storage-locations-tree');
-        const locations = await response.json();
-
-        const select = document.getElementById('storageLocationSelect');
-        // Keep only the first option (Select...)
-        while (select.options.length > 1) {
-          select.remove(1);
-        }
-
-        // Recursive function to add options with indentation
-        function addLocationOptions(locations, level = 0) {
-          locations.forEach(location => {
-            const option = document.createElement('option');
-            option.value = location.id;
-            const indent = '\u00A0'.repeat(level * 4); // Non-breaking spaces for indentation
-            option.textContent = indent + location.name;
-            select.appendChild(option);
-
-            if (location.children && location.children.length > 0) {
-              addLocationOptions(location.children, level + 1);
-            }
+        const response = await apiCall('/storage-locations-tree?active_only=1');
+        const tree = await response.json();
+        allStorageLocations = [];
+        (function flatten(nodes) {
+          nodes.forEach(n => {
+            allStorageLocations.push({ id: n.id, name: n.name, code: n.code, type: n.type, path: n.full_path || n.name });
+            flatten(n.children || []);
           });
-        }
-
-        addLocationOptions(locations);
+        })(tree);
       } catch (error) {
         console.error('Error loading all locations:', error);
       }
     }
+
+    function searchStorageLocations(query) {
+      const input = document.getElementById('storageLocationSelect');
+      const results = document.getElementById('storageLocationResults');
+      // Typing invalidates any previously picked location until a match is chosen again
+      if (document.getElementById('storageLocationId').value && input.dataset.picked !== input.value) {
+        document.getElementById('storageLocationId').value = '';
+      }
+      const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const matches = allStorageLocations
+        .filter(l => terms.every(t => `${l.path} ${l.code || ''}`.toLowerCase().includes(t)))
+        .slice(0, 12);
+      storageLocationActiveIdx = matches.length ? 0 : -1;
+      results.innerHTML = matches.length ? matches.map((l, i) => `
+        <button type="button" class="list-group-item list-group-item-action ${i === 0 ? 'active' : ''}" data-id="${l.id}" data-path="${escapeHtml(l.path)}">
+          <div class="d-flex justify-content-between"><strong>${escapeHtml(l.name)}</strong><span class="badge bg-azure-lt">${escapeHtml(l.type)}</span></div>
+          <small class="${i === 0 ? '' : 'text-muted'}">${escapeHtml(l.path)}${l.code ? ' · ' + escapeHtml(l.code) : ''}</small>
+        </button>`).join('') : '<div class="list-group-item text-muted">No matching locations</div>';
+      results.style.display = 'block';
+    }
+
+    function pickStorageLocation(id, path) {
+      const input = document.getElementById('storageLocationSelect');
+      input.value = path;
+      input.dataset.picked = path;
+      document.getElementById('storageLocationId').value = id;
+      document.getElementById('storageLocationResults').style.display = 'none';
+    }
+
+    function storageLocationKeydown(e) {
+      const results = document.getElementById('storageLocationResults');
+      const items = [...results.querySelectorAll('button')];
+      if (e.key === 'Escape') { results.style.display = 'none'; return; }
+      if (!items.length || results.style.display === 'none') return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        storageLocationActiveIdx = (storageLocationActiveIdx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items.forEach((el, i) => el.classList.toggle('active', i === storageLocationActiveIdx));
+        items[storageLocationActiveIdx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); // don't submit the form while choosing
+        const el = items[storageLocationActiveIdx];
+        if (el) pickStorageLocation(el.dataset.id, el.dataset.path);
+      }
+    }
+
+    document.getElementById('storageLocationResults').addEventListener('mousedown', e => {
+      const el = e.target.closest('button[data-id]');
+      if (el) { e.preventDefault(); pickStorageLocation(el.dataset.id, el.dataset.path); }
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#storageLocationSelect, #storageLocationResults')) {
+        document.getElementById('storageLocationResults').style.display = 'none';
+      }
+    });
 
     function renderLocationsTable() {
       const tbody = document.getElementById('locationsTableBody');
@@ -1811,23 +1856,14 @@
       }
     }
 
-    function handleStorageLocationSelect() {
-      const select = document.getElementById('storageLocationSelect');
-      const storageLocationId = document.getElementById('storageLocationId');
-
-      if (select.value) {
-        storageLocationId.value = select.value;
-      } else {
-        storageLocationId.value = '';
-      }
-    }
-
     function showAddLocationForm() {
       document.getElementById('locationFormTitle').textContent = 'Add Location';
       document.getElementById('locationForm').reset();
       document.getElementById('locationId').value = '';
       document.getElementById('storageLocationId').value = '';
-      document.getElementById('storageLocationSelect').value = '';
+      const slInput = document.getElementById('storageLocationSelect');
+      slInput.value = '';
+      slInput.dataset.picked = '';
       document.getElementById('locationFormCard').style.display = 'block';
       document.getElementById('storageLocationSelect').focus();
     }
@@ -1845,7 +1881,10 @@
       document.getElementById('locationId').value = location.id;
       document.getElementById('storageLocationId').value = location.storage_location_id || '';
 
-      document.getElementById('storageLocationSelect').value = location.storage_location_id || '';
+      const slPath = location.storage_location ? (location.storage_location.full_path || location.storage_location.name) : '';
+      const slInputEdit = document.getElementById('storageLocationSelect');
+      slInputEdit.value = slPath;
+      slInputEdit.dataset.picked = slPath;
 
       document.getElementById('locationQuantity').value = location.quantity;
       document.getElementById('locationCommitted').value = location.quantity_committed;
@@ -1897,7 +1936,7 @@
       const storageLocationId = document.getElementById('storageLocationId').value;
 
       if (!storageLocationId) {
-        showNotification('Please select a storage location', 'warning');
+        showNotification('Please pick a storage location from the suggestions', 'warning');
         return;
       }
 

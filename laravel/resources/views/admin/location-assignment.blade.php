@@ -561,9 +561,11 @@ function updateUnassignedProgress() {
 async function apiFetch(path, method = 'GET', body = null) {
   const opts = {
     method,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
     },
   };
   if (body) opts.body = JSON.stringify(body);
