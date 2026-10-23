@@ -807,6 +807,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // already handles the frontend's multipart POST-with-_method=PUT edit calls.
         Route::put('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'update'])->middleware('permission:fabrication.edit');
         Route::delete('/fabrication-documents/{fabricationDocument}', [FabricationDocumentController::class, 'destroy'])->middleware('permission:fabrication.delete');
+        Route::post('/fabrication-documents/{fabricationDocument}/revisions/{revision}/restore', [FabricationDocumentController::class, 'restoreRevision'])->middleware('permission:fabrication.edit');
+        Route::delete('/fabrication-documents/{fabricationDocument}/revisions/{revision}', [FabricationDocumentController::class, 'destroyRevision'])->middleware('permission:fabrication.delete');
 
         // Quality Reports (PDF ingestion, elevation matching, verification)
         Route::middleware('permission:quality.view')->group(function () {
