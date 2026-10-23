@@ -9,7 +9,7 @@
           <div class="row g-2 align-items-center">
             <div class="col">
               <div class="page-pretitle">System Administration</div>
-              <h1 class="page-title">Admin Panel</h1>
+              <h1 class="page-title">Admin</h1>
             </div>
           </div>
         </div>
@@ -17,92 +17,54 @@
 
       <main id="content" class="page-body">
         <div class="container-xl">
-          <!-- Stats Cards -->
-          <div class="row row-deck row-cards mb-3">
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Total Users</div>
-                  <div class="h1 mb-3" id="statTotalUsers">-</div>
-                  <div>All user accounts</div>
+          <div class="row g-3">
+            <!-- Section navigation -->
+            <div class="col-lg-3 col-xl-2">
+              <div class="card admin-nav-card">
+                <div class="list-group list-group-flush list-group-transparent" id="adminNav" role="tablist">
+                  <div class="admin-nav-label">People &amp; access</div>
+                  <a href="#tab-users" class="list-group-item list-group-item-action active" data-bs-toggle="tab" role="tab" data-title="Users" data-stats="1">
+                    <i class="ti ti-users me-2"></i>Users
+                  </a>
+                  <a href="#tab-permissions" class="list-group-item list-group-item-action" data-bs-toggle="tab" role="tab" data-title="Roles &amp; Permissions" data-stats="1">
+                    <i class="ti ti-shield-lock me-2"></i>Roles &amp; Permissions
+                  </a>
+                  <div class="admin-nav-label">Company</div>
+                  <a href="#tab-settings" class="list-group-item list-group-item-action" data-bs-toggle="tab" role="tab" data-title="System Settings">
+                    <i class="ti ti-settings me-2"></i>System Settings
+                  </a>
+                  <div class="admin-nav-label">Inventory</div>
+                  <a href="#tab-inventory" class="list-group-item list-group-item-action" data-bs-toggle="tab" role="tab" data-title="Inventory Pricing">
+                    <i class="ti ti-package me-2"></i>Pricing Management
+                  </a>
+                  <a href="#tab-location-assignment" class="list-group-item list-group-item-action" data-bs-toggle="tab" role="tab" data-title="Location Assignment">
+                    <i class="ti ti-building-warehouse me-2"></i>Location Assignment
+                  </a>
+                  <div class="admin-nav-label">Fabrication</div>
+                  <a href="#tab-elevation-types" class="list-group-item list-group-item-action" data-bs-toggle="tab" role="tab" data-title="Elevation Types &amp; Job Steps"
+                     onclick="loadElevationTypes(); loadJobStepTemplates()">
+                    <i class="ti ti-ruler-2 me-2"></i>Elevation Types &amp; Steps
+                  </a>
+                  <a href="#tab-fab-users" class="list-group-item list-group-item-action" data-bs-toggle="tab" role="tab" data-title="Fab Users"
+                     onclick="loadFabUsersAdmin()">
+                    <i class="ti ti-hard-hat me-2"></i>Fab Users
+                  </a>
                 </div>
               </div>
             </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Active Users</div>
-                  <div class="h1 mb-3" id="statActiveUsers">-</div>
-                  <div>Currently active</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Roles</div>
-                  <div class="h1 mb-3" id="statTotalRoles">-</div>
-                  <div>Permission groups</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Admin Users</div>
-                  <div class="h1 mb-3" id="statAdminUsers">-</div>
-                  <div>Users with admin access</div>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <!-- Navigation Tabs -->
-          <div class="row">
-            <div class="col-12">
-              <div class="card">
-                <div class="card-header">
-                  <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-users" class="nav-link active" data-bs-toggle="tab" aria-selected="true" role="tab">
-                        <i class="ti ti-users me-2"></i>User Management
-                      </a>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-permissions" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
-                        <i class="ti ti-shield-lock me-2"></i>Permissions & Roles
-                      </a>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-settings" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
-                        <i class="ti ti-settings me-2"></i>System Settings
-                      </a>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-inventory" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
-                        <i class="ti ti-package me-2"></i>Inventory Management
-                      </a>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-location-assignment" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
-                        <i class="ti ti-building-warehouse me-2"></i>Location Assignment
-                      </a>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-elevation-types" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
-                         onclick="loadElevationTypes(); loadJobStepTemplates()">
-                        <i class="ti ti-ruler-2 me-2"></i>Elevation Types &amp; Job Steps
-                      </a>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                      <a href="#tab-fab-users" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"
-                         onclick="loadFabUsersAdmin()">
-                        <i class="ti ti-hard-hat me-2"></i>Fab Users
-                      </a>
-                    </li>
-                  </ul>
+            <!-- Content -->
+            <div class="col-lg-9 col-xl-10">
+              <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+                <h2 class="mb-0" id="adminSectionTitle">Users</h2>
+                <div class="ms-auto d-flex gap-2" id="adminStatStrip">
+                  <span class="badge bg-secondary-lt fs-5 fw-normal"><span id="statTotalUsers">-</span> users</span>
+                  <span class="badge bg-green-lt fs-5 fw-normal"><span id="statActiveUsers">-</span> active</span>
+                  <span class="badge bg-blue-lt fs-5 fw-normal"><span id="statAdminUsers">-</span> admins</span>
+                  <span class="badge bg-purple-lt fs-5 fw-normal"><span id="statTotalRoles">-</span> roles</span>
                 </div>
-
+              </div>
+              <div class="card">
                 <div class="card-body">
                   <div class="tab-content">
                     <!-- User Management Tab -->
@@ -3342,6 +3304,15 @@
         }
       }
 
+      // Sidebar: keep URL hash in sync, show section title, stats only for people sections
+      document.addEventListener('shown.bs.tab', (e) => {
+        const link = e.target.closest('#adminNav a');
+        if (!link) return;
+        document.getElementById('adminSectionTitle').textContent = link.dataset.title || link.textContent.trim();
+        document.getElementById('adminStatStrip').style.display = link.dataset.stats ? '' : 'none';
+        try { history.replaceState(null, '', link.getAttribute('href')); } catch (err) { /* ignore */ }
+      });
+
       document.addEventListener('DOMContentLoaded', () => {
         const tab = document.querySelector('a[href="#tab-settings"]');
         if (tab) tab.addEventListener('shown.bs.tab', () => {
@@ -3361,6 +3332,20 @@
     </script>
 
     <style>
+      .admin-nav-card { position: sticky; top: calc(var(--fd-nav-offset, 0px) + 1rem); }
+      .admin-nav-label {
+        font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+        color: var(--tblr-secondary-color); padding: 12px 16px 4px;
+      }
+      .admin-nav-label:first-child { padding-top: 10px; }
+      #adminNav .list-group-item { border: 0; padding: 8px 16px; }
+      #adminNav .list-group-item.active { background: var(--tblr-primary-lt); color: var(--tblr-primary); font-weight: 500; }
+      @media (max-width: 991.98px) {
+        .admin-nav-card { position: static; }
+        #adminNav { flex-direction: row; flex-wrap: wrap; padding: 6px; }
+        .admin-nav-label { display: none; }
+        #adminNav .list-group-item { border-radius: var(--tblr-border-radius); }
+      }
       .form-check {
         margin-bottom: 0.5rem;
       }
