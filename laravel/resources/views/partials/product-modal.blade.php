@@ -1,12 +1,25 @@
 {{-- Shared product view/edit modal and all supporting JavaScript --}}
 {{-- Include this partial on any page that needs the product details modal --}}
 
+  <style>
+    #viewProductModal #productTabs { position: sticky; top: -1rem; z-index: 5; background: var(--tblr-modal-bg, var(--tblr-bg-surface)); padding-top: .5rem; margin-top: -.5rem; }
+    #viewProductModal .pm-strip { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding: .5rem .75rem; margin-bottom: 1rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
+    #viewProductModal .pm-strip .pm-stat { display: flex; align-items: baseline; gap: .4rem; }
+    #viewProductModal .pm-strip .n { font-size: 1.15rem; font-weight: 600; line-height: 1; }
+    #viewProductModal .pm-strip .l { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+    #viewProductModal .pm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+    #viewProductModal .pm-toolbar h4 { margin: 0; }
+  </style>
+
   <div class="modal modal-blur fade" id="viewProductModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="viewProductModalTitle">Product Details</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title text-truncate" id="viewProductModalTitle">Product Details</h5>
+          <button class="btn btn-primary btn-sm ms-auto me-2" id="editProductBtn" onclick="toggleEditMode()" data-permission="inventory.edit">
+            <i class="ti ti-edit me-1"></i>Edit
+          </button>
+          <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <!-- Tabs -->
@@ -42,13 +55,6 @@
           <div class="tab-content" id="productTabContent">
             <!-- Details Tab -->
             <div class="tab-pane fade show active" id="details" role="tabpanel">
-              <div class="mb-3">
-                <div class="d-flex justify-content-end">
-                  <button class="btn btn-primary" id="editProductBtn" onclick="toggleEditMode()" data-permission="inventory.edit">
-                    <i class="ti ti-edit me-1"></i>Edit Product
-                  </button>
-                </div>
-              </div>
               <div id="productDetailsView"></div>
               <div id="productEditForm" style="display: none;"></div>
             </div>
@@ -56,58 +62,27 @@
             <!-- Locations Tab -->
             <div class="tab-pane fade" id="locations" role="tabpanel">
               <div class="mb-3">
-                <div class="row g-2 align-items-center mb-3">
-                  <div class="col">
-                    <h3 class="mb-0">Inventory Locations</h3>
-                    <p class="text-muted mb-0">Manage stock distribution across multiple locations</p>
-                  </div>
-                  <div class="col-auto">
-                    <button class="btn btn-warning ms-2" onclick="showIssueToJobForm()" data-permission="inventory.adjust">
+                <div class="pm-toolbar">
+                  <h4>Inventory Locations</h4>
+                  <div class="ms-auto d-flex flex-wrap gap-2">
+                    <button class="btn btn-sm btn-warning" onclick="showIssueToJobForm()" data-permission="inventory.adjust">
                       <i class="ti ti-package-export me-1"></i>Issue to Job
                     </button>
-                    <button class="btn btn-primary" onclick="showAddLocationForm()" data-permission="inventory.edit">
-                      <i class="ti ti-plus me-1"></i>Add Location
-                    </button>
-                    <button class="btn btn-outline-primary ms-2" onclick="showTransferForm()" data-permission="inventory.adjust">
+                    <button class="btn btn-sm btn-outline-primary" onclick="showTransferForm()" data-permission="inventory.adjust">
                       <i class="ti ti-arrows-transfer-down me-1"></i>Transfer
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="showAddLocationForm()" data-permission="inventory.edit">
+                      <i class="ti ti-plus me-1"></i>Add Location
                     </button>
                   </div>
                 </div>
 
                 <!-- Location Statistics -->
-                <div class="row row-cards mb-3" id="locationStatsCards">
-                  <div class="col-md-3">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Total Locations</div>
-                        <div class="h2 mb-0" id="statTotalLocations">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-3">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Total Quantity</div>
-                        <div class="h2 mb-0" id="statTotalQuantity">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-3">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Committed</div>
-                        <div class="h2 mb-0" id="statTotalCommitted">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-3">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Available</div>
-                        <div class="h2 mb-0 text-success" id="statTotalAvailable">-</div>
-                      </div>
-                    </div>
-                  </div>
+                <div class="pm-strip" id="locationStatsCards">
+                  <div class="pm-stat"><span class="n" id="statTotalLocations">-</span><span class="l">Locations</span></div>
+                  <div class="pm-stat"><span class="n" id="statTotalQuantity">-</span><span class="l">Quantity</span></div>
+                  <div class="pm-stat"><span class="n" id="statTotalCommitted">-</span><span class="l">Committed</span></div>
+                  <div class="pm-stat"><span class="n text-success" id="statTotalAvailable">-</span><span class="l">Available</span></div>
                 </div>
 
                 <!-- Add/Edit Location Form (Hidden by default) -->
@@ -240,60 +215,20 @@
             <!-- Reservations Tab -->
             <div class="tab-pane fade" id="reservations" role="tabpanel">
               <div class="mb-3">
-                <div class="row g-2 align-items-center mb-3">
-                  <div class="col">
-                    <h3 class="mb-0">Job Reservations</h3>
-                    <p class="text-muted mb-0">Reserve inventory for jobs and track commitments</p>
-                  </div>
-                  <div class="col-auto">
-                    <button class="btn btn-primary" onclick="showAddReservationForm()" data-permission="orders.create">
-                      <i class="ti ti-plus me-1"></i>Reserve Inventory
-                    </button>
-                  </div>
+                <div class="pm-toolbar">
+                  <h4>Job Reservations</h4>
+                  <button class="btn btn-sm btn-primary ms-auto" onclick="showAddReservationForm()" data-permission="orders.create">
+                    <i class="ti ti-plus me-1"></i>Reserve Inventory
+                  </button>
                 </div>
 
                 <!-- Reservation Statistics -->
-                <div class="row row-cards mb-3">
-                  <div class="col-md-2">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Active</div>
-                        <div class="h2 mb-0" id="statActiveReservations">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-2">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Committed</div>
-                        <div class="h2 mb-0" id="statQuantityCommitted">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-3">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">ATP (Available)</div>
-                        <div class="h2 mb-0 text-success" id="statATP">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-2">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Overdue</div>
-                        <div class="h2 mb-0 text-danger" id="statOverdueReservations">-</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-3">
-                    <div class="card card-sm">
-                      <div class="card-body">
-                        <div class="subheader">Due This Week</div>
-                        <div class="h2 mb-0 text-warning" id="statUpcomingReservations">-</div>
-                      </div>
-                    </div>
-                  </div>
+                <div class="pm-strip">
+                  <div class="pm-stat"><span class="n" id="statActiveReservations">-</span><span class="l">Active</span></div>
+                  <div class="pm-stat"><span class="n" id="statQuantityCommitted">-</span><span class="l">Committed</span></div>
+                  <div class="pm-stat"><span class="n text-success" id="statATP">-</span><span class="l">ATP</span></div>
+                  <div class="pm-stat"><span class="n text-danger" id="statOverdueReservations">-</span><span class="l">Overdue</span></div>
+                  <div class="pm-stat"><span class="n text-warning" id="statUpcomingReservations">-</span><span class="l">Due this week</span></div>
                 </div>
 
                 <!-- Add/Edit Reservation Form (Hidden by default) -->
@@ -393,29 +328,20 @@
 
             <!-- Activity Tab -->
             <div class="tab-pane fade" id="activity" role="tabpanel">
-              <div class="mb-3">
-                <div class="row g-2 align-items-center">
-                  <div class="col">
-                    <h3 class="mb-0">Activity History</h3>
-                    <p class="text-muted mb-0">All inventory transactions for this product</p>
-                  </div>
-                  <div class="col-auto">
-                    <select class="form-select form-select-sm" id="activityTypeFilter" onchange="loadProductActivity(currentProductId)">
-                      <option value="">All Types</option>
-                      <option value="receipt">Receipts</option>
-                      <option value="shipment">Shipments</option>
-                      <option value="adjustment">Adjustments</option>
-                      <option value="transfer">Transfers</option>
-                      <option value="return">Returns</option>
-                      <option value="cycle_count">Cycle Counts</option>
-                    </select>
-                  </div>
-                  <div class="col-auto">
-                    <button class="btn btn-sm btn-primary" onclick="exportProductTransactions(currentProductId)">
-                      <i class="ti ti-download me-1"></i>Export
-                    </button>
-                  </div>
-                </div>
+              <div class="pm-toolbar">
+                <h4>Activity History</h4>
+                <select class="form-select form-select-sm ms-auto" style="width:auto" id="activityTypeFilter" onchange="loadProductActivity(currentProductId)">
+                  <option value="">All Types</option>
+                  <option value="receipt">Receipts</option>
+                  <option value="shipment">Shipments</option>
+                  <option value="adjustment">Adjustments</option>
+                  <option value="transfer">Transfers</option>
+                  <option value="return">Returns</option>
+                  <option value="cycle_count">Cycle Counts</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="exportProductTransactions(currentProductId)">
+                  <i class="ti ti-download me-1"></i>Export
+                </button>
               </div>
 
               <div class="loading" id="activityLoading" style="display: none;">
@@ -1089,7 +1015,7 @@
 
       // Reset edit mode state and buttons
       isEditMode = false;
-      document.getElementById('editProductBtn').style.display = 'block';
+      document.getElementById('editProductBtn').style.display = '';
       document.getElementById('editProductFooterActions').style.display = 'none';
       document.getElementById('productDetailsView').style.display = 'block';
       document.getElementById('productEditForm').style.display = 'none';
@@ -1116,6 +1042,8 @@
 
     async function toggleEditMode() {
       isEditMode = true;
+      const detailsTabBtn = document.getElementById('details-tab');
+      if (detailsTabBtn && window.bootstrap) window.bootstrap.Tab.getOrCreateInstance(detailsTabBtn).show();
       document.getElementById('editProductBtn').style.display = 'none';
       document.getElementById('productDetailsView').style.display = 'none';
       // Show form area with a spinner while data loads; Save button stays hidden until ready
@@ -1138,7 +1066,7 @@
 
     function cancelEditMode() {
       isEditMode = false;
-      document.getElementById('editProductBtn').style.display = 'block';
+      document.getElementById('editProductBtn').style.display = '';
       document.getElementById('editProductFooterActions').style.display = 'none';
       document.getElementById('productDetailsView').style.display = 'block';
       document.getElementById('productEditForm').style.display = 'none';
