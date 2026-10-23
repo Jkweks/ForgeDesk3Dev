@@ -194,6 +194,66 @@ class StorageLocationController extends Controller
     }
 
     /**
+     * Create several sequentially named child locations under one parent
+     * (e.g. parent "X.1", prefix "X.1.", start 1, count 5 => X.1.1 ... X.1.5)
+     */
+    public function storeBulk(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'parent_id' => 'required|exists:storage_locations,id',
+            'count' => 'required|integer|min:1|max:100',
+            'start' => 'nullable|integer|min:0',
+            'prefix' => 'nullable|string|max:200',
+            'type' => 'required|in:aisle,rack,shelf,bin,warehouse,zone,other',
+            'description' => 'nullable|string',
+            'is_active' => 'boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $parent = StorageLocation::findOrFail($request->parent_id);
+        $prefix = $request->input('prefix', $parent->name.'.');
+        $start = (int) $request->input('start', 1);
+        $count = (int) $request->count;
+
+        $names = [];
+        for ($i = 0; $i < $count; $i++) {
+            $names[] = $prefix.($start + $i);
+        }
+
+        if (max(array_map('strlen', $names)) > 255) {
+            return response()->json(['errors' => ['prefix' => ['Generated names are too long.']]], 422);
+        }
+
+        // Names are globally unique; refuse the whole batch rather than create a partial set
+        $taken = StorageLocation::whereIn('name', $names)->pluck('name')->all();
+        if ($taken) {
+            return response()->json([
+                'message' => 'These names already exist: '.implode(', ', array_slice($taken, 0, 5)).(count($taken) > 5 ? '…' : ''),
+                'errors' => ['prefix' => ['Some generated names already exist.']],
+            ], 422);
+        }
+
+        $created = \Illuminate\Support\Facades\DB::transaction(function () use ($names, $request, $parent, $start) {
+            return collect($names)->map(function ($name, $i) use ($request, $parent, $start) {
+                return StorageLocation::create([
+                    'name' => $name,
+                    'code' => $this->generateLocationCode($name),
+                    'type' => $request->type,
+                    'parent_id' => $parent->id,
+                    'description' => $request->description,
+                    'is_active' => $request->boolean('is_active', true),
+                    'sort_order' => $start + $i,
+                ]);
+            });
+        });
+
+        return response()->json($created, 201);
+    }
+
+    /**
      * Store a newly created storage location
      */
     public function store(Request $request)
@@ -232,7 +292,7 @@ class StorageLocationController extends Controller
     /**
      * Display the specified storage location
      */
-    public function show(StorageLocation $storageLocation)
+    public function show(Request $request, StorageLocation $storageLocation)
     {
         // Get all descendant location IDs (including self)
         $descendantIds = $storageLocation->getDescendantIds(true);
@@ -276,13 +336,22 @@ class StorageLocationController extends Controller
             'total_value' => round($totalValue, 2),
         ];
 
-        // Load direct inventory locations (not aggregated) for detail view
-        $storageLocation->load('inventoryLocations.product');
+        // Direct inventory by default; the whole subtree when include_children is set
+        if ($request->boolean('include_children')) {
+            $items = \App\Models\InventoryLocation::with(['product', 'storageLocation'])
+                ->whereIn('storage_location_id', $descendantIds)
+                ->get()
+                ->sortBy(fn ($il) => $il->storageLocation->full_path ?? '')
+                ->values();
+        } else {
+            $storageLocation->load('inventoryLocations.product');
+            $items = $storageLocation->inventoryLocations;
+        }
 
         return response()->json([
             'location' => $storageLocation,
             'stats' => $stats,
-            'inventory_locations' => $storageLocation->inventoryLocations,
+            'inventory_locations' => $items,
             'aggregated_stats_include_children' => true,
         ]);
     }

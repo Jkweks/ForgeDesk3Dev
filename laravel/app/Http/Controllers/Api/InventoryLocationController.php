@@ -276,6 +276,86 @@ class InventoryLocationController extends Controller
     }
 
     /**
+     * Move stock from one inventory location row to any storage location,
+     * creating the destination row for the product if it doesn't exist yet.
+     */
+    public function transferToStorageLocation(Request $request)
+    {
+        $validated = $request->validate([
+            'from_inventory_location_id' => 'required|exists:inventory_locations,id',
+            'to_storage_location_id' => 'required|exists:storage_locations,id',
+            'quantity' => 'required|numeric|min:0.1',
+            'notes' => 'nullable|string',
+        ]);
+
+        $source = InventoryLocation::findOrFail($validated['from_inventory_location_id']);
+        if ((int) $source->storage_location_id === (int) $validated['to_storage_location_id']) {
+            return response()->json(['message' => 'Source and destination are the same location'], 422);
+        }
+
+        $product = Product::findOrFail($source->product_id);
+        $qty = round((float) $validated['quantity'], 1);
+
+        try {
+            DB::beginTransaction();
+
+            $dest = InventoryLocation::firstOrCreate(
+                ['product_id' => $product->id, 'storage_location_id' => $validated['to_storage_location_id']],
+                ['quantity' => 0, 'quantity_committed' => 0, 'is_primary' => false]
+            );
+
+            $locked = InventoryLocation::whereIn('id', [$source->id, $dest->id])
+                ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $source = $locked[$source->id];
+            $dest = $locked[$dest->id];
+
+            if ($source->quantity_available < $qty) {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Insufficient available quantity at source location',
+                    'errors' => ['quantity' => ['Not enough available inventory']],
+                ], 422);
+            }
+
+            $quantityBefore = $product->quantity_on_hand;
+
+            $source->quantity -= $qty;
+            $source->save();
+            $dest->quantity += $qty;
+            $dest->save();
+
+            $source->load('storageLocation');
+            $dest->load('storageLocation');
+            $fromName = $source->storageLocation->name ?? 'Unknown';
+            $toName = $dest->storageLocation->name ?? 'Unknown';
+
+            InventoryTransaction::create([
+                'product_id' => $product->id,
+                'type' => 'transfer',
+                'quantity' => $qty,
+                'quantity_before' => $quantityBefore,
+                'quantity_after' => $product->quantity_on_hand,
+                'reference_number' => "Transfer: {$fromName} → {$toName}",
+                'reference_type' => 'location_transfer',
+                'reference_id' => $dest->id,
+                'notes' => "Transferred {$qty} from {$fromName} to {$toName}".
+                           (! empty($validated['notes']) ? "\n".$validated['notes'] : ''),
+                'user_id' => auth()->id(),
+                'transaction_date' => now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json(['message' => 'Inventory transferred successfully']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'Transfer failed'], 500);
+        }
+    }
+
+    /**
      * Adjust quantity at a specific location
      */
     public function adjust(Request $request, Product $product, InventoryLocation $location)

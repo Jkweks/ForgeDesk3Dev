@@ -107,13 +107,19 @@
                       <div class="subheader mb-2">Child locations</div>
                       <div class="d-flex flex-wrap gap-2" id="detailChildren"></div>
                     </div>
-                    <div class="subheader mb-2">Stored here</div>
+                    <div class="d-flex align-items-center mb-2">
+                      <div class="subheader mb-0" id="storedHereLabel">Stored here</div>
+                      <label class="form-check form-switch ms-auto mb-0" id="includeChildrenWrap">
+                        <input class="form-check-input" type="checkbox" id="includeChildren">
+                        <span class="form-check-label">Include child locations</span>
+                      </label>
+                    </div>
                     <div class="table-responsive">
                       <table class="table table-vcenter table-sm">
                         <thead><tr>
-                          <th>SKU</th><th>Description</th>
+                          <th>SKU</th><th>Description</th><th id="locColHeader" style="display:none">Location</th>
                           <th class="text-end">Qty</th><th class="text-end">Committed</th>
-                          <th class="text-end">Available</th><th class="text-end">Value</th><th></th>
+                          <th class="text-end">Available</th><th class="text-end">Value</th><th></th><th></th>
                         </tr></thead>
                         <tbody id="locationProductsTableBody"></tbody>
                       </table>
@@ -167,6 +173,23 @@
               <label class="form-label">Description</label>
               <textarea class="form-control" id="locationDescription" name="description" rows="2" placeholder="Optional description or notes about this location"></textarea>
             </div>
+            <div class="mb-3 border rounded p-3 bg-surface-secondary" id="bulkSection" style="display:none">
+              <label class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="bulkEnabled">
+                <span class="form-check-label">Create multiple sequentially numbered locations</span>
+              </label>
+              <div id="bulkFields" style="display:none">
+                <div class="row g-2">
+                  <div class="col-4"><label class="form-label">How many</label>
+                    <input type="number" class="form-control" id="bulkCount" min="1" max="100" value="5"></div>
+                  <div class="col-4"><label class="form-label">Start at</label>
+                    <input type="number" class="form-control" id="bulkStart" min="0" value="1"></div>
+                  <div class="col-4"><label class="form-label">Prefix</label>
+                    <input type="text" class="form-control" id="bulkPrefix"></div>
+                </div>
+                <div class="form-text mt-2" id="bulkPreview"></div>
+              </div>
+            </div>
             <div class="row">
               <div class="col-md-6">
                 <label class="form-label">Aisle</label>
@@ -197,6 +220,47 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
             <button type="submit" class="btn btn-primary">Save Location</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer Modal -->
+  <div class="modal modal-blur fade" id="transferModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Transfer Inventory</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="transferForm">
+          <div class="modal-body">
+            <div class="mb-3">
+              <div class="subheader">Product</div>
+              <div id="transferProduct" class="fw-bold"></div>
+              <div class="text-muted small" id="transferFromInfo"></div>
+            </div>
+            <div class="mb-3 position-relative">
+              <label class="form-label required">Move to</label>
+              <input type="text" class="form-control" id="transferDest" autocomplete="off" placeholder="Type to search locations..." required>
+              <div class="list-group position-absolute w-100 shadow" id="transferDestResults" style="display:none; z-index:1060; max-height:220px; overflow-y:auto;"></div>
+              <input type="hidden" id="transferDestId">
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-6"><label class="form-label required">Quantity</label>
+                <input type="number" class="form-control" id="transferQty" min="0.1" step="0.1" required></div>
+              <div class="col-6 d-flex align-items-end">
+                <button type="button" class="btn btn-link px-0" id="transferAllBtn">Move all available</button></div>
+            </div>
+            <div>
+              <label class="form-label">Notes</label>
+              <input type="text" class="form-control" id="transferNotes" placeholder="Optional">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="transferSubmit"><i class="ti ti-arrows-transfer-down me-1"></i>Transfer</button>
           </div>
         </form>
       </div>
@@ -239,6 +303,10 @@
     let selectedId = null;
     let editingLocationId = null;
     let currentViewLocationId = null;
+    let currentItems = [];
+    let includeChildren = false;
+    try { includeChildren = localStorage.getItem('sl_include_children') === '1'; } catch (e) {}
+    let transferSource = null;
 
     const money = (n, d = 2) => '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
     const num = n => Number(n || 0).toLocaleString();
@@ -259,6 +327,13 @@
       document.getElementById('typeFilter').addEventListener('change', renderTree);
       document.getElementById('usageFilter').addEventListener('change', renderTree);
       document.getElementById('locationForm').addEventListener('submit', handleLocationFormSubmit);
+      const incl = document.getElementById('includeChildren');
+      incl.checked = includeChildren;
+      incl.addEventListener('change', () => {
+        includeChildren = incl.checked;
+        try { localStorage.setItem('sl_include_children', includeChildren ? '1' : '0'); } catch (e) {}
+        if (selectedId) selectLocation(selectedId);
+      });
 
       // One delegated handler for the tree instead of inline onclick strings
       document.getElementById('locationsTree').addEventListener('click', e => {
@@ -455,16 +530,23 @@
         return `<button type="button" class="btn btn-sm" data-id="${k.id}"><i class="ti ${TYPE_ICONS[k.type] || 'ti-map-pin'} me-1"></i>${escapeHtml(k.name)}${ks.products_count ? ` <span class="badge bg-green-lt ms-1">${num(ks.products_count)}</span>` : ''}</button>`;
       }).join('');
 
+      // Only worth offering when there is something below this location
+      const showSub = includeChildren && kids.length > 0;
+      document.getElementById('includeChildrenWrap').style.display = kids.length ? '' : 'none';
+      document.getElementById('storedHereLabel').textContent = showSub ? 'Stored here and in child locations' : 'Stored here';
+      document.getElementById('locColHeader').style.display = showSub ? '' : 'none';
+      const cols = showSub ? 9 : 8;
       const tbody = document.getElementById('locationProductsTableBody');
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading...</td></tr>';
+      tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted">Loading...</td></tr>`;
       try {
-        const details = await authenticatedFetch(`/storage-locations/${id}`);
+        const details = await authenticatedFetch(`/storage-locations/${id}${showSub ? '?include_children=1' : ''}`);
         if (selectedId !== id) return; // user clicked elsewhere meanwhile
         const items = details?.inventory_locations || [];
         if (!items.length) {
-          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nothing stored directly at this location</td></tr>';
+          tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted py-4">${showSub ? 'Nothing stored here or in child locations' : 'Nothing stored directly at this location'}</td></tr>`;
           return;
         }
+        currentItems = items;
         tbody.innerHTML = items.map(item => {
           const p = item.product;
           const qty = parseFloat(item.quantity || 0);
@@ -474,16 +556,20 @@
           return `<tr>
             <td class="text-nowrap">${escapeHtml(p?.sku || '-')}</td>
             <td>${escapeHtml(p?.description || '-')}</td>
+            ${showSub ? `<td class="text-nowrap small">${item.storage_location_id === id ? '<span class="text-muted">(this location)</span>' : escapeHtml(item.storage_location?.name || '')}</td>` : ''}
             <td class="text-end">${num(qty)}</td>
             <td class="text-end">${num(committed)}</td>
             <td class="text-end text-success">${num(qty - committed)}</td>
             <td class="text-end">${money(value)}</td>
             <td>${item.is_primary ? '<span class="badge bg-primary-lt">Primary</span>' : ''}</td>
+            <td class="text-end"><button type="button" class="btn btn-sm" data-permission="inventory.adjust" ${qty - committed > 0 ? '' : 'disabled'}
+                onclick="openTransfer(${item.id})"><i class="ti ti-arrows-transfer-down me-1"></i>Move</button></td>
           </tr>`;
         }).join('');
+        if (typeof applyActionPermissions === 'function') applyActionPermissions();
       } catch (error) {
         console.error('Error loading location details:', error);
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Failed to load products</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-danger">Failed to load products</td></tr>`;
       }
     }
 
@@ -520,6 +606,131 @@
         document.getElementById('bulkShelfPrintBtn'), 'Failed to generate shelf labels PDF');
     }
 
+
+    // ---------- Bulk child creation ----------
+    function bulkPrefixDefault() {
+      const parent = currentLocations.find(l => l.id === Number(document.getElementById('locationParent').value));
+      return parent ? parent.name + '.' : '';
+    }
+
+    function updateBulkPreview() {
+      const count = Math.max(0, parseInt(document.getElementById('bulkCount').value) || 0);
+      const start = parseInt(document.getElementById('bulkStart').value) || 0;
+      const prefix = document.getElementById('bulkPrefix').value;
+      const names = Array.from({ length: Math.min(count, 3) }, (_, i) => prefix + (start + i));
+      const last = prefix + (start + count - 1);
+      document.getElementById('bulkPreview').textContent = count
+        ? `Will create ${count}: ${names.join(', ')}${count > 3 ? ', … ' + last : ''}` : '';
+    }
+
+    function setBulkMode(on, resetPrefix = false) {
+      document.getElementById('bulkFields').style.display = on ? '' : 'none';
+      document.getElementById('bulkEnabled').checked = on;
+      // single-location name is replaced by prefix + number
+      const name = document.getElementById('locationName');
+      name.required = !on;
+      name.disabled = on;
+      if (on && resetPrefix) document.getElementById('bulkPrefix').value = bulkPrefixDefault();
+      if (on) updateBulkPreview();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('bulkEnabled').addEventListener('change', e => setBulkMode(e.target.checked, true));
+      ['bulkCount', 'bulkStart', 'bulkPrefix'].forEach(id => document.getElementById(id).addEventListener('input', updateBulkPreview));
+      document.getElementById('locationParent').addEventListener('change', () => {
+        if (document.getElementById('bulkEnabled').checked) {
+          document.getElementById('bulkPrefix').value = bulkPrefixDefault();
+          updateBulkPreview();
+        }
+      });
+    });
+
+    // ---------- Transfer ----------
+    function openTransfer(inventoryLocationId) {
+      const item = currentItems.find(i => i.id === inventoryLocationId);
+      if (!item) return;
+      const available = parseFloat(item.quantity || 0) - parseFloat(item.quantity_committed || 0);
+      transferSource = { ...item, available };
+      document.getElementById('transferForm').reset();
+      document.getElementById('transferDestId').value = '';
+      document.getElementById('transferProduct').textContent = `${item.product?.sku || ''} — ${item.product?.description || ''}`;
+      const from = currentLocations.find(l => l.id === selectedId);
+      document.getElementById('transferFromInfo').textContent = `From ${from?.full_path || from?.name || ''} · ${num(available)} available`;
+      const qty = document.getElementById('transferQty');
+      qty.max = available;
+      showModal(document.getElementById('transferModal'));
+      setTimeout(() => document.getElementById('transferDest').focus(), 300);
+    }
+
+    function searchTransferDest() {
+      const input = document.getElementById('transferDest');
+      const box = document.getElementById('transferDestResults');
+      document.getElementById('transferDestId').value = '';
+      const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const matches = currentLocations
+        .filter(l => l.is_active && l.id !== selectedId && terms.every(t => `${l.full_path || l.name} ${l.code || ''}`.toLowerCase().includes(t)))
+        .slice(0, 10);
+      box.innerHTML = matches.length ? matches.map(l => `
+        <button type="button" class="list-group-item list-group-item-action" data-id="${l.id}" data-path="${escapeHtml(l.full_path || l.name)}">
+          <strong>${escapeHtml(l.name)}</strong> <span class="badge bg-azure-lt ms-1">${escapeHtml(l.type)}</span><br>
+          <small class="text-muted">${escapeHtml(l.full_path || l.name)}</small></button>`).join('')
+        : '<div class="list-group-item text-muted">No matching locations</div>';
+      box.style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('transferDest');
+      const box = document.getElementById('transferDestResults');
+      input.addEventListener('input', searchTransferDest);
+      input.addEventListener('focus', searchTransferDest);
+      box.addEventListener('mousedown', e => {
+        const el = e.target.closest('button[data-id]');
+        if (!el) return;
+        e.preventDefault();
+        input.value = el.dataset.path;
+        document.getElementById('transferDestId').value = el.dataset.id;
+        box.style.display = 'none';
+      });
+      input.addEventListener('blur', () => setTimeout(() => { box.style.display = 'none'; }, 150));
+      document.getElementById('transferAllBtn').addEventListener('click', () => {
+        if (transferSource) document.getElementById('transferQty').value = transferSource.available;
+      });
+      document.getElementById('transferForm').addEventListener('submit', handleTransferSubmit);
+    });
+
+    async function handleTransferSubmit(e) {
+      e.preventDefault();
+      const destId = document.getElementById('transferDestId').value;
+      const qty = parseFloat(document.getElementById('transferQty').value);
+      if (!destId) { showNotification('Pick a destination from the suggestions', 'warning'); return; }
+      if (!(qty > 0) || qty > transferSource.available) { showNotification(`Quantity must be between 0.1 and ${transferSource.available}`, 'warning'); return; }
+
+      const btn = document.getElementById('transferSubmit');
+      btn.disabled = true;
+      try {
+        const response = await apiCall('/inventory-locations/transfer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from_inventory_location_id: transferSource.id,
+            to_storage_location_id: Number(destId),
+            quantity: qty,
+            notes: document.getElementById('transferNotes').value || null,
+          }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || Object.values(body.errors || {}).flat().join(' ') || 'Transfer failed');
+        showNotification('Inventory transferred', 'success');
+        hideModal(document.getElementById('transferModal'));
+        expandAncestors(Number(destId));
+        await loadLocations();
+      } catch (error) {
+        showNotification(error.message, 'danger');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     // ---------- Add / edit ----------
     function populateParentDropdown() {
       const select = document.getElementById('locationParent');
@@ -542,6 +753,8 @@
       document.getElementById('locationForm').reset();
       document.getElementById('locationModalTitle').textContent = 'Add Storage Location';
       document.getElementById('locationActive').checked = true;
+      document.getElementById('bulkSection').style.display = 'none';
+      setBulkMode(false);
       showModal(document.getElementById('addLocationModal'));
     }
 
@@ -552,12 +765,15 @@
       const parent = currentLocations.find(l => l.id === parentId);
       const next = { warehouse: 'zone', zone: 'aisle', aisle: 'rack', rack: 'shelf', shelf: 'bin' };
       document.getElementById('locationType').value = next[parent?.type] || 'bin';
+      document.getElementById('bulkSection').style.display = '';
     }
 
     function editLocation(locationId) {
       const location = currentLocations.find(l => l.id === locationId);
       if (!location) return;
       editingLocationId = locationId;
+      document.getElementById('bulkSection').style.display = 'none';
+      setBulkMode(false);
       document.getElementById('locationModalTitle').textContent = 'Edit Storage Location';
       document.getElementById('locationName').value = location.name || '';
       document.getElementById('locationParent').value = location.parent_id || '';
@@ -585,6 +801,9 @@
         position: fd.get('position'),
         is_active: fd.get('is_active') === 'on',
       };
+      if (!editingLocationId && document.getElementById('bulkEnabled').checked) {
+        return submitBulk(data);
+      }
       try {
         const response = await apiCall(editingLocationId ? `/storage-locations/${editingLocationId}` : `/storage-locations`, {
           method: editingLocationId ? 'PUT' : 'POST',
@@ -605,6 +824,33 @@
       } catch (error) {
         console.error('Error saving location:', error);
         showNotification('Failed to save location: ' + error.message, 'danger');
+      }
+    }
+
+    async function submitBulk(data) {
+      if (!data.parent_id) { showNotification('Choose a parent location for bulk creation', 'warning'); return; }
+      try {
+        const response = await apiCall('/storage-locations/bulk-children', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parent_id: Number(data.parent_id),
+            count: parseInt(document.getElementById('bulkCount').value),
+            start: parseInt(document.getElementById('bulkStart').value) || 0,
+            prefix: document.getElementById('bulkPrefix').value,
+            type: data.type,
+            description: data.description || null,
+            is_active: data.is_active,
+          }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || Object.values(body.errors || {}).flat().join(' ') || 'Failed to create locations');
+        showNotification(`Created ${body.length} locations`, 'success');
+        hideModal(document.getElementById('addLocationModal'));
+        expanded.add(Number(data.parent_id));
+        await loadLocations();
+      } catch (error) {
+        showNotification(error.message, 'danger');
       }
     }
 
