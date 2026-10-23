@@ -133,6 +133,34 @@
   </div>
 </div>
 
+<div id="wq-grp-overlay" class="wq-overlay" style="display:none;">
+  <div class="card" style="width:min(560px, 92vw); max-height:85vh; display:flex; flex-direction:column;">
+    <div class="card-header">
+      <div>
+        <h3 class="card-title mb-0" id="wq-grp-title">Assign</h3>
+        <div class="text-muted small" id="wq-grp-sub"></div>
+      </div>
+      <button type="button" class="btn-close ms-auto" onclick="wqGrpClose()"></button>
+    </div>
+    <div class="card-body" style="overflow-y:auto;">
+      <div class="d-flex align-items-center mb-1">
+        <div class="subheader" id="wq-grp-items-label">Include</div>
+        <label class="form-check mb-0 ms-auto small"><input class="form-check-input" type="checkbox" id="wq-grp-all" checked onchange="wqGrpToggleAll(this.checked)"><span class="form-check-label">All</span></label>
+      </div>
+      <div id="wq-grp-items" class="mb-3"></div>
+      <div class="subheader mb-1">Assign to <span class="text-muted fw-normal text-lowercase">(pick several to share; none = unassign)</span></div>
+      <div id="wq-grp-ops" class="d-flex flex-wrap gap-2"></div>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <div id="wq-grp-status" class="text-muted small"></div>
+      <div>
+        <button class="btn btn-link" onclick="wqGrpClose()">Cancel</button>
+        <button class="btn btn-primary" id="wq-grp-apply" onclick="wqGrpApply()">Assign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="wq-assignee-overlay" class="wq-overlay" style="display:none;">
   <div class="card" style="width:min(420px, 92vw); max-height:80vh; display:flex; flex-direction:column;">
     <div class="card-header">
@@ -372,9 +400,13 @@ function groupedCardHtml(c, users, mode) {
   </div>`;
 }
 
-function subHtml(label, group, users, mode) {
+function grpBtn(attrs, title) {
+  return `<button type="button" class="btn btn-sm btn-ghost-primary p-0 px-1 wq-grp-btn" ${attrs} title="${esc(title)}" data-permission="fabrication.work-orders.edit"><i class="ti ti-user-plus"></i></button>`;
+}
+
+function subHtml(label, group, users, mode, act) {
   const ready = group.filter(c => !c.gated).length;
-  return `<div class="wq-sub"><span>${esc(label)}</span><span class="ms-auto">${ready === group.length ? group.length : `${ready} ready · ${group.length}`}</span></div>`
+  return `<div class="wq-sub"><span>${esc(label)}</span><span class="ms-auto">${ready === group.length ? group.length : `${ready} ready · ${group.length}`}</span>${act || ''}</div>`
     + group.map(c => groupedCardHtml(c, users, mode)).join('');
 }
 
@@ -398,28 +430,35 @@ function renderGrouped(board) {
       prio(a) - prio(b) || String(a[0].job_number).localeCompare(String(b[0].job_number), undefined, { numeric: true }));
     jobs.forEach(list => {
       const steps = by(list, c => c.name);
-      const body = stepOrder.filter(n => steps.has(n)).map(n => subHtml(n, steps.get(n), users, 'job')).join('');
-      cols.push(colShell(jobTitle(list[0]), list, body));
+      const jid = list[0].business_job_id;
+      const body = stepOrder.filter(n => steps.has(n)).map(n => subHtml(n, steps.get(n), users, 'job',
+        jid ? grpBtn(`data-grp="job" data-job="${jid}" data-step="${esc(n).replace(/"/g, '&quot;')}"`, `Assign "${n}" for this job`) : '')).join('');
+      cols.push(colShell(jobTitle(list[0]), list, body,
+        jid ? grpBtn(`data-grp="job" data-job="${jid}"`, 'Assign this whole job, or pick steps') : ''));
     });
   } else {
     const steps = by(cards, c => c.name);
     stepOrder.filter(n => steps.has(n)).forEach(n => {
       const list = steps.get(n);
       const jobs = [...by(list, jobKey).values()].sort((a, b) => prio(a) - prio(b));
-      const body = jobs.map(g => subHtml(jobTitle(g[0]), g, users, 'step')).join('');
-      cols.push(colShell(n, list, body));
+      const nm = esc(n).replace(/"/g, '&quot;');
+      const body = jobs.map(g => subHtml(jobTitle(g[0]), g, users, 'step',
+        g[0].business_job_id ? grpBtn(`data-grp="step" data-step="${nm}" data-job="${g[0].business_job_id}"`, `Assign "${n}" for this job`) : '')).join('');
+      cols.push(colShell(n, list, body, grpBtn(`data-grp="step" data-step="${nm}"`, 'Assign this step across jobs')));
     });
   }
 
   board.innerHTML = cols.join('') || '<div class="text-secondary text-center w-100 py-5">Nothing matches these filters.</div>';
+  if (typeof applyActionPermissions === 'function') applyActionPermissions();
 }
 
-function colShell(title, list, body) {
+function colShell(title, list, body, act) {
   const ready = list.filter(c => !c.gated).length;
   const overdue = list.filter(c => isPast(c.due_date)).length;
   return `<div class="wq-col" style="min-width:300px">
     <div class="wq-col-head">
       <span class="text-truncate" title="${esc(title)}">${esc(title)}</span>
+      ${act || ''}
       <span class="ms-auto text-secondary small text-nowrap">${ready === list.length ? list.length : `${ready} ready · ${list.length}`}${overdue ? ` · <span class="text-danger">${overdue} overdue</span>` : ''}</span>
     </div>
     <div>${body}</div>
@@ -650,6 +689,121 @@ async function wqApplyBulk() {
   } catch (e) {
     console.error(e);
     status.textContent = 'Failed to apply bulk assignment.';
+  }
+}
+
+// ── Group assign: a whole job, or chosen steps of it (and a step across jobs) ──
+let wqGrp = null;
+
+document.getElementById('wq-board').addEventListener('click', e => {
+  const b = e.target.closest('.wq-grp-btn');
+  if (!b) return;
+  e.stopPropagation();
+  const job = b.dataset.job ? parseInt(b.dataset.job) : null;
+  b.dataset.grp === 'job' ? wqGrpOpenJob(job, b.dataset.step || null) : wqGrpOpenStep(b.dataset.step, job);
+});
+
+// With a single work order selected in the filter, stay inside it rather than touching the whole job
+function wqGrpScope(jobId) {
+  const wo = document.getElementById('wq-wo').value;
+  return wo ? { work_order_id: parseInt(wo) } : { job_id: jobId };
+}
+
+function wqGrpOpenJob(jobId, presetStep) {
+  const wo = document.getElementById('wq-wo').value;
+  const cards = wqAllCards().filter(c => c.business_job_id === jobId && (!wo || String(c.work_order_id) === wo));
+  if (!cards.length) return;
+  const order = wqStepOrder(cards);
+  const items = order.map(n => {
+    const g = cards.filter(c => c.name === n);
+    return { key: n, label: n, count: g.length, ready: g.filter(c => !c.gated).length };
+  });
+  const j = cards[0];
+  wqGrp = { mode: 'job', jobId, items };
+  wqGrpShow(`Assign ${j.job_number ? j.job_number + ' – ' : ''}${j.job_name || 'job'}`,
+    (wo ? 'Limited to the work order selected in the filter.' : 'All work orders of this job.') + ' Includes locked steps; finished steps are left alone.',
+    'Steps to include', presetStep ? [presetStep] : items.map(i => i.key));
+}
+
+function wqGrpOpenStep(stepName, presetJob) {
+  const wo = document.getElementById('wq-wo').value;
+  const cards = wqAllCards().filter(c => c.name === stepName && (!wo || String(c.work_order_id) === wo));
+  if (!cards.length) return;
+  const byJob = new Map();
+  cards.forEach(c => { const k = c.business_job_id ?? 0; (byJob.get(k) || byJob.set(k, []).get(k)).push(c); });
+  const items = [...byJob.entries()].filter(([k]) => k).map(([k, g]) => ({
+    key: String(k), jobId: k, count: g.length, ready: g.filter(c => !c.gated).length,
+    label: g[0].job_number ? `${g[0].job_number} – ${g[0].job_name || ''}` : (g[0].job_name || 'Job'),
+  }));
+  wqGrp = { mode: 'step', stepName, items };
+  wqGrpShow(`Assign "${stepName}"`, 'Across the jobs you tick below. Includes locked steps; finished steps are left alone.', 'Jobs to include',
+    presetJob ? [String(presetJob)] : items.map(i => i.key));
+}
+
+function wqGrpShow(title, sub, itemsLabel, checkedKeys) {
+  document.getElementById('wq-grp-title').textContent = title;
+  document.getElementById('wq-grp-sub').textContent = sub;
+  document.getElementById('wq-grp-items-label').textContent = itemsLabel;
+  document.getElementById('wq-grp-status').textContent = '';
+  document.getElementById('wq-grp-items').innerHTML = wqGrp.items.map(i => `
+    <label class="form-check d-flex align-items-center mb-1">
+      <input class="form-check-input me-2" type="checkbox" value="${esc(i.key).replace(/"/g, '&quot;')}" ${checkedKeys.includes(i.key) ? 'checked' : ''} onchange="wqGrpSyncAll()">
+      <span class="form-check-label flex-fill">${esc(i.label)}</span>
+      <span class="text-muted small">${i.ready === i.count ? i.count : `${i.ready} ready · ${i.count}`}</span>
+    </label>`).join('');
+  document.getElementById('wq-grp-ops').innerHTML = (wqData.fab_users || []).map(u => `
+    <label class="form-selectgroup-item">
+      <input type="checkbox" class="form-selectgroup-input" value="${u.id}">
+      <span class="form-selectgroup-label">${esc(u.name)}</span>
+    </label>`).join('') || '<div class="text-muted">No fab users.</div>';
+  wqGrpSyncAll();
+  document.getElementById('wq-grp-overlay').style.display = 'flex';
+}
+
+function wqGrpSyncAll() {
+  const boxes = [...document.querySelectorAll('#wq-grp-items input')];
+  document.getElementById('wq-grp-all').checked = boxes.length > 0 && boxes.every(b => b.checked);
+}
+function wqGrpToggleAll(on) { document.querySelectorAll('#wq-grp-items input').forEach(b => { b.checked = on; }); }
+function wqGrpClose() { document.getElementById('wq-grp-overlay').style.display = 'none'; wqGrp = null; }
+
+async function wqGrpApply() {
+  if (!wqGrp) return;
+  const keys = [...document.querySelectorAll('#wq-grp-items input:checked')].map(b => b.value);
+  const ids = [...document.querySelectorAll('#wq-grp-ops input:checked')].map(b => parseInt(b.value));
+  const status = document.getElementById('wq-grp-status');
+  if (!keys.length) { status.textContent = 'Tick at least one to include.'; return; }
+  const chosen = wqGrp.items.filter(i => keys.includes(i.key));
+  const total = chosen.reduce((n, i) => n + i.count, 0);
+  if (!ids.length && !confirm(`Unassign all ${total} selected step(s)?`)) return;
+
+  const btn = document.getElementById('wq-grp-apply');
+  btn.disabled = true;
+  status.textContent = 'Assigning…';
+  try {
+    let updated = 0;
+    const post = async body => {
+      const r = await API('/work-order-stages/bulk-assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('bulk assign failed');
+      updated += (await r.json()).updated || 0;
+    };
+    if (wqGrp.mode === 'job') {
+      await post({ ...wqGrpScope(wqGrp.jobId), assignments: chosen.map(i => ({ stage_name: i.key, assigned_to_ids: ids })) });
+    } else {
+      for (const i of chosen) {
+        await post({ ...wqGrpScope(i.jobId), assignments: [{ stage_name: wqGrp.stepName, assigned_to_ids: ids }] });
+      }
+    }
+    status.textContent = `Updated ${updated} step(s).`;
+    await loadBoard();
+    setTimeout(wqGrpClose, 600);
+  } catch (e) {
+    console.error(e);
+    status.textContent = 'Failed to assign. Nothing may have changed — refresh and check.';
+  } finally {
+    btn.disabled = false;
   }
 }
 
