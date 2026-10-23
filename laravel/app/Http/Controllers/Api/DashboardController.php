@@ -51,6 +51,17 @@ class DashboardController extends Controller
         )->value('total') ?? 0);
     }
 
+    /**
+     * Active products with no storage location assigned (same definition the
+     * "Products Without a Location" dashboard widget counts).
+     */
+    private function applyNoLocationFilter($query, Request $request): void
+    {
+        if ($request->boolean('no_location')) {
+            $query->whereDoesntHave('inventoryLocations', fn ($q) => $q->whereNotNull('storage_location_id'));
+        }
+    }
+
     public function index(Request $request)
     {
         $categoryId = $request->get('category_id');
@@ -93,6 +104,7 @@ class DashboardController extends Controller
         // Base query for stats (apply filters once)
         $statsQuery = Product::where('is_active', true)->excludeMaintenanceConsumables();
         $excludeIdleSpecialOrder($statsQuery);
+        $this->applyNoLocationFilter($statsQuery, $request);
         if ($categoryId) {
             $statsQuery->whereHas('categories', function ($q) use ($categoryId) {
                 $q->where('categories.id', $categoryId);
@@ -129,10 +141,11 @@ class DashboardController extends Controller
             'pending_orders' => Order::whereIn('status', ['pending', 'processing'])->count(),
         ];
 
-        $inventoryQuery = Product::with(['inventoryLocations', 'categories'])
+        $inventoryQuery = Product::with(['inventoryLocations.storageLocation', 'categories'])
             ->where('is_active', true)
             ->excludeMaintenanceConsumables();
         $excludeIdleSpecialOrder($inventoryQuery);
+        $this->applyNoLocationFilter($inventoryQuery, $request);
 
         if ($categoryId) {
             $inventoryQuery->whereHas('categories', function ($q) use ($categoryId) {
@@ -247,7 +260,8 @@ class DashboardController extends Controller
                         ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
                 });
             })
-            ->with('categories');
+            ->with(['categories', 'inventoryLocations.storageLocation']);
+        $this->applyNoLocationFilter($query, $request);
 
         $enrich = function ($product) use ($committedByProduct) {
             $committedQty = $committedByProduct[$product->id] ?? 0;
