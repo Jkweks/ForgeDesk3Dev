@@ -11,6 +11,10 @@
 .wq-col-head { display:flex; align-items:center; gap:.4rem; font-weight:600; padding:.25rem .35rem .5rem; }
 .wq-card { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); border-radius:var(--tblr-border-radius); padding:.5rem .6rem; margin-bottom:.4rem; cursor:grab; font-size:.85rem; }
 .wq-card:active { cursor:grabbing; }
+.wq-sub { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; font-weight:600; color:var(--tblr-secondary-color); display:flex; align-items:center; gap:.4rem; margin:.5rem .25rem .3rem; }
+.wq-sub:first-child { margin-top:.1rem; }
+.wq-sub .ms-auto { font-weight:400; text-transform:none; letter-spacing:0; }
+.wq-card.static { cursor:default; }
 .wq-card.overdue { border-left:3px solid var(--tblr-danger); }
 .wq-strip .wq-stat { display:flex; align-items:baseline; gap:6px; }
 .wq-strip .n { font-size:1.4rem; font-weight:600; line-height:1; }
@@ -45,6 +49,11 @@
         (waiting on an earlier step) can be moved too, so work can be planned ahead.
       </div>
       <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
+        <div class="btn-group btn-group-sm" id="wq-group" title="How the board is grouped">
+          <button type="button" class="btn active" data-group="operator" onclick="wqSetGroup('operator')"><i class="ti ti-user me-1"></i>By operator</button>
+          <button type="button" class="btn" data-group="job" onclick="wqSetGroup('job')"><i class="ti ti-briefcase me-1"></i>By job</button>
+          <button type="button" class="btn" data-group="step" onclick="wqSetGroup('step')"><i class="ti ti-list-details me-1"></i>By step</button>
+        </div>
         <select id="wq-job" class="form-select form-select-sm" style="width:auto" onchange="wqOnJobChange()">
           <option value="">All jobs</option>
         </select>
@@ -202,6 +211,7 @@ function wqSyncUrl() {
   set('job', document.getElementById('wq-job').value);
   set('wo', document.getElementById('wq-wo').value);
   set('step', document.getElementById('wq-step').value);
+  if (wqGroup !== 'operator') q.set('group', wqGroup);
   set('q', document.getElementById('wq-search').value.trim());
   if (document.getElementById('wq-overdue-only').checked) q.set('overdue', '1');
   if (document.getElementById('wq-hide-locked').checked) q.set('hidelocked', '1');
@@ -322,11 +332,114 @@ function colHtml(opId, title, oldest, stages, initials, muted) {
   </div>`;
 }
 
+let wqGroup = 'operator';
+
+function wqSetGroup(g) {
+  wqGroup = g;
+  renderBoard();
+}
+
+// Steps in workflow order: stages are created in sequence, so the lowest stage id seen per name approximates it
+function wqStepOrder(cards) {
+  const first = new Map();
+  cards.forEach(c => { if (!first.has(c.name) || c.stage_id < first.get(c.name)) first.set(c.name, c.stage_id); });
+  return [...first.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]);
+}
+
+function groupedCardHtml(c, users, mode) {
+  const ops = (c.assignee_ids || []).map(id => users[id]).filter(Boolean)
+    .map(u => `<span class="badge bg-blue-lt text-blue" title="${esc(u.name)}">${esc(u.initials || u.name)}</span>`).join(' ')
+    || '<span class="badge bg-secondary-lt text-secondary">unassigned</span>';
+  const active = c.status === 'in_progress' ? ' <span class="badge bg-warning-lt text-warning">active</span>' : '';
+  const lock = c.gated
+    ? ` <i class="ti ti-lock wq-lock" title="Blocked by &quot;${esc(c.blocking_stage_name || 'an earlier step')}&quot;"></i>` : '';
+  // The column/sub-header already names the step (or job), so the card leads with what's left
+  const lead = c.elevation_tag;
+  const where = esc(c.release_label);
+  return `<div class="wq-card static${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" data-stage="${c.stage_id}">
+    <div class="d-flex align-items-start gap-1">
+      <div class="flex-fill"><strong>${esc(lead)}</strong>${active}${lock}
+        <span class="text-secondary small ms-1">${where}</span></div>
+      <button class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Edit assignees"
+          onclick="event.stopPropagation(); wqEditAssignees(${c.stage_id})"><i class="ti ti-user-plus"></i></button>
+    </div>
+    <div class="wq-meta">
+      ${ops}
+      ${c.due_date ? `<span class="small ${isPast(c.due_date) ? 'text-danger' : 'text-secondary'}">due ${esc(c.due_date)}</span>` : ''}
+      ${c.date_requested ? `<span class="text-secondary small">need ${esc(c.date_requested)}</span>` : ''}
+      ${c.priority != null ? `<span class="text-secondary small">#${c.priority}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function subHtml(label, group, users, mode) {
+  const ready = group.filter(c => !c.gated).length;
+  return `<div class="wq-sub"><span>${esc(label)}</span><span class="ms-auto">${ready === group.length ? group.length : `${ready} ready · ${group.length}`}</span></div>`
+    + group.map(c => groupedCardHtml(c, users, mode)).join('');
+}
+
+// "By job": one column per job, steps grouped inside. "By step": one column per step, jobs grouped inside.
+function renderGrouped(board) {
+  const users = {};
+  (wqData.fab_users || []).forEach(u => { users[u.id] = u; });
+  (wqData.operators || []).forEach(o => { users[o.user.id] = users[o.user.id] || o.user; });
+
+  const all = wqAllCards();
+  const cards = all.filter(wqCardVisible);
+  const stepOrder = wqStepOrder(all);
+  const by = (list, keyFn) => list.reduce((m, c) => { const k = keyFn(c); (m.get(k) || m.set(k, []).get(k)).push(c); return m; }, new Map());
+  const jobKey = c => c.business_job_id ?? 0;
+  const jobTitle = c => c.job_number ? `${c.job_number} – ${c.job_name || ''}` : (c.job_name || 'No job');
+  const prio = list => Math.min(...list.map(c => c.priority ?? Infinity));
+  const cols = [];
+
+  if (wqGroup === 'job') {
+    const jobs = [...by(cards, jobKey).values()].sort((a, b) =>
+      prio(a) - prio(b) || String(a[0].job_number).localeCompare(String(b[0].job_number), undefined, { numeric: true }));
+    jobs.forEach(list => {
+      const steps = by(list, c => c.name);
+      const body = stepOrder.filter(n => steps.has(n)).map(n => subHtml(n, steps.get(n), users, 'job')).join('');
+      cols.push(colShell(jobTitle(list[0]), list, body));
+    });
+  } else {
+    const steps = by(cards, c => c.name);
+    stepOrder.filter(n => steps.has(n)).forEach(n => {
+      const list = steps.get(n);
+      const jobs = [...by(list, jobKey).values()].sort((a, b) => prio(a) - prio(b));
+      const body = jobs.map(g => subHtml(jobTitle(g[0]), g, users, 'step')).join('');
+      cols.push(colShell(n, list, body));
+    });
+  }
+
+  board.innerHTML = cols.join('') || '<div class="text-secondary text-center w-100 py-5">Nothing matches these filters.</div>';
+}
+
+function colShell(title, list, body) {
+  const ready = list.filter(c => !c.gated).length;
+  const overdue = list.filter(c => isPast(c.due_date)).length;
+  return `<div class="wq-col" style="min-width:300px">
+    <div class="wq-col-head">
+      <span class="text-truncate" title="${esc(title)}">${esc(title)}</span>
+      <span class="ms-auto text-secondary small text-nowrap">${ready === list.length ? list.length : `${ready} ready · ${list.length}`}${overdue ? ` · <span class="text-danger">${overdue} overdue</span>` : ''}</span>
+    </div>
+    <div>${body}</div>
+  </div>`;
+}
+
 function renderBoard() {
   document.getElementById('wq-loading').style.display = 'none';
   const board = document.getElementById('wq-board');
   board.style.display = 'flex';
   if (!wqData) { board.innerHTML = ''; return; }
+
+  document.querySelectorAll('#wq-group [data-group]').forEach(b => b.classList.toggle('active', b.dataset.group === wqGroup));
+  if (wqGroup !== 'operator') {
+    renderGrouped(board);
+    wqUpdateStrip();
+    wqSyncUrl();
+    wqSyncTopScroll();
+    return;
+  }
 
   const opById = {};
   (wqData.operators || []).forEach(o => { opById[o.user.id] = o; });
@@ -429,7 +542,9 @@ function wqAllCards() {
   if (!wqData) return [];
   const cards = [...(wqData.unassigned?.stages || [])];
   (wqData.operators || []).forEach(o => cards.push(...(o.stages || [])));
-  return cards;
+  // A stage shared by several operators is listed under each of them — count it once
+  const seen = new Set();
+  return cards.filter(c => !seen.has(c.stage_id) && seen.add(c.stage_id));
 }
 
 function wqOpenBulk() {
@@ -590,6 +705,7 @@ async function wqSaveAssignees() {
   document.getElementById('wq-overdue-only').checked = u.get('overdue') === '1';
   document.getElementById('wq-hide-locked').checked = u.get('hidelocked') === '1';
   if (u.get('step')) pendingStep = u.get('step');
+  if (['job', 'step'].includes(u.get('group'))) wqGroup = u.get('group');
   await loadBoard();
 })();
 setInterval(() => loadBoard(true), 30000);
