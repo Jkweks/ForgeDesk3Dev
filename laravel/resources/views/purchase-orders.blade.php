@@ -27,6 +27,11 @@
     .po-stat { display: flex; align-items: baseline; gap: 6px; }
     .po-stat .n { font-size: 1.4rem; font-weight: 600; line-height: 1; }
     .po-stat .l { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+    #poContent .table { font-size: .8125rem; }
+    #poContent .table > :not(caption) > * > *, #viewPOItemsTable > :not(caption) > * > * { padding: .25rem .6rem; line-height: 1.3; }
+    #poContent .progress { height: 12px !important; font-size: .65rem; }
+    #poContent .btn-group .btn { padding: .1rem .35rem; }
+    #poContent .badge { font-size: .7rem; padding: .15rem .4rem; }
     .po-cnt:not(:empty) { margin-left: 4px; font-size: .7rem; opacity: .7; }
     .po-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .75rem 1.5rem; margin-bottom: 1rem; }
     .po-kv .l { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
