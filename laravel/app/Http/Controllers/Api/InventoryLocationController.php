@@ -471,7 +471,7 @@ class InventoryLocationController extends Controller
 
     /**
      * Get all inventory items (with location record IDs) at a specific storage location.
-     * Used by the bulk location-assignment admin tool.
+     * Used by the bulk location-assignment tab in the admin page.
      */
     public function itemsAtLocation(\App\Models\StorageLocation $storageLocation)
     {
