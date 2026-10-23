@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FabricationDocument;
+use App\Models\FabricationDocumentRevision;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -15,7 +17,7 @@ class FabricationDocumentController extends Controller
      */
     public function index(Request $request)
     {
-        $query = FabricationDocument::query();
+        $query = FabricationDocument::query()->withCount('revisions');
 
         // Type filter
         if ($request->filled('type') && in_array($request->type, ['fabrication', 'installation', 'maintenance'])) {
@@ -30,6 +32,11 @@ class FabricationDocumentController extends Controller
         // Manufacturer filter
         if ($request->filled('manufacturer')) {
             $query->where('manufacturer', $request->manufacturer);
+        }
+
+        // Tag filter (tags is a JSON array)
+        if ($request->filled('tag')) {
+            $query->whereJsonContains('tags', $request->tag);
         }
 
         // Text search (title, hwtype, manufacturer, notes)
@@ -82,6 +89,7 @@ class FabricationDocumentController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'type' => 'required|in:fabrication,installation,maintenance',
+            'revision' => 'nullable|string|max:50',
             'hwtype' => 'nullable|string|max:100',
             'manufacturer' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
@@ -92,6 +100,7 @@ class FabricationDocumentController extends Controller
         $data = [
             'title' => $request->title,
             'type' => $request->type,
+            'revision' => $request->revision,
             'hwtype' => $request->hwtype,
             'manufacturer' => $request->manufacturer,
             'notes' => $request->notes,
@@ -102,6 +111,7 @@ class FabricationDocumentController extends Controller
         if ($request->hasFile('file')) {
             $fileData = $this->storeFile($request->file('file'));
             $data = array_merge($data, $fileData);
+            $data['revision'] = $request->filled('revision') ? $request->revision : 'v1';
         }
 
         $doc = FabricationDocument::create($data);
@@ -114,7 +124,7 @@ class FabricationDocumentController extends Controller
      */
     public function show(FabricationDocument $fabricationDocument)
     {
-        return response()->json($this->formatDoc($fabricationDocument));
+        return response()->json($this->formatDoc($fabricationDocument->loadCount('revisions'), true));
     }
 
     /**
@@ -125,6 +135,7 @@ class FabricationDocumentController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'type' => 'required|in:fabrication,installation,maintenance',
+            'revision' => 'nullable|string|max:50',
             'hwtype' => 'nullable|string|max:100',
             'manufacturer' => 'nullable|string|max:100',
             'notes' => 'nullable|string|max:5000',
@@ -143,23 +154,26 @@ class FabricationDocumentController extends Controller
         ];
 
         if ($request->hasFile('file')) {
-            // Delete old file if present
-            if ($fabricationDocument->file_path) {
-                Storage::disk('public')->delete($fabricationDocument->file_path);
-            }
-            $fileData = $this->storeFile($request->file('file'));
-            $data = array_merge($data, $fileData);
+            // The file being replaced is kept as a revision, not deleted
+            $this->archiveCurrentFile($fabricationDocument, $request->user()?->id);
+            $data = array_merge($data, $this->storeFile($request->file('file')));
+            $data['revision'] = $request->filled('revision')
+                ? $request->revision
+                : 'v'.($fabricationDocument->revisions()->count() + 1);
         } elseif ($request->boolean('remove_file') && $fabricationDocument->file_path) {
-            Storage::disk('public')->delete($fabricationDocument->file_path);
+            $this->archiveCurrentFile($fabricationDocument, $request->user()?->id);
+            $data['revision'] = null;
             $data['file_name'] = null;
             $data['file_path'] = null;
             $data['file_size'] = null;
             $data['file_mime'] = null;
+        } elseif ($request->filled('revision')) {
+            $data['revision'] = $request->revision; // relabel without replacing the file
         }
 
         $fabricationDocument->update($data);
 
-        return response()->json($this->formatDoc($fabricationDocument->fresh()));
+        return response()->json($this->formatDoc($fabricationDocument->fresh()->loadCount('revisions'), true));
     }
 
     /**
@@ -178,9 +192,50 @@ class FabricationDocumentController extends Controller
             ]);
         }
 
+        foreach ($fabricationDocument->revisions as $rev) {
+            Storage::disk('public')->delete($rev->file_path);
+            $rev->delete();
+        }
+
         $fabricationDocument->delete();
 
         return response()->json(['message' => 'Document deleted'], 200);
+    }
+
+    /**
+     * Swap a stored revision back in as the current file; the file it replaces
+     * becomes a revision itself, so nothing is lost.
+     */
+    public function restoreRevision(Request $request, FabricationDocument $fabricationDocument, FabricationDocumentRevision $revision)
+    {
+        abort_unless($revision->fabrication_document_id === $fabricationDocument->id, 404);
+
+        DB::transaction(function () use ($request, $fabricationDocument, $revision) {
+            $this->archiveCurrentFile($fabricationDocument, $request->user()?->id);
+            $fabricationDocument->update([
+                'revision' => $revision->revision,
+                'file_name' => $revision->file_name,
+                'file_path' => $revision->file_path,
+                'file_size' => $revision->file_size,
+                'file_mime' => $revision->file_mime,
+            ]);
+            $revision->delete(); // file now belongs to the document
+        });
+
+        return response()->json($this->formatDoc($fabricationDocument->fresh()->loadCount('revisions'), true));
+    }
+
+    /**
+     * Permanently remove one old revision and its file.
+     */
+    public function destroyRevision(FabricationDocument $fabricationDocument, FabricationDocumentRevision $revision)
+    {
+        abort_unless($revision->fabrication_document_id === $fabricationDocument->id, 404);
+
+        Storage::disk('public')->delete($revision->file_path);
+        $revision->delete();
+
+        return response()->json($this->formatDoc($fabricationDocument->fresh()->loadCount('revisions'), true));
     }
 
     /**
@@ -222,6 +277,25 @@ class FabricationDocumentController extends Controller
         };
     }
 
+    /**
+     * Move the document's current file into the revisions table (file stays on disk).
+     */
+    private function archiveCurrentFile(FabricationDocument $doc, ?int $userId): void
+    {
+        if (! $doc->file_path) {
+            return;
+        }
+
+        $doc->revisions()->create([
+            'revision' => $doc->revision ?: 'v'.($doc->revisions()->count() + 1),
+            'file_name' => $doc->file_name,
+            'file_path' => $doc->file_path,
+            'file_size' => $doc->file_size,
+            'file_mime' => $doc->file_mime,
+            'archived_by' => $userId,
+        ]);
+    }
+
     private function storeFile(\Illuminate\Http\UploadedFile $file): array
     {
         $slug = Str::uuid()->toString();
@@ -250,12 +324,14 @@ class FabricationDocumentController extends Controller
         return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
-    private function formatDoc(FabricationDocument $doc): array
+    private function formatDoc(FabricationDocument $doc, bool $withRevisions = false): array
     {
-        return [
+        $out = [
             'id' => $doc->id,
             'title' => $doc->title,
             'type' => $doc->type,
+            'revision' => $doc->revision,
+            'revisions_count' => $doc->revisions_count ?? 0,
             'hwtype' => $doc->hwtype,
             'manufacturer' => $doc->manufacturer,
             'tags' => $doc->tags ?? [],
@@ -265,5 +341,21 @@ class FabricationDocumentController extends Controller
             'updated_at' => $doc->updated_at?->toIso8601String(),
             'created_by' => $doc->created_by,
         ];
+
+        if ($withRevisions) {
+            $out['revisions'] = $doc->revisions->map(fn ($r) => [
+                'id' => $r->id,
+                'revision' => $r->revision,
+                'file' => [
+                    'name' => $r->file_name,
+                    'size' => $r->file_size,
+                    'mime' => $r->file_mime,
+                    'url' => '/storage/'.$r->file_path,
+                ],
+                'archived_at' => $r->created_at?->toIso8601String(),
+            ])->values();
+        }
+
+        return $out;
     }
 }

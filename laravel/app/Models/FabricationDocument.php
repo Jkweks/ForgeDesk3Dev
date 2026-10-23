@@ -14,6 +14,7 @@ class FabricationDocument extends Model
     protected $fillable = [
         'title',
         'type',
+        'revision',
         'hwtype',
         'manufacturer',
         'file_name',
@@ -33,6 +34,11 @@ class FabricationDocument extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function revisions()
+    {
+        return $this->hasMany(FabricationDocumentRevision::class)->orderByDesc('id');
     }
 
     /**
