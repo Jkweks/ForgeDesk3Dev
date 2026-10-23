@@ -72,6 +72,7 @@ class WorkQueueController extends Controller
                 'work_order_id' => $wo?->id,
                 'business_job_id' => $wo?->business_job_id,
                 'release_label' => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo?->release_token}",
+                'release_token' => $wo?->release_token,
                 'job_number' => $job?->job_number,
                 'job_name' => $job?->job_name,
                 'priority' => $wo?->priority,

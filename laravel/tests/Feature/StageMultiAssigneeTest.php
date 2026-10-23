@@ -91,6 +91,7 @@ class StageMultiAssigneeTest extends TestCase
         $this->assertArrayHasKey('job_number', $card);
         $this->assertArrayHasKey('business_job_id', $card);
         $this->assertArrayHasKey('release_label', $card);
+        $this->assertArrayHasKey('release_token', $card);
     }
 
     public function test_one_operator_completing_clears_it_for_all(): void

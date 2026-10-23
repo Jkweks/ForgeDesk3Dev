@@ -589,7 +589,12 @@ function wqAllCards() {
 function wqOpenBulk() {
   const cards = wqAllCards();
   const byWo = new Map();
-  cards.forEach(c => { if (c.work_order_id && !byWo.has(c.work_order_id)) byWo.set(c.work_order_id, c.release_label); });
+  // "Job name – release" (the release token alone, not the job-number prefix)
+  cards.forEach(c => {
+    if (c.work_order_id && !byWo.has(c.work_order_id)) {
+      byWo.set(c.work_order_id, c.job_name ? `${c.job_name} – ${c.release_token ?? c.release_label}` : (c.release_token ?? c.release_label));
+    }
+  });
 
   const sel = document.getElementById('wq-bulk-wo');
   const currentWo = document.getElementById('wq-wo').value;
