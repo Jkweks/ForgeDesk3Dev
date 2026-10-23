@@ -350,7 +350,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/products/{product}/locations/{location}/adjust', [InventoryLocationController::class, 'adjust'])->middleware('permission:inventory.adjust');
         Route::get('/products/{product}/locations/statistics', [InventoryLocationController::class, 'statistics'])->middleware('permission:inventory.view');
         Route::get('/locations', [InventoryLocationController::class, 'getAllLocations'])->middleware('permission:inventory.view');
-        Route::get('/locations/by-storage/{storageLocation}', [InventoryLocationController::class, 'itemsAtLocation'])->middleware('permission:inventory.view');
         Route::get('/locations/products-without-storage', [InventoryLocationController::class, 'productsWithoutStorageLocation'])->middleware('permission:inventory.view');
 
         // Storage Locations (Master Location Management)
