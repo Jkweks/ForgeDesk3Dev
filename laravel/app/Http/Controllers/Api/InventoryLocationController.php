@@ -470,40 +470,6 @@ class InventoryLocationController extends Controller
     }
 
     /**
-     * Get all inventory items (with location record IDs) at a specific storage location.
-     * Used by the bulk location-assignment tab in the admin page.
-     */
-    public function itemsAtLocation(\App\Models\StorageLocation $storageLocation)
-    {
-        $items = InventoryLocation::where('storage_location_id', $storageLocation->id)
-            ->whereNull('deleted_at')
-            ->with('product')
-            ->orderBy('is_primary', 'desc')
-            ->get()
-            ->map(fn ($il) => [
-                'inv_location_id' => $il->id,
-                'product_id' => $il->product_id,
-                'sku' => $il->product->sku,
-                'part_number' => $il->product->part_number,
-                'description' => $il->product->description,
-                'photo_url' => $il->product->photo_url,
-                'quantity' => $il->quantity,
-                'quantity_committed' => $il->quantity_committed,
-                'is_primary' => (bool) $il->is_primary,
-            ]);
-
-        return response()->json([
-            'storage_location' => [
-                'id' => $storageLocation->id,
-                'name' => $storageLocation->name,
-                'code' => $storageLocation->code,
-            ],
-            'items' => $items,
-            'count' => $items->count(),
-        ]);
-    }
-
-    /**
      * Get all active products that have no inventory_location record pointing to any storage location.
      * These are products that are "unassigned" — no location data at all.
      */
