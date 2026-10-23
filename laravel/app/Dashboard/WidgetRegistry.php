@@ -165,7 +165,7 @@ class WidgetRegistry
             ]],
             ['Inventory', ['inventory.view'], '/dashboard/widgets/storage', [
                 $stat('storage_locations', 'Storage Locations', 'Active storage locations.', 'ti-map-pin', 'locations', '/storage-locations'),
-                $stat('storage_unassigned', 'Products Without a Location', 'Active products with no storage location assigned.', 'ti-map-pin-off', 'products_without_location', '/inventory/products'),
+                $stat('storage_unassigned', 'Products Without a Location', 'Active products with no storage location assigned.', 'ti-map-pin-off', 'products_without_location', '/inventory/products?noloc=1'),
             ]],
             ['Cycle Counting', ['cycle-count.view'], '/dashboard/widgets/cycle-counts', [
                 $stat('cycle_active', 'Active Cycle Counts', 'Planned and in-progress counting sessions.', 'ti-clipboard-check', 'active_sessions', '/cycle-counting'),

@@ -17,3 +17,6 @@ tiger-bridge/node_modules
 
 # tiger-bridge service logs
 tiger-bridge/logs/
+
+# NFS silly-rename temp files
+.nfs*

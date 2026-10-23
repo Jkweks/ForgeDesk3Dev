@@ -23,86 +23,61 @@
   </div>
 
   <!-- Statistics Cards -->
+  <style>
+    .po-stat { display: flex; align-items: baseline; gap: 6px; }
+    .po-stat .n { font-size: 1.4rem; font-weight: 600; line-height: 1; }
+    .po-stat .l { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+    #poContent .table { font-size: .8125rem; }
+    #poContent .table > :not(caption) > * > *, #viewPOItemsTable > :not(caption) > * > * { padding: .25rem .6rem; line-height: 1.3; }
+    #poContent .progress { height: 12px !important; font-size: .65rem; }
+    #poContent .btn-group .btn { padding: .1rem .35rem; }
+    #poContent .badge { font-size: .7rem; padding: .15rem .4rem; }
+    .po-cnt:not(:empty) { margin-left: 4px; font-size: .7rem; opacity: .7; }
+    .po-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .75rem 1.5rem; margin-bottom: 1rem; }
+    .po-kv .l { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+    .po-kv .v { font-weight: 500; min-height: 1.4em; }
+    .po-section { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--tblr-secondary-color); margin: 1rem 0 .5rem; }
+  </style>
   <div class="page-body">
-    <div class="row row-deck row-cards mb-3">
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Total Orders</div>
-            </div>
-            <div class="h1 mb-0" id="statTotalOrders">-</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Open Orders</div>
-            </div>
-            <div class="h1 mb-0 text-primary" id="statOpenOrders">-</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Pending Value</div>
-            </div>
-            <div class="h1 mb-0 text-warning" id="statPendingValue">-</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Total Value</div>
-            </div>
-            <div class="h1 mb-0 text-success" id="statTotalValue">-</div>
-          </div>
-        </div>
+    <div class="card mb-3">
+      <div class="card-body py-2 d-flex flex-wrap gap-4 align-items-center">
+        <div class="po-stat"><span class="n" id="statTotalOrders">-</span><span class="l">Orders</span></div>
+        <div class="po-stat"><span class="n text-primary" id="statOpenOrders">-</span><span class="l">Open</span></div>
+        <div class="po-stat"><span class="n text-warning" id="statPendingValue">-</span><span class="l">Pending value</span></div>
+        <div class="po-stat"><span class="n text-success" id="statTotalValue">-</span><span class="l">Total value</span></div>
       </div>
     </div>
 
     <!-- Filters -->
-    <div class="row mb-3">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-body">
-            <div class="row g-2">
-              <div class="col-md-3">
-                <label class="form-label">Status</label>
-                <select class="form-select" id="filterStatus" onchange="loadPurchaseOrders()">
-                  <option value="">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="submitted">Submitted</option>
-                  <option value="approved">Approved</option>
-                  <option value="partially_received">Partially Received</option>
-                  <option value="received">Received</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Supplier</label>
-                <select class="form-select" id="filterSupplier" onchange="loadPurchaseOrders()">
-                  <option value="">All Suppliers</option>
-                </select>
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Search</label>
-                <input type="text" class="form-control" id="filterSearch" placeholder="PO number, notes..." onkeyup="debounceSearch()">
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">&nbsp;</label>
-                <button class="btn btn-secondary w-100" onclick="clearFilters()">
-                  <i class="ti ti-x me-1"></i>Clear Filters
-                </button>
-              </div>
-            </div>
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <div class="btn-group" id="poStatusTabs">
+            <button type="button" class="btn active" data-status="">All</button>
+            <button type="button" class="btn" data-status="draft">Draft <span class="po-cnt" data-cnt="draft"></span></button>
+            <button type="button" class="btn" data-status="submitted">Submitted <span class="po-cnt" data-cnt="submitted"></span></button>
+            <button type="button" class="btn" data-status="approved">Approved <span class="po-cnt" data-cnt="approved"></span></button>
+            <button type="button" class="btn" data-status="partially_received">Partial <span class="po-cnt" data-cnt="partially_received"></span></button>
+            <button type="button" class="btn" data-status="received">Received</button>
+            <button type="button" class="btn" data-status="cancelled">Cancelled</button>
           </div>
+          <select class="form-select" id="filterStatus" onchange="loadPurchaseOrders()" style="display:none">
+            <option value="">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
+            <option value="approved">Approved</option>
+            <option value="partially_received">Partially Received</option>
+            <option value="received">Received</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select class="form-select ms-auto" id="filterSupplier" onchange="loadPurchaseOrders()" style="width:auto;max-width:240px">
+            <option value="">All suppliers</option>
+          </select>
+          <div class="input-icon" style="min-width:220px">
+            <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+            <input type="text" class="form-control" id="filterSearch" placeholder="PO number, notes…" onkeyup="debounceSearch()" autocomplete="off">
+          </div>
+          <button class="btn btn-link" id="clearFiltersBtn" onclick="clearFilters()" style="display:none"><i class="ti ti-x me-1"></i>Clear</button>
         </div>
       </div>
     </div>
@@ -113,6 +88,7 @@
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Purchase Orders</h3>
+            <span class="text-muted small ms-auto" id="poResultCount"></span>
           </div>
           <div id="poLoading" class="card-body text-center py-5">
             <div class="spinner-border" role="status"></div>
@@ -154,6 +130,7 @@
       <div class="modal-body">
         <form id="poForm">
           <input type="hidden" id="poId">
+          <div class="po-section" style="margin-top:0">Order</div>
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label required">Supplier</label>
@@ -170,6 +147,7 @@
               <input type="date" class="form-control" id="poExpectedDate">
             </div>
           </div>
+          <div class="po-section">Shipping</div>
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label">Ship To Location</label>
@@ -183,17 +161,15 @@
               <input type="text" class="form-control" id="poShipTo" placeholder="Only if not a saved location">
             </div>
           </div>
+          <div class="po-section">Notes</div>
           <div class="row mb-3">
             <div class="col-md-12">
-              <label class="form-label">Notes</label>
-              <textarea class="form-control" id="poNotes" rows="2"></textarea>
+              <textarea class="form-control" id="poNotes" rows="2" placeholder="Internal notes or special instructions"></textarea>
             </div>
           </div>
 
-          <hr>
-
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>Line Items</h4>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="po-section m-0">Line items</div>
             <button type="button" class="btn btn-sm btn-primary" onclick="addPOLineItem()">
               <i class="ti ti-plus me-1"></i>Add Item
             </button>
@@ -245,61 +221,24 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="row mb-3">
-          <div class="col-md-6">
-            <table class="table table-sm">
-              <tr>
-                <th>PO Number:</th>
-                <td id="viewPONumber"></td>
-              </tr>
-              <tr>
-                <th>Supplier:</th>
-                <td id="viewPOSupplier"></td>
-              </tr>
-              <tr>
-                <th>Order Date:</th>
-                <td id="viewPOOrderDate"></td>
-              </tr>
-              <tr>
-                <th>Expected Date:</th>
-                <td id="viewPOExpectedDate"></td>
-              </tr>
-              <tr>
-                <th>Job:</th>
-                <td>
-                  <div class="input-group input-group-sm" style="max-width:260px;">
-                    <input type="text" class="form-control form-control-sm" id="viewPOJobInput" placeholder="Job name">
-                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="savePOJob()" title="Save job">
-                      <i class="ti ti-device-floppy"></i>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </table>
-          </div>
-          <div class="col-md-6">
-            <table class="table table-sm">
-              <tr>
-                <th>Status:</th>
-                <td id="viewPOStatus"></td>
-              </tr>
-              <tr>
-                <th>Total Amount:</th>
-                <td id="viewPOTotal"></td>
-              </tr>
-              <tr>
-                <th>Created By:</th>
-                <td id="viewPOCreator"></td>
-              </tr>
-              <tr>
-                <th>Approved By:</th>
-                <td id="viewPOApprover"></td>
-              </tr>
-              <tr>
-                <th>Send To For Approval:</th>
-                <td id="viewPOAssignedApprover"></td>
-              </tr>
-            </table>
+        <div class="po-kv">
+          <div><div class="l">PO Number</div><div class="v" id="viewPONumber"></div></div>
+          <div><div class="l">Supplier</div><div class="v" id="viewPOSupplier"></div></div>
+          <div><div class="l">Status</div><div class="v" id="viewPOStatus"></div></div>
+          <div><div class="l">Total</div><div class="v" id="viewPOTotal"></div></div>
+          <div><div class="l">Order date</div><div class="v" id="viewPOOrderDate"></div></div>
+          <div><div class="l">Expected date</div><div class="v" id="viewPOExpectedDate"></div></div>
+          <div><div class="l">Created by</div><div class="v" id="viewPOCreator"></div></div>
+          <div><div class="l">Approved by</div><div class="v" id="viewPOApprover"></div></div>
+          <div><div class="l">Send for approval to</div><div class="v" id="viewPOAssignedApprover"></div></div>
+          <div>
+            <div class="l">Job</div>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control form-control-sm" id="viewPOJobInput" placeholder="Job name">
+              <button class="btn btn-outline-secondary btn-sm" type="button" onclick="savePOJob()" title="Save job">
+                <i class="ti ti-device-floppy"></i>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -363,7 +302,7 @@
           </div>
         </div>
 
-        <h4>Line Items</h4>
+        <div class="po-section">Line items</div>
         <div class="table-responsive">
           <table class="table table-vcenter" id="viewPOItemsTable">
             <thead>
@@ -553,8 +492,14 @@ function safeHideModal(modalId) {
   if (backdrop) backdrop.remove();
 }
 
+let pendingSupplierFilter = '';
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  const urlQ = new URLSearchParams(location.search);
+  if (urlQ.get('status')) document.getElementById('filterStatus').value = urlQ.get('status');
+  if (urlQ.get('q')) document.getElementById('filterSearch').value = urlQ.get('q');
+  pendingSupplierFilter = urlQ.get('supplier') || '';
   loadSuppliers();
   loadProducts();
   loadCompanyLocations();
@@ -590,6 +535,7 @@ async function loadPurchaseOrders() {
     const orders = response.data || response;
 
     renderPurchaseOrders(orders);
+    syncFilterUi(orders.length);
 
     document.getElementById('poLoading').style.display = 'none';
     document.getElementById('poContent').style.display = 'block';
@@ -614,7 +560,7 @@ function renderPurchaseOrders(orders) {
 
     return `
       <tr>
-        <td><strong>${escapeHtml(po.po_number)}</strong></td>
+        <td><a href="#" class="fw-bold text-reset" onclick="viewPODetails(${po.id}); return false;">${escapeHtml(po.po_number)}</a></td>
         <td>${po.supplier ? escapeHtml(po.supplier.name) : '-'}</td>
         <td>${formatDate(po.order_date)}</td>
         <td>${po.expected_date ? formatDate(po.expected_date) : '-'}</td>
@@ -666,7 +612,7 @@ async function loadSuppliers() {
       if (selectId === 'poSupplier') {
         select.innerHTML = '<option value="">Select supplier...</option>';
       } else {
-        select.innerHTML = '<option value="">All Suppliers</option>';
+        select.innerHTML = '<option value="">All suppliers</option>';
       }
 
       allSuppliers.forEach(supplier => {
@@ -678,6 +624,13 @@ async function loadSuppliers() {
 
       if (currentValue) select.value = currentValue;
     });
+
+    // A supplier carried in the URL can only be applied once the options exist
+    if (pendingSupplierFilter) {
+      document.getElementById('filterSupplier').value = pendingSupplierFilter;
+      pendingSupplierFilter = '';
+      loadPurchaseOrders();
+    }
   } catch (error) {
     console.error('Error loading suppliers:', error);
   }
@@ -735,6 +688,10 @@ async function loadStatistics() {
       stats.approved + stats.partially_received;
     document.getElementById('statPendingValue').textContent = formatCurrency(stats.pending_value);
     document.getElementById('statTotalValue').textContent = formatCurrency(stats.total_value);
+    document.querySelectorAll('.po-cnt').forEach(el => {
+      const n = stats[el.dataset.cnt] || 0;
+      el.textContent = n ? n : '';
+    });
   } catch (error) {
     console.error('Error loading statistics:', error);
   }
@@ -1619,6 +1576,27 @@ async function submitReceive() {
 }
 
 // Clear filters
+function syncFilterUi(count) {
+  const status = document.getElementById('filterStatus').value;
+  const supplier = document.getElementById('filterSupplier').value;
+  const search = document.getElementById('filterSearch').value.trim();
+  document.querySelectorAll('#poStatusTabs [data-status]').forEach(b => b.classList.toggle('active', b.dataset.status === status));
+  document.getElementById('clearFiltersBtn').style.display = (status || supplier || search) ? '' : 'none';
+  document.getElementById('poResultCount').textContent = `${count} order${count === 1 ? '' : 's'}`;
+  const q = new URLSearchParams();
+  if (status) q.set('status', status);
+  if (supplier) q.set('supplier', supplier);
+  if (search) q.set('q', search);
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+}
+
+document.getElementById('poStatusTabs').addEventListener('click', e => {
+  const btn = e.target.closest('[data-status]');
+  if (!btn) return;
+  document.getElementById('filterStatus').value = btn.dataset.status;
+  loadPurchaseOrders();
+});
+
 function clearFilters() {
   document.getElementById('filterStatus').value = '';
   document.getElementById('filterSupplier').value = '';

@@ -709,6 +709,7 @@ class WorkOrderController extends Controller
             'release_number' => $wo->release_number,
             'release_code' => $wo->release_code,
             'release_label' => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo->release_token}",
+            'release_token' => $wo->release_token,
             'date_issued' => $wo->date_issued?->format('Y-m-d'),
             'due_date' => $wo->due_date?->format('Y-m-d'),
             'due_date_first' => $dueFirst ?? $wo->due_date?->format('Y-m-d'),

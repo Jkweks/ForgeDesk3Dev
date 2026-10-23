@@ -4,9 +4,18 @@
 
 @section('content')
     <style>
-      #inventoryTableContainer { max-height: 60vh; overflow-y: auto; }
-      #inventoryTableContainer thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); }
-      #inventoryTableContainer table > :not(caption) > * > * { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+      .prod-scroll { max-height: calc(100vh - 380px); min-height: 320px; overflow: auto; }
+      .prod-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); white-space: nowrap; }
+      .prod-table tbody tr { cursor: pointer; }
+      .prod-table { font-size: .8125rem; }
+      .prod-table > :not(caption) > * > * { padding: .25rem .6rem; line-height: 1.3; }
+      .prod-table td { vertical-align: middle; }
+      .prod-table .badge { font-size: .7rem; padding: .15rem .4rem; }
+      .prod-loading { opacity: .5; pointer-events: none; transition: opacity .15s; }
+      .prod-stat { display: flex; align-items: baseline; gap: 6px; }
+      .prod-stat .n { font-size: 1.4rem; font-weight: 600; line-height: 1; }
+      .prod-stat .l { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+      .prod-tabs .btn { font-size: .8125rem; }
     </style>
     <div class="page-wrapper">
       <div class="page-header d-print-none">
@@ -39,122 +48,72 @@
 
       <main id="content" class="page-body">
         <div class="container-xl">
-          <!-- Stats Cards -->
-          <div class="row row-deck row-cards mb-3">
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">SKUs Tracked</div>
-                  <div class="h1 mb-3" id="statSkus">-</div>
-                  <div>Active inventory items</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Units on Hand</div>
-                  <div class="h1 mb-3" id="statOnHand">-</div>
-                  <div>Total inventory count</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Available Units</div>
-                  <div class="h1 mb-3" id="statAvailable">-</div>
-                  <div>Uncommitted inventory</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="subheader">Low Stock Alerts</div>
-                  <div class="h1 mb-3 text-warning" id="statLowStock">-</div>
-                  <div>Items below threshold</div>
-                </div>
-              </div>
+          <!-- Stats strip -->
+          <div class="card mb-3">
+            <div class="card-body py-2 d-flex flex-wrap gap-4 align-items-center">
+              <div class="prod-stat"><span class="n" id="statSkus">-</span><span class="l">SKUs</span></div>
+              <div class="prod-stat"><span class="n" id="statOnHand">-</span><span class="l">Units on hand</span></div>
+              <div class="prod-stat"><span class="n" id="statAvailable">-</span><span class="l">Available</span></div>
+              <div class="prod-stat"><span class="n text-warning" id="statLowStock">-</span><span class="l">Low-stock alerts</span></div>
+              <span class="text-muted small ms-auto" id="statScopeNote"></span>
             </div>
           </div>
-          <!-- Inventory Table -->
-          <div class="row">
-            <div class="col-12">
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title">Inventory Snapshot</h3>
-                  <div class="ms-auto d-flex gap-2">
-                    <select class="form-select form-select-sm" id="categoryFilter" style="width: auto;">
-                      <option value="">All Categories</option>
-                    </select>
-                    <input type="text" class="form-control form-control-sm" placeholder="Search..." id="searchInput" style="min-width: 200px;">
-                  </div>
-                </div>
-                <div class="card-body">
-                  <ul class="nav nav-tabs mb-3">
-                    <li class="nav-item">
-                      <a href="#" class="nav-link active" data-tab="all">All Inventory</a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="#" class="nav-link" data-tab="low_stock">Low Stock <span class="badge text-bg-warning ms-2" id="badgeLowStock">0</span></a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="#" class="nav-link" data-tab="critical">Critical <span class="badge text-bg-danger ms-2" id="badgeCritical">0</span></a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="#" class="nav-link" data-tab="boneyard">Boneyard (No Cost)</a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="#" class="nav-link" data-tab="door_shims">Door Shims</a>
-                    </li>
-                    <li class="nav-item">
-                      <a href="#" class="nav-link" data-tab="special_order">Special Order</a>
-                    </li>
-                  </ul>
 
-                  <div class="loading" id="loadingIndicator">
-                    <div class="spinner-border" role="status"></div>
-                    <div>Loading inventory...</div>
-                  </div>
-
-                  <div class="table-responsive" id="inventoryTableContainer" style="display: none;">
-                    <table class="table table-vcenter card-table table-striped">
-                      <thead>
-                        <tr>
-                          <th class="sortable" data-sort="sku" style="cursor: pointer;">
-                            SKU <span class="sort-icon"></span>
-                          </th>
-                          <th class="sortable" data-sort="description" style="cursor: pointer;">
-                            Description <span class="sort-icon"></span>
-                          </th>
-                          <th>Locations</th>
-                          <th class="text-end sortable" data-sort="quantity_on_hand" style="cursor: pointer;">
-                            On Hand <span class="sort-icon"></span>
-                          </th>
-                          <th class="text-end sortable" data-sort="quantity_committed" style="cursor: pointer;">
-                            Committed <span class="sort-icon"></span>
-                          </th>
-                          <th class="text-end sortable" data-sort="quantity_available" style="cursor: pointer;">
-                            Available <span class="sort-icon"></span>
-                          </th>
-                          <th class="sortable" data-sort="status" style="cursor: pointer;">
-                            Status <span class="sort-icon"></span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody id="inventoryTableBody"></tbody>
-                    </table>
-                  </div>
-                  <!-- Pagination -->
-                  <div class="card-footer d-flex align-items-center" id="paginationContainer" style="display: none;">
-                    <p class="m-0 text-muted">Showing <span id="paginationFrom">1</span> to <span id="paginationTo">50</span> of <span id="paginationTotal">0</span> items</p>
-                    <ul class="pagination m-0 ms-auto" id="paginationNav">
-                      <!-- Pagination will be rendered by JavaScript -->
-                    </ul>
-                  </div>
+          <div class="card">
+            <div class="card-header flex-column align-items-stretch gap-2">
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <div class="input-icon flex-fill" style="min-width:220px">
+                  <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                  <input type="text" class="form-control" placeholder="Search SKU, part number, description, finish…" id="searchInput" autocomplete="off">
                 </div>
+                <select class="form-select" id="categoryFilter" style="width:auto;max-width:240px">
+                  <option value="">All categories</option>
+                </select>
+                <label class="btn mb-0" id="noLocationBtn" title="Only products with no storage location">
+                  <input type="checkbox" class="d-none" id="noLocationFilter"><i class="ti ti-map-pin-off me-1"></i>No location
+                </label>
+                <button class="btn btn-link" id="clearFiltersBtn" style="display:none"><i class="ti ti-x me-1"></i>Clear</button>
               </div>
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <div class="btn-group prod-tabs" id="prodTabs">
+                  <button type="button" class="btn active" data-tab="all">All</button>
+                  <button type="button" class="btn" data-tab="low_stock">Low stock <span class="badge text-bg-warning ms-1" id="badgeLowStock">0</span></button>
+                  <button type="button" class="btn" data-tab="critical">Critical <span class="badge text-bg-danger ms-1" id="badgeCritical">0</span></button>
+                  <button type="button" class="btn" data-tab="special_order">Special order</button>
+                  <button type="button" class="btn" data-tab="door_shims">Door shims</button>
+                  <button type="button" class="btn" data-tab="boneyard">Boneyard</button>
+                </div>
+                <select class="form-select form-select-sm ms-auto" id="perPageSelect" style="width:auto" title="Rows per page">
+                  <option value="25">25 / page</option>
+                  <option value="50" selected>50 / page</option>
+                  <option value="100">100 / page</option>
+                  <option value="250">250 / page</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="prod-scroll" id="inventoryTableContainer">
+              <table class="table table-vcenter table-hover card-table prod-table mb-0">
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="sku" style="cursor:pointer">SKU <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="description" style="cursor:pointer">Description <span class="sort-icon"></span></th>
+                    <th>Locations</th>
+                    <th class="text-end sortable" data-sort="quantity_on_hand" style="cursor:pointer">On Hand <span class="sort-icon"></span></th>
+                    <th class="text-end sortable" data-sort="quantity_committed" style="cursor:pointer">Committed <span class="sort-icon"></span></th>
+                    <th class="text-end sortable" data-sort="quantity_available" style="cursor:pointer">Available <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="status" style="cursor:pointer">Status <span class="sort-icon"></span></th>
+                  </tr>
+                </thead>
+                <tbody id="inventoryTableBody">
+                  <tr><td colspan="7" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Loading inventory…</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="card-footer d-flex align-items-center" id="paginationContainer" style="display:none">
+              <p class="m-0 text-muted">Showing <span id="paginationFrom">1</span>–<span id="paginationTo">50</span> of <span id="paginationTotal">0</span></p>
+              <ul class="pagination m-0 ms-auto" id="paginationNav"></ul>
             </div>
           </div>
         </div>
@@ -412,137 +371,173 @@
 
 @push('scripts')
   <script>
-    // Dashboard-specific state
+    // ── List state (mirrored in the URL so views can be bookmarked / linked) ──
+    const TABS = ['all', 'low_stock', 'critical', 'special_order', 'door_shims', 'boneyard'];
+    const SORTS = ['sku', 'description', 'quantity_on_hand', 'quantity_committed', 'quantity_available', 'status'];
     let currentTab = 'all';
     let currentCategoryFilter = '';
+    let currentNoLocation = false;
     let currentPage = 1;
+    let currentPerPage = 50;
     let paginationData = null;
     let currentSortBy = 'sku';
     let currentSortDir = 'asc';
     let currentSearch = '';
     let searchDebounceTimer = null;
+    let loadSeq = 0;
 
-    async function loadDashboard(page = 1) {
+    function readStateFromUrl() {
+      const q = new URLSearchParams(location.search);
+      if (TABS.includes(q.get('tab'))) currentTab = q.get('tab');
+      currentSearch = q.get('q') || '';
+      currentCategoryFilter = q.get('cat') || '';
+      currentNoLocation = q.get('noloc') === '1';
+      if (SORTS.includes(q.get('sort'))) currentSortBy = q.get('sort');
+      currentSortDir = q.get('dir') === 'desc' ? 'desc' : 'asc';
+      currentPage = Math.max(1, parseInt(q.get('page'), 10) || 1);
+      const pp = parseInt(q.get('pp'), 10);
+      if ([25, 50, 100, 250].includes(pp)) currentPerPage = pp;
+    }
+
+    function writeStateToUrl() {
+      const q = new URLSearchParams(location.search); // keeps ?product= while a deep link is pending
+      const set = (k, v, def) => (v === def || v === '' || v === false) ? q.delete(k) : q.set(k, v === true ? '1' : v);
+      set('tab', currentTab, 'all');
+      set('q', currentSearch, '');
+      set('cat', currentCategoryFilter, '');
+      set('noloc', currentNoLocation, false);
+      set('sort', currentSortBy, 'sku');
+      set('dir', currentSortDir, 'asc');
+      set('page', currentPage > 1 ? String(currentPage) : '', '');
+      set('pp', currentPerPage === 50 ? '' : String(currentPerPage), '');
+      const qs = q.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+
+    function syncControlsFromState() {
+      document.getElementById('searchInput').value = currentSearch;
+      document.getElementById('categoryFilter').value = currentCategoryFilter;
+      document.getElementById('perPageSelect').value = String(currentPerPage);
+      const nl = document.getElementById('noLocationFilter');
+      nl.checked = currentNoLocation;
+      document.getElementById('noLocationBtn').classList.toggle('active', currentNoLocation);
+      document.querySelectorAll('#prodTabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === currentTab));
+      const any = currentSearch || currentCategoryFilter || currentNoLocation || currentTab !== 'all';
+      document.getElementById('clearFiltersBtn').style.display = any ? '' : 'none';
+    }
+
+    // One loader for every tab: "all" uses /dashboard (which also returns the stats), the rest use the status endpoint
+    async function loadDashboard(page = currentPage) {
+      const seq = ++loadSeq;
+      currentPage = page;
+      syncControlsFromState();
+      writeStateToUrl();
+      const container = document.getElementById('inventoryTableContainer');
+      container.classList.add('prod-loading');
+
+      const params = new URLSearchParams({ page, per_page: currentPerPage, sort_by: currentSortBy, sort_dir: currentSortDir });
+      if (currentCategoryFilter) params.set('category_id', currentCategoryFilter);
+      if (currentSearch) params.set('search', currentSearch);
+      if (currentNoLocation) params.set('no_location', '1');
+      const url = currentTab === 'all' ? `/dashboard?${params}` : `/dashboard/inventory/${currentTab}?${params}`;
+
       try {
-        currentPage = page;
-        document.getElementById('loadingIndicator').style.display = 'block';
-        document.getElementById('inventoryTableContainer').style.display = 'none';
-        document.getElementById('paginationContainer').style.display = 'none';
-
-        // Build URL with all filters
-        let url = `/dashboard?page=${page}&sort_by=${currentSortBy}&sort_dir=${currentSortDir}`;
-        if (currentCategoryFilter) {
-          url += `&category_id=${currentCategoryFilter}`;
-        }
-        if (currentSearch) {
-          url += `&search=${encodeURIComponent(currentSearch)}`;
-        }
         const response = await apiCall(url);
+        if (seq !== loadSeq) return; // a newer request superseded this one
         if (!response.ok) {
           if (response.status === 401) { showLogin(); return; }
           throw new Error(`Server error: ${response.status}`);
         }
         const data = await response.json();
+        if (seq !== loadSeq) return;
 
-        document.getElementById('statSkus').textContent = data.stats.skus_tracked.toLocaleString();
-        document.getElementById('statOnHand').textContent = data.stats.units_on_hand.toLocaleString();
-        document.getElementById('statAvailable').textContent = data.stats.units_available.toLocaleString();
-        document.getElementById('statLowStock').textContent = data.stats.low_stock_alerts.toLocaleString();
-        document.getElementById('badgeLowStock').textContent = data.stats.low_stock_alerts;
-        document.getElementById('badgeCritical').textContent = data.stats.critical_count;
+        const list = currentTab === 'all' ? data.inventory : data;
+        if (currentTab === 'all') {
+          document.getElementById('statSkus').textContent = data.stats.skus_tracked.toLocaleString();
+          document.getElementById('statOnHand').textContent = data.stats.units_on_hand.toLocaleString();
+          document.getElementById('statAvailable').textContent = data.stats.units_available.toLocaleString();
+          document.getElementById('statLowStock').textContent = data.stats.low_stock_alerts.toLocaleString();
+          document.getElementById('badgeLowStock').textContent = data.stats.low_stock_alerts;
+          document.getElementById('badgeCritical').textContent = data.stats.critical_count;
+          document.getElementById('statScopeNote').textContent = (currentSearch || currentCategoryFilter || currentNoLocation) ? 'Totals reflect the current filters' : '';
+        }
+        // A page past the end (e.g. after a filter change from a bookmarked URL) falls back to the last page
+        if (list.last_page && page > list.last_page) { return loadDashboard(list.last_page); }
 
-        renderInventoryTable(data.inventory.data);
-        renderPagination(data.inventory);
+        renderInventoryTable(list.data);
+        renderPagination(list);
         updateSortIcons();
-
-        document.getElementById('loadingIndicator').style.display = 'none';
-        document.getElementById('inventoryTableContainer').style.display = 'block';
+        container.scrollTop = 0;
       } catch (error) {
         if (!currentUser) return; // session expired — login page already shown
-        console.error('Error loading dashboard:', error);
-        document.getElementById('loadingIndicator').style.display = 'none';
+        console.error('Error loading inventory:', error);
+        document.getElementById('inventoryTableBody').innerHTML =
+          '<tr><td colspan="7" class="text-center text-danger py-4">Failed to load inventory. <a href="#" onclick="loadDashboard(); return false;">Retry</a></td></tr>';
+      } finally {
+        if (seq === loadSeq) container.classList.remove('prod-loading');
       }
     }
 
-    // Sort by column
+    function reloadFromFirstPage() { loadDashboard(1); }
+
+    function clearFilters() {
+      currentTab = 'all'; currentSearch = ''; currentCategoryFilter = ''; currentNoLocation = false;
+      reloadFromFirstPage();
+    }
+
     function sortByColumn(column) {
       if (currentSortBy === column) {
-        // Toggle direction if same column
         currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
       } else {
         currentSortBy = column;
         currentSortDir = 'asc';
       }
-      currentPage = 1; // Reset to first page
-      if (currentTab === 'all') {
-        loadDashboard(1);
-      } else {
-        loadByStatus(currentTab, 1);
-      }
+      reloadFromFirstPage();
     }
 
-    // Update sort icons in table headers
     function updateSortIcons() {
       document.querySelectorAll('.sortable').forEach(th => {
         const icon = th.querySelector('.sort-icon');
-        const column = th.dataset.sort;
-        if (column === currentSortBy) {
-          icon.innerHTML = currentSortDir === 'asc'
-            ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon ms-1"><path d="M12 5l0 14"/><path d="M18 11l-6 -6"/><path d="M6 11l6 -6"/></svg>'
-            : '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon ms-1"><path d="M12 5l0 14"/><path d="M18 13l-6 6"/><path d="M6 13l6 6"/></svg>';
-        } else {
-          icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon ms-1 text-muted"><path d="M8 9l4 -4l4 4"/><path d="M16 15l-4 4l-4 -4"/></svg>';
-        }
+        if (!icon) return;
+        icon.innerHTML = th.dataset.sort === currentSortBy
+          ? `<i class="ti ti-chevron-${currentSortDir === 'asc' ? 'up' : 'down'} text-primary"></i>`
+          : '<i class="ti ti-selector text-muted"></i>';
       });
     }
 
-    // Search handler with debounce
     function handleSearch(e) {
-      const searchTerm = e.target.value.trim();
+      const term = e.target.value.trim();
       clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => {
-        currentSearch = searchTerm;
-        currentPage = 1; // Reset to first page
-        if (currentTab === 'all') {
-          loadDashboard(1);
-        } else {
-          loadByStatus(currentTab, 1);
-        }
-      }, 300); // 300ms debounce
+      searchDebounceTimer = setTimeout(() => { currentSearch = term; reloadFromFirstPage(); }, 300);
     }
 
     function renderInventoryTable(products) {
       const tbody = document.getElementById('inventoryTableBody');
-      tbody.innerHTML = '';
-
-      if (products.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No inventory items found</td></tr>';
+      if (!products.length) {
+        const filtered = currentSearch || currentCategoryFilter || currentNoLocation || currentTab !== 'all';
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-5">
+          <i class="ti ti-package-off" style="font-size:2rem;display:block"></i>
+          ${filtered ? 'No products match these filters.<br><a href="#" onclick="clearFilters(); return false;">Clear filters</a>' : 'No inventory items found.'}
+        </td></tr>`;
         return;
       }
 
       tbody.innerHTML = products.map(product => {
-        const statusBadge = getStatusBadge(product.status, product.on_order_qty);
         const locationCount = product.inventory_locations?.length || 0;
         const locationsDisplay = locationCount > 0
           ? `<span class="badge text-bg-azure">${locationCount} <i class="ti ti-map-pin"></i></span>`
           : '<span class="text-muted">-</span>';
 
-        // Use pack-aware display functions
-        const onHandDisplay = formatOnHandDisplay(product);
-        const committedDisplay = formatCommittedDisplay(product, true);
-        const availableDisplay = formatAvailableDisplay(product);
-
         return `
-          <tr onclick="viewProduct(${product.id})" style="cursor: pointer;">
+          <tr onclick="viewProduct(${product.id})">
             <td><span class="text-muted">${htmlEscape(product.sku)}</span></td>
             <td>${htmlEscape(product.description)}</td>
             <td>${locationsDisplay}</td>
-            <td class="text-end">${onHandDisplay}</td>
-            <td class="text-end">${committedDisplay}</td>
-            <td class="text-end">${availableDisplay}</td>
-            <td>${statusBadge}</td>
-          </tr>
-        `;
+            <td class="text-end">${formatOnHandDisplay(product)}</td>
+            <td class="text-end">${formatCommittedDisplay(product, true)}</td>
+            <td class="text-end">${formatAvailableDisplay(product)}</td>
+            <td>${getStatusBadge(product.status, product.on_order_qty)}</td>
+          </tr>`;
       }).join('');
     }
 
@@ -551,156 +546,50 @@
       const container = document.getElementById('paginationContainer');
       const nav = document.getElementById('paginationNav');
 
-      if (!pagination || pagination.total === 0) {
-        container.style.display = 'none';
-        return;
-      }
+      if (!pagination || pagination.total === 0) { container.style.display = 'none'; return; }
 
-      // Update showing text
-      document.getElementById('paginationFrom').textContent = pagination.from || 0;
-      document.getElementById('paginationTo').textContent = pagination.to || 0;
+      document.getElementById('paginationFrom').textContent = (pagination.from || 0).toLocaleString();
+      document.getElementById('paginationTo').textContent = (pagination.to || 0).toLocaleString();
       document.getElementById('paginationTotal').textContent = pagination.total.toLocaleString();
 
-      // Build pagination nav
-      const currentPage = pagination.current_page;
-      const lastPage = pagination.last_page;
-
-      let html = '';
-
-      // Previous button
-      html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-          <a class="page-link" href="#" onclick="goToPage(${currentPage - 1}); return false;" tabindex="-1" ${currentPage === 1 ? 'aria-disabled="true"' : ''}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
-              <path d="M15 6l-6 6l6 6"></path>
-            </svg>
-          </a>
-        </li>
-      `;
-
-      // Page numbers - show max 7 pages with ellipsis
-      const pageNumbers = getPageNumbers(currentPage, lastPage, 7);
-      pageNumbers.forEach(pageNum => {
-        if (pageNum === '...') {
-          html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-        } else {
-          html += `
-            <li class="page-item ${pageNum === currentPage ? 'active' : ''}">
-              <a class="page-link" href="#" onclick="goToPage(${pageNum}); return false;">${pageNum}</a>
-            </li>
-          `;
-        }
+      const cur = pagination.current_page, last = pagination.last_page;
+      const item = (label, page, disabled, active) =>
+        `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}"><a class="page-link" href="#" onclick="goToPage(${page}); return false;">${label}</a></li>`;
+      let html = item('<i class="ti ti-chevron-left"></i>', cur - 1, cur === 1, false);
+      getPageNumbers(cur, last, 7).forEach(n => {
+        html += n === '...' ? '<li class="page-item disabled"><span class="page-link">…</span></li>' : item(n, n, false, n === cur);
       });
-
-      // Next button
-      html += `
-        <li class="page-item ${currentPage === lastPage ? 'disabled' : ''}">
-          <a class="page-link" href="#" onclick="goToPage(${currentPage + 1}); return false;" ${currentPage === lastPage ? 'aria-disabled="true"' : ''}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
-              <path d="M9 6l6 6l-6 6"></path>
-            </svg>
-          </a>
-        </li>
-      `;
+      html += item('<i class="ti ti-chevron-right"></i>', cur + 1, cur === last, false);
 
       nav.innerHTML = html;
-      container.style.display = pagination.last_page > 1 ? 'flex' : 'none';
+      container.style.display = 'flex';
     }
 
     function getPageNumbers(current, last, maxVisible) {
-      if (last <= maxVisible) {
-        return Array.from({length: last}, (_, i) => i + 1);
-      }
-
+      if (last <= maxVisible) return Array.from({ length: last }, (_, i) => i + 1);
       const pages = [];
       const half = Math.floor(maxVisible / 2);
-
       if (current <= half + 1) {
-        // Near start
         for (let i = 1; i <= maxVisible - 2; i++) pages.push(i);
-        pages.push('...');
-        pages.push(last);
+        pages.push('...', last);
       } else if (current >= last - half) {
-        // Near end
-        pages.push(1);
-        pages.push('...');
+        pages.push(1, '...');
         for (let i = last - maxVisible + 3; i <= last; i++) pages.push(i);
       } else {
-        // Middle
-        pages.push(1);
-        pages.push('...');
+        pages.push(1, '...');
         for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-        pages.push('...');
-        pages.push(last);
+        pages.push('...', last);
       }
-
       return pages;
     }
 
     function goToPage(page) {
       if (!paginationData || page < 1 || page > paginationData.last_page) return;
-
-      if (currentTab === 'all') {
-        loadDashboard(page);
-      } else {
-        loadByStatus(currentTab, page);
-      }
+      loadDashboard(page);
     }
 
-    /**
-     * Format committed quantity display
-     * Shows packs needed if product has pack_size > 1, with eaches in tooltip
-     * Example: "2 packs" with title="137 eaches total"
-     */
-    document.querySelectorAll('.nav-link[data-tab]').forEach(link => {
-      link.addEventListener('click', async (e) => {
-        e.preventDefault();
-        document.querySelectorAll('.nav-link[data-tab]').forEach(l => l.classList.remove('active'));
-        e.target.classList.add('active');
-
-        currentTab = e.target.dataset.tab;
-        currentPage = 1; // Reset to first page on tab change
-        if (currentTab === 'all') {
-          loadDashboard(1);
-        } else {
-          await loadByStatus(currentTab, 1);
-        }
-      });
-    });
-
-    async function loadByStatus(status, page = 1) {
-      try {
-        currentPage = page;
-        document.getElementById('loadingIndicator').style.display = 'block';
-        document.getElementById('inventoryTableContainer').style.display = 'none';
-        document.getElementById('paginationContainer').style.display = 'none';
-
-        let url = `/dashboard/inventory/${status}?page=${page}&sort_by=${currentSortBy}&sort_dir=${currentSortDir}`;
-        if (currentCategoryFilter) {
-          url += `&category_id=${currentCategoryFilter}`;
-        }
-        if (currentSearch) {
-          url += `&search=${encodeURIComponent(currentSearch)}`;
-        }
-        const response = await apiCall(url);
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-        const data = await response.json();
-        renderInventoryTable(data.data);
-        renderPagination(data);
-        updateSortIcons();
-
-        document.getElementById('loadingIndicator').style.display = 'none';
-        document.getElementById('inventoryTableContainer').style.display = 'block';
-      } catch (error) {
-        console.error('Error loading filtered inventory:', error);
-        document.getElementById('loadingIndicator').style.display = 'none';
-        document.getElementById('inventoryTableContainer').style.display = 'block';
-        const tbody = document.getElementById('inventoryTableBody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Failed to load inventory. Please try again.</td></tr>';
-      }
-    }
+    // Refresh after modal operations (called from the product modal), staying on the same page
+    function refreshTable() { loadDashboard(currentPage); }
 
     async function exportProducts() {
       try {
@@ -731,15 +620,6 @@
       } catch (error) {
         console.error('Export failed:', error);
         showNotification('Export failed: ' + error.message, 'danger');
-      }
-    }
-
-    // Refresh the page's inventory table after modal operations
-    function refreshTable() {
-      if (currentTab === 'all') {
-        loadDashboard(currentPage);
-      } else {
-        loadByStatus(currentTab, currentPage);
       }
     }
 
@@ -850,6 +730,9 @@
 
         categoryFilter.appendChild(option);
       });
+
+      // The options load after the URL state is read — re-apply a category chosen via link/bookmark
+      categoryFilter.value = currentCategoryFilter;
     }
 
     function populateSupplierDropdown() {
@@ -1136,27 +1019,20 @@
     });
 
 
-    // Category filter event listener
-    document.getElementById('categoryFilter').addEventListener('change', function(e) {
-      currentCategoryFilter = e.target.value;
-      currentPage = 1; // Reset to first page
-      if (currentTab === 'all') {
-        loadDashboard(1);
-      } else {
-        loadByStatus(currentTab, 1);
-      }
+    // Filter controls
+    document.getElementById('categoryFilter').addEventListener('change', e => { currentCategoryFilter = e.target.value; reloadFromFirstPage(); });
+    document.getElementById('searchInput').addEventListener('input', handleSearch);
+    document.getElementById('noLocationFilter').addEventListener('change', e => { currentNoLocation = e.target.checked; reloadFromFirstPage(); });
+    document.getElementById('perPageSelect').addEventListener('change', e => { currentPerPage = parseInt(e.target.value, 10); reloadFromFirstPage(); });
+    document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+    document.querySelectorAll('#prodTabs [data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => { currentTab = btn.dataset.tab; reloadFromFirstPage(); });
     });
 
-    // Search input event listener
-    document.getElementById('searchInput').addEventListener('input', handleSearch);
-
     // Sort column click handlers (main inventory table)
-    document.querySelectorAll('.sortable').forEach(th => {
+    document.querySelectorAll('#inventoryTableContainer .sortable').forEach(th => {
       th.addEventListener('click', function() {
-        const column = this.dataset.sort;
-        if (column) {
-          sortByColumn(column);
-        }
+        if (this.dataset.sort) sortByColumn(this.dataset.sort);
       });
     });
 
@@ -1169,17 +1045,17 @@
     // Initialize dashboard after session is validated
     window.sessionReady.then(() => {
       if (!currentUser) return;
-      loadDashboard();
-      loadConfigurations(); // Load finish codes and UOMs
+      readStateFromUrl();
+      loadDashboard(currentPage);
+      loadConfigurations(); // Load finish codes and UOMs (also fills the category filter)
 
-      // Check for product ID in URL and auto-open modal
-      const urlParams = new URLSearchParams(window.location.search);
-      const productId = urlParams.get('product');
+      // Deep link: ?product=<id> opens that product's modal on top of the list
+      const productId = new URLSearchParams(location.search).get('product');
       if (productId) {
-        // Wait for dashboard to load, then open product
-        setTimeout(() => viewProduct(parseInt(productId)), 500);
-        // Clear the URL parameter
-        window.history.replaceState({}, document.title, '/inventory/products');
+        setTimeout(() => viewProduct(parseInt(productId, 10)), 500);
+        const q = new URLSearchParams(location.search);
+        q.delete('product');
+        history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
       }
     });
   </script>

@@ -54,6 +54,21 @@
     .jobs-toolbar { width: 100%; flex-wrap: wrap; }
     .jobs-toolbar .search-wrap { flex: 1 1 auto; }
 }
+
+/* --- Overhaul: slim stats, sortable headers, tighter rows --- */
+.jobs-strip .js-stat { display: flex; align-items: baseline; gap: 6px; cursor: default; }
+.jobs-strip .js-stat .n { font-size: 1.4rem; font-weight: 600; line-height: 1; }
+.jobs-strip .js-stat .l { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--tblr-secondary-color); }
+.jobs-strip .js-stat.clickable { cursor: pointer; }
+.jobs-strip .js-stat.clickable:hover .l { color: var(--tblr-primary); }
+#jobsTableEl { font-size: .8125rem; }
+#jobsTableEl > :not(caption) > tr.job-row > * { padding-top: .3rem; padding-bottom: .3rem; }
+#jobsTableEl .badge { font-size: .7rem; padding: .15rem .4rem; }
+#jobsTableEl thead th[data-col] { cursor: pointer; user-select: none; }
+#jobsTableEl thead th[data-col]:hover { color: var(--tblr-primary); }
+#jobsTableEl thead th .sort-ind { margin-left: 3px; font-size: .7rem; }
+.jobs-tabs .btn { font-size: .8125rem; }
+.jobs-tabs .jt-cnt { margin-left: 4px; font-size: .7rem; opacity: .7; }
 @endsection
 
 @section('content')
@@ -80,38 +95,15 @@
       <main id="content" class="page-body">
         <div class="container-xl">
           <!-- Stats -->
-          <div class="row row-cards jobs-stats mb-3">
-            <div class="col-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="stat-value" id="statTotalJobs">–</div>
-                  <div class="stat-label text-secondary">Total jobs</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="stat-value text-success" id="statActiveJobs">–</div>
-                  <div class="stat-label text-secondary">Active</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="stat-value text-warning" id="statOnHoldJobs">–</div>
-                  <div class="stat-label text-secondary">On hold</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="card">
-                <div class="card-body">
-                  <div class="stat-value text-info" id="statCompletedJobs">–</div>
-                  <div class="stat-label text-secondary">Completed</div>
-                </div>
-              </div>
+          <div class="card mb-3 jobs-strip">
+            <div class="card-body py-2 d-flex flex-wrap gap-4 align-items-center">
+              <div class="js-stat"><span class="n" id="statTotalJobs">–</span><span class="l">Jobs</span></div>
+              <div class="js-stat"><span class="n text-success" id="statActiveJobs">–</span><span class="l">Active</span></div>
+              <div class="js-stat"><span class="n text-warning" id="statOnHoldJobs">–</span><span class="l">On hold</span></div>
+              <div class="js-stat"><span class="n text-info" id="statCompletedJobs">–</span><span class="l">Completed</span></div>
+              <div class="js-stat clickable ms-auto" onclick="setStatusFilter('overdue')" title="Active or on-hold jobs past their target date">
+                <span class="n text-danger" id="statOverdueJobs">–</span><span class="l">Overdue</span></div>
+              <div class="js-stat" title="Active jobs due within 7 days"><span class="n text-warning" id="statDueSoonJobs">–</span><span class="l">Due ≤ 7 days</span></div>
             </div>
           </div>
 
@@ -120,20 +112,29 @@
             <div class="col-12">
               <div class="card">
                 <div class="card-header d-flex flex-wrap align-items-center gap-2">
-                  <h3 class="card-title mb-0">Jobs</h3>
-                  <div class="jobs-toolbar d-flex align-items-center ms-sm-auto">
-                    <select class="form-select form-select-sm w-auto" id="filterStatus">
-                      <option value="">All statuses</option>
-                      <option value="active">Active</option>
-                      <option value="on_hold">On Hold</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                  <div class="btn-group jobs-tabs" id="jobsStatusTabs">
+                    <button type="button" class="btn active" data-status="">All <span class="jt-cnt" data-jt="all"></span></button>
+                    <button type="button" class="btn" data-status="active">Active <span class="jt-cnt" data-jt="active"></span></button>
+                    <button type="button" class="btn" data-status="on_hold">On hold <span class="jt-cnt" data-jt="on_hold"></span></button>
+                    <button type="button" class="btn" data-status="overdue">Overdue <span class="jt-cnt" data-jt="overdue"></span></button>
+                    <button type="button" class="btn" data-status="completed">Completed <span class="jt-cnt" data-jt="completed"></span></button>
+                    <button type="button" class="btn" data-status="cancelled">Cancelled <span class="jt-cnt" data-jt="cancelled"></span></button>
+                  </div>
+                  <select id="filterStatus" style="display:none">
+                    <option value="">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <span class="text-muted small ms-auto" id="jobsResultCount"></span>
+                  <div class="jobs-toolbar d-flex align-items-center">
                     <div class="input-group input-group-sm search-wrap">
                       <span class="input-group-text">
                         <i class="ti ti-search"></i>
                       </span>
-                      <input type="text" class="form-control" placeholder="Search job #, name, customer…" id="searchInput">
+                      <input type="text" class="form-control" placeholder="Search job #, name, customer…" id="searchInput" autocomplete="off">
                     </div>
                     <div class="dropdown">
                       <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="jobs-columns-btn"
@@ -937,8 +938,33 @@
 
         let allJobs = [];
         let currentJob = null;
+        let jobSort = { col: '', dir: 'asc' };
+
+        const isOverdueJob = j => ['active', 'on_hold'].includes(j.status) && j.days_until_completion != null && Math.floor(Number(j.days_until_completion)) < 0;
+        const isDueSoonJob = j => j.status === 'active' && j.days_until_completion != null && Math.floor(Number(j.days_until_completion)) >= 0 && Math.floor(Number(j.days_until_completion)) <= 7;
+
+        const JOB_SORTERS = {
+            job_number:   (a, b) => String(a.job_number).localeCompare(String(b.job_number), undefined, { numeric: true }),
+            name:         (a, b) => String(a.job_name || '').localeCompare(String(b.job_name || '')),
+            customer:     (a, b) => String(a.customer_name || '').localeCompare(String(b.customer_name || '')),
+            status:       (a, b) => String(a.status_label || a.status).localeCompare(String(b.status_label || b.status)),
+            reservations: (a, b) => (a.reservations_count || 0) - (b.reservations_count || 0),
+            work_orders:  (a, b) => (a.work_orders_count || 0) - (b.work_orders_count || 0),
+            start:        (a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')),
+            target:       (a, b) => String(a.target_completion_date || '').localeCompare(String(b.target_completion_date || '')),
+            days_left:    (a, b) => Number(a.days_until_completion) - Number(b.days_until_completion),
+        };
+        // Jobs missing the sorted value always sink to the bottom, either direction
+        const JOB_SORT_VALUE = {
+            start: j => j.start_date, target: j => j.target_completion_date,
+            days_left: j => j.days_until_completion, customer: j => j.customer_name,
+        };
 
         document.addEventListener('DOMContentLoaded', function() {
+            const urlQ = new URLSearchParams(location.search);
+            if (urlQ.get('status')) document.getElementById('filterStatus').value = urlQ.get('status');
+            if (urlQ.get('q')) document.getElementById('searchInput').value = urlQ.get('q');
+            if (JOB_SORTERS[urlQ.get('sort')]) jobSort = { col: urlQ.get('sort'), dir: urlQ.get('dir') === 'desc' ? 'desc' : 'asc' };
             initJobsColumnPrefs();
             loadJobs().then(() => {
                 // Deep link from dashboard widgets: ?job=<id>
@@ -952,6 +978,19 @@
             // Search and filter
             document.getElementById('searchInput').addEventListener('input', filterJobs);
             document.getElementById('filterStatus').addEventListener('change', filterJobs);
+
+            document.getElementById('jobsStatusTabs').addEventListener('click', e => {
+                const btn = e.target.closest('[data-status]');
+                if (btn) setStatusFilter(btn.dataset.status);
+            });
+            document.querySelector('#jobsTableEl thead').addEventListener('click', e => {
+                const th = e.target.closest('th[data-col]');
+                if (!th) return;
+                const col = th.dataset.col;
+                if (jobSort.col === col) jobSort.dir = jobSort.dir === 'asc' ? 'desc' : 'asc';
+                else jobSort = { col, dir: 'asc' };
+                filterJobs();
+            });
         });
 
         async function loadJobs() {
@@ -970,7 +1009,7 @@
                 allJobs = data.jobs;
 
                 updateStats();
-                displayJobs(allJobs);
+                filterJobs();
 
                 document.getElementById('loadingIndicator').style.display = 'none';
 
@@ -996,6 +1035,18 @@
             document.getElementById('statActiveJobs').textContent = active;
             document.getElementById('statOnHoldJobs').textContent = onHold;
             document.getElementById('statCompletedJobs').textContent = completed;
+            document.getElementById('statOverdueJobs').textContent = allJobs.filter(isOverdueJob).length;
+            document.getElementById('statDueSoonJobs').textContent = allJobs.filter(isDueSoonJob).length;
+
+            const counts = { all: total, active, on_hold: onHold, completed,
+                cancelled: allJobs.filter(j => j.status === 'cancelled').length,
+                overdue: allJobs.filter(isOverdueJob).length };
+            document.querySelectorAll('[data-jt]').forEach(el => { el.textContent = counts[el.dataset.jt] ?? ''; });
+        }
+
+        function setStatusFilter(status) {
+            document.getElementById('filterStatus').value = status;
+            filterJobs();
         }
 
         function displayJobs(jobs) {
@@ -1036,7 +1087,7 @@
                             <button class="btn btn-sm btn-icon btn-ghost-secondary" onclick="editJob(${job.id})" title="Edit" data-permission="jobs.edit">
                                 <i class="ti ti-pencil"></i>
                             </button>
-                            <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteJob(${job.id})" title="Delete">
+                            <button class="btn btn-sm btn-icon btn-ghost-danger" onclick="deleteJob(${job.id})" title="Delete" data-permission="jobs.delete">
                                 <i class="ti ti-trash"></i>
                             </button>
                         </div>
@@ -1238,7 +1289,7 @@
         }
 
         function filterJobs() {
-            const search = document.getElementById('searchInput').value.toLowerCase();
+            const search = document.getElementById('searchInput').value.toLowerCase().trim();
             const statusFilter = document.getElementById('filterStatus').value;
 
             let filtered = allJobs;
@@ -1251,11 +1302,44 @@
                 );
             }
 
-            if (statusFilter) {
+            if (statusFilter === 'overdue') {
+                filtered = filtered.filter(isOverdueJob);
+            } else if (statusFilter) {
                 filtered = filtered.filter(job => job.status === statusFilter);
             }
 
+            if (jobSort.col && JOB_SORTERS[jobSort.col]) {
+                const getVal = JOB_SORT_VALUE[jobSort.col];
+                const dir = jobSort.dir === 'desc' ? -1 : 1;
+                filtered = [...filtered].sort((a, b) => {
+                    if (getVal) {
+                        const am = getVal(a) == null || getVal(a) === '', bm = getVal(b) == null || getVal(b) === '';
+                        if (am || bm) return am === bm ? 0 : (am ? 1 : -1);
+                    }
+                    return dir * JOB_SORTERS[jobSort.col](a, b);
+                });
+            }
+
             displayJobs(filtered);
+            syncJobsUi(filtered.length, statusFilter, search);
+        }
+
+        function syncJobsUi(shown, statusFilter, search) {
+            document.querySelectorAll('#jobsStatusTabs [data-status]').forEach(b => b.classList.toggle('active', b.dataset.status === statusFilter));
+            document.getElementById('jobsResultCount').textContent = shown === allJobs.length ? `${allJobs.length} jobs` : `${shown} of ${allJobs.length} jobs`;
+            document.querySelectorAll('#jobsTableEl thead th[data-col]').forEach(th => {
+                th.querySelector('.sort-ind')?.remove();
+                if (th.dataset.col === jobSort.col) {
+                    th.insertAdjacentHTML('beforeend', `<i class="ti ti-chevron-${jobSort.dir === 'asc' ? 'up' : 'down'} sort-ind text-primary"></i>`);
+                }
+            });
+            const q = new URLSearchParams(location.search); // keep ?job= for a pending deep link
+            const set = (k, v) => v ? q.set(k, v) : q.delete(k);
+            set('status', statusFilter);
+            set('q', search);
+            set('sort', jobSort.col);
+            set('dir', jobSort.col && jobSort.dir === 'desc' ? 'desc' : '');
+            history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
         }
 
         // ===== TABBED DETAIL HELPERS =====

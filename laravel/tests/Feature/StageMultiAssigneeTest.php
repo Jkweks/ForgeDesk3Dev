@@ -82,6 +82,18 @@ class StageMultiAssigneeTest extends TestCase
         $this->assertEqualsCanonicalizing(['Al', 'Mo'], $ops[$al->id]['stages'][0]['assignee_names']);
     }
 
+    public function test_queue_cards_carry_job_fields_for_grouping(): void
+    {
+        $this->stage($this->elevation($this->wo()), 'Door assembly', 1);
+
+        $card = $this->getJson('/api/v1/work-queue')->json('unassigned.stages.0');
+
+        $this->assertArrayHasKey('job_number', $card);
+        $this->assertArrayHasKey('business_job_id', $card);
+        $this->assertArrayHasKey('release_label', $card);
+        $this->assertArrayHasKey('release_token', $card);
+    }
+
     public function test_one_operator_completing_clears_it_for_all(): void
     {
         $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
