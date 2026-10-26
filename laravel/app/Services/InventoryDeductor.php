@@ -14,7 +14,7 @@ use App\Models\Product;
  */
 class InventoryDeductor
 {
-    public function deduct(Product $product, float $quantity, string $reference, string $notes, ?int $userId = null): void
+    public function deduct(Product $product, float $quantity, string $reference, string $notes, ?int $userId = null, string $type = 'fulfillment'): void
     {
         if ($quantity <= 0) {
             return;
@@ -26,6 +26,7 @@ class InventoryDeductor
         $locations = InventoryLocation::where('product_id', $product->id)
             ->orderBy('is_primary', 'desc')
             ->orderBy('id', 'asc')
+            ->lockForUpdate() // concurrent deductions apply to current bin quantities (no-op outside a transaction)
             ->get();
 
         foreach ($locations as $location) {
@@ -51,7 +52,7 @@ class InventoryDeductor
 
         InventoryTransaction::create([
             'product_id' => $product->id,
-            'type' => 'fulfillment',
+            'type' => $type,
             'quantity' => -$quantity,
             'quantity_before' => $stockBefore,
             'quantity_after' => $product->quantity_on_hand,

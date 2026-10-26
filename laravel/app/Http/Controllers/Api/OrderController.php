@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CommittedInventory;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\InventoryDeductor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -202,15 +203,18 @@ class OrderController extends Controller
             'actual_ship_date' => 'required|date',
         ]);
 
-        return DB::transaction(function () use ($order, $validated) {
+        return DB::transaction(function () use ($request, $order, $validated) {
             foreach ($order->items as $item) {
                 $product = $item->product;
 
-                $product->adjustQuantity(
-                    -$item->quantity,
-                    'shipment',
+                // Bins are the source of truth; this draws from them and recalculates the product total.
+                app(InventoryDeductor::class)->deduct(
+                    $product,
+                    $item->quantity,
                     $order->order_number,
-                    "Shipped for order {$order->order_number}"
+                    "Shipped for order {$order->order_number}",
+                    $request->user()?->id,
+                    'shipment',
                 );
 
                 $item->quantity_shipped = $item->quantity;
