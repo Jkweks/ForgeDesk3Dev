@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
+use App\Services\InventoryDeductor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -183,7 +184,12 @@ class ProductController extends Controller
     /** Create one product (status + categories), as the add form does. */
     private function createProductWithCategories(array $data, Request $request): Product
     {
+        // Stock lives in the bins: opening stock becomes the primary bin, never a bare product column.
+        $openingStock = (float) ($data['quantity_on_hand'] ?? 0);
+        unset($data['quantity_on_hand']);
+
         $product = Product::create($data);
+        app(InventoryDeductor::class)->seed($product, $openingStock);
         $product->updateStatus();
 
         // Handle multiple categories
@@ -456,17 +462,19 @@ class ProductController extends Controller
     public function adjustInventory(Request $request, Product $product)
     {
         $validated = $request->validate([
-            'quantity' => 'required|integer',
+            'quantity' => 'required|numeric',
             'type' => 'required|in:receipt,shipment,adjustment,transfer,return',
             'reference_number' => 'nullable|max:255',
             'notes' => 'nullable',
         ]);
 
-        $product->adjustQuantity(
+        app(InventoryDeductor::class)->adjust(
+            $product,
             $validated['quantity'],
             $validated['type'],
             $validated['reference_number'] ?? null,
-            $validated['notes'] ?? null
+            $validated['notes'] ?? null,
+            $request->user()?->id,
         );
 
         return response()->json([

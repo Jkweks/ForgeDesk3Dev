@@ -644,7 +644,7 @@ class InventoryTransactionController extends Controller
      * negative removes across locations, primary first. Mirrors the location
      * handling in createManual().
      */
-    private function applyInventoryDelta(Product $product, int $quantityChange): void
+    private function applyInventoryDelta(Product $product, float $quantityChange): void
     {
         if ($quantityChange > 0) {
             $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();

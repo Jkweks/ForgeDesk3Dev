@@ -11,6 +11,27 @@ class Product extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * quantity_on_hand is a cached total of the bins, kept in step by a database trigger on
+     * inventory_locations. Code must change stock by changing bins (see InventoryDeductor); if a save
+     * tries to set the total to something the bins don't add up to, the bins win and it is logged.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Product $product) {
+            if (! $product->exists || ! $product->isDirty('quantity_on_hand') || ! $product->inventoryLocations()->exists()) {
+                return;
+            }
+            $binTotal = (float) $product->inventoryLocations()->sum('quantity');
+            if (abs((float) $product->quantity_on_hand - $binTotal) > 0.0001) {
+                \Illuminate\Support\Facades\Log::warning('Ignored a direct quantity_on_hand write; bins are the source of truth', [
+                    'product_id' => $product->id, 'attempted' => $product->quantity_on_hand, 'bin_total' => $binTotal,
+                ]);
+                $product->quantity_on_hand = $binTotal;
+            }
+        });
+    }
+
     protected $fillable = [
         'sku', 'part_number', 'finish', 'description', 'long_description',
         'photo_path',
@@ -391,33 +412,6 @@ class Product extends Model
         $this->status = $status;
 
         $this->save();
-    }
-
-    /**
-     * @deprecated Use InventoryLocationController::adjust() instead, which keeps
-     *             inventory_locations in sync before recalculating the product totals.
-     *             This method edits quantity_on_hand directly without touching any
-     *             storage location, leaving the two out of sync.
-     */
-    public function adjustQuantity($quantity, $type, $reference = null, $notes = null)
-    {
-        $quantityBefore = $this->quantity_on_hand;
-        $this->quantity_on_hand += $quantity;
-        $this->save();
-
-        InventoryTransaction::create([
-            'product_id' => $this->id,
-            'type' => $type,
-            'quantity' => $quantity,
-            'quantity_before' => $quantityBefore,
-            'quantity_after' => $this->quantity_on_hand,
-            'reference_number' => $reference,
-            'notes' => $notes,
-            'user_id' => auth()->id(),
-            'transaction_date' => now(),
-        ]);
-
-        $this->updateStatus();
     }
 
     /**

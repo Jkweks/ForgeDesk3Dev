@@ -32,3 +32,6 @@ Schedule::command('fleet:sync-in')->everyTwoMinutes()->withoutOverlapping();
 // Safety net for the "notify when special orders are in" reservation option (PO receipts
 // trigger it directly; this catches manual adjustments and cycle counts).
 Schedule::command('reservations:check-special-orders')->hourly()->withoutOverlapping();
+
+// Flag any product whose cached on-hand total stops matching its bins (logs a warning; fix with --fix)
+Schedule::command('inventory:check-totals')->dailyAt('02:15')->withoutOverlapping();

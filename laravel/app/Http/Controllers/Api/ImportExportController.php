@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Supplier;
+use App\Services\InventoryDeductor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -176,7 +177,6 @@ class ImportExportController extends Controller
                         'long_description' => $data['Long Description'] ?? null,
                         'category' => $data['Category'] ?? null,
                         'unit_cost' => $data['Unit Cost'],
-                        'quantity_on_hand' => $data['Quantity On Hand'],
                         'minimum_quantity' => $data['Minimum Quantity'],
                         'maximum_quantity' => $data['Maximum Quantity'] ?? null,
                         'unit_of_measure' => $data['Unit of Measure'],
@@ -192,6 +192,15 @@ class ImportExportController extends Controller
                         $updateData['supplier_id'] = $resolveSupplierId($data['Supplier']);
                     }
                     $product->update($updateData);
+                    // The sheet's quantity is a stock count: record the difference as an adjustment on the bins
+                    app(InventoryDeductor::class)->adjust(
+                        $product,
+                        (float) $data['Quantity On Hand'] - (float) $product->quantity_on_hand,
+                        'adjustment',
+                        'Import',
+                        'Quantity set by product import',
+                        $request->user()?->id,
+                    );
                     $product->updateStatus();
                     $results['success']++;
                 } else {
@@ -201,7 +210,6 @@ class ImportExportController extends Controller
                         'long_description' => $data['Long Description'] ?? null,
                         'category' => $data['Category'] ?? null,
                         'unit_cost' => $data['Unit Cost'],
-                        'quantity_on_hand' => $data['Quantity On Hand'],
                         'minimum_quantity' => $data['Minimum Quantity'],
                         'maximum_quantity' => $data['Maximum Quantity'] ?? null,
                         'unit_of_measure' => $data['Unit of Measure'],
@@ -211,6 +219,7 @@ class ImportExportController extends Controller
                         'lead_time_days' => $data['Lead Time Days'] ?? null,
                         'is_active' => ($data['Active'] ?? 'Yes') === 'Yes',
                     ]);
+                    app(InventoryDeductor::class)->seed($product, (float) $data['Quantity On Hand']);
                     $product->updateStatus();
                     $results['success']++;
                 }

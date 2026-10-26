@@ -7,6 +7,7 @@ use App\Models\Machine;
 use App\Models\MachineTooling;
 use App\Models\MaintenanceRecord;
 use App\Models\Product;
+use App\Services\InventoryDeductor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -211,9 +212,10 @@ class MachineToolingController extends Controller
 
             // If this is a consumable tool, decrease inventory
             if ($product->isConsumableTool()) {
-                $product->adjustQuantity(-1, 'issue',
+                app(InventoryDeductor::class)->deduct($product, 1,
                     "Installed on {$machine->name} at {$request->location_on_machine}",
-                    "Tool installation for machine tooling ID: {$tooling->id}"
+                    "Tool installation for machine tooling ID: {$tooling->id}",
+                    auth()->id(), 'issue'
                 );
             }
 
@@ -310,9 +312,10 @@ class MachineToolingController extends Controller
 
             // If this is a consumable tool, decrease inventory
             if ($newProduct->isConsumableTool()) {
-                $newProduct->adjustQuantity(-1, 'issue',
+                app(InventoryDeductor::class)->deduct($newProduct, 1,
                     "Replaced tool on {$oldTooling->machine->name} at {$oldTooling->location_on_machine}",
-                    "Tool replacement for machine tooling ID: {$newTooling->id}"
+                    "Tool replacement for machine tooling ID: {$newTooling->id}",
+                    auth()->id(), 'issue'
                 );
             }
 

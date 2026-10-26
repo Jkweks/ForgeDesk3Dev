@@ -517,17 +517,6 @@ class InventoryLocationController extends Controller
      */
     private function updateProductTotals(Product $product)
     {
-        $totals = $product->inventoryLocations()
-            ->selectRaw('
-                COALESCE(SUM(quantity), 0) as total_quantity,
-                COALESCE(SUM(quantity_committed), 0) as total_committed
-            ')
-            ->first();
-
-        $product->quantity_on_hand = $totals->total_quantity ?? 0;
-        $product->quantity_committed = $totals->total_committed ?? 0;
-        $product->save();
-
-        $product->updateStatus();
+        $product->recalculateQuantitiesFromLocations();
     }
 }
