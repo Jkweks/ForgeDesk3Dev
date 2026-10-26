@@ -3244,7 +3244,7 @@ let _wizJobActiveIdx = -1;
 
 async function loadWizardJobs() {
     try {
-        const r = await API('/business-jobs?per_page=1000&status=active');
+        const r = await API('/business-jobs?per_page=1000&status=active,permanent');
         const data = await r.json();
         wizardJobs = data.jobs || [];
     } catch (e) {

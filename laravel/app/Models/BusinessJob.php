@@ -42,6 +42,7 @@ class BusinessJob extends Model
         'on_hold' => 'On Hold',
         'completed' => 'Completed',
         'cancelled' => 'Cancelled',
+        'permanent' => 'Permanent',
     ];
 
     /**
@@ -132,8 +133,8 @@ class BusinessJob extends Model
      */
     public function syncAutoStatus(): void
     {
-        // Don't override manually set terminal/hold statuses
-        if (in_array($this->status, ['cancelled', 'on_hold'])) {
+        // Don't override manually set terminal/hold statuses; permanent jobs never end
+        if (in_array($this->status, ['cancelled', 'on_hold', 'permanent'])) {
             return;
         }
 

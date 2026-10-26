@@ -119,6 +119,7 @@
                     <button type="button" class="btn" data-status="overdue">Overdue <span class="jt-cnt" data-jt="overdue"></span></button>
                     <button type="button" class="btn" data-status="completed">Completed <span class="jt-cnt" data-jt="completed"></span></button>
                     <button type="button" class="btn" data-status="cancelled">Cancelled <span class="jt-cnt" data-jt="cancelled"></span></button>
+                    <button type="button" class="btn" data-status="permanent">Permanent <span class="jt-cnt" data-jt="permanent"></span></button>
                   </div>
                   <select id="filterStatus" style="display:none">
                     <option value="">All statuses</option>
@@ -127,6 +128,7 @@
                     <option value="overdue">Overdue</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
+                    <option value="permanent">Permanent</option>
                   </select>
                   <span class="text-muted small ms-auto" id="jobsResultCount"></span>
                   <div class="jobs-toolbar d-flex align-items-center">
@@ -293,6 +295,7 @@
                         <option value="on_hold">On Hold</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
+                        <option value="permanent">Permanent (never auto-completes)</option>
                       </select>
                     </div>
                     <div class="col-md-4">
@@ -1040,6 +1043,7 @@
 
             const counts = { all: total, active, on_hold: onHold, completed,
                 cancelled: allJobs.filter(j => j.status === 'cancelled').length,
+                permanent: allJobs.filter(j => j.status === 'permanent').length,
                 overdue: allJobs.filter(isOverdueJob).length };
             document.querySelectorAll('[data-jt]').forEach(el => { el.textContent = counts[el.dataset.jt] ?? ''; });
         }
@@ -2344,6 +2348,7 @@
                 'on_hold': 'warning',
                 'completed': 'info',
                 'cancelled': 'danger',
+                'permanent': 'purple',
             };
             return colors[status] || 'secondary';
         }

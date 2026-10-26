@@ -28,7 +28,7 @@ class BusinessJobController extends Controller
 
             // Filter by status if provided
             if ($request->has('status')) {
-                $query->where('status', $request->status);
+                $query->whereIn('status', array_filter(explode(',', (string) $request->status)));
             }
 
             // Search by job number or name
@@ -169,7 +169,7 @@ class BusinessJobController extends Controller
                 'contact_name' => 'nullable|string|max:255',
                 'contact_phone' => 'nullable|string|max:50',
                 'contact_email' => 'nullable|email|max:255',
-                'status' => 'nullable|in:active,on_hold,completed,cancelled',
+                'status' => 'nullable|in:active,on_hold,completed,cancelled,permanent',
                 'start_date' => 'nullable|date',
                 'target_completion_date' => 'nullable|date',
                 'notes' => 'nullable|string',
@@ -255,7 +255,7 @@ class BusinessJobController extends Controller
                 'contact_name' => 'nullable|string|max:255',
                 'contact_phone' => 'nullable|string|max:50',
                 'contact_email' => 'nullable|email|max:255',
-                'status' => 'nullable|in:active,on_hold,completed,cancelled',
+                'status' => 'nullable|in:active,on_hold,completed,cancelled,permanent',
                 'start_date' => 'nullable|date',
                 'target_completion_date' => 'nullable|date',
                 'actual_completion_date' => 'nullable|date',
