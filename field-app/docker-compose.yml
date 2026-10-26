@@ -1,0 +1,71 @@
+# ForgeDesk Field app. Deploy on its own server, separate from ForgeDesk:
+#   cp .env.example .env   # fill in the passwords and domain
+#   docker compose up -d --build
+# ForgeDesk connects OUT to the db service (see README.md); nothing here ever reaches ForgeDesk.
+name: forgedesk-field
+
+services:
+  db:
+    build: ./db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fieldadmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: fieldapp
+      FIELD_APP_DB_PASSWORD: ${FIELD_APP_DB_PASSWORD:?set FIELD_APP_DB_PASSWORD in .env}
+      FORGEDESK_SYNC_DB_PASSWORD: ${FORGEDESK_SYNC_DB_PASSWORD:?set FORGEDESK_SYNC_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # The one port ForgeDesk needs. Bind it to this server's LAN/VPN address and firewall it
+    # to ForgeDesk's IP only; the default keeps it local to this machine.
+    ports:
+      - "${FIELDSYNC_DB_BIND:-127.0.0.1}:${FIELDSYNC_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldadmin -d fieldapp"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: fieldapp
+      PGUSER: field_app
+      PGPASSWORD: ${FIELD_APP_DB_PASSWORD}
+      PORT: "3000"
+      # Cookies are Secure (HTTPS-only) unless you explicitly turn this off for a plain-HTTP test.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      FIELD_DOMAIN: ${FIELD_DOMAIN:?set FIELD_DOMAIN in .env}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

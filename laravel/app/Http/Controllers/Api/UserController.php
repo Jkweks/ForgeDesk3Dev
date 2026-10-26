@@ -75,6 +75,7 @@ class UserController extends Controller
                 'role_display_name' => $user->roleModel?->display_name ?? ucfirst($user->role),
                 'is_active' => $user->is_active,
                 'is_disabled' => (bool) $user->is_disabled,
+                'mobile_app_access' => (bool) $user->mobile_app_access,
                 'status' => $user->is_disabled ? 'disabled' : ($user->is_active ? 'active' : 'inactive'),
                 'must_change_password' => $user->must_change_password,
                 'password_expires_at' => optional($user->passwordExpiresAt())->toIso8601String(),
@@ -168,6 +169,7 @@ class UserController extends Controller
             'email' => 'required|email|unique:users,email',
             'role' => ['required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
+            'mobile_app_access' => 'sometimes|boolean',
             // Hold the welcome email so profile / roles / permissions can be set
             // up first, then send it (individually or in bulk) later.
             'send_welcome_email' => 'sometimes|boolean',
@@ -178,6 +180,10 @@ class UserController extends Controller
         // Only an admin may create another admin.
         if ($validated['role'] === 'admin' && ! $request->user()->isAdmin()) {
             return response()->json(['message' => 'Only an administrator can assign the admin role'], 403);
+        }
+
+        if ($denied = $this->denyMobileAccessUnlessAdmin($request, $validated)) {
+            return $denied;
         }
 
         // Generate full name from first and last name
@@ -334,6 +340,7 @@ class UserController extends Controller
             'role' => $user->role,
             'is_active' => $user->is_active,
             'is_disabled' => (bool) $user->is_disabled,
+            'mobile_app_access' => (bool) $user->mobile_app_access,
             'must_change_password' => $user->must_change_password,
             'welcome_email_sent_at' => $user->welcome_email_sent_at?->toIso8601String(),
             'invitation_pending' => $user->welcome_email_sent_at === null,
@@ -377,7 +384,14 @@ class UserController extends Controller
             'role' => ['sometimes', 'required', Rule::exists('roles', 'name')],
             'is_active' => 'sometimes|boolean',
             'is_disabled' => 'sometimes|boolean',
+            'mobile_app_access' => 'sometimes|boolean',
         ]);
+
+        if (array_key_exists('mobile_app_access', $validated)
+            && (bool) $validated['mobile_app_access'] !== (bool) $user->mobile_app_access
+            && ($denied = $this->denyMobileAccessUnlessAdmin($request, $validated))) {
+            return $denied;
+        }
 
         // A disabled user (left the company) can't sign in either.
         if (! empty($validated['is_disabled'])) {
@@ -434,8 +448,22 @@ class UserController extends Controller
                 'email' => $user->email,
                 'role' => $user->role,
                 'is_active' => $user->is_active,
+                'mobile_app_access' => (bool) $user->mobile_app_access,
             ],
         ]);
+    }
+
+    /**
+     * Mobile access publishes the user's password hash to the internet-facing field app database
+     * (docs/fleet-field-sync-contract.md, v2), so only an administrator may grant it.
+     */
+    private function denyMobileAccessUnlessAdmin(Request $request, array $validated)
+    {
+        if (! empty($validated['mobile_app_access']) && ! $request->user()->isAdmin()) {
+            return response()->json(['message' => 'Only an administrator can allow mobile app access'], 403);
+        }
+
+        return null;
     }
 
     /**

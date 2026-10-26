@@ -58,6 +58,14 @@ class FleetFieldSyncTest extends TestCase
             $t->text('payload');
             $t->string('ingested_at')->nullable();
         });
+        $s->create('fa_users', function ($t) {
+            $t->unsignedBigInteger('forgedesk_user_id')->primary();
+            $t->string('login');
+            $t->string('display_name');
+            $t->string('password_hash');
+            $t->boolean('is_active')->default(true);
+            $t->string('synced_at')->nullable();
+        });
         $s->create('fa_photos', function ($t) {
             $t->id();
             $t->string('submission_uuid');
@@ -271,5 +279,88 @@ class FleetFieldSyncTest extends TestCase
 
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
         $this->getJson('/api/v1/fleet/dashboard')->assertOk()->assertJsonPath('sync.stale', true);
+    }
+
+    // ---- Mobile-app logins (contract v2) ----------------------------------------------------
+
+    private function remoteUsers()
+    {
+        return DB::connection('fieldsync')->table('fa_users')->get()->keyBy('forgedesk_user_id');
+    }
+
+    private function mobileUser(array $attrs = []): User
+    {
+        static $n = 0;
+        $n++;
+
+        return User::factory()->create(array_merge([
+            'first_name' => 'Crew', 'last_name' => "Member{$n}", 'name' => "Crew Member{$n}",
+            'email' => "Crew{$n}@Example.com", 'role' => 'viewer', 'is_active' => true,
+            'mobile_app_access' => true, 'must_change_password' => false, 'password' => 'a-real-password-1',
+        ], $attrs));
+    }
+
+    public function test_only_users_with_mobile_access_are_published_with_their_forgedesk_password_hash(): void
+    {
+        $crew = $this->mobileUser();
+        $office = $this->mobileUser(['mobile_app_access' => false, 'email' => 'office@example.com']);
+
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+
+        $remote = $this->remoteUsers();
+        $this->assertCount(1, $remote, 'users without the flag are never sent');
+        $this->assertFalse($remote->has($office->id));
+        $row = $remote[$crew->id];
+        $this->assertSame(strtolower($crew->email), $row->login, 'login is the lowercased email');
+        $this->assertSame($crew->name, $row->display_name);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('a-real-password-1', $row->password_hash), 'same password works');
+        $this->assertEquals(1, $row->is_active);
+    }
+
+    public function test_accounts_that_cannot_sign_in_get_no_credential_on_the_field_side(): void
+    {
+        $inactive = $this->mobileUser(['is_active' => false]);
+        $disabled = $this->mobileUser(['is_disabled' => true, 'is_active' => false]);
+        $temp = $this->mobileUser(['must_change_password' => true]);
+
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+
+        foreach ([$inactive, $disabled, $temp] as $u) {
+            $row = $this->remoteUsers()[$u->id];
+            $this->assertSame('', $row->password_hash, "{$u->email} must not have a hash on the public server");
+            $this->assertEquals(0, $row->is_active);
+        }
+    }
+
+    public function test_revoking_access_or_deleting_a_user_strips_the_hash_on_the_next_sync(): void
+    {
+        $revoked = $this->mobileUser();
+        $deleted = $this->mobileUser();
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+        $this->assertNotSame('', $this->remoteUsers()[$revoked->id]->password_hash);
+
+        $revoked->update(['mobile_app_access' => false]);
+        $deleted->delete();
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+
+        foreach ([$revoked, $deleted] as $u) {
+            $row = $this->remoteUsers()[$u->id];
+            $this->assertSame('', $row->password_hash);
+            $this->assertEquals(0, $row->is_active);
+        }
+    }
+
+    public function test_a_password_change_in_forgedesk_reaches_the_field_side(): void
+    {
+        $crew = $this->mobileUser();
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+        $before = $this->remoteUsers()[$crew->id]->password_hash;
+
+        $crew->update(['password' => 'a-brand-new-password-2']);
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+
+        $after = $this->remoteUsers()[$crew->id]->password_hash;
+        $this->assertNotSame($before, $after);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('a-brand-new-password-2', $after));
     }
 }

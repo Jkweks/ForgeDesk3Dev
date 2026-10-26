@@ -1,0 +1,19 @@
+{
+  "name": "forgedesk-field",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ForgeDesk field app: mobile inspections, meter readings and defect reports for fleet/field assets",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/",
+    "user": "node scripts/user.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "jsqr": "^1.4.0",
+    "pg": "^8.13.1"
+  }
+}

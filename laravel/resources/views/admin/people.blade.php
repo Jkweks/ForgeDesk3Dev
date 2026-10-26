@@ -115,6 +115,13 @@
                 <span class="form-check-label">Active</span>
               </label>
             </div>
+            <div class="mb-3">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" id="addUserMobile">
+                <span class="form-check-label">Allow mobile app (field app) sign-in</span>
+              </label>
+              <div class="form-hint">Uses their ForgeDesk email and password. Administrators only. Works once they have set their own password.</div>
+            </div>
             <div class="mb-1">
               <label class="form-check">
                 <input class="form-check-input" type="checkbox" id="addUserSendWelcome" checked>
@@ -178,6 +185,13 @@
                 <span class="form-check-label">Disabled (no longer with the company)</span>
               </label>
               <div class="form-hint">Removes them from the pickers and stops all emails. Also turns off sign-in.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" id="editUserMobile">
+                <span class="form-check-label">Allow mobile app (field app) sign-in</span>
+              </label>
+              <div class="form-hint">Uses their ForgeDesk email and password. Administrators only. Works once they have set their own password; changing or resetting it here carries over to the app within a couple of minutes.</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -291,6 +305,7 @@
         document.getElementById('addUserEmail').value = '';
         document.getElementById('addUserRole').value = '';
         document.getElementById('addUserActive').checked = true;
+        document.getElementById('addUserMobile').checked = false;
         document.getElementById('addUserSendWelcome').checked = true;
 
         // Ensure role dropdown is populated
@@ -323,6 +338,7 @@
               email: email,
               role: role,
               is_active: active,
+              mobile_app_access: document.getElementById('addUserMobile').checked,
               send_welcome_email: sendWelcome
             })
           });
@@ -363,6 +379,7 @@
           document.getElementById('editUserRole').value = user.role;
           document.getElementById('editUserActive').checked = user.is_active;
           document.getElementById('editUserDisabled').checked = !!user.is_disabled;
+          document.getElementById('editUserMobile').checked = !!user.mobile_app_access;
 
           showModal(document.getElementById('editUserModal'));
         } catch (error) {
@@ -410,7 +427,8 @@
             email: email,
             role: role,
             is_active: active,
-            is_disabled: disabled
+            is_disabled: disabled,
+            mobile_app_access: document.getElementById('editUserMobile').checked
           };
 
           // Only include password if it was changed
@@ -711,6 +729,10 @@
             statusBadge += user.temp_password_expired
               ? ' <span class="badge bg-red-lt" title="Temporary password expired">Invite expired</span>'
               : ' <span class="badge bg-yellow-lt" title="Waiting for the user to set a new password">Pending invite</span>';
+          }
+
+          if (user.mobile_app_access) {
+            statusBadge += ' <span class="badge bg-purple-lt" title="Can sign in to the mobile field app"><i class="ti ti-device-mobile"></i></span>';
           }
 
           const roleBadge = roleBadges[user.role] || '<span class="badge bg-secondary-lt">' + user.role + '</span>';

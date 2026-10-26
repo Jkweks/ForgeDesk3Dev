@@ -1,6 +1,10 @@
-# Field app ⇄ ForgeDesk sync contract (v1)
+# Field app ⇄ ForgeDesk sync contract (v2)
 
-`schema_version: 1`. Two codebases depend on this; change it deliberately.
+`schema_version: 2`. Two codebases depend on this; change it deliberately.
+
+**v2 (additive):** ForgeDesk now also publishes crew logins into `fa_users` (see below). Payloads and the
+other tables are unchanged. Existing field databases are upgraded with `field-app/db/upgrades/002-forgedesk-users.sql`
+(it drops the v1 local user tables). ForgeDesk's `fleet:sync-out` fails loudly until the field DB has `fa_users`.
 
 ## Principles
 
@@ -46,6 +50,18 @@ CREATE TABLE fa_submissions (
   ingested_at     timestamp                   -- set by ForgeDesk once handled (ingested, rejected or held)
 );
 
+-- Crew logins, published by ForgeDesk (read-only for the field app). One row per ForgeDesk user who an
+-- administrator ticked "Allow mobile app" for; rows are never deleted. Users sign in with their ForgeDesk
+-- email and password.
+CREATE TABLE fa_users (
+  forgedesk_user_id bigint PRIMARY KEY,
+  login             text NOT NULL,            -- ForgeDesk email, lowercased (unique, case-insensitive)
+  display_name      text NOT NULL,            -- becomes fa_submissions.submitted_by
+  password_hash     text NOT NULL DEFAULT '', -- ForgeDesk's bcrypt hash; '' = cannot sign in right now
+  is_active         boolean NOT NULL DEFAULT true,
+  synced_at         timestamp
+);
+
 -- Photos for a submission, as base64 text (ForgeDesk verifies real image type, re-encodes, stores privately).
 CREATE TABLE fa_photos (
   id              bigserial PRIMARY KEY,
@@ -60,10 +76,26 @@ CREATE TABLE fa_photos (
 
 | Role | Grants |
 |---|---|
-| `field_app` (public-facing app) | `SELECT` on `fa_assets`, `fa_checklists`; `INSERT` on `fa_submissions`, `fa_photos`; `SELECT` on own rows as needed. **No UPDATE/DELETE**. |
-| `forgedesk_sync` (ForgeDesk) | `SELECT/INSERT/UPDATE` on `fa_assets`, `fa_checklists`; `SELECT/UPDATE(ingested_at)` on `fa_submissions`; `SELECT/DELETE` on `fa_photos`. |
+| `field_app` (public-facing app) | `SELECT` on `fa_assets`, `fa_checklists`, `fa_users`; `SELECT`, `INSERT` on `fa_submissions`; `INSERT` on `fa_photos`. **No UPDATE/DELETE** on the inbox or `fa_users`. |
+| `forgedesk_sync` (ForgeDesk) | `SELECT/INSERT/UPDATE` on `fa_assets`, `fa_checklists`, `fa_users`; `SELECT/UPDATE(ingested_at)` on `fa_submissions`; `SELECT/DELETE` on `fa_photos`. |
 
-Field-app logins/users live entirely in the field app. ForgeDesk only sees the `submitted_by` text.
+### Logins (v2)
+
+Accounts are managed in ForgeDesk (Users → *Allow mobile app*, administrators only). The field app keeps no
+user management of its own, only sessions (`fa_sessions`, field-app private; ForgeDesk never sees them).
+
+**Security trade-off, accepted deliberately:** signing in with the *same* password means ForgeDesk's password
+hash for these users sits on the internet-facing server. Anyone who breaches the field database could try to
+crack those hashes offline, and a cracked password may be reused elsewhere. Mitigations built in:
+
+- Only users explicitly opted in are ever published, and only admins can opt a user in.
+- A hash is present **only while the account can sign in**: inactive, disabled, deleted, access removed, or still
+  on a temporary password (`must_change_password`) all publish `password_hash = ''` (and `is_active = false`).
+  Removing access therefore removes the credential from the field side on the next sync (≤ 2 min), and the
+  field app rejects existing sessions at once.
+- Hashes are bcrypt (cost 12). The field app can never write `fa_users`.
+- Treat opted-in accounts as exposed: give them least-privilege ForgeDesk roles, and prefer people who don't
+  hold admin roles. An admin who opts in puts an admin hash on the public server.
 
 ## Payloads (`fa_submissions.payload`, version 1)
 
@@ -96,7 +128,7 @@ Opens a `repair` work order flagged as coming from the field app.
 
 ## ForgeDesk behaviour
 
-1. **Out:** upserts `fa_assets` (in-service assets only; others flagged `is_active=false`) and `fa_checklists`. Nothing else leaves ForgeDesk: no costs, purchase info, VIN/plate, notes, or documents.
+1. **Out:** upserts `fa_assets` (in-service assets only; others flagged `is_active=false`), `fa_checklists`, and `fa_users` (opted-in users; everyone else previously published is blanked, never deleted). Nothing else leaves ForgeDesk: no costs, purchase info, VIN/plate, notes, or documents.
 2. **In:** reads up to 100 rows with `ingested_at IS NULL`, ordered by `id`. For each: skip if `submission_uuid` already in `field_sync_log`; otherwise validate + apply inside a transaction; write a `field_sync_log` row (`ingested` | `rejected` | `needs_review`, with reason and original payload); set `ingested_at` on the remote row. Photos are pulled from `fa_photos`, verified by content sniffing (JPEG/PNG/WebP only), JPEG/PNG re-encoded to strip EXIF/GPS, stored on ForgeDesk's private disk, and removed from the field DB.
 3. Replaying a submission (same `submission_uuid`) is always safe.
 4. Dashboard shows a warning if the last successful pull/publish is older than 15 minutes.
@@ -106,4 +138,5 @@ Opens a `repair` work order flagged as coming from the field app.
 - Queue submissions locally while offline and replay them with the **same `submission_uuid`**.
 - Resolve a scanned QR code (`asset_number`) against `fa_assets`; show only `is_active` assets.
 - Build the inspection form from `fa_checklists.items`.
-- Never trust ForgeDesk-published data for authorization; manage your own users and sessions.
+- Authenticate against `fa_users` only (`is_active AND password_hash <> ''`), keep your own sessions, and take `submitted_by` from the signed-in user's `display_name`, never from the request.
+- Re-check `fa_users` on every request so a revoked account stops working as soon as the sync lands.

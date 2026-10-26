@@ -10,7 +10,7 @@ class FleetSyncOut extends Command
 {
     protected $signature = 'fleet:sync-out';
 
-    protected $description = 'Publish the asset + checklist snapshot to the field app database';
+    protected $description = 'Publish the asset, checklist and mobile-user snapshot to the field app database';
 
     public function handle(FieldSync $sync): int
     {
@@ -21,7 +21,7 @@ class FleetSyncOut extends Command
         }
         try {
             $r = $sync->publish();
-            $this->info("Published {$r['assets']} assets, {$r['checklists']} checklists.");
+            $this->info("Published {$r['assets']} assets, {$r['checklists']} checklists, {$r['users']} mobile users.");
 
             return self::SUCCESS;
         } catch (Throwable $e) {

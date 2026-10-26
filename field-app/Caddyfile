@@ -1,0 +1,12 @@
+# FIELD_DOMAIN examples:
+#   field.example.com  -> automatic Let's Encrypt HTTPS (ports 80 and 443 must reach this host)
+#   :80                -> plain HTTP, for a quick local test only (camera/QR need HTTPS)
+{
+	# Clients connecting by IP address send no SNI; serve our certificate to them anyway.
+	default_sni {$FIELD_DOMAIN}
+}
+
+{$FIELD_DOMAIN} {
+	encode gzip
+	reverse_proxy app:3000
+}

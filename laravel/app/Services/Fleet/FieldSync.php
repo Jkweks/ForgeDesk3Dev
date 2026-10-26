@@ -8,6 +8,7 @@ use App\Models\FieldAssetInspection;
 use App\Models\FieldAssetType;
 use App\Models\FieldAssetWorkOrder;
 use App\Models\FieldSyncLog;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Cache;
@@ -65,7 +66,7 @@ class FieldSync
      * Publish the minimal snapshot the crews need. Deliberately excludes costs, purchase
      * info, VIN/plate, documents and notes.
      *
-     * @return array{assets: int, checklists: int}
+     * @return array{assets: int, checklists: int, users: int}
      */
     public function publish(): array
     {
@@ -104,9 +105,49 @@ class FieldSync
             }
         });
 
+        // Assets are committed first; a field DB that predates fa_users (contract v2) then fails
+        // loudly here instead of silently leaving crews unable to sign in.
+        $users = $this->publishUsers($remote);
+
         Cache::forever(self::CACHE_LAST_OUT, now()->toIso8601String());
 
-        return ['assets' => count($rows), 'checklists' => count($checklists)];
+        return ['assets' => count($rows), 'checklists' => count($checklists), 'users' => $users];
+    }
+
+    /**
+     * Mobile-app logins (contract v2). Only users an admin ticked "Allow mobile app" for are ever
+     * published, and a bcrypt hash is only on the field side while the account can actually sign in:
+     * a user who is inactive, disabled, removed, has lost access, or still holds an unchanged
+     * temporary password gets an empty hash, so nothing usable sits on the public-facing server.
+     */
+    private function publishUsers(Connection $remote): int
+    {
+        $now = now()->toDateTimeString();
+        $users = User::where('mobile_app_access', true)->get();
+
+        $rows = $users->map(function (User $u) use ($now) {
+            $canSignIn = $u->is_active && ! $u->is_disabled && ! $u->must_change_password && $u->password;
+
+            return [
+                'forgedesk_user_id' => $u->id,
+                'login' => mb_strtolower(trim($u->email)),
+                'display_name' => Str::limit($u->full_name ?: $u->name, 100, ''),
+                'password_hash' => $canSignIn ? $u->password : '',
+                'is_active' => (bool) $canSignIn,
+                'synced_at' => $now,
+            ];
+        })->all();
+
+        $remote->transaction(function () use ($remote, $rows) {
+            foreach (array_chunk($rows, 200) as $chunk) {
+                $remote->table('fa_users')->upsert($chunk, ['forgedesk_user_id'], ['login', 'display_name', 'password_hash', 'is_active', 'synced_at']);
+            }
+            // Revoked or deleted: keep the row (sessions/history reference it) but strip the credential.
+            $remote->table('fa_users')->whereNotIn('forgedesk_user_id', array_column($rows, 'forgedesk_user_id'))
+                ->update(['is_active' => false, 'password_hash' => '']);
+        });
+
+        return count($rows);
     }
 
     // ---- field app -> ForgeDesk ----------------------------------------------------------
