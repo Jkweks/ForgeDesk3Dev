@@ -124,8 +124,8 @@
       </div>
       <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
         <div class="btn-group btn-group-sm" id="wq-view" title="Board or two-week schedule">
-          <button type="button" class="btn active" data-view="board" onclick="wqSetView('board')"><i class="ti ti-layout-kanban me-1"></i>Board</button>
-          <button type="button" class="btn" data-view="schedule" onclick="wqSetView('schedule')"><i class="ti ti-calendar-week me-1"></i>Schedule</button>
+          <button type="button" class="btn" data-view="board" onclick="wqSetView('board')"><i class="ti ti-layout-kanban me-1"></i>Board</button>
+          <button type="button" class="btn active" data-view="schedule" onclick="wqSetView('schedule')"><i class="ti ti-calendar-week me-1"></i>Schedule</button>
         </div>
         <div class="btn-group btn-group-sm" id="wq-group" title="How the board is grouped">
           <button type="button" class="btn active" data-group="operator" onclick="wqSetGroup('operator')"><i class="ti ti-user me-1"></i>By operator</button>
@@ -297,7 +297,7 @@ const API = (p, o = {}) => fetch('/api/v1' + p, {
 let wqData = null;
 let wqDragStageId = null;
 let wqSchedDrag = null;
-let wqView = 'board';
+let wqView = 'schedule';
 let wqJobs = [];
 let wqWOs = [];
 
@@ -351,7 +351,7 @@ function wqSyncUrl() {
   set('wo', document.getElementById('wq-wo').value);
   set('step', document.getElementById('wq-step').value);
   if (wqGroup !== 'operator') q.set('group', wqGroup);
-  if (wqView !== 'board') q.set('view', wqView);
+  if (wqView !== 'schedule') q.set('view', wqView);
   set('q', document.getElementById('wq-search').value.trim());
   if (document.getElementById('wq-overdue-only').checked) q.set('overdue', '1');
   if (document.getElementById('wq-hide-locked').checked) q.set('hidelocked', '1');
@@ -1587,7 +1587,7 @@ async function wqSaveAssignees() {
   document.getElementById('wq-hide-locked').checked = u.get('hidelocked') === '1';
   if (u.get('step')) pendingStep = u.get('step');
   if (['job', 'step'].includes(u.get('group'))) wqGroup = u.get('group');
-  if (u.get('view') === 'schedule') wqView = 'schedule';
+  if (u.get('view') === 'board') wqView = 'board';
   await loadBoard();
 })();
 setInterval(() => loadBoard(true), 30000);
