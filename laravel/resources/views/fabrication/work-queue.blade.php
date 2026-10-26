@@ -41,25 +41,55 @@
   .wq-cal tr { break-inside:avoid; page-break-inside:avoid; }
   .wq-cal tbody td { height:2.1rem; padding:.1rem .25rem; }
   .wq-cal .it { margin-bottom:.1rem; padding:.05rem .2rem; }
+  .wq-sg.print { break-inside:avoid; page-break-inside:avoid; font-size:.66rem; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .wq-sg-row { break-inside:avoid; page-break-inside:avoid; }
   @page { size: landscape; margin: .4in; }
 }
 .wq-sched-wrap { overflow-x:auto; }
-.wq-sched { width:100%; min-width:900px; border-collapse:collapse; table-layout:fixed; font-size:.8rem; margin-bottom:.75rem; }
-.wq-sched th, .wq-sched td { border:1px solid var(--tblr-border-color); padding:.25rem .3rem; vertical-align:top; }
-.wq-sched th { background:var(--tblr-bg-surface-secondary); text-align:center; font-weight:600; }
-.wq-sched th.today { background:var(--tblr-primary-lt); }
-.wq-sched .wkend { background:var(--tblr-bg-surface-tertiary, var(--tblr-bg-surface-secondary)); }
-.wq-sched td.op { width:8rem; font-weight:600; background:var(--tblr-bg-surface-secondary); }
-.wq-sched tbody td.cell { height:3.6rem; }
-.wq-sched td.cell.drop-hover { outline:2px dashed var(--tblr-primary); outline-offset:-2px; background:var(--tblr-primary-lt); }
-.wq-sched .it { margin-bottom:.25rem; padding:.2rem .35rem; border:1px solid var(--tblr-border-color); border-left:3px solid var(--tblr-primary); border-radius:var(--tblr-border-radius-sm); background:var(--tblr-bg-surface); cursor:grab; line-height:1.25; }
-.wq-sched .it:active { cursor:grabbing; }
-.wq-sched .it.late { border-left-color:var(--tblr-danger); }
-.wq-sched .it.locked { border-left-style:dashed; opacity:.75; }
-.wq-sched .it.dragging { opacity:.35; }
-.wq-sched .it small { display:block; color:var(--tblr-secondary-color); }
+.wq-sched-panel { width:14rem; flex:none; max-height:80vh; overflow-y:auto; }
+.wq-sched-panel .sb { margin-bottom:.35rem; }
+.wq-sched-panel.drop-hover { outline:2px dashed var(--tblr-primary); outline-offset:2px; background:var(--tblr-primary-lt); }
+.wq-sg { min-width:800px; margin-bottom:.75rem; font-size:.8rem; border:1px solid var(--tblr-border-color); }
+.wq-sg-head, .wq-sg-row { display:grid; }
+.wq-sg-head > div { background:var(--tblr-bg-surface-secondary); text-align:center; font-weight:600; padding:.25rem; border-right:1px solid var(--tblr-border-color); }
+.wq-sg-head > div.today { background:var(--tblr-primary-lt); }
+.wq-sg-row { border-top:1px solid var(--tblr-border-color); grid-auto-rows:minmax(3rem, auto); }
+.wq-sg-row .op { font-weight:600; background:var(--tblr-bg-surface-secondary); padding:.25rem .4rem; }
+.wq-sg .wkend { background:var(--tblr-bg-surface-tertiary, var(--tblr-bg-surface-secondary)); }
+.wq-sg-row .cell { border-left:1px solid var(--tblr-border-color); min-height:3rem; }
+.wq-sg-row .cell.today { background:var(--tblr-primary-lt); }
+.wq-sg-row .cell { position:relative; }
+.is-dragging .wq-sg-row .cell { background-image:repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), rgba(128,128,128,.22) calc(25% - 1px), rgba(128,128,128,.22) 25%); }
+.wq-sg-row .cell.drop-span { --f:0%; --t:100%; background-image:linear-gradient(to right, transparent var(--f), var(--tblr-primary-lt) var(--f), var(--tblr-primary-lt) var(--t), transparent var(--t)), repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), rgba(128,128,128,.22) calc(25% - 1px), rgba(128,128,128,.22) 25%); box-shadow:inset 0 2px 0 var(--tblr-primary-lt), inset 0 -2px 0 var(--tblr-primary-lt); }
+.wq-sg-row .cell.drop-end::after { content:attr(data-tip); position:absolute; right:2px; bottom:2px; z-index:3; padding:0 .35rem; font-size:.68rem; white-space:nowrap; border-radius:3px; background:var(--tblr-primary); color:#fff; pointer-events:none; }
+.wq-sg-row .cell.drop-hover { outline:2px dashed var(--tblr-primary); outline-offset:-2px; background:var(--tblr-primary-lt); }
+.wq-sg-row .sb { position:relative; z-index:1; margin:2px; }
+.is-dragging .wq-sg-row .sb { pointer-events:none; }
+.sb { padding:.2rem .5rem .2rem .5rem; border:1px solid var(--tblr-border-color); border-left:3px solid var(--tblr-primary); border-radius:var(--tblr-border-radius-sm); background:var(--tblr-bg-surface); cursor:grab; line-height:1.25; overflow:hidden; }
+.sb:active { cursor:grabbing; }
+.sb.late { border-left-color:var(--tblr-danger); }
+.sb.locked { border-left-style:dashed; opacity:.75; }
+.sb.assist { border-left-color:var(--tblr-success); background:var(--tblr-success-lt); }
+.sb.note { border-left-color:var(--tblr-yellow); background:var(--tblr-yellow-lt); }
+.sb.dragging { opacity:.35; }
+.sb strong, .sb small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sb small { color:var(--tblr-secondary-color); }
+.sb .lz { position:absolute; top:0; left:0; bottom:0; width:.5rem; cursor:ew-resize; background:rgba(0,0,0,.08); }
+.sb .rz { position:absolute; top:0; right:0; bottom:0; width:.5rem; cursor:ew-resize; background:rgba(0,0,0,.08); }
 .wq-sched-tray { display:flex; flex-wrap:wrap; gap:.35rem; align-items:flex-start; }
 .wq-sched-tray .it { width:11rem; margin:0; border-left-color:var(--tblr-secondary); }
+.wq-sg.print { color:#000; background:#fff; border-color:#999; min-width:0; }
+.wq-sg.print .wq-sg-head > div { background:#eee; color:#000; border-color:#999; }
+.wq-sg.print .wq-sg-head > div.today, .wq-sg.print .cell.today { background:#cfe2ff; }
+.wq-sg.print .wq-sg-row { border-color:#999; grid-auto-rows:minmax(2.1rem, auto); }
+.wq-sg.print .op { background:#eee; color:#000; }
+.wq-sg.print .wkend { background:#f6f6f6; }
+.wq-sg.print .cell { border-color:#999; min-height:2.1rem; }
+.wq-sg.print .sb { background:#f1f6fd; color:#000; border-color:#aac; border-left-color:#206bc4; cursor:default; padding:.05rem .3rem; }
+.wq-sg.print .sb.late { border-left-color:#d63939; background:#fdf0f0; }
+.wq-sg.print .sb.assist { border-left-color:#2fb344; background:#e6f6ea; }
+.wq-sg.print .sb.note { border-left-color:#f59f00; background:#fff6d6; }
+.wq-sg.print .sb small { color:#444; }
 .wq-cal { width:100%; border-collapse:collapse; table-layout:fixed; font-size:.72rem; }
 .wq-cal th, .wq-cal td { border:1px solid #999; padding:.2rem .3rem; vertical-align:top; }
 .wq-cal th { background:#eee; text-align:center; color:#000; }
@@ -159,7 +189,7 @@
           <button class="btn btn-sm btn-outline-secondary" onclick="wqSchedShift(7)" title="Forward a week"><i class="ti ti-chevron-right"></i></button>
           <button class="btn btn-sm btn-outline-secondary" onclick="wqSchedShift(0)">This week</button>
           <label class="form-check form-switch mb-0 ms-2"><input class="form-check-input" type="checkbox" id="wq-sched-weekends" onchange="renderBoard()"><span class="form-check-label small">Include weekends</span></label>
-          <span class="text-secondary small ms-auto">Drag a card to another day to shift its planned dates, to another row to reassign it, or both.</span>
+          <span class="text-secondary small ms-auto">Drag a bar to move it (snaps to 2h quarter-days), drag its right edge to extend it, or drag an unassigned work order onto an operator's day.</span>
         </div>
         <div id="wq-sched-body" class="wq-sched-wrap"></div>
       </div>
@@ -731,6 +761,8 @@ function wqCalModel(startVal, weekends) {
         woId: c.work_order_id, opId, label: woLabel(c.job_name, c.release_token ?? c.release_label),
         steps: [], stageIds: [], assigneeIds: c.assignee_ids || [],
         rawStart: c.planned_start_date, rawEnd: c.planned_completion_date, start, end, locked: true,
+        estMin: c.estimated_minutes, due: c.due_date,
+        sq: c.planned_start_date ? (c.planned_start_quarter ?? 0) : 0, eq: c.planned_completion_date ? (c.planned_completion_quarter ?? 3) : 3,
         allOne: soleOwner(c.work_order_id),
       }).get(c.work_order_id);
       w.steps.push(c.name);
@@ -763,20 +795,12 @@ function wqRenderCalendar() {
   const wk2 = wqYmd(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + 7));
   const wk = d => d.getDay() % 6 === 0 ? 'wkend' : '';
 
-  // One table per week, stacked, so each prints at a readable width
-  const weekTable = (wkDays) => {
-    const wkKeys = wkDays.map(wqYmd);
-    const head = wkDays.map((d, i) => `<th class="${wk(d)}${wkKeys[i] === today ? ' today' : ''}">${d.toLocaleDateString([], { weekday: 'short' })}<br>${fmt(wkKeys[i])}</th>`).join('');
-    const body = rows.filter(r => r.always || r.list.some(w => w.from <= wkKeys[wkKeys.length - 1] && w.to >= wkKeys[0])).map(r => `<tr><td class="op">${esc(r.title)}</td>` + wkKeys.map((k, i) => {
-      const items = r.list.filter(w => w.from <= k && k <= w.to);
-      return `<td class="${wk(wkDays[i])}">` + items.map(w =>
-        `<div class="it${w.late ? ' late' : ''}${w.locked ? ' locked' : ''}"><strong>${esc(w.label)}</strong>${w.allOne && !w.late ? '' : `<small>${w.allOne ? '' : esc([...new Set(w.steps)].join(', '))}${w.late ? `${w.allOne ? '' : ' · '}overdue` : ''}</small>`}</div>`).join('') + '</td>';
-    }).join('') + '</tr>').join('');
-    // Blank rows to pencil in saw schedules by hand
-    const blank = ['Saw 1', 'Saw 2'].map(n => `<tr class="blank"><td class="op">${n}</td>${wkDays.map(d => `<td class="${wk(d)}"></td>`).join('')}</tr>`).join('');
-    return `<table class="wq-cal"><thead><tr><th style="width:7rem">Week of ${fmt(wkKeys[0])}</th>${head}</tr></thead><tbody>${body}${blank}</tbody></table>`;
-  };
+  // One grid per week, stacked, so each prints at a readable width; same bars as the Schedule view
+  const opRows = rows.filter(r => r.opId);
+  const entries = wqData?.schedule_entries || [];
+  const weekTable = wkDays => wqWeekGrid(wkDays, opRows, entries, { interactive: false, extraRows: ['Saw 1', 'Saw 2'] });
 
+  const unassignedList = [...new Set((wqData?.unassigned?.stages || []).filter(wqCardVisible).map(c => woLabel(c.job_name, c.release_token ?? c.release_label) + (c.due_date ? ` (due ${fmt(c.due_date)})` : '')))].join(', ');
   const unscheduled = new Set();
   wqAllCards().filter(wqCardVisible).forEach(c => { if (!(c.planned_completion_date || c.due_date || c.planned_start_date)) unscheduled.add(woLabel(c.job_name, c.release_token ?? c.release_label)); });
 
@@ -785,7 +809,8 @@ function wqRenderCalendar() {
     ${weekTable(days.filter(d => wqYmd(d) < wk2))}
     <div style="height:.75rem"></div>
     ${weekTable(days.filter(d => wqYmd(d) >= wk2))}
-    <div class="small mt-2">Work orders span planned start → planned completion (or sit on their due date). <span style="color:#d63939">Red</span> = past its end date; dashed = waiting on an earlier step.
+    <div class="small mt-2">Bars span planned start → planned completion in 2-hour blocks (or sit on the due date). <span style="color:#d63939">Red</span> = past its end date; dashed = waiting on an earlier step; green = assist; yellow = note.
+    ${unassignedList ? `<br>Unassigned: ${esc(unassignedList)}` : ''}
     ${unscheduled.size ? `<br>No dates set (not shown): ${esc([...unscheduled].join(', '))}` : ''}</div>`;
 }
 
@@ -806,85 +831,310 @@ function wqSchedShift(n) {
   renderBoard();
 }
 
+// Positions on the schedule are quarter-days (2h of an 8h day): absolute slot = day number * 4 + quarter (0-3)
+const wqDayNum = k => Math.round(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)) / 86400000);
+const wqAbs = (k, q) => wqDayNum(k) * 4 + q;
+const wqFromAbs = a => ({ d: new Date(Math.floor(a / 4) * 86400000).toISOString().slice(0, 10), q: ((a % 4) + 4) % 4 });
+// Work content -> schedule length in quarters: hours rounded to the nearest 2h block (24h = 12 quarters = 3 days)
+const wqSchedQuarters = est => est ? Math.max(1, Math.round(est / 120)) : 4;
+// Last slot of a block of n quarters starting at `start`, stepping over Sat/Sun when weekends are hidden
+function wqEndFrom(start, n, skipWeekends) {
+  let pos = start, left = n - 1;
+  while (left > 0) {
+    pos++;
+    const g = new Date(Math.floor(pos / 4) * 86400000).getUTCDay();
+    if (skipWeekends && (g === 0 || g === 6)) continue;
+    left--;
+  }
+  return pos;
+}
+const wqCellQuarter = (e, cell) => { const r = cell.getBoundingClientRect(); return Math.min(3, Math.max(0, Math.floor((e.clientX - r.left) / r.width * 4))); };
+
+// One week of the schedule as a grid: operators down the side, multi-day bars across quarter-day positions.
+// Interactive (drag / right-click, registering each bar in o.reg) for the board; static for the printout.
+function wqWeekGrid(wkDays, opRows, entries, o) {
+  const today = wqYmd(new Date());
+  const fmt = k => new Date(k + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const wk = d => d.getDay() % 6 === 0 ? 'wkend' : '';
+    const keys = wkDays.map(wqYmd), n = keys.length;
+    // Visible column holding a date; weekend dates hidden from the grid snap inward
+    const colFrom = k => { for (let i = 0; i < n; i++) if (keys[i] >= k) return i; return n; };
+    const colTo = k => { for (let i = n - 1; i >= 0; i--) if (keys[i] <= k) return i; return -1; };
+    const cols = `grid-template-columns: 8rem repeat(${n}, minmax(0, 1fr))`;
+    const head = `<div class="wq-sg-head" style="${cols}"><div>Week of ${fmt(keys[0])}</div>${wkDays.map((d, i) =>
+      `<div class="${wk(d)}${keys[i] === today ? ' today' : ''}">${d.toLocaleDateString([], { weekday: 'short' })}<br>${fmt(keys[i])}</div>`).join('')}</div>`;
+
+    const body = opRows.map(r => {
+      const bars = [];
+      r.list.forEach(w => {
+        const s = w.late ? w.from : w.start, e = w.late ? w.from : w.end;
+        bars.push({ kind: 'wo', ref: w, s, e, label: w.label, sub: [...new Set(w.steps)].join(', ') + (w.late ? ' · overdue' : ''),
+          cls: 'wo' + (w.late ? ' late' : '') + (w.locked ? ' locked' : ''), canResize: !w.late, sq: w.late ? 0 : w.sq, eq: w.late ? 3 : w.eq });
+      });
+      entries.filter(x => x.user_id === r.opId).forEach(x => bars.push({
+        kind: x.work_order_id ? 'assist' : 'note', ref: x, s: x.start_date, e: x.end_date,
+        label: x.work_order_id ? x.label : x.note, sub: x.work_order_id ? 'Assist' : '', cls: x.work_order_id ? 'assist' : 'note', canResize: true, sq: x.start_quarter ?? 0, eq: x.end_quarter ?? 3,
+      }));
+      const placed = bars.map(b => ({ ...b, a: colFrom(b.s < keys[0] ? keys[0] : b.s), b: colTo(b.e > keys[n - 1] ? keys[n - 1] : b.e) }))
+        .filter(b => b.a < n && b.b >= 0 && b.a <= b.b);
+      // Quarter-day extents inside this week, so back-to-back jobs on one day can share a lane (job order)
+      placed.forEach(b => {
+        b.qs = keys[b.a] === b.s ? wqAbs(b.s, b.sq) : wqAbs(keys[b.a], 0);
+        b.qe = keys[b.b] === b.e ? wqAbs(b.e, b.eq) : wqAbs(keys[b.b], 3);
+      });
+      placed.sort((x, y) => x.qs - y.qs || y.qe - x.qe);
+      const laneEnds = [];
+      placed.forEach(b => {
+        let l = laneEnds.findIndex(end => end < b.qs);
+        if (l < 0) l = laneEnds.push(-Infinity) - 1;
+        laneEnds[l] = b.qe; b.lane = l + 1;
+      });
+      const lanes = Math.max(1, laneEnds.length);
+      const cells = [];
+      for (let l = 1; l <= lanes; l++) keys.forEach((k, i) => cells.push(
+        `<div class="cell ${wk(wkDays[i])}${k === today ? ' today' : ''}" style="grid-row:${l};grid-column:${i + 2}"${!o.interactive ? '' : ` data-op="${r.opId}" data-day="${k}" data-lane="${l}"
+          ondragover="wqSchedOver(event)" ondragleave="wqSchedLeave(event)" ondrop="wqSchedDrop(event, ${r.opId}, '${k}')"
+          oncontextmenu="wqSchedCellMenu(event, ${r.opId}, '${k}')"`}></div>`));
+      const barHtml = placed.map(b => {
+        let i = -1;
+        if (o.interactive) { o.reg.push({ kind: b.kind, ref: b.ref, keys: keys.slice(b.a, b.b + 1), opId: r.opId }); i = o.reg.length - 1; }
+        const handle = !o.interactive ? '' : (b.canResize && b.e <= keys[n - 1] && b.e >= keys[0]
+          ? `<span class="rz" draggable="true" title="Drag to change the end" ondragstart="wqSchedResizeStart(event, ${i}, 'end')" ondragend="wqSchedDragEnd(event)"></span>` : '')
+          + (b.canResize && keys[b.a] === b.s
+          ? `<span class="lz" draggable="true" title="Drag to change the start" ondragstart="wqSchedResizeStart(event, ${i}, 'start')" ondragend="wqSchedDragEnd(event)"></span>` : '');
+        // Part-day start/end: inset the bar by the unused quarters (percent margins resolve against the spanned area)
+        const nCols = b.b - b.a + 1;
+        const inL = keys[b.a] === b.s ? b.sq / 4 / nCols * 100 : 0, inR = keys[b.b] === b.e ? (3 - b.eq) / 4 / nCols * 100 : 0;
+        return `<div class="sb ${b.cls}" style="grid-row:${b.lane};grid-column:${b.a + 2} / ${b.b + 3};margin-left:calc(${inL}% + 2px);margin-right:calc(${inR}% + 2px)"${!o.interactive ? '' : ` draggable="true"
+          ondragstart="wqSchedDragStart(event, ${i})" ondragend="wqSchedDragEnd(event)" oncontextmenu="wqSchedBarMenu(event, ${i})"`}
+          title="${esc(b.label || '')}${b.sub ? ': ' + esc(b.sub) : ''}"><strong>${esc(b.label || '')}</strong>${b.sub ? `<small>${esc(b.sub)}</small>` : ''}${handle}</div>`;
+      }).join('');
+      return `<div class="wq-sg-row" style="${cols}"><div class="op" style="grid-row:1 / span ${lanes};grid-column:1">${esc(r.title)}</div>${cells.join('')}${barHtml}</div>`;
+    }).join('');
+    // Blank rows to pencil in by hand (print only)
+    const blank = (o.extraRows || []).map(n => `<div class="wq-sg-row" style="${cols}"><div class="op">${esc(n)}</div>${keys.map((k, i) => `<div class="cell ${wk(wkDays[i])}" style="grid-row:1;grid-column:${i + 2}"></div>`).join('')}</div>`).join('');
+    return `<div class="wq-sg${o.interactive ? '' : ' print'}">${head}${body}${blank}</div>`;
+}
+
 function wqRenderSchedule() {
   const inp = document.getElementById('wq-sched-start');
   if (!inp.value) inp.value = wqSchedMonday(new Date());
-  const { days, first, last, d0, rows } = wqCalModel(inp.value, document.getElementById('wq-sched-weekends').checked);
+  const weekends = document.getElementById('wq-sched-weekends').checked;
+  const { days, first, last, d0, rows } = wqCalModel(inp.value, weekends);
+  document.getElementById('wq-sched-body').classList.remove('is-dragging');
   const today = wqYmd(new Date());
   const fmt = k => new Date(k + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
   const wk = d => d.getDay() % 6 === 0 ? 'wkend' : '';
   const wk2 = wqYmd(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + 7));
+  const entries = wqData?.schedule_entries || [];
+  const opRows = rows.filter(r => r.opId);
 
   // Items are looked up by index on drag start, so no data has to be serialised into the markup
   const reg = [];
-  const itemHtml = (w, k) => {
-    reg.push({ w, day: k });
-    return `<div class="it${w.late ? ' late' : ''}${w.locked ? ' locked' : ''}" draggable="true" data-i="${reg.length - 1}"
-        ondragstart="wqSchedDragStart(event, ${reg.length - 1})" ondragend="wqSchedDragEnd(event)"
-        title="${esc(w.label)}: ${esc([...new Set(w.steps)].join(', '))}"><strong>${esc(w.label)}</strong><small>${esc([...new Set(w.steps)].join(', '))}${w.late ? ' · overdue' : ''}</small></div>`;
-  };
 
-  const weekTable = wkDays => {
-    const keys = wkDays.map(wqYmd);
-    const head = wkDays.map((d, i) => `<th class="${wk(d)}${keys[i] === today ? ' today' : ''}">${d.toLocaleDateString([], { weekday: 'short' })}<br>${fmt(keys[i])}</th>`).join('');
-    const body = rows.filter(r => r.always || r.list.some(w => w.from <= keys[keys.length - 1] && w.to >= keys[0])).map(r =>
-      `<tr><td class="op">${esc(r.title)}</td>` + keys.map((k, i) =>
-        `<td class="cell ${wk(wkDays[i])}" ondragover="wqSchedOver(event)" ondragleave="wqSchedLeave(event)" ondrop="wqSchedDrop(event, ${r.opId}, '${k}')">`
-        + r.list.filter(w => w.from <= k && k <= w.to).map(w => itemHtml(w, k)).join('') + '</td>').join('') + '</tr>').join('');
-    return `<table class="wq-sched"><thead><tr><th style="width:8rem">Week of ${fmt(keys[0])}</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
-  };
+  // Left panel: every work order whose steps all sit unassigned
+  const pm = new Map();
+  (wqData?.unassigned?.stages || []).filter(wqCardVisible).forEach(c => {
+    const p = pm.get(c.work_order_id) || pm.set(c.work_order_id, {
+      woId: c.work_order_id, opId: 0, label: woLabel(c.job_name, c.release_token ?? c.release_label),
+      stageIds: [], steps: [], scopes: [], assigneeIds: [], estMin: c.estimated_minutes, due: c.due_date,
+    }).get(c.work_order_id);
+    p.stageIds.push(...c.stage_ids);
+    p.scopes.push(...(c.stage_scopes || []));
+    p.steps.push(c.name);
+  });
+  const panel = [...pm.values()].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+  const panelHtml = panel.map(w => {
+    reg.push({ kind: 'panel', ref: w, keys: [] });
+    const hrs = w.estMin ? `${(w.estMin / 60).toFixed(1)} h` : 'no estimate';
+    const overdue = w.due && w.due < today;
+    const i = reg.length - 1;
+    // How much of the job is still unassigned, by scope
+    const all = wqAllCards().filter(c => c.work_order_id === w.woId).reduce((n, c) => n + c.stage_ids.length, 0);
+    const scopes = [...new Set(w.scopes)].join(', ');
+    return `<div class="sb wo" draggable="true" ondragstart="wqSchedDragStart(event, ${i})" ondragend="wqSchedDragEnd(event)"
+        oncontextmenu="wqSchedPanelMenu(event, ${i})" title="${esc(w.label)} — right-click to assign part of it"><strong>${esc(w.label)}</strong>
+        <small class="${overdue ? 'text-danger' : ''}">${w.due ? 'Due ' + fmt(w.due) : 'No due date'} · ${hrs}</small>
+        <small>${w.stageIds.length === all ? 'All steps unassigned' : `${w.stageIds.length} of ${all} steps unassigned`}${scopes ? ' · ' + esc(scopes) : ''}</small></div>`;
+  }).join('') || '<div class="text-secondary small">Nothing unassigned.</div>';
 
-  const tray = rows.flatMap(r => r.unscheduled.map(w => ({ r, w })));
+  // Assigned work orders that have no dates yet
+  const tray = opRows.flatMap(r => r.unscheduled.map(w => ({ r, w })));
   const trayHtml = tray.length ? `<div class="card mb-3"><div class="card-body py-2">
       <div class="subheader mb-1">No dates yet — drag onto a day to schedule</div>
-      <div class="wq-sched-tray">${tray.map(({ r, w }) => itemHtml(w, null)
-        .replace('<small>', `<small>${esc(r.title)} · `)).join('')}</div></div></div>` : '';
+      <div class="wq-sched-tray">${tray.map(({ r, w }) => {
+        reg.push({ kind: 'wo', ref: w, keys: [] });
+        return `<div class="sb wo" draggable="true" ondragstart="wqSchedDragStart(event, ${reg.length - 1})" ondragend="wqSchedDragEnd(event)"><strong>${esc(w.label)}</strong><small>${esc(r.title)}</small></div>`;
+      }).join('')}</div></div></div>` : '';
+
+  const weekBlock = wkDays => wqWeekGrid(wkDays, opRows, entries, { reg, interactive: true });
 
   wqSchedReg = reg;
-  document.getElementById('wq-sched-body').innerHTML = trayHtml
-    + weekTable(days.filter(d => wqYmd(d) < wk2)) + weekTable(days.filter(d => wqYmd(d) >= wk2))
-    + `<div class="small text-secondary">${fmt(first)} – ${fmt(last)} · <span class="text-danger">Red</span> = past its end date; dashed = waiting on an earlier step.</div>`;
+  document.getElementById('wq-sched-body').innerHTML = `<div class="d-flex gap-3 align-items-start">
+      <div class="wq-sched-panel" ondragover="wqSchedOver(event)" ondragleave="wqSchedLeave(event)" ondrop="wqSchedDropPanel(event)"><div class="subheader mb-2">Unassigned (${panel.length}) <span class="text-secondary fw-normal">· drop here to unassign</span></div>${panelHtml}</div>
+      <div class="flex-grow-1" style="min-width:0">${trayHtml}
+        <div class="wq-sched-wrap">${weekBlock(days.filter(d => wqYmd(d) < wk2))}${weekBlock(days.filter(d => wqYmd(d) >= wk2))}</div>
+        <div class="small text-secondary">${fmt(first)} – ${fmt(last)} · <span class="text-danger">Red</span> = past its end date; dashed = waiting on an earlier step; green = assist; yellow = note. Right-click a bar or a day for more.</div>
+      </div></div>`;
 }
 let wqSchedReg = [];
 
+function wqSchedGrabDay(e, it) {
+  if (!it.keys.length) return null;
+  const r = e.currentTarget.getBoundingClientRect();
+  return it.keys[Math.min(it.keys.length - 1, Math.max(0, Math.floor((e.clientX - r.left) / r.width * it.keys.length)))];
+}
+// Quarter-day slot under the cursor when a bar is picked up
+function wqSchedGrabAbs(e, it) {
+  if (!it.keys.length) return null;
+  const cell = document.elementsFromPoint(e.clientX, e.clientY).find(x => x.classList?.contains('cell') && x.dataset.day);
+  return cell ? wqAbs(cell.dataset.day, wqCellQuarter(e, cell)) : wqAbs(it.keys[0], 0);
+}
 function wqSchedDragStart(e, i) {
-  wqSchedDrag = wqSchedReg[i];
+  const it = wqSchedReg[i];
+  wqSchedDrag = { ...it, mode: 'move', grab: wqSchedGrabAbs(e, it) };
   e.currentTarget.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', String(i)); // Firefox won't start a drag without data
+  // Let the drop land on the day cells underneath the bars (after the drag image is captured)
+  setTimeout(() => document.getElementById('wq-sched-body').classList.add('is-dragging'), 0);
 }
-function wqSchedDragEnd(e) { e.currentTarget.classList.remove('dragging'); wqSchedDrag = null; }
-function wqSchedOver(e) { if (!wqSchedDrag) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drop-hover'); }
+function wqSchedResizeStart(e, i, edge) {
+  e.stopPropagation();
+  wqSchedDrag = { ...wqSchedReg[i], mode: edge === 'start' ? 'resizeStart' : 'resize' };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', 'resize');
+  setTimeout(() => document.getElementById('wq-sched-body').classList.add('is-dragging'), 0);
+}
+function wqSchedDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.getElementById('wq-sched-body')?.classList.remove('is-dragging');
+  wqSchedClearPreview();
+  wqSchedDrag = null;
+}
+function wqSchedOver(e) {
+  if (!wqSchedDrag) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (e.currentTarget.dataset.day) wqSchedPreview(e, e.currentTarget);
+  else e.currentTarget.classList.add('drop-hover');
+}
+
+// Where the dragged item would land if dropped at slot `pos`: { s, e } as absolute quarter slots, or null
+function wqSchedSpan(d, pos, skipWk) {
+  if (d.mode === 'resizeStart') {
+    const e = d.kind === 'wo' ? wqAbs(d.ref.end, d.ref.eq) : wqAbs(d.ref.end_date, d.ref.end_quarter ?? 3);
+    return pos > e ? null : { s: pos, e };
+  }
+  if (d.mode === 'resize') {
+    const s = d.kind === 'wo' ? wqAbs(d.ref.start, d.ref.sq) : wqAbs(d.ref.start_date, d.ref.start_quarter ?? 0);
+    return pos < s ? null : { s, e: pos };
+  }
+  if (d.kind === 'assist' || d.kind === 'note') {
+    const x = d.ref, delta = d.grab != null ? pos - d.grab : 0;
+    return { s: wqAbs(x.start_date, x.start_quarter ?? 0) + delta, e: wqAbs(x.end_date, x.end_quarter ?? 3) + delta };
+  }
+  const w = d.ref;
+  if (d.kind === 'wo' && w.end) {
+    const s0 = wqAbs(w.start, w.sq), e0 = wqAbs(w.end, w.eq), delta = pos - (w.late ? e0 : d.grab);
+    return { s: s0 + delta, e: e0 + delta };
+  }
+  return { s: pos, e: wqEndFrom(pos, wqSchedQuarters(w.estMin), skipWk) };
+}
+
+// Live preview while dragging: shade exactly the quarter-days the item would cover if dropped here
+// and label where it ends. Uses the same maths as the drop.
+let wqSchedPrev = '';
+function wqSchedClearPreview() {
+  wqSchedPrev = '';
+  document.querySelectorAll('#wq-sched-body .drop-span').forEach(c => {
+    c.classList.remove('drop-span', 'drop-end'); c.removeAttribute('data-tip'); c.style.removeProperty('--f'); c.style.removeProperty('--t');
+  });
+}
+function wqSchedPreview(e, cell) {
+  const d = wqSchedDrag, op = cell.dataset.op, lane = cell.dataset.lane;
+  const pos = wqAbs(cell.dataset.day, wqCellQuarter(e, cell));
+  if (wqSchedPrev === `${op}|${pos}|${lane}`) return;
+  wqSchedClearPreview();
+  wqSchedPrev = `${op}|${pos}|${lane}`;
+  const span = wqSchedSpan(d, pos, !document.getElementById('wq-sched-weekends').checked);
+  if (!span) return;
+  const S = wqFromAbs(span.s), E = wqFromAbs(span.e);
+  let endCell = null;
+  document.querySelectorAll(`#wq-sched-body .cell[data-op="${op}"]`).forEach(c => {
+    const k = c.dataset.day;
+    if (k < S.d || k > E.d) return;
+    if (c.dataset.lane !== lane && !(c.parentElement !== cell.parentElement && c.dataset.lane === '1')) return;
+    c.classList.add('drop-span');
+    c.style.setProperty('--f', (k === S.d ? S.q * 25 : 0) + '%');
+    c.style.setProperty('--t', (k === E.d ? (E.q + 1) * 25 : 100) + '%');
+    if (!endCell || k > endCell.dataset.day) endCell = c;
+  });
+  if (endCell) {
+    endCell.classList.add('drop-end');
+    const len = (span.e - span.s + 1) * 2;
+    endCell.dataset.tip = `${len}h · ends ` + new Date(E.d + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+      + (E.q < 3 ? ` after ${(E.q + 1) * 2}h` : '');
+  }
+}
 function wqSchedLeave(e) { e.currentTarget.classList.remove('drop-hover'); }
+
+const wqJson = (url, method, body) => API(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  .then(r => { if (!r.ok) throw new Error(method + ' ' + url + ' failed'); return r; });
 
 async function wqSchedDrop(e, opId, day) {
   e.preventDefault();
   e.currentTarget.classList.remove('drop-hover');
+  document.getElementById('wq-sched-body').classList.remove('is-dragging');
+  wqSchedClearPreview();
   if (!wqSchedDrag) return;
-  const { w, day: from } = wqSchedDrag;
+  const d = wqSchedDrag;
   wqSchedDrag = null;
-
-  const reassign = opId !== w.opId;
-  // Open work already past its end date is shown in the first column; moving it means "finish it on the drop day"
-  const delta = w.end ? wqDayDiff(w.late ? w.end : from, day) : 0;
-  if (!reassign && w.end && delta === 0) return;
-
+  const skipWk = !document.getElementById('wq-sched-weekends').checked;
   const tasks = [];
-  if (reassign) {
-    // A step shared by several operators keeps the others; only this row's operator is swapped
-    const ids = (w.assigneeIds || []).filter(id => id !== w.opId);
-    if (opId) ids.push(opId);
-    tasks.push(wqPatchStages(w.stageIds, ids.length > 1
-      ? { assigned_to_ids: ids, log_message: 'Reassigned via Work Queue schedule' }
-      : { assigned_to_id: ids[0] || null, log_message: 'Reassigned via Work Queue schedule' }));
-  }
-  if (!w.end || delta !== 0) {
-    const start = w.end ? wqAddDays(w.start, delta) : day;
-    const end = w.end ? wqAddDays(w.end, delta) : day;
-    tasks.push(API(`/work-orders/${w.woId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planned_start_date: start, planned_completion_date: end }),
-    }).then(r => { if (!r.ok) throw new Error('reschedule failed'); }));
+  const pos = wqAbs(day, wqCellQuarter(e, e.currentTarget));
+  const span = wqSchedSpan(d, pos, skipWk);
+  if (!span) return;
+  const S = wqFromAbs(span.s), E = wqFromAbs(span.e);
+
+  if (d.mode === 'resizeStart') {
+    if (d.kind === 'wo') {
+      const w = d.ref;
+      if (span.s === wqAbs(w.start, w.sq)) return;
+      tasks.push(wqJson(`/work-orders/${w.woId}`, 'PATCH', { planned_start_date: S.d, planned_start_quarter: S.q, planned_completion_date: w.end, planned_completion_quarter: w.eq }));
+    } else {
+      if (span.s === wqAbs(d.ref.start_date, d.ref.start_quarter ?? 0)) return;
+      tasks.push(wqJson(`/schedule-entries/${d.ref.id}`, 'PATCH', { start_date: S.d, start_quarter: S.q }));
+    }
+  } else if (d.mode === 'resize') {
+    if (d.kind === 'wo') {
+      const w = d.ref;
+      if (span.e === wqAbs(w.end, w.eq)) return;
+      tasks.push(wqJson(`/work-orders/${w.woId}`, 'PATCH', { planned_start_date: w.start, planned_start_quarter: w.sq, planned_completion_date: E.d, planned_completion_quarter: E.q }));
+    } else {
+      if (span.e === wqAbs(d.ref.end_date, d.ref.end_quarter ?? 3)) return;
+      tasks.push(wqJson(`/schedule-entries/${d.ref.id}`, 'PATCH', { end_date: E.d, end_quarter: E.q }));
+    }
+  } else if (d.kind === 'assist' || d.kind === 'note') {
+    const x = d.ref;
+    if (opId === x.user_id && span.s === wqAbs(x.start_date, x.start_quarter ?? 0)) return;
+    tasks.push(wqJson(`/schedule-entries/${x.id}`, 'PATCH', { user_id: opId, start_date: S.d, start_quarter: S.q, end_date: E.d, end_quarter: E.q }));
+  } else {
+    const w = d.ref;
+    const reassign = opId !== w.opId;
+    if (reassign) {
+      // A step shared by several operators keeps the others; only this row's operator is swapped
+      const ids = (w.assigneeIds || []).filter(id => id !== w.opId);
+      if (opId) ids.push(opId);
+      tasks.push(wqPatchStages(w.stageIds, ids.length > 1
+        ? { assigned_to_ids: ids, log_message: 'Reassigned via Work Queue schedule' }
+        : { assigned_to_id: ids[0] || null, log_message: 'Reassigned via Work Queue schedule' }));
+    }
+    const dated = d.kind === 'wo' && w.end;
+    const moved = !dated || span.s !== wqAbs(w.start, w.sq) || span.e !== wqAbs(w.end, w.eq);
+    if (!moved && !reassign) return;
+    // No dates yet (or dragged in from the unassigned panel): length comes from the work content
+    if (moved) tasks.push(wqJson(`/work-orders/${w.woId}`, 'PATCH', { planned_start_date: S.d, planned_start_quarter: S.q, planned_completion_date: E.d, planned_completion_quarter: E.q }));
   }
   try {
     await Promise.all(tasks);
@@ -893,6 +1143,164 @@ async function wqSchedDrop(e, opId, day) {
     alert('Failed to update the schedule.');
   }
   await loadBoard();
+}
+
+// Dropping a bar back on the unassigned list takes that operator off its steps (an assist or note is just removed)
+async function wqSchedDropPanel(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drop-hover');
+  document.getElementById('wq-sched-body').classList.remove('is-dragging');
+  const d = wqSchedDrag;
+  wqSchedDrag = null;
+  if (!d || d.mode !== 'move' || d.kind === 'panel') return;
+  try {
+    if (d.kind === 'wo') {
+      // A step shared by several operators keeps the others
+      const w = d.ref, ids = (w.assigneeIds || []).filter(id => id !== w.opId);
+      await wqPatchStages(w.stageIds, ids.length > 1
+        ? { assigned_to_ids: ids, log_message: 'Unassigned via Work Queue schedule' }
+        : { assigned_to_id: ids[0] || null, log_message: 'Unassigned via Work Queue schedule' });
+    } else {
+      await wqJson(`/schedule-entries/${d.ref.id}`, 'DELETE', {});
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Failed to update the schedule.');
+  }
+  await loadBoard();
+}
+
+// ── Right-click menus: notes on a day, assists on a work order ──
+function wqSchedMenu(e, items) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('wq-sched-ctx')?.remove();
+  const m = document.createElement('div');
+  m.id = 'wq-sched-ctx';
+  m.className = 'dropdown-menu show';
+  m.style.cssText = `position:fixed;z-index:1080;left:${e.clientX}px;top:${e.clientY}px;max-height:60vh;overflow:auto`;
+  items.forEach(it => {
+    const el = document.createElement(it.header ? 'h6' : 'button');
+    el.className = it.header ? 'dropdown-header' : 'dropdown-item ' + (it.cls || '');
+    el.textContent = it.label;
+    if (!it.header) el.onclick = () => { m.remove(); it.fn(); };
+    m.appendChild(el);
+  });
+  document.body.appendChild(m);
+  const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } };
+  setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+async function wqSchedCreate(body) {
+  try { await wqJson('/schedule-entries', 'POST', body); } catch (err) { console.error(err); alert('Failed to save.'); }
+  await loadBoard();
+}
+async function wqSchedDelete(id) {
+  try { await wqJson(`/schedule-entries/${id}`, 'DELETE', {}); } catch (err) { console.error(err); alert('Failed to delete.'); }
+  await loadBoard();
+}
+
+function wqSchedPanelMenu(e, i) {
+  const w = wqSchedReg[i].ref;
+  wqSchedMenu(e, [{ label: 'Assign part of job…', fn: () => wqScopeOpen(w.woId, w.label, { unassignedOnly: true }) }]);
+}
+
+function wqSchedCellMenu(e, opId, day) {
+  wqSchedMenu(e, [{ label: 'Add note / time off…', fn: () => {
+    const note = (prompt('Note for this day (e.g. Day off, Out early):') || '').trim();
+    if (note) wqSchedCreate({ user_id: opId, start_date: day, end_date: day, note });
+  } }]);
+}
+
+function wqSchedBarMenu(e, i) {
+  const it = wqSchedReg[i];
+  const day = wqSchedGrabDay(e, it) || it.keys[0];
+  const rowUser = it.opId;
+  const items = [];
+  if (it.kind === 'note') {
+    items.push({ label: 'Edit note…', fn: async () => {
+      const note = (prompt('Note:', it.ref.note) || '').trim();
+      if (!note) return;
+      try { await wqJson(`/schedule-entries/${it.ref.id}`, 'PATCH', { note }); } catch (err) { alert('Failed to save.'); }
+      await loadBoard();
+    } });
+  } else {
+    const woId = it.kind === 'assist' ? it.ref.work_order_id : it.ref.woId;
+    items.push({ header: true, label: `Add team member for ${new Date(day + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}` });
+    (wqData.fab_users || []).filter(u => u.id !== rowUser).forEach(u =>
+      items.push({ label: u.name, fn: () => wqSchedCreate({ user_id: u.id, work_order_id: woId, start_date: day, end_date: day }) }));
+  }
+  if (it.kind === 'wo') items.push({ label: 'Assign part of job to a user…', fn: () => wqScopeOpen(it.ref.woId, it.ref.label) });
+  if (it.kind === 'assist' || it.kind === 'note') items.push({ label: 'Remove', cls: 'text-danger', fn: () => wqSchedDelete(it.ref.id) });
+  wqSchedMenu(e, items);
+}
+
+// ── Part-of-a-job assignment: hand some scopes (SF / doors / frames...) or steps to one user ──
+function wqScopeOpen(woId, label, opts = {}) {
+  // Every board stage of this work order, once each
+  const stages = new Map();
+  wqAllCards().filter(c => c.work_order_id === woId).forEach(c => c.stage_ids.forEach((id, i) => stages.set(id, {
+    id, scope: c.stage_scopes?.[i] || 'Other', step: c.name, names: c.assignee_names || [],
+    open: !(c.assignee_ids?.length || c.assigned_to_id),
+  })));
+  if (!stages.size) { alert('No open steps on this work order.'); return; }
+  document.getElementById('wq-scope-overlay')?.remove();
+  const el = document.createElement('div');
+  el.id = 'wq-scope-overlay';
+  el.className = 'wq-overlay';
+  el.style.display = 'flex';
+  let tab = opts.tab || 'scope';
+  const groupsFor = key => {
+    const g = new Map();
+    stages.forEach(v => {
+      const x = g.get(v[key]) || g.set(v[key], { ids: [], names: new Set(), open: 0 }).get(v[key]);
+      x.ids.push(v.id); v.names.forEach(n => x.names.add(n)); if (v.open) x.open++;
+    });
+    return [...g.entries()];
+  };
+  let list = [];
+  const draw = () => {
+    const only = el.querySelector('#wq-scope-open')?.checked ?? !!opts.unassignedOnly;
+    list = groupsFor(tab === 'scope' ? 'scope' : 'step');
+    el.innerHTML = `<div class="card" style="width:min(480px, 94vw); max-height:90vh; display:flex; flex-direction:column">
+      <div class="card-header"><h3 class="card-title">Assign part of ${esc(label)}</h3></div>
+      <div class="card-body overflow-auto">
+        <div class="btn-group btn-group-sm mb-2">
+          <button type="button" class="btn ${tab === 'scope' ? 'active' : ''}" data-tab="scope">By scope</button>
+          <button type="button" class="btn ${tab === 'step' ? 'active' : ''}" data-tab="step">By step</button>
+        </div>
+        ${list.map(([name, g], i) => `
+          <label class="form-check d-flex align-items-center gap-2 py-1">
+            <input class="form-check-input mt-0 wq-scope-chk" type="checkbox" value="${i}" ${opts.unassignedOnly && g.open ? 'checked' : ''}>
+            <span class="flex-fill">${esc(name)} <span class="text-secondary small">· ${g.ids.length} step${g.ids.length === 1 ? '' : 's'}</span></span>
+            ${g.open ? `<span class="badge bg-red-lt">${g.open} unassigned</span>` : ''}
+            <span class="text-secondary small">${g.names.size ? esc([...g.names].join(', ')) : ''}</span>
+          </label>`).join('')}
+        <label class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="wq-scope-open" ${only ? 'checked' : ''}><span class="form-check-label small">Only steps nobody has yet</span></label>
+        <div class="subheader mt-3 mb-1">Assign to</div>
+        <select class="form-select" id="wq-scope-user">${(wqData.fab_users || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
+        <div class="text-secondary small mt-2">Replaces whoever is on the chosen steps; the rest of the work order is left as is.</div>
+      </div>
+      <div class="card-footer d-flex justify-content-end gap-2">
+        <button class="btn" id="wq-scope-cancel">Cancel</button>
+        <button class="btn btn-primary" id="wq-scope-apply">Assign</button>
+      </div></div>`;
+    el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { opts = { ...opts, unassignedOnly: el.querySelector('#wq-scope-open').checked }; tab = b.dataset.tab; draw(); });
+    el.querySelector('#wq-scope-cancel').onclick = () => el.remove();
+    el.querySelector('#wq-scope-apply').onclick = async () => {
+      const onlyOpen = el.querySelector('#wq-scope-open').checked;
+      const ids = [...new Set([...el.querySelectorAll('.wq-scope-chk:checked')].flatMap(c => list[+c.value][1].ids))]
+        .filter(id => !onlyOpen || stages.get(id).open);
+      if (!ids.length) return;
+      try {
+        await wqPatchStages(ids, { assigned_to_id: +el.querySelector('#wq-scope-user').value, log_message: 'Assigned via Work Queue schedule' });
+      } catch (err) { console.error(err); alert('Failed to assign.'); }
+      el.remove();
+      await loadBoard();
+    };
+  };
+  document.body.appendChild(el);
+  draw();
 }
 
 // ── Bulk assign (all steps of a given name, across a work order) ────────

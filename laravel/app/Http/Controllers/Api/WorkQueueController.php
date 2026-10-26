@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\FdScheduleEntry;
 use App\Models\FdUser;
 use App\Models\FdWoStage;
 use App\Services\StageGateService;
@@ -26,7 +27,7 @@ class WorkQueueController extends Controller
 
         $query = FdWoStage::query()
             ->actionable()
-            ->with(['elevation.stages', 'elevation.workOrder.businessJob', 'elevation.doorFrameConfiguration', 'assignedTo', 'assignees']);
+            ->with(['elevation.stages', 'elevation.workOrder.businessJob', 'elevation.elevationType', 'elevation.doorFrameConfiguration', 'assignedTo', 'assignees']);
 
         // Filter the board to one work order, or one job's work orders.
         if ($request->filled('work_order_id')) {
@@ -55,10 +56,15 @@ class WorkQueueController extends Controller
 
         $rows = $stages;
 
+        // Work content per work order (minutes), for sizing a bar when it's dropped on the schedule
+        $workOrders = $stages->map(fn ($s) => $s->elevation->workOrder)->filter()->unique('id');
+        $workOrders->load(['elevations.stages', 'elevations.templateSet']);
+        $estimates = $workOrders->mapWithKeys(fn ($wo) => [$wo->id => $wo->estimateMinutes()['effective']]);
+
         // One card per work order + step name: the elevations' stages are assigned
         // together here, but each keeps its own row so it is still completed
         // individually on the shop floor / work order modals.
-        $card = function ($group) {
+        $card = function ($group) use ($estimates) {
             $s = $group->first();
             $wo = $s->elevation->workOrder;
             $job = $wo?->businessJob;
@@ -68,6 +74,8 @@ class WorkQueueController extends Controller
             return [
                 'stage_id' => $s->id,
                 'stage_ids' => $group->pluck('id')->values(),
+                // Elevation type (scope: storefront, door, frame...) of each stage, aligned with stage_ids
+                'stage_scopes' => $group->map(fn ($g) => $g->elevation->elevationType?->name ?? 'Other')->values(),
                 'name' => $s->name,
                 'status' => $group->contains('status', 'in_progress') ? 'in_progress' : $s->status,
                 'gated' => $gated,
@@ -87,9 +95,12 @@ class WorkQueueController extends Controller
                 'job_number' => $job?->job_number,
                 'job_name' => $job?->job_name,
                 'priority' => $wo?->priority,
+                'estimated_minutes' => $wo ? $estimates->get($wo->id) : null,
                 'due_date' => $wo?->due_date?->format('Y-m-d'),
                 'planned_start_date' => $wo?->planned_start_date?->format('Y-m-d'),
                 'planned_completion_date' => $wo?->planned_completion_date?->format('Y-m-d'),
+                'planned_start_quarter' => $wo?->planned_start_quarter ?? 0,
+                'planned_completion_quarter' => $wo?->planned_completion_quarter ?? 3,
             ];
         };
 
@@ -160,6 +171,21 @@ class WorkQueueController extends Controller
                 'stages' => $collapse($unassignedGroup)->map($card)->values(),
             ],
             // Every active fab user, so the board can show empty columns to drop onto.
+            // Assists and notes on operator rows (recent and upcoming only)
+            'schedule_entries' => FdScheduleEntry::with('workOrder.businessJob:id,job_number,job_name')
+                ->where('end_date', '>=', today()->subDays(45))
+                ->get()
+                ->map(fn ($e) => [
+                    'id' => $e->id,
+                    'user_id' => $e->user_id,
+                    'work_order_id' => $e->work_order_id,
+                    'label' => $e->workOrder ? trim(($e->workOrder->businessJob?->job_name ?? '').' '.($e->workOrder->release_token ? "({$e->workOrder->release_token})" : '')) : null,
+                    'note' => $e->note,
+                    'start_date' => $e->start_date->format('Y-m-d'),
+                    'end_date' => $e->end_date->format('Y-m-d'),
+                    'start_quarter' => $e->start_quarter,
+                    'end_quarter' => $e->end_quarter,
+                ])->values(),
             'fab_users' => FdUser::where('active', true)->orderBy('name')->get(['id', 'name', 'initials']),
         ]);
     }

@@ -77,6 +77,63 @@
       });
     },
 
+    weekgrid(body, def, data) {
+      const days = (data && data.days) || [];
+      const users = (data && data.users) || [];
+      if (!users.length) {
+        body.innerHTML = '<div class="text-secondary small">Nothing to show.</div>';
+        return;
+      }
+      const keys = days.map((d) => d.key), n = keys.length;
+      // Quarter-day slots (2h of an 8h day), as on the Work Queue schedule
+      const abs = (k, q) => Math.round(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)) / 86400000) * 4 + q;
+      const colFrom = (k) => { for (let i = 0; i < n; i++) if (keys[i] >= k) return i; return n; };
+      const colTo = (k) => { for (let i = n - 1; i >= 0; i--) if (keys[i] <= k) return i; return -1; };
+      // Same job, same colour, on every row
+      const palette = ['blue', 'azure', 'indigo', 'purple', 'pink', 'orange', 'teal', 'cyan', 'lime'];
+      const colour = (text) => {
+        let h = 0;
+        for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+        return palette[h % palette.length];
+      };
+      const cols = `grid-template-columns: 7rem repeat(${n}, minmax(0, 1fr))`;
+      const head = `<div class="dash-wk-head" style="${cols}"><div></div>${days.map((d) =>
+        `<div class="${d.today ? 'today' : ''}">${esc(d.label)}</div>`).join('')}</div>`;
+
+      const rows = users.map((u) => {
+        const placed = (u.bars || []).map((b) => ({ ...b, a: colFrom(b.start < keys[0] ? keys[0] : b.start), z: colTo(b.end > keys[n - 1] ? keys[n - 1] : b.end) }))
+          .filter((b) => b.a < n && b.z >= 0 && b.a <= b.z);
+        placed.forEach((b) => {
+          b.qs = keys[b.a] === b.start ? abs(b.start, b.sq) : abs(keys[b.a], 0);
+          b.qe = keys[b.z] === b.end ? abs(b.end, b.eq) : abs(keys[b.z], 3);
+        });
+        // Back-to-back jobs on one day share a lane, in the order they run
+        placed.sort((x, y) => x.qs - y.qs || y.qe - x.qe);
+        const laneEnds = [];
+        placed.forEach((b) => {
+          let l = laneEnds.findIndex((end) => end < b.qs);
+          if (l < 0) l = laneEnds.push(-Infinity) - 1;
+          laneEnds[l] = b.qe; b.lane = l + 1;
+        });
+        const lanes = Math.max(1, laneEnds.length);
+        const cells = [];
+        for (let l = 1; l <= lanes; l++) days.forEach((d, i) => cells.push(
+          `<div class="dash-wk-c${d.today ? ' today' : ''}" style="grid-row:${l};grid-column:${i + 2}"></div>`));
+        const barHtml = placed.map((b) => {
+          const span = b.z - b.a + 1;
+          const inL = keys[b.a] === b.start ? b.sq / 4 / span * 100 : 0;
+          const inR = keys[b.z] === b.end ? (3 - b.eq) / 4 / span * 100 : 0;
+          const cls = b.kind === 'note' ? 'yellow' : (b.kind === 'assist' ? 'green' : colour(b.text));
+          return `<div class="dash-wk-bar bg-${cls}-lt" style="grid-row:${b.lane};grid-column:${b.a + 2} / ${b.z + 3};margin-left:calc(${inL}% + 2px);margin-right:calc(${inR}% + 2px)" title="${esc(b.text)}">${esc(b.text)}</div>`;
+        }).join('');
+        const busy = placed.length > 0;
+        return `<div class="dash-wk-row" style="${cols}"><div class="dash-wk-u${busy ? '' : ' text-secondary'}" style="grid-row:1 / span ${lanes}">${esc(u.name)}</div>${cells.join('')}${barHtml}</div>`;
+      }).join('');
+
+      body.innerHTML = `<div class="dash-wk h-100 overflow-auto">${head}${rows}</div>`;
+      body.querySelector('.dash-wk').addEventListener('click', () => { if (!state.editing && data.link) window.location.href = data.link; });
+    },
+
     chart(body, def, data, item) {
       const build = chartBuilders[def.chart];
       if (!build || typeof Chart === 'undefined') {

@@ -1317,9 +1317,11 @@ function renderWOList(wos) {
     const tbody = document.getElementById('wo-tbody');
     const sorted = wos.slice().sort(compareWO);
     tbody.innerHTML = sorted.map((wo, idx) => {
-        const assignedPills = (wo.assigned_users || []).map(u =>
+        // Click the user icon / pills to pick assignees without opening the work order (like the date cells)
+        const assignedPills = `<span class="d-inline-flex align-items-center gap-1" style="cursor:pointer" title="Assign workers" onclick="openRowAssign(event, ${wo.id})">
+            <i class="ti ti-user-plus text-muted"></i>${(wo.assigned_users || []).map(u =>
             `<span class="badge bg-blue-lt text-blue" title="${esc(u.name)}">${esc(u.initials || u.name.slice(0,2))}</span>`
-        ).join(' ') || '<span class="text-muted">—</span>';
+        ).join(' ') || '<span class="small text-muted">—</span>'}</span>`;
         // Show the stored priority when the WO has one (the normal case —
         // every non-archived WO gets resequenced with one); fall back to its
         // position in the current sort so the column never sits blank for an
@@ -1940,6 +1942,51 @@ async function saveWOEstimate(val) {
         renderWOEstimate(currentWO);
         loadWorkOrders();
     } catch (e) { console.error(e); fabToast('Failed to save estimate.', 'error'); }
+}
+
+// Inline assign popover for the table's Assigned column
+function openRowAssign(event, woId) {
+    event.stopPropagation();
+    document.getElementById('row-assign-pop')?.remove();
+    const wo = (typeof allWOs !== 'undefined' ? allWOs : []).find(w => w.id === woId);
+    const current = new Set((wo?.assigned_users || []).map(u => u.id));
+    const pop = document.createElement('div');
+    pop.id = 'row-assign-pop';
+    pop.className = 'card';
+    pop.style.cssText = 'position:fixed;z-index:9999;min-width:200px;max-height:60vh;overflow:auto;box-shadow:0 .5rem 1.5rem rgba(0,0,0,.3)';
+    pop.innerHTML = `<div class="card-body p-2">
+        ${fabUsers.map(u => `<label class="form-check mb-1"><input class="form-check-input row-assign-chk" type="checkbox" value="${u.id}" ${current.has(u.id) ? 'checked' : ''}><span class="form-check-label">${esc(u.name)}</span></label>`).join('')}
+        <div class="d-flex justify-content-end gap-1 mt-2">
+            <button type="button" class="btn btn-sm btn-ghost-secondary" id="row-assign-cancel">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary" id="row-assign-save">Save</button>
+        </div></div>`;
+    document.body.appendChild(pop);
+    const r = event.currentTarget.getBoundingClientRect();
+    pop.style.left = Math.min(r.left, window.innerWidth - pop.offsetWidth - 8) + 'px';
+    pop.style.top = Math.min(r.bottom + 4, window.innerHeight - pop.offsetHeight - 8) + 'px';
+    const close = () => { pop.remove(); document.removeEventListener('mousedown', outside, true); };
+    const outside = e => { if (!pop.contains(e.target)) close(); };
+    setTimeout(() => document.addEventListener('mousedown', outside, true), 0);
+    pop.querySelector('#row-assign-cancel').onclick = close;
+    pop.querySelector('#row-assign-save').onclick = async () => {
+        const ids = [...pop.querySelectorAll('.row-assign-chk:checked')].map(el => parseInt(el.value));
+        close();
+        try {
+            await API(`/work-orders/${woId}/assignments`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_ids: ids }),
+            });
+            if (currentWO && currentWO.id === woId) {
+                currentWO.assigned_users = fabUsers.filter(u => ids.includes(u.id));
+                renderAssignedUsers(currentWO.assigned_users);
+            }
+        } catch (e) {
+            console.error(e);
+            fabToast('Failed to save assignments.', 'error');
+        }
+        loadWorkOrders();
+    };
 }
 
 // ============================================================

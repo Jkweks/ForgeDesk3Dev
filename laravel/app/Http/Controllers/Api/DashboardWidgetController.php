@@ -11,6 +11,8 @@ use App\Models\CutFlow\StickSession;
 use App\Models\CycleCountSession;
 use App\Models\DoorFrameConfiguration;
 use App\Models\FabricationDocument;
+use App\Models\FdScheduleEntry;
+use App\Models\FdUser;
 use App\Models\FdWoStage;
 use App\Models\FdWorkOrder;
 use App\Models\InventoryLocation;
@@ -151,52 +153,61 @@ class DashboardWidgetController extends Controller
     }
 
     /**
-     * One-week work queue schedule: open work orders (job name only) against the next 7 days,
-     * using the same planned start -> planned completion span (or due date) as the work queue
-     * calendar. Work orders already past their end date show as late on today.
+     * This work week's (Mon-Fri) work queue schedule: one row per active fab user with the same
+     * bars as the Work Queue schedule view (planned start -> planned completion in quarter-days,
+     * or the due date, for any work order with an open step assigned to them; plus schedule
+     * assists and notes). Names only: no steps. The widget lays the bars out client-side.
      */
     public function workQueueWeek()
     {
-        $days = collect(range(0, 6))->map(fn (int $i) => today()->addDays($i));
-        $first = $days->first();
-        $last = $days->last();
+        $monday = today()->startOfWeek();
+        $days = collect(range(0, 4))->map(fn (int $i) => $monday->copy()->addDays($i));
+        $from = $days->first()->copy()->startOfDay();
+        $to = $days->last()->copy()->startOfDay();
 
-        $workOrders = $this->openWorkOrders()
-            ->with('businessJob:id,job_number,job_name')
-            ->get()
-            ->map(function (FdWorkOrder $wo) {
-                $end = $wo->planned_completion_date ?? $wo->due_date ?? $wo->planned_start_date;
-
-                return $end ? [$wo, ($wo->planned_start_date ?? $end)->copy()->startOfDay(), $end->copy()->startOfDay()] : null;
-            })
-            ->filter()
-            ->filter(fn (array $x) => $x[1]->lte($last))
-            ->sortBy([fn ($a, $b) => $a[1] <=> $b[1], fn ($a, $b) => $a[2] <=> $b[2]])
-            ->values();
-
-        $rows = $workOrders->map(function (array $x) use ($days, $first) {
-            [$wo, $start, $end] = $x;
-            $late = $end->lt($first);
-            $name = $wo->businessJob?->job_name ?: (string) $wo->businessJob?->job_number;
-
-            return [
-                'link' => '/fabrication/work-orders?wo='.$wo->id,
-                'cells' => ['job' => trim($name.' '.($wo->release_token ? "({$wo->release_token})" : ''))]
-                    + $days->mapWithKeys(fn (Carbon $d) => [$d->format('Y-m-d') => match (true) {
-                        $late && $d->equalTo($first) => ['text' => 'Late', 'class' => 'bg-red-lt'],
-                        ! $late && $d->betweenIncluded($start, $end) => ['text' => '●', 'class' => $d->isWeekend() ? 'bg-secondary-lt' : 'bg-blue-lt'],
-                        default => '',
-                    }])->all(),
+        $users = FdUser::where('active', true)->orderBy('name')->get(['id', 'name']);
+        /** @var array<int, array<string, array<string, mixed>>> user => bar key => bar */
+        $bars = [];
+        $put = function (int $userId, Carbon $start, int $sq, Carbon $end, int $eq, string $text, string $kind) use (&$bars, $from, $to) {
+            if ($end->copy()->startOfDay()->lt($from) || $start->copy()->startOfDay()->gt($to)) {
+                return;
+            }
+            $bars[$userId]["$kind|$text|{$start->format('Y-m-d')}|{$end->format('Y-m-d')}"] = [
+                'text' => $text, 'kind' => $kind,
+                'start' => $start->format('Y-m-d'), 'sq' => $sq, 'end' => $end->format('Y-m-d'), 'eq' => $eq,
             ];
-        });
+        };
+        $jobName = fn (?FdWorkOrder $wo) => (string) ($wo?->businessJob?->job_name ?: $wo?->businessJob?->job_number);
+
+        FdWoStage::query()->actionable()
+            ->with(['elevation.workOrder.businessJob:id,job_number,job_name', 'assignees:id'])
+            ->get()
+            ->each(function (FdWoStage $stage) use ($put, $jobName) {
+                $wo = $stage->elevation->workOrder;
+                $end = $wo?->planned_completion_date ?? $wo?->due_date ?? $wo?->planned_start_date;
+                if (! $end) {
+                    return;
+                }
+                $ids = $stage->assignees->pluck('id');
+                if ($ids->isEmpty() && $stage->assigned_to_id) {
+                    $ids = collect([$stage->assigned_to_id]);
+                }
+                foreach ($ids as $uid) {
+                    $put((int) $uid, $wo->planned_start_date ?? $end, $wo->planned_start_date ? (int) $wo->planned_start_quarter : 0,
+                        $end, $wo->planned_completion_date ? (int) $wo->planned_completion_quarter : 3, $jobName($wo), 'job');
+                }
+            });
+
+        FdScheduleEntry::with('workOrder.businessJob:id,job_number,job_name')
+            ->whereDate('start_date', '<=', $to)->whereDate('end_date', '>=', $from)
+            ->get()
+            ->each(fn (FdScheduleEntry $e) => $put($e->user_id, $e->start_date, (int) $e->start_quarter, $e->end_date, (int) $e->end_quarter,
+                $e->work_order_id ? $jobName($e->workOrder) : (string) $e->note, $e->work_order_id ? 'assist' : 'note'));
 
         return response()->json([
-            'columns' => array_merge(
-                [['key' => 'job', 'label' => 'Job']],
-                $days->map(fn (Carbon $d) => ['key' => $d->format('Y-m-d'), 'label' => $d->format('D j'), 'align' => 'center'])->all(),
-            ),
-            'rows' => $rows,
-            'total' => $rows->count(),
+            'days' => $days->map(fn (Carbon $d) => ['key' => $d->format('Y-m-d'), 'label' => $d->format('D j'), 'today' => $d->isToday()])->all(),
+            'users' => $users->map(fn (FdUser $u) => ['name' => $u->name, 'bars' => array_values($bars[$u->id] ?? [])])->values(),
+            'link' => '/fabrication/work-queue',
         ]);
     }
 

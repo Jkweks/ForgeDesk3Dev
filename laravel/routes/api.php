@@ -765,6 +765,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::middleware('permission:fabrication.work-orders.view')->group(function () {
             Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
             Route::get('/work-queue', [\App\Http\Controllers\Api\WorkQueueController::class, 'index']);
+            $se = \App\Http\Controllers\Api\ScheduleEntryController::class;
+            Route::post('/schedule-entries', [$se, 'store'])->middleware('permission:fabrication.work-orders.edit');
+            Route::patch('/schedule-entries/{id}', [$se, 'update'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/schedule-entries/{id}', [$se, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
             // Static paths BEFORE the /work-orders/{id} wildcard.
             Route::post('/work-orders/resequence-priority', [\App\Http\Controllers\Api\WorkOrderController::class, 'resequencePriority'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/work-orders/reorder', [\App\Http\Controllers\Api\WorkOrderController::class, 'reorder'])->middleware('permission:fabrication.work-orders.edit');

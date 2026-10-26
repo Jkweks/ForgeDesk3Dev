@@ -22,6 +22,8 @@ use App\Models\User;
  *   Every widget may declare `settings_schema` (fields: key, label, type select|multiselect|toggle,
  *   options, default, show_if); values are saved in the layout, sent to the data endpoint as query
  *   params, and validated server-side by sanitizeSettings()/resolveSettings().
+ *   weekgrid — `endpoint` returns {days:[{key,label,today}], users:[{name, bars:[{text, kind, start, sq, end, eq}]}], link}:
+ *           a user-by-day grid of schedule bars in quarter-days (kind: job|assist|note).
  *   chart — Chart.js chart named by `chart`; the renderer in the JS knows each
  *           chart's endpoint shape.
  */
@@ -92,8 +94,8 @@ class WidgetRegistry
                 ]),
             ]],
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/schedule', [
-                ['key' => 'wo_week_schedule', 'title' => 'Work Queue: 1 Week Schedule', 'description' => 'Open work orders by job name across the next 7 days, from the work queue schedule.', 'icon' => 'ti-calendar-week',
-                    'type' => 'table', 'settings_schema' => [],
+                ['key' => 'wo_week_schedule', 'title' => 'Work Queue: This Week', 'description' => 'Fab users down the side, job names in each day of the current work week (Mon-Fri), from the work queue schedule.', 'icon' => 'ti-calendar-week',
+                    'type' => 'weekgrid', 'settings_schema' => [],
                     'default_size' => ['w' => 8, 'h' => 6], 'min_size' => ['w' => 5, 'h' => 3], 'refresh_seconds' => 300],
             ]],
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/stages', [

@@ -178,9 +178,19 @@ class WorkOrderController extends Controller
             $wo = FdWorkOrder::findOrFail($id);
             $wo->fill($request->only([
                 'date_issued', 'due_date', 'planned_start_date', 'planned_completion_date',
+                'planned_start_quarter', 'planned_completion_quarter',
                 'material_delivery', 'estimated_minutes_override',
                 'notes', 'priority', 'priority_locked',
             ]));
+
+            // Quarter-day slots only mean something alongside the Work Queue schedule; a date set
+            // anywhere else covers the whole day.
+            if ($request->has('planned_start_date') && ! $request->has('planned_start_quarter')) {
+                $wo->planned_start_quarter = 0;
+            }
+            if ($request->has('planned_completion_date') && ! $request->has('planned_completion_quarter')) {
+                $wo->planned_completion_quarter = 3;
+            }
 
             // Empty string from the form reverts to the computed roll-up.
             if ($request->has('estimated_minutes_override') && ! $request->filled('estimated_minutes_override')) {
@@ -716,6 +726,8 @@ class WorkOrderController extends Controller
             'due_date_last' => $dueLast ?? $wo->due_date?->format('Y-m-d'),
             'planned_start_date' => $wo->planned_start_date?->format('Y-m-d'),
             'planned_completion_date' => $wo->planned_completion_date?->format('Y-m-d'),
+            'planned_start_quarter' => $wo->planned_start_quarter,
+            'planned_completion_quarter' => $wo->planned_completion_quarter,
             'material_delivery' => $wo->material_delivery,
             'estimated_minutes' => $estimate['effective'],
             'estimated_minutes_computed' => $estimate['computed'],

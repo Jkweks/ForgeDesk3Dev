@@ -12,6 +12,15 @@
       #dashboardGrid .dash-chart { position: absolute; inset: 0; }
       #dashboardGrid .dash-table thead th { position: sticky; top: 0; background: var(--tblr-bg-surface, #fff); z-index: 1; }
       #dashboardGrid .dash-table tbody tr[data-href] { cursor: pointer; }
+      #dashboardGrid .dash-wk { font-size: .75rem; cursor: pointer; }
+      #dashboardGrid .dash-wk-head, #dashboardGrid .dash-wk-row { display: grid; }
+      #dashboardGrid .dash-wk-head { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); font-weight: 600; text-align: center; }
+      #dashboardGrid .dash-wk-head > div { padding: .2rem .3rem; border-bottom: 1px solid var(--tblr-border-color); }
+      #dashboardGrid .dash-wk-head > div.today, #dashboardGrid .dash-wk-c.today { background: var(--tblr-primary-lt); }
+      #dashboardGrid .dash-wk-row { border-bottom: 1px solid var(--tblr-border-color); grid-auto-rows: minmax(1.8rem, auto); }
+      #dashboardGrid .dash-wk-u { grid-column: 1; padding: .2rem .3rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #dashboardGrid .dash-wk-c { border-left: 1px solid var(--tblr-border-color); }
+      #dashboardGrid .dash-wk-bar { position: relative; z-index: 1; margin-top: 2px; margin-bottom: 2px; padding: 1px 5px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
       #dashboardGrid .dash-remove, #dashboardGrid .dash-settings { display: none; }
       #dashboardGrid.dash-editing .dash-remove { display: inline-block; }
       #dashboardGrid.dash-editing .dash-settings { display: inline-flex; }

@@ -48,7 +48,7 @@ class FdWorkOrder extends Model
 
     protected $fillable = [
         'business_job_id', 'release_number', 'release_code', 'date_issued', 'due_date',
-        'planned_start_date', 'planned_completion_date',
+        'planned_start_date', 'planned_completion_date', 'planned_start_quarter', 'planned_completion_quarter',
         'material_delivery', 'estimated_minutes_override', 'notes', 'archived', 'priority', 'priority_locked',
         'status', 'completed_at', 'completed_by_user_id', 'completion_email_sent_at',
     ];
