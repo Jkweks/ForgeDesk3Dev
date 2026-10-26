@@ -51,6 +51,14 @@ Route::get('/operations/replenishment', function () {
     return view('operations.replenishment');
 });
 
+// Field & Fleet Assets
+Route::get('/fleet', function () {
+    return view('fleet.index');
+});
+Route::get('/fleet/assets/{id}', function ($id) {
+    return view('fleet.asset', ['assetId' => (int) $id]);
+})->whereNumber('id');
+
 Route::get('/cycle-counting', function () {
     return view('cycle-counting');
 });

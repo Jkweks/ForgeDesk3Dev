@@ -538,6 +538,61 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/business-jobs/{jobId}/documents', [\App\Http\Controllers\Api\JobDocumentController::class, 'store'])->middleware('permission:jobs.documents.manage');
         Route::delete('/business-jobs/{jobId}/documents/{documentId}', [\App\Http\Controllers\Api\JobDocumentController::class, 'destroy'])->middleware('permission:jobs.documents.manage');
 
+        // Field & Fleet Assets (vehicles, trailers, swing stages, gang boxes...). Separate from the
+        // shop maintenance module above; field crews use the separate field app, synced via DB.
+        $fleet = \App\Http\Controllers\Api\FleetController::class;
+        $fa = \App\Http\Controllers\Api\FieldAssetController::class;
+        $fm = \App\Http\Controllers\Api\FieldAssetMaintenanceController::class;
+        $fr = \App\Http\Controllers\Api\FieldAssetRecordsController::class;
+        $fd = \App\Http\Controllers\Api\FieldAssetDocumentController::class;
+
+        Route::get('/fleet/dashboard', [$fleet, 'dashboard'])->middleware('permission:fleet.view');
+        Route::get('/fleet/upcoming', [$fleet, 'upcoming'])->middleware('permission:fleet.view');
+        Route::get('/fleet/inbox', [$fleet, 'inbox'])->middleware('permission:fleet.manage');
+        Route::post('/fleet/inbox/{id}/resolve', [$fleet, 'resolveInbox'])->middleware('permission:fleet.manage');
+        Route::get('/field-asset-types', [$fleet, 'types'])->middleware('permission:fleet.view');
+        Route::post('/field-asset-types', [$fleet, 'storeType'])->middleware('permission:fleet.manage');
+        Route::put('/field-asset-types/{id}', [$fleet, 'updateType'])->middleware('permission:fleet.manage');
+        Route::delete('/field-asset-types/{id}', [$fleet, 'destroyType'])->middleware('permission:fleet.manage');
+
+        Route::get('/field-assets', [$fa, 'index'])->middleware('permission:fleet.view');
+        Route::get('/field-assets/filter-options', [$fa, 'filterOptions'])->middleware('permission:fleet.view');
+        Route::post('/field-assets', [$fa, 'store'])->middleware('permission:fleet.manage');
+        Route::get('/field-assets/{id}', [$fa, 'show'])->middleware('permission:fleet.view');
+        Route::put('/field-assets/{id}', [$fa, 'update'])->middleware('permission:fleet.manage');
+        Route::delete('/field-assets/{id}', [$fa, 'destroy'])->middleware('permission:fleet.delete');
+        Route::post('/field-assets/{id}/meter', [$fa, 'meter'])->middleware('permission:fleet.manage');
+        Route::get('/field-assets/{id}/meter-readings', [$fa, 'meterHistory'])->middleware('permission:fleet.view');
+        Route::post('/field-assets/{id}/status', [$fa, 'status'])->middleware('permission:fleet.manage');
+        Route::get('/field-assets/{id}/timeline', [$fa, 'timeline'])->middleware('permission:fleet.view');
+
+        Route::get('/field-assets/{assetId}/plans', [$fm, 'plans'])->middleware('permission:fleet.view');
+        Route::post('/field-assets/{assetId}/plans', [$fm, 'storePlan'])->middleware('permission:fleet.manage');
+        Route::post('/field-assets/{assetId}/plans/apply-template', [$fm, 'applyTemplate'])->middleware('permission:fleet.manage');
+        Route::put('/field-asset-plans/{id}', [$fm, 'updatePlan'])->middleware('permission:fleet.manage');
+        Route::delete('/field-asset-plans/{id}', [$fm, 'destroyPlan'])->middleware('permission:fleet.manage');
+
+        Route::get('/field-asset-work-orders', [$fm, 'index'])->middleware('permission:fleet.view');
+        Route::post('/field-asset-work-orders', [$fm, 'store'])->middleware('permission:fleet.manage');
+        Route::get('/field-asset-work-orders/{id}', [$fm, 'show'])->middleware('permission:fleet.view');
+        Route::put('/field-asset-work-orders/{id}', [$fm, 'update'])->middleware('permission:fleet.manage');
+        Route::post('/field-asset-work-orders/{id}/complete', [$fm, 'complete'])->middleware('permission:fleet.manage');
+        Route::delete('/field-asset-work-orders/{id}', [$fm, 'destroy'])->middleware('permission:fleet.manage');
+
+        Route::get('/field-assets/{assetId}/inspections', [$fr, 'inspections'])->middleware('permission:fleet.view');
+        Route::get('/field-assets/{assetId}/inspection-checklist', [$fr, 'checklist'])->middleware('permission:fleet.view');
+        Route::post('/field-assets/{assetId}/inspections', [$fr, 'storeInspection'])->middleware('permission:fleet.manage');
+        Route::post('/field-asset-inspections/{id}/create-work-order', [$fr, 'createWorkOrderFromInspection'])->middleware('permission:fleet.manage');
+        Route::get('/field-assets/{assetId}/compliance', [$fr, 'compliance'])->middleware('permission:fleet.view');
+        Route::post('/field-assets/{assetId}/compliance', [$fr, 'storeCompliance'])->middleware('permission:fleet.manage');
+        Route::put('/field-asset-compliance/{id}', [$fr, 'updateCompliance'])->middleware('permission:fleet.manage');
+        Route::delete('/field-asset-compliance/{id}', [$fr, 'destroyCompliance'])->middleware('permission:fleet.manage');
+
+        Route::get('/field-assets/{assetId}/documents', [$fd, 'index'])->middleware('permission:fleet.view');
+        Route::get('/field-assets/{assetId}/documents/{documentId}/download', [$fd, 'download'])->middleware('permission:fleet.view');
+        Route::post('/field-assets/{assetId}/documents', [$fd, 'store'])->middleware('permission:fleet.documents.manage');
+        Route::delete('/field-assets/{assetId}/documents/{documentId}', [$fd, 'destroy'])->middleware('permission:fleet.documents.manage');
+
         // Door/Frame Configurator
         Route::get('/door-frame-configurations', [DoorFrameConfigurationController::class, 'index'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations', [DoorFrameConfigurationController::class, 'store'])->middleware('permission:configurator.edit');

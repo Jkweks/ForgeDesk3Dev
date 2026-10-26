@@ -43,6 +43,10 @@ abstract class TestCase extends BaseTestCase
         // its own in-memory sqlite so the suite can never touch the live cutflow DB.
         $app['config']->set('database.connections.cutflow', $app['config']['database.connections.sqlite']);
 
+        // Field-app sync DB: never let tests reach a real remote database. Tests that
+        // exercise the sync create their own fa_* tables on this in-memory connection.
+        $app['config']->set('database.connections.fieldsync', $app['config']['database.connections.sqlite']);
+
         return $app;
     }
 }

@@ -972,13 +972,13 @@ class BusinessJobController extends Controller
                 $location->quantity = max(0, $location->quantity + $qty);
                 $location->save();
             } else {
-                // No location row exists yet for this product — create an "Unassigned"
+                // No location row exists yet for this product — create an "Default"
                 // location so inventory_locations stays the source of truth instead of
                 // drifting from a direct quantity_on_hand write.
-                $unassigned = \App\Models\StorageLocation::where('code', 'UNASSIGNED')->first();
+                $default = \App\Models\StorageLocation::defaultLocation();
                 \App\Models\InventoryLocation::create([
                     'product_id' => $product->id,
-                    'storage_location_id' => $unassigned?->id ?? null,
+                    'storage_location_id' => $default->id,
                     'quantity' => max(0, $qty),
                     'is_primary' => true,
                 ]);

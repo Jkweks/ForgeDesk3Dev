@@ -289,7 +289,19 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     </div>
                   </div>
                 </div>
-                <div class="mb-3">
+                                <div class="mb-3">
+                  <label class="form-check">
+                    <input type="checkbox" class="form-check-input" id="editNotifySpecial">
+                    <span class="form-check-label">Notify people when all special-order items are received</span>
+                  </label>
+                  <div id="editNotifyUsersWrap" class="mt-2 d-none">
+                    <label class="form-label">Who to notify</label>
+                    <select class="form-select" id="editNotifyUsers" multiple size="5"></select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to pick several. They get an email (if they have an address on file) and an in-app notice once, when every special-order line is in stock.</small>
+                    <div class="small text-success mt-1 d-none" id="editNotifySentNote"></div>
+                  </div>
+                </div>
+<div class="mb-3">
                   <label class="form-label">Notes</label>
                   <textarea class="form-control" id="editNotes" rows="3" placeholder="Add any notes..."></textarea>
                 </div>
@@ -469,7 +481,19 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     </div>
                   </div>
                 </div>
-                <div class="mb-3">
+                                <div class="mb-3">
+                  <label class="form-check">
+                    <input type="checkbox" class="form-check-input" id="manualNotifySpecial">
+                    <span class="form-check-label">Notify people when all special-order items are received</span>
+                  </label>
+                  <div id="manualNotifyUsersWrap" class="mt-2 d-none">
+                    <label class="form-label">Who to notify</label>
+                    <select class="form-select" id="manualNotifyUsers" multiple size="5"></select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to pick several. They get an email (if they have an address on file) and an in-app notice once, when every special-order line is in stock.</small>
+                    <div class="small text-success mt-1 d-none" id="manualNotifySentNote"></div>
+                  </div>
+                </div>
+<div class="mb-3">
                   <label class="form-label">Notes</label>
                   <textarea class="form-control" id="manualNotes" rows="2"></textarea>
                 </div>
@@ -1365,6 +1389,26 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             }
         }
 
+        // ── Special-order notification picker (shared by edit + manual-create modals) ──
+        async function initNotifyPicker(prefix, enabled, userIds, sentAt) {
+            const cb = document.getElementById(prefix + 'NotifySpecial');
+            const wrap = document.getElementById(prefix + 'NotifyUsersWrap');
+            const sel = document.getElementById(prefix + 'NotifyUsers');
+            const people = (await fetchPeople()).filter(p => !p.disabled || (userIds || []).includes(p.id));
+            sel.innerHTML = people.map(p => `<option value="${p.id}" ${(userIds || []).includes(p.id) ? 'selected' : ''}>${escapeHtml(p.label)}</option>`).join('');
+            cb.checked = !!enabled;
+            wrap.classList.toggle('d-none', !cb.checked);
+            cb.onchange = () => wrap.classList.toggle('d-none', !cb.checked);
+            const note = document.getElementById(prefix + 'NotifySentNote');
+            if (note) { note.textContent = sentAt ? 'Notice sent ' + sentAt + '.' : ''; note.classList.toggle('d-none', !sentAt); }
+        }
+        function readNotifyPicker(prefix) {
+            const on = document.getElementById(prefix + 'NotifySpecial').checked;
+            const ids = [...document.getElementById(prefix + 'NotifyUsers').selectedOptions].map(o => parseInt(o.value, 10));
+            if (on && ids.length === 0) { alert('Pick at least one person to notify, or turn the option off.'); return null; }
+            return { notify_special_received: on, notify_user_ids: ids };
+        }
+
         async function showEditModal() {
             const res = editingReservation;
 
@@ -1377,6 +1421,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             document.getElementById('editNeededBy').value = res.needed_by || '';
             document.getElementById('editStatus').value = res.status_label || res.status;
             document.getElementById('editNotes').value = res.notes || '';
+            await initNotifyPicker('edit', res.notify_special_received, res.notify_user_ids, res.special_received_notified_at);
 
             // Reset add item form
             hideAddItemForm();
@@ -1571,6 +1616,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             const requestedById = document.getElementById('editRequestedBy').value;
             const neededBy = document.getElementById('editNeededBy').value;
             const notes = document.getElementById('editNotes').value;
+            const notify = readNotifyPicker('edit');
+            if (notify === null) return;
 
             try {
                 // Update reservation header
@@ -1585,7 +1632,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                         job_name: jobName,
                         requested_by_id: requestedById || null,
                         needed_by: neededBy,
-                        notes: notes
+                        notes: notes,
+                        ...notify
                     })
                 });
 
@@ -1819,6 +1867,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             document.getElementById('manualJobName').value = '';
             populatePeopleSelect(document.getElementById('manualRequestedBy'), (typeof currentUser !== 'undefined' && currentUser) ? currentUser.id : '', { placeholder: '— Select requester —' });
             document.getElementById('manualNeededBy').value = '';
+            initNotifyPicker('manual', false, [], null);
             document.getElementById('manualNotes').value = '';
 
             manualItems = [];
@@ -2023,6 +2072,8 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             const requestedById = document.getElementById('manualRequestedBy').value;
             const neededBy = document.getElementById('manualNeededBy').value;
             const notes = document.getElementById('manualNotes').value.trim();
+            const notify = readNotifyPicker('manual');
+            if (notify === null) return;
 
             if (!jobNumber) {
                 alert('Job Number is required');
@@ -2059,6 +2110,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                         requested_by_id: requestedById,
                         needed_by: neededBy || null,
                         notes: notes || null,
+                        ...notify,
                         items: manualItems
                     })
                 });

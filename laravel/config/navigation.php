@@ -99,6 +99,16 @@ return [
         ],
     ],
     [
+        'label' => 'Field & Fleet', 'icon' => 'truck', 'permission' => 'nav.fleet',
+        'active' => ['fleet*'],
+        'items' => [
+            ['label' => 'Fleet Overview', 'href' => '/fleet', 'active' => ['fleet']],
+            ['label' => 'Assets', 'href' => '/fleet#assets'],
+            ['label' => 'Work Orders', 'href' => '/fleet#work-orders'],
+            ['label' => 'Field Inbox', 'href' => '/fleet#inbox', 'permission' => 'fleet.manage'],
+        ],
+    ],
+    [
         'label' => 'Maintenance', 'icon' => 'tool', 'permission' => 'nav.maintenance',
         'active' => ['maintenance*'],
         'items' => [

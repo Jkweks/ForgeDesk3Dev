@@ -284,4 +284,91 @@ class WorkQueueBoardTest extends TestCase
             'assignments' => [['stage_name' => 'Cutting', 'assigned_to_id' => null]],
         ])->assertStatus(403);
     }
+
+    // ── Job-level cards: one per work order + step, covering every elevation ──
+
+    public function test_cards_collapse_elevations_into_one_per_work_order_and_step(): void
+    {
+        $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
+        $wo = $this->wo(['priority' => 1, 'priority_locked' => true]);
+        $e1 = $this->elevation($wo, '2026-09-10');
+        $e2 = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'E2-B', 'date_requested' => '2026-09-01']);
+        $s1 = $this->stage($e1, 'Cutting', 1, ['assigned_to_id' => $al->id]);
+        $s2 = $this->stage($e2, 'Cutting', 1, ['assigned_to_id' => $al->id, 'status' => 'in_progress']);
+        $this->stage($e1, 'Welding', 2, ['assigned_to_id' => $al->id]);
+
+        $op = collect($this->getJson('/api/v1/work-queue')->json('operators'))->firstWhere('user.id', $al->id);
+
+        $this->assertSame(2, $op['count'], 'Cutting + Welding, not one card per elevation');
+        $cut = collect($op['stages'])->firstWhere('name', 'Cutting');
+        $this->assertEqualsCanonicalizing([$s1->id, $s2->id], $cut['stage_ids']);
+        $this->assertSame(2, $cut['elevation_count']);
+        $this->assertSame('in_progress', $cut['status']);
+        $this->assertSame('2026-09-01', $cut['date_requested']);
+        $this->assertSame('2 elevations', $cut['elevation_tag']);
+    }
+
+    public function test_card_is_gated_only_when_every_elevation_is_gated(): void
+    {
+        $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
+        $wo = $this->wo(['priority' => 1, 'priority_locked' => true]);
+        $e1 = $this->elevation($wo);
+        $e2 = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'E2-B']);
+        $this->stage($e1, 'Prep', 1);                                         // e1 Prep still open → e1 Fab gated
+        $this->stage($e1, 'Fab', 2, ['assigned_to_id' => $al->id]);
+        $this->stage($e2, 'Prep', 1, ['status' => 'complete']);               // e2 Prep done → e2 Fab startable
+        $this->stage($e2, 'Fab', 2, ['assigned_to_id' => $al->id]);
+
+        $fab = collect($this->getJson('/api/v1/work-queue')->json('operators'))
+            ->firstWhere('user.id', $al->id)['stages'];
+
+        $this->assertCount(1, $fab);
+        $this->assertFalse($fab[0]['gated']);
+        $this->assertSame(1, collect($this->getJson('/api/v1/work-queue')->json('operators'))->firstWhere('user.id', $al->id)['ready_count']);
+    }
+
+    public function test_different_work_orders_and_operators_keep_separate_cards(): void
+    {
+        $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
+        $bob = FdUser::create(['name' => 'Bob', 'role' => 'worker', 'active' => true]);
+        $woA = $this->wo(['priority' => 1, 'priority_locked' => true]);
+        $woB = $this->wo(['priority' => 2, 'priority_locked' => true]);
+        $eA = $this->elevation($woA);
+        $eA2 = FdWoElevation::create(['work_order_id' => $woA->id, 'elevation_tag' => 'E2-B']);
+        $this->stage($eA, 'Cutting', 1, ['assigned_to_id' => $al->id]);
+        $this->stage($eA2, 'Cutting', 1, ['assigned_to_id' => $bob->id]);     // same WO + step, other operator
+        $this->stage($this->elevation($woB), 'Cutting', 1, ['assigned_to_id' => $al->id]);
+
+        $ops = collect($this->getJson('/api/v1/work-queue')->json('operators'))->keyBy('user.id');
+
+        $this->assertSame(2, $ops[$al->id]['count'], 'one card per work order');
+        $this->assertSame(1, $ops[$bob->id]['count']);
+    }
+
+    public function test_unassigned_bucket_collapses_and_cards_carry_planned_dates(): void
+    {
+        $wo = $this->wo(['priority' => 1, 'priority_locked' => true, 'planned_start_date' => '2026-10-26', 'planned_completion_date' => '2026-11-02']);
+        $this->stage($this->elevation($wo), 'Cutting', 1);
+        $this->stage(FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'E2-B']), 'Cutting', 1);
+
+        $un = $this->getJson('/api/v1/work-queue')->json('unassigned');
+
+        $this->assertSame(1, $un['count']);
+        $this->assertSame('2026-10-26', $un['stages'][0]['planned_start_date']);
+        $this->assertSame('2026-11-02', $un['stages'][0]['planned_completion_date']);
+    }
+
+    public function test_each_elevations_stage_is_still_completed_individually(): void
+    {
+        $al = FdUser::create(['name' => 'Al', 'role' => 'worker', 'active' => true]);
+        $wo = $this->wo(['priority' => 1, 'priority_locked' => true]);
+        $s1 = $this->stage($this->elevation($wo), 'Cutting', 1, ['assigned_to_id' => $al->id]);
+        $s2 = $this->stage(FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'E2-B']), 'Cutting', 1, ['assigned_to_id' => $al->id]);
+
+        $s1->update(['status' => 'complete']);
+
+        $card = collect($this->getJson('/api/v1/work-queue')->json('operators'))->firstWhere('user.id', $al->id)['stages'][0];
+        $this->assertSame([$s2->id], $card['stage_ids']);
+        $this->assertSame(1, $card['elevation_count']);
+    }
 }

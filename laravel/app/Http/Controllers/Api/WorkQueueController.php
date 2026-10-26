@@ -11,7 +11,9 @@ use Illuminate\Http\Request;
 /**
  * The manager assignment board: every actionable, un-gated stage grouped by
  * operator (plus an "unassigned" bucket), each group ranked by effective
- * priority. Reassignment is done client-side via PATCH /work-order-stages/{id}.
+ * priority. Cards are job-level (work order + step name) and carry every
+ * elevation's stage id; reassignment is done client-side via
+ * PATCH /work-order-stages/{id} for each of them.
  */
 class WorkQueueController extends Controller
 {
@@ -53,22 +55,31 @@ class WorkQueueController extends Controller
 
         $rows = $stages;
 
-        $card = function (FdWoStage $s) {
+        // One card per work order + step name: the elevations' stages are assigned
+        // together here, but each keeps its own row so it is still completed
+        // individually on the shop floor / work order modals.
+        $card = function ($group) {
+            $s = $group->first();
             $wo = $s->elevation->workOrder;
             $job = $wo?->businessJob;
+            $gated = $group->every(fn ($g) => $g->is_gated);
+            $tags = $group->map(fn ($g) => $g->elevation->elevation_tag)->unique()->values();
 
             return [
                 'stage_id' => $s->id,
+                'stage_ids' => $group->pluck('id')->values(),
                 'name' => $s->name,
-                'status' => $s->status,
-                'gated' => (bool) $s->is_gated,
-                'blocking_stage_name' => $s->blocking_stage_name,
+                'status' => $group->contains('status', 'in_progress') ? 'in_progress' : $s->status,
+                'gated' => $gated,
+                'blocking_stage_name' => $gated ? $s->blocking_stage_name : null,
                 'assigned_to_id' => $s->assigned_to_id,
                 'assignee_ids' => $s->assignees->pluck('id')->values(),
                 'assignee_names' => $s->assignees->pluck('name')->values(),
                 'elevation_id' => $s->elevation_id,
-                'elevation_tag' => $s->elevation->elevation_tag,
-                'date_requested' => $s->elevation->date_requested?->format('Y-m-d'),
+                'elevation_tag' => $tags->count() === 1 ? $tags->first() : "{$tags->count()} elevations",
+                'elevation_tags' => $tags,
+                'elevation_count' => $group->count(),
+                'date_requested' => $group->map(fn ($g) => $g->elevation->date_requested?->format('Y-m-d'))->filter()->min(),
                 'work_order_id' => $wo?->id,
                 'business_job_id' => $wo?->business_job_id,
                 'release_label' => $job ? "{$job->job_number}-{$wo->release_token}" : "{$wo?->release_token}",
@@ -77,8 +88,16 @@ class WorkQueueController extends Controller
                 'job_name' => $job?->job_name,
                 'priority' => $wo?->priority,
                 'due_date' => $wo?->due_date?->format('Y-m-d'),
+                'planned_start_date' => $wo?->planned_start_date?->format('Y-m-d'),
+                'planned_completion_date' => $wo?->planned_completion_date?->format('Y-m-d'),
             ];
         };
+
+        // Collapse an operator's stages to job-level groups (work order + step
+        // name), keeping the board's ranking order for the first of each.
+        $collapse = fn ($stages) => $stages
+            ->groupBy(fn ($s) => $s->elevation->work_order_id.'|'.mb_strtolower($s->name))
+            ->values();
 
         // "Oldest waiting" is the oldest request date among stages that can
         // actually be started now (ignore gated ones).
@@ -112,7 +131,7 @@ class WorkQueueController extends Controller
 
         $operators = $grouped
             ->reject(fn ($g, $uid) => (int) $uid === 0)
-            ->map(function ($g, $uid) use ($userDir, $card, $oldest) {
+            ->map(function ($g, $uid) use ($userDir, $card, $oldest, $collapse) {
                 $u = $userDir->get($uid);
 
                 return [
@@ -121,10 +140,10 @@ class WorkQueueController extends Controller
                         'name' => $u->name ?? 'Unknown',
                         'initials' => $u->initials ?? '?',
                     ],
-                    'count' => $g->count(),
-                    'ready_count' => $g->where('is_gated', false)->count(),
+                    'count' => $collapse($g)->count(),
+                    'ready_count' => $collapse($g)->filter(fn ($c) => $c->contains('is_gated', false))->count(),
                     'oldest_date_requested' => $oldest($g),
-                    'stages' => $g->map($card)->values(),
+                    'stages' => $collapse($g)->map($card)->values(),
                 ];
             })
             ->sortBy('user.name')
@@ -135,10 +154,10 @@ class WorkQueueController extends Controller
         return response()->json([
             'operators' => $operators,
             'unassigned' => [
-                'count' => $unassignedGroup->count(),
-                'ready_count' => $unassignedGroup->where('is_gated', false)->count(),
+                'count' => $collapse($unassignedGroup)->count(),
+                'ready_count' => $collapse($unassignedGroup)->filter(fn ($c) => $c->contains('is_gated', false))->count(),
                 'oldest_date_requested' => $oldest($unassignedGroup),
-                'stages' => $unassignedGroup->map($card)->values(),
+                'stages' => $collapse($unassignedGroup)->map($card)->values(),
             ],
             // Every active fab user, so the board can show empty columns to drop onto.
             'fab_users' => FdUser::where('active', true)->orderBy('name')->get(['id', 'name', 'initials']),

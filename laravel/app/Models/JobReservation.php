@@ -24,12 +24,16 @@ class JobReservation extends Model
         'fulfilled_by_id',
         'fulfilled_at',
         'source',
+        'notify_special_received',
+        'special_received_notified_at',
     ];
 
     protected $casts = [
         'needed_by' => 'date',
         'release_number' => 'integer',
         'fulfilled_at' => 'datetime',
+        'notify_special_received' => 'boolean',
+        'special_received_notified_at' => 'datetime',
     ];
 
     /**
@@ -130,6 +134,35 @@ class JobReservation extends Model
     public function fulfilledBy()
     {
         return $this->belongsTo(User::class, 'fulfilled_by_id');
+    }
+
+    /** Users to email when every special-order item on this reservation has been received. */
+    public function notifyUsers()
+    {
+        return $this->belongsToMany(User::class, 'job_reservation_notify_users', 'job_reservation_id', 'user_id')->withTimestamps();
+    }
+
+    /**
+     * Apply the special-order notification settings from a request payload.
+     * Enabling requires at least one recipient; changing the setup re-arms the one-shot notice.
+     */
+    public function applyNotifySettings(?bool $enabled, ?array $userIds): void
+    {
+        $changed = false;
+
+        if ($enabled !== null && $enabled !== (bool) $this->notify_special_received) {
+            $this->notify_special_received = $enabled;
+            $changed = true;
+        }
+        if ($userIds !== null) {
+            $ids = array_values(array_unique(array_map('intval', $userIds)));
+            $diff = $this->notifyUsers()->sync($ids);
+            $changed = $changed || $diff['attached'] || $diff['detached'];
+        }
+        if ($changed) {
+            $this->special_received_notified_at = null;
+        }
+        $this->save();
     }
 
     /**

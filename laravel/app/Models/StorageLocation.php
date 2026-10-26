@@ -38,6 +38,26 @@ class StorageLocation extends Model
 
     protected $appends = ['has_children', 'full_path'];
 
+    /**
+     * The catch-all location for stock with nowhere specific to live. Restores it if it
+     * was soft-deleted and recreates it if missing, so callers always get a usable id
+     * (inventory_locations.storage_location_id is NOT NULL).
+     */
+    public static function defaultLocation(): self
+    {
+        $location = static::withTrashed()->where('code', 'DEFAULT')->first();
+
+        if ($location) {
+            if ($location->trashed()) {
+                $location->restore();
+            }
+
+            return $location;
+        }
+
+        return static::create(['name' => 'Default Storage', 'code' => 'DEFAULT', 'type' => 'warehouse', 'is_active' => true]);
+    }
+
     // Hierarchical relationships
 
     /**

@@ -392,10 +392,7 @@ class InventoryTransactionController extends Controller
                         $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();
 
                         if (! $primaryLocation) {
-                            $defaultLocation = \App\Models\StorageLocation::firstOrCreate(
-                                ['code' => 'DEFAULT'],
-                                ['name' => 'Default Storage', 'type' => 'warehouse', 'is_active' => true]
-                            );
+                            $defaultLocation = \App\Models\StorageLocation::defaultLocation();
 
                             $primaryLocation = $product->inventoryLocations()->create([
                                 'storage_location_id' => $defaultLocation->id,
@@ -653,10 +650,7 @@ class InventoryTransactionController extends Controller
             $primaryLocation = $product->inventoryLocations()->where('is_primary', true)->first();
 
             if (! $primaryLocation) {
-                $defaultLocation = \App\Models\StorageLocation::firstOrCreate(
-                    ['code' => 'DEFAULT'],
-                    ['name' => 'Default Storage', 'type' => 'warehouse', 'is_active' => true]
-                );
+                $defaultLocation = \App\Models\StorageLocation::defaultLocation();
 
                 $primaryLocation = $product->inventoryLocations()->create([
                     'storage_location_id' => $defaultLocation->id,

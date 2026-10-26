@@ -113,6 +113,24 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        // Field & fleet app sync. A separate database (typically on another host / DMZ)
+        // owned by the public-facing field app. ForgeDesk connects out to it; nothing
+        // public ever connects to the ForgeDesk database. See config/fleet.php.
+        'fieldsync' => [
+            'driver' => 'pgsql',
+            'url' => env('FIELDSYNC_DB_URL'),
+            'host' => env('FIELDSYNC_DB_HOST', '127.0.0.1'),
+            'port' => env('FIELDSYNC_DB_PORT', '5432'),
+            'database' => env('FIELDSYNC_DB_DATABASE', 'fieldapp'),
+            'username' => env('FIELDSYNC_DB_USERNAME', ''),
+            'password' => env('FIELDSYNC_DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => env('FIELDSYNC_DB_SCHEMA', 'public'),
+            'sslmode' => env('FIELDSYNC_DB_SSLMODE', 'prefer'),
+        ],
+
         // CutFlow (shop-floor cut list / stick planning / cut log), absorbed
         // into this app but kept on its own database on the same Postgres
         // instance — same server/role as the default `pgsql` connection

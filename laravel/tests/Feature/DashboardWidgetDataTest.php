@@ -400,7 +400,7 @@ class DashboardWidgetDataTest extends TestCase
         $this->admin();
         $this->product('LS-OK', ['status' => 'in_stock', 'quantity_on_hand' => 500]);
         $this->product('LS-LOW', ['status' => 'low', 'quantity_on_hand' => 12]);
-        $this->product('LS-CRIT', ['status' => 'critical', 'quantity_on_hand' => 0]);
+        $crit = $this->product('LS-CRIT', ['status' => 'critical', 'quantity_on_hand' => 0]);
         $this->product('LS-VLOW', ['status' => 'very_low', 'quantity_on_hand' => 3]);
         $this->product('LS-INACTIVE', ['status' => 'critical', 'quantity_on_hand' => 0, 'is_active' => false]);
 
@@ -408,7 +408,9 @@ class DashboardWidgetDataTest extends TestCase
 
         $this->assertSame(['LS-CRIT', 'LS-VLOW', 'LS-LOW'], array_column($items, 'label'));
         $this->assertSame('bg-red-lt', $items[0]['meta_class']);
-        $this->assertSame('/critical-stock', $items[0]['link']);
+        // Deep-links to the product on the critical page; non-critical items go to /low-stock
+        $this->assertSame('/critical-stock?product='.$crit->id, $items[0]['link']);
+        $this->assertStringStartsWith('/low-stock?product=', $items[2]['link']);
         $this->assertSame('3 on hand', $items[1]['meta']);
     }
 

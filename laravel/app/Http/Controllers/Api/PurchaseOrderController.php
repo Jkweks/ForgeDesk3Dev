@@ -425,12 +425,12 @@ class PurchaseOrderController extends Controller
                         $primaryLocation->save();
                     } else {
                         // No locations exist yet (new/unplaced product). Create an
-                        // Unassigned location record so the location table stays as
+                        // Default location record so the location table stays as
                         // the source of truth and recalculateQuantitiesFromLocations()
                         // never resets this receipt to zero.
-                        $unassigned = StorageLocation::where('code', 'UNASSIGNED')->first();
+                        $default = StorageLocation::defaultLocation();
                         $product->inventoryLocations()->create([
-                            'storage_location_id' => $unassigned?->id ?? null,
+                            'storage_location_id' => $default->id,
                             'quantity' => $quantityToReceive,
                             'is_primary' => true,
                         ]);
@@ -468,6 +468,15 @@ class PurchaseOrderController extends Controller
             }
 
             DB::commit();
+
+            // Tell anyone watching a reservation whose special orders are now all in. A mail
+            // problem must never undo or fail a receipt that has already been committed.
+            try {
+                app(\App\Services\SpecialOrderReceivedNotifier::class)
+                    ->check(collect($request->items)->map(fn ($i) => PurchaseOrderItem::find($i['item_id'])?->product_id)->filter()->unique()->values()->all());
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
             $purchaseOrder->load(['items.product', 'supplier']);
 

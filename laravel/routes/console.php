@@ -22,3 +22,13 @@ Schedule::command('disk:check')->hourly();
 
 // Delete material-check files that were never committed to a reservation
 Schedule::command('material-check:clean-staging')->daily();
+
+// Field & fleet assets: due/expiry alerts daily; field-app sync every couple of minutes
+// (both sync commands no-op unless FIELDSYNC_ENABLED=true).
+Schedule::command('fleet:check-due')->dailyAt('06:30')->withoutOverlapping();
+Schedule::command('fleet:sync-out')->everyTwoMinutes()->withoutOverlapping();
+Schedule::command('fleet:sync-in')->everyTwoMinutes()->withoutOverlapping();
+
+// Safety net for the "notify when special orders are in" reservation option (PO receipts
+// trigger it directly; this catches manual adjustments and cycle counts).
+Schedule::command('reservations:check-special-orders')->hourly()->withoutOverlapping();

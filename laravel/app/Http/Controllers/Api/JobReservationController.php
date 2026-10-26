@@ -155,6 +155,9 @@ class JobReservationController extends Controller
                     'status' => $reservation->status,
                     'status_label' => $reservation->status_label,
                     'notes' => $reservation->notes,
+                    'notify_special_received' => (bool) $reservation->notify_special_received,
+                    'notify_user_ids' => $reservation->notifyUsers()->pluck('users.id')->all(),
+                    'special_received_notified_at' => $reservation->special_received_notified_at?->format('Y-m-d H:i:s'),
                     'fulfilled_by_id' => $reservation->fulfilled_by_id,
                     'fulfilled_by_name' => $reservation->fulfilledBy?->name,
                     'fulfilled_at' => $reservation->fulfilled_at?->format('Y-m-d H:i:s'),
@@ -527,7 +530,15 @@ class JobReservationController extends Controller
                 'requested_by_id' => 'sometimes|nullable|integer|exists:users,id',
                 'needed_by' => 'sometimes|nullable|date',
                 'notes' => 'sometimes|nullable|string',
+                'notify_special_received' => 'sometimes|boolean',
+                'notify_user_ids' => 'sometimes|nullable|array|max:50',
+                'notify_user_ids.*' => 'integer|exists:users,id',
             ]);
+            $validator->after(function ($v) use ($request) {
+                if ($request->boolean('notify_special_received') && $request->has('notify_user_ids') && empty($request->input('notify_user_ids'))) {
+                    $v->errors()->add('notify_user_ids', 'Pick at least one person to notify.');
+                }
+            });
 
             if ($validator->fails()) {
                 return response()->json([
@@ -571,6 +582,15 @@ class JobReservationController extends Controller
 
                 $reservation->save();
 
+                if ($request->has('notify_special_received') || $request->has('notify_user_ids')) {
+                    $reservation->applyNotifySettings(
+                        $request->has('notify_special_received') ? $request->boolean('notify_special_received') : null,
+                        $request->has('notify_user_ids') ? ($request->input('notify_user_ids') ?? []) : null,
+                    );
+                    // Everything may already be in stock: don't make the user wait for the hourly check.
+                    app(\App\Services\SpecialOrderReceivedNotifier::class)->check();
+                }
+
                 DB::commit();
 
                 Log::info('Reservation updated', [
@@ -591,6 +611,8 @@ class JobReservationController extends Controller
                         'needed_by' => $reservation->needed_by?->format('Y-m-d'),
                         'notes' => $reservation->notes,
                         'status' => $reservation->status,
+                        'notify_special_received' => (bool) $reservation->notify_special_received,
+                        'special_received_notified_at' => $reservation->special_received_notified_at?->format('Y-m-d H:i:s'),
                     ],
                 ]);
 
@@ -666,6 +688,11 @@ class JobReservationController extends Controller
                     'committed_qty' => $request->committed_qty,
                     'consumed_qty' => 0,
                 ]);
+
+                // A new special-order line means the earlier "all received" notice no longer holds.
+                if ($product->is_special_order && $reservation->special_received_notified_at) {
+                    $reservation->forceFill(['special_received_notified_at' => null])->save();
+                }
 
                 DB::commit();
 
@@ -1122,6 +1149,9 @@ class JobReservationController extends Controller
                 'items.*.product_id' => 'required|integer|exists:products,id',
                 'items.*.requested_qty' => 'required|numeric|min:0.1',
                 'items.*.committed_qty' => 'nullable|numeric|min:0',
+                'notify_special_received' => 'sometimes|boolean',
+                'notify_user_ids' => 'required_if:notify_special_received,true,1|nullable|array|max:50',
+                'notify_user_ids.*' => 'integer|exists:users,id',
             ]);
 
             if ($validator->fails()) {
@@ -1150,6 +1180,10 @@ class JobReservationController extends Controller
                     'notes' => $request->notes,
                     'status' => $initialStatus,
                 ]);
+
+                if ($request->boolean('notify_special_received')) {
+                    $reservation->applyNotifySettings(true, $request->input('notify_user_ids', []));
+                }
 
                 $itemsData = [];
                 $totalRequested = 0;

@@ -238,7 +238,7 @@ class CycleCountItem extends Model
         } else {
             // Legacy: product-level count without location (should not happen going forward)
             // Still supported for backward compatibility. Apply the variance to the
-            // primary inventory location (falling back to creating an "Unassigned"
+            // primary inventory location (falling back to creating an "Default"
             // location) and recalculate from locations, rather than writing
             // quantity_on_hand directly — this keeps inventory_locations as the
             // source of truth instead of letting it drift.
@@ -254,9 +254,9 @@ class CycleCountItem extends Model
                 $primaryLocation->quantity += $varianceEaches;
                 $primaryLocation->save();
             } else {
-                $unassigned = StorageLocation::where('code', 'UNASSIGNED')->first();
+                $default = StorageLocation::defaultLocation();
                 $product->inventoryLocations()->create([
-                    'storage_location_id' => $unassigned?->id ?? null,
+                    'storage_location_id' => $default->id,
                     'quantity' => $countedEaches,
                     'is_primary' => true,
                 ]);
