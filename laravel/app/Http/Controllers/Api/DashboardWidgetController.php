@@ -151,6 +151,56 @@ class DashboardWidgetController extends Controller
     }
 
     /**
+     * One-week work queue schedule: open work orders (job name only) against the next 7 days,
+     * using the same planned start -> planned completion span (or due date) as the work queue
+     * calendar. Work orders already past their end date show as late on today.
+     */
+    public function workQueueWeek()
+    {
+        $days = collect(range(0, 6))->map(fn (int $i) => today()->addDays($i));
+        $first = $days->first();
+        $last = $days->last();
+
+        $workOrders = $this->openWorkOrders()
+            ->with('businessJob:id,job_number,job_name')
+            ->get()
+            ->map(function (FdWorkOrder $wo) {
+                $end = $wo->planned_completion_date ?? $wo->due_date ?? $wo->planned_start_date;
+
+                return $end ? [$wo, ($wo->planned_start_date ?? $end)->copy()->startOfDay(), $end->copy()->startOfDay()] : null;
+            })
+            ->filter()
+            ->filter(fn (array $x) => $x[1]->lte($last))
+            ->sortBy([fn ($a, $b) => $a[1] <=> $b[1], fn ($a, $b) => $a[2] <=> $b[2]])
+            ->values();
+
+        $rows = $workOrders->map(function (array $x) use ($days, $first) {
+            [$wo, $start, $end] = $x;
+            $late = $end->lt($first);
+            $name = $wo->businessJob?->job_name ?: (string) $wo->businessJob?->job_number;
+
+            return [
+                'link' => '/fabrication/work-orders?wo='.$wo->id,
+                'cells' => ['job' => trim($name.' '.($wo->release_token ? "({$wo->release_token})" : ''))]
+                    + $days->mapWithKeys(fn (Carbon $d) => [$d->format('Y-m-d') => match (true) {
+                        $late && $d->equalTo($first) => ['text' => 'Late', 'class' => 'bg-red-lt'],
+                        ! $late && $d->betweenIncluded($start, $end) => ['text' => '●', 'class' => $d->isWeekend() ? 'bg-secondary-lt' : 'bg-blue-lt'],
+                        default => '',
+                    }])->all(),
+            ];
+        });
+
+        return response()->json([
+            'columns' => array_merge(
+                [['key' => 'job', 'label' => 'Job']],
+                $days->map(fn (Carbon $d) => ['key' => $d->format('Y-m-d'), 'label' => $d->format('D j'), 'align' => 'center'])->all(),
+            ),
+            'rows' => $rows,
+            'total' => $rows->count(),
+        ]);
+    }
+
+    /**
      * Open stages (pending / in progress, on live open elevations) grouped by
      * stage name. Stage names come from per-elevation-type templates, so they
      * are returned as data rather than a fixed list.

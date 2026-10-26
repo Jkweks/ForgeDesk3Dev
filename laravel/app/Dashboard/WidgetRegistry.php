@@ -91,6 +91,11 @@ class WidgetRegistry
                         'options' => WorkOrderColumns::options(), 'show_if' => ['columns_mode' => 'custom']],
                 ]),
             ]],
+            ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/schedule', [
+                ['key' => 'wo_week_schedule', 'title' => 'Work Queue: 1 Week Schedule', 'description' => 'Open work orders by job name across the next 7 days, from the work queue schedule.', 'icon' => 'ti-calendar-week',
+                    'type' => 'table', 'settings_schema' => [],
+                    'default_size' => ['w' => 8, 'h' => 6], 'min_size' => ['w' => 5, 'h' => 3], 'refresh_seconds' => 300],
+            ]],
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/stages', [
                 $chart('wo_stage_wip', 'Work in Progress by Stage', 'Open pending and in-progress stages, grouped by stage name.', 'ti-chart-bar', 'stage_wip'),
             ]],

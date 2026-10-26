@@ -248,6 +248,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/widgets/work-orders', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrders']);
             Route::get('/dashboard/widgets/work-orders/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrdersDue']);
             Route::get('/dashboard/widgets/work-orders/table', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrdersTable']);
+            Route::get('/dashboard/widgets/work-orders/schedule', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workQueueWeek']);
             Route::get('/dashboard/widgets/work-orders/stages', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrderStages']);
         });
         Route::get('/dashboard/widgets/quality', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'quality'])->middleware('permission:quality.view');
