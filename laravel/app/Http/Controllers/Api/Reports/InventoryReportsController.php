@@ -1342,6 +1342,7 @@ class InventoryReportsController extends Controller
                 'unit_of_measure' => $product->unit_of_measure,
                 'available_value_list' => $availableValueList,
                 'available_value_net' => $availableValueNet,
+                'nonsof' => (bool) $product->nonsof,
             ];
         });
 

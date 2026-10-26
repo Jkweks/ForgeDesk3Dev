@@ -561,7 +561,7 @@ class ProductController extends Controller
                 'reference_type' => 'job',
                 'reference_id' => null,
                 'notes' => "Issued to job: {$validated['job_name']}".
-                           ($validated['notes'] ? "\n".$validated['notes'] : ''),
+                           (! empty($validated['notes']) ? "\n".$validated['notes'] : ''),
                 'user_id' => auth()->id(),
                 'transaction_date' => now(),
             ]);

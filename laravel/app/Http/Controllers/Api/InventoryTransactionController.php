@@ -470,7 +470,7 @@ class InventoryTransactionController extends Controller
                     'reference_number' => $validated['reference_number'],
                     'reference_type' => 'manual',
                     'reference_id' => null,
-                    'notes' => $validated['notes'],
+                    'notes' => $validated['notes'] ?? null,
                     'user_id' => Auth::id(),
                     'transaction_date' => $validated['transaction_date'],
                 ]);
@@ -563,7 +563,7 @@ class InventoryTransactionController extends Controller
             $attributes = [
                 'type' => $validated['type'],
                 'reference_number' => $validated['reference_number'],
-                'notes' => $validated['notes'],
+                'notes' => $validated['notes'] ?? null,
                 'transaction_date' => $validated['transaction_date'],
             ];
 

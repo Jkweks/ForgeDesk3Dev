@@ -256,7 +256,7 @@ class InventoryLocationController extends Controller
                 'reference_type' => 'location_transfer',
                 'reference_id' => $toLocation->id,
                 'notes' => "Transferred {$validated['quantity']} from {$fromLocationName} to {$toLocationName}".
-                           ($validated['notes'] ? "\n".$validated['notes'] : ''),
+                           (! empty($validated['notes']) ? "\n".$validated['notes'] : ''),
                 'user_id' => auth()->id(),
                 'transaction_date' => now(),
             ]);
@@ -414,7 +414,7 @@ class InventoryLocationController extends Controller
             'reference_type' => 'location_adjustment',
             'reference_id' => $location->id,
             'notes' => "Adjusted quantity at {$locationName} by {$validated['quantity']} (Location: {$locationQuantityBefore} → {$location->quantity})".
-                       ($validated['notes'] ? "\n".$validated['notes'] : ''),
+                       (! empty($validated['notes']) ? "\n".$validated['notes'] : ''),
             'user_id' => auth()->id(),
             'transaction_date' => now(),
         ]);
