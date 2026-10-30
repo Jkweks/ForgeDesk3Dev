@@ -72,6 +72,7 @@ return [
         'items' => [
             ['label' => 'Work Orders', 'href' => '/fabrication/work-orders', 'active' => ['fabrication/work-orders']],
             ['label' => 'Work Queue', 'href' => '/fabrication/work-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/work-queue']],
+            ['label' => 'Programming Queue', 'href' => '/fabrication/programming-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/programming-queue']],
             ['label' => 'Cut Lists', 'href' => '/fabrication/cut-lists', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/cut-lists']],
             ['label' => 'Documents', 'href' => '/fabrication/documents', 'permission' => 'fabrication.view', 'active' => ['fabrication/documents']],
             ['header' => 'Displays'],

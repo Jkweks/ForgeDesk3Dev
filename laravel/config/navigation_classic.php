@@ -111,6 +111,7 @@ return [
         'items' => [
             ['label' => 'Work Orders', 'href' => '/fabrication/work-orders', 'active' => ['fabrication/work-orders']],
             ['label' => 'Work Queue', 'href' => '/fabrication/work-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/work-queue']],
+            ['label' => 'Programming Queue', 'href' => '/fabrication/programming-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/programming-queue']],
             ['label' => 'Cut Lists', 'href' => '/fabrication/cut-lists', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/cut-lists']],
             ['label' => 'Quality Reports', 'href' => '/fabrication/quality', 'permission' => 'quality.view', 'active' => ['fabrication/quality']],
             ['label' => 'Shop Floor Display', 'href' => '/shop', 'target' => '_blank', 'external' => true],

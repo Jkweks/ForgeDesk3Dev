@@ -22,6 +22,33 @@ class FdWoStage extends Model
         'sort_order', 'phase', 'blocks_next', 'minutes_per_joint', 'status', 'assigned_to_id', 'completed_by_id', 'started_at', 'completed_at', 'notes',
     ];
 
+    protected static function booted(): void
+    {
+        // Programming steps default to the shop's programmer, whichever path created them (templates,
+        // configurator sync, manual add). An explicit assignee on create is respected.
+        static::created(function (FdWoStage $stage) {
+            if ($stage->assigned_to_id || ! $stage->isProgramming()) {
+                return;
+            }
+            if ($programmer = self::defaultProgrammerId()) {
+                $stage->syncAssignees([$programmer]);
+            }
+        });
+    }
+
+    /** True for any step whose name contains "program" (Program, Programmed, CNC Programming). */
+    public function isProgramming(): bool
+    {
+        return str_contains(mb_strtolower((string) $this->name), 'program');
+    }
+
+    public static function defaultProgrammerId(): ?int
+    {
+        $name = config('fabrication.default_programmer');
+
+        return $name ? FdUser::where('active', true)->where('name', $name)->value('id') : null;
+    }
+
     /** Gate ordering key: explicit phase, or the row's sort_order when unset. */
     public function getEffectivePhaseAttribute(): int
     {

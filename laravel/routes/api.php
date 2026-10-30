@@ -765,6 +765,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::middleware('permission:fabrication.work-orders.view')->group(function () {
             Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
             Route::get('/work-queue', [\App\Http\Controllers\Api\WorkQueueController::class, 'index']);
+            Route::get('/programming-queue', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'index']);
             $se = \App\Http\Controllers\Api\ScheduleEntryController::class;
             Route::post('/schedule-entries', [$se, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/schedule-entries/{id}', [$se, 'update'])->middleware('permission:fabrication.work-orders.edit');

@@ -108,6 +108,10 @@ Route::get('/fabrication/work-queue', function () {
     return view('fabrication.work-queue');
 });
 
+Route::get('/fabrication/programming-queue', function () {
+    return view('fabrication.programming-queue');
+});
+
 Route::get('/fabrication/quality', function () {
     return view('fabrication.quality');
 });
