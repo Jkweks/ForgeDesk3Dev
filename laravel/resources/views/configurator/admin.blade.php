@@ -1616,6 +1616,93 @@
     document.getElementById('hwlib-var-options-wrap').style.display = document.getElementById('hwlib-var-type').value === 'select' ? '' : 'none';
   }
 
+  // ---- Variable formula builder (same signed-term shape as the frame cut-length formula) ----
+  function hwVarToggleFormula() {
+    const on = document.getElementById('hwlib-var-calculated').checked;
+    document.getElementById('hwlib-var-formula-wrap').style.display = on ? '' : 'none';
+    if (on && !document.querySelector('#hwlib-var-branches .hw-branch')) hwVarAddBranch({ when: null, terms: [] });
+  }
+  function hwVarCodeOptions(selected) {
+    const cur = document.getElementById('hwlib-var-id').value;
+    return '<option value="">— variable —</option>' + hwVariables
+      .filter(x => x.id != cur).sort((a, b) => a.code.localeCompare(b.code))
+      .map(x => `<option value="${esc(x.code)}" ${x.code === selected ? 'selected' : ''}>${esc(x.code)} — ${esc(x.label)}</option>`).join('');
+  }
+  function hwVarAddBranch(branch) {
+    const el = document.createElement('div');
+    el.className = 'border rounded p-2 mb-2 hw-branch';
+    const w = branch?.when || null;
+    el.innerHTML = `
+      <div class="row g-2 align-items-center mb-2">
+        <div class="col-3">
+          <select class="form-select form-select-sm hw-when-type" onchange="hwVarToggleWhen(this)">
+            <option value="" ${!w ? 'selected' : ''}>Always / otherwise</option>
+            <option value="var_true" ${w?.type === 'var_true' ? 'selected' : ''}>If variable is true</option>
+            <option value="category" ${w?.type === 'category' ? 'selected' : ''}>If opening has category</option>
+          </select>
+        </div>
+        <div class="col-7">
+          <select class="form-select form-select-sm hw-when-var" style="${w?.type === 'var_true' ? '' : 'display:none'}">${hwVarCodeOptions(w?.var)}</select>
+          <input type="text" class="form-control form-control-sm hw-when-match" placeholder="category name contains… (e.g. continuous hinge)" value="${esc(w?.match || '')}" style="${w?.type === 'category' ? '' : 'display:none'}">
+        </div>
+        <div class="col-2 text-end">
+          <button type="button" class="btn btn-sm btn-icon text-danger" title="Remove condition" onclick="this.closest('.hw-branch').remove()"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+      <div class="hw-terms"></div>
+      <button type="button" class="btn btn-sm btn-link p-0" onclick="hwVarAddTerm(this.closest('.hw-branch').querySelector('.hw-terms'))"><i class="ti ti-plus"></i> Term</button>`;
+    document.getElementById('hwlib-var-branches').appendChild(el);
+    const terms = branch?.terms?.length ? branch.terms : [{ sign: 1, kind: 'var' }];
+    terms.forEach(t => hwVarAddTerm(el.querySelector('.hw-terms'), t));
+  }
+  function hwVarToggleWhen(sel) {
+    const b = sel.closest('.hw-branch');
+    b.querySelector('.hw-when-var').style.display = sel.value === 'var_true' ? '' : 'none';
+    b.querySelector('.hw-when-match').style.display = sel.value === 'category' ? '' : 'none';
+  }
+  function hwVarAddTerm(wrap, term) {
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-center mb-2 hw-term';
+    const kind = term?.kind || 'var';
+    row.innerHTML = `
+      <div class="col-2"><select class="form-select form-select-sm hw-term-sign">
+        <option value="1" ${!term || term.sign >= 0 ? 'selected' : ''}>+</option>
+        <option value="-1" ${term && term.sign < 0 ? 'selected' : ''}>−</option></select></div>
+      <div class="col-2"><select class="form-select form-select-sm hw-term-kind" onchange="hwVarToggleTerm(this)">
+        <option value="var" ${kind === 'var' ? 'selected' : ''}>Variable</option>
+        <option value="fixed" ${kind === 'fixed' ? 'selected' : ''}>Fixed</option></select></div>
+      <div class="col-5">
+        <select class="form-select form-select-sm hw-term-var" style="${kind === 'var' ? '' : 'display:none'}">${hwVarCodeOptions(term?.var)}</select>
+        <input type="number" step="0.0001" class="form-control form-control-sm hw-term-value" placeholder="value" value="${kind === 'fixed' ? (term?.value ?? '') : ''}" style="${kind === 'fixed' ? '' : 'display:none'}">
+      </div>
+      <div class="col-2"><input type="number" step="any" class="form-control form-control-sm hw-term-mult" title="Multiplier" placeholder="×1" value="${kind === 'var' && term?.mult != null && term.mult != 1 ? term.mult : ''}" style="${kind === 'var' ? '' : 'display:none'}"></div>
+      <div class="col-1 text-end"><button type="button" class="btn btn-sm btn-icon text-danger" onclick="this.closest('.hw-term').remove()"><i class="ti ti-x"></i></button></div>`;
+    wrap.appendChild(row);
+  }
+  function hwVarToggleTerm(sel) {
+    const r = sel.closest('.hw-term'), isVar = sel.value === 'var';
+    r.querySelector('.hw-term-var').style.display = isVar ? '' : 'none';
+    r.querySelector('.hw-term-mult').style.display = isVar ? '' : 'none';
+    r.querySelector('.hw-term-value').style.display = isVar ? 'none' : '';
+  }
+  function hwVarCollectFormula() {
+    const branches = Array.from(document.querySelectorAll('#hwlib-var-branches .hw-branch')).map(b => {
+      const type = b.querySelector('.hw-when-type').value;
+      const when = !type ? null : type === 'var_true'
+        ? { type, var: b.querySelector('.hw-when-var').value }
+        : { type, match: b.querySelector('.hw-when-match').value.trim() };
+      const terms = Array.from(b.querySelectorAll('.hw-term')).map(r => {
+        const kind = r.querySelector('.hw-term-kind').value;
+        const t = { sign: parseInt(r.querySelector('.hw-term-sign').value, 10), kind };
+        if (kind === 'fixed') t.value = parseFloat(r.querySelector('.hw-term-value').value || 0);
+        else { t.var = r.querySelector('.hw-term-var').value; t.mult = parseFloat(r.querySelector('.hw-term-mult').value || 1); }
+        return t;
+      });
+      return { when, terms };
+    });
+    return { branches };
+  }
+
   function hwVarOpenModal(id) {
     const v = id ? hwFindVariable(id) : null;
     document.getElementById('hwlib-var-id').value = id || '';
@@ -1639,6 +1726,10 @@
       hwVariables.filter(x => x.id != id).map(x => `<option value="${x.id}" ${v?.overrides_variable_id == x.id ? 'selected' : ''}>${esc(x.code)} — ${esc(x.label)}</option>`).join('');
 
     hwVarToggleOptions();
+    document.getElementById('hwlib-var-branches').innerHTML = '';
+    const def = v?.formula_def;
+    if (def?.branches?.length) def.branches.forEach(b => hwVarAddBranch(b));
+    hwVarToggleFormula();
     showModal(document.getElementById('hwlib-var-modal'));
   }
 
@@ -1659,6 +1750,7 @@
       notes: document.getElementById('hwlib-var-notes').value || null,
       overrides_variable_id: document.getElementById('hwlib-var-overrides').value || null,
       is_calculated: document.getElementById('hwlib-var-calculated').checked,
+      formula_def: document.getElementById('hwlib-var-calculated').checked ? hwVarCollectFormula() : null,
       show_in_report: document.getElementById('hwlib-var-showreport').checked,
       is_inspection: document.getElementById('hwlib-var-inspection').checked,
     };
@@ -1898,6 +1990,54 @@
     }));
   }
 
+  // ---- Item documents ----
+  const HW_DOC_TYPES = { template: 'Template', instructions: 'Instructions', parts_manual: 'Parts manual', spec_sheet: 'Spec sheet', other: 'Other' };
+
+  function hwItemRenderDocs(docs) {
+    const fmt = n => n == null ? '' : n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+    document.getElementById('hwlib-item-docs').innerHTML = (docs || []).map(d => `
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="badge bg-blue-lt">${esc(HW_DOC_TYPES[d.doc_type] || d.doc_type)}</span>
+        <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.title)}</a>
+        <span class="text-muted small">${esc(d.file_name)} ${fmt(d.file_size)}</span>
+        <button type="button" class="btn btn-sm btn-icon text-danger ms-auto" title="Delete" onclick="hwItemDeleteDoc(${d.id})"><i class="ti ti-trash"></i></button>
+      </div>`).join('') || '<div class="text-muted small">No documents yet.</div>';
+  }
+  function hwItemSetDocs(itemId, docs) {
+    const it = hwFindItem(itemId);
+    if (it) it.documents = docs;
+    hwItemRenderDocs(docs);
+  }
+  async function hwItemUploadDoc() {
+    const itemId = document.getElementById('hwlib-item-id').value;
+    const file = document.getElementById('hwlib-doc-file').files[0];
+    if (!itemId || !file) { showNotification('Choose a file to upload.', 'warning'); return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('doc_type', document.getElementById('hwlib-doc-type').value);
+    const title = document.getElementById('hwlib-doc-title').value.trim();
+    if (title) fd.append('title', title);
+    const btn = document.getElementById('hwlib-doc-upload');
+    btn.disabled = true;
+    try {
+      const r = await authenticatedUpload(`/config/hwlib-items/${itemId}/documents`, fd);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { showNotification(data.message || Object.values(data.errors || {}).flat().join(' ') || 'Upload failed', 'danger'); return; }
+      hwItemSetDocs(itemId, data.documents);
+      document.getElementById('hwlib-doc-file').value = '';
+      document.getElementById('hwlib-doc-title').value = '';
+    } catch (err) { showNotification(err.message, 'danger'); }
+    finally { btn.disabled = false; }
+  }
+  async function hwItemDeleteDoc(docId) {
+    if (!confirm('Delete this document?')) return;
+    const itemId = document.getElementById('hwlib-item-id').value;
+    try {
+      const res = await authenticatedFetch(`/config/hwlib-item-documents/${docId}`, { method: 'DELETE' });
+      hwItemSetDocs(itemId, res.documents);
+    } catch (err) { showNotification(err.message, 'danger'); }
+  }
+
   function hwItemOpenModal(id) {
     const i = id ? hwFindItem(id) : null;
     document.getElementById('hwlib-item-id').value = id || '';
@@ -1929,6 +2069,12 @@
 
     document.getElementById('hwlib-item-backers').innerHTML = '';
     (i?.backers || []).forEach(row => hwItemAddBackerRow(row));
+
+    document.getElementById('hwlib-item-docs-new').style.display = id ? 'none' : '';
+    document.getElementById('hwlib-item-docs-wrap').style.display = id ? '' : 'none';
+    document.getElementById('hwlib-doc-file').value = '';
+    document.getElementById('hwlib-doc-title').value = '';
+    hwItemRenderDocs(i?.documents);
 
     showModal(document.getElementById('hwlib-item-modal'));
   }

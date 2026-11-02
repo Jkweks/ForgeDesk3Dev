@@ -770,6 +770,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/config/hwlib-items/{id}/values', [ConfiguratorHwlibAdminController::class, 'setItemValues'])->middleware('permission:configurator.catalog.manage');
         Route::put('/config/hwlib-items/{id}/functions', [ConfiguratorHwlibAdminController::class, 'setItemFunctions'])->middleware('permission:configurator.catalog.manage');
         Route::put('/config/hwlib-items/{id}/backers', [ConfiguratorHwlibAdminController::class, 'setItemBackers'])->middleware('permission:configurator.catalog.manage');
+        Route::post('/config/hwlib-items/{id}/documents', [ConfiguratorHwlibAdminController::class, 'storeItemDocument'])->middleware('permission:configurator.catalog.manage');
+        Route::put('/config/hwlib-item-documents/{docId}', [ConfiguratorHwlibAdminController::class, 'updateItemDocument'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/config/hwlib-item-documents/{docId}', [ConfiguratorHwlibAdminController::class, 'destroyItemDocument'])->middleware('permission:configurator.catalog.manage');
 
         Route::post('/config/hwlib-backers', [ConfiguratorHwlibAdminController::class, 'storeBacker'])->middleware('permission:configurator.catalog.manage');
         Route::put('/config/hwlib-backers/{id}', [ConfiguratorHwlibAdminController::class, 'updateBacker'])->middleware('permission:configurator.catalog.manage');

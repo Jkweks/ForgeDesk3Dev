@@ -17,8 +17,8 @@ use App\Models\DoorFrameConfiguration;
  *   1. the link's own override value (degree_matrix: cell at the opening's
  *      angle; otherwise the raw override text)
  *   2. the item's catalog value (same degree_matrix / raw split)
- *   3. the variable's formula, if calculated (may branch — see
- *      selectBranch() for the handful of conditional formulas that need it)
+ *   3. the variable's formula, if calculated (formula_def: signed terms, optionally
+ *      split into conditional branches — see HwlibFormulaConverter)
  *   4. the SAME variable code on another hwlib link attached to the same
  *      configuration (a formula can reference another item's value — e.g. a
  *      Strike's STRIKEMNT_ADD feeding a Panic's PANIC_BACKSET)
@@ -79,6 +79,7 @@ class HwlibResolver
                     'var_type' => $variable->var_type,
                     'is_calculated' => $variable->is_calculated,
                     'formula' => $variable->formula,
+                    'formula_def' => $variable->formula_def,
                     'default_value' => $variable->default_value,
                     'link_value_text' => optional($linkValues->get($variable->id))->value_text,
                     'item_value_text' => optional($itemValues->get($variable->id))->value_text,
@@ -228,14 +229,27 @@ class HwlibResolver
             return $this->resolveVar($code, $linkId, $seen)['value'];
         };
 
-        if (str_contains($formula, '·')) {
-            $branch = $this->selectBranch($raw->code, $this->parseBranches($formula), $resolveRaw, $this->sameComboCategories[$linkId] ?? []);
+        $def = $raw->formula_def ?? null;
+        if (is_array($def)) {
+            $branch = $this->selectBranch($def['branches'] ?? [], $resolveRaw, $this->sameComboCategories[$linkId] ?? []);
             if (! $branch) {
                 return ['value' => null, 'overridden' => false];
             }
-            $result = $this->evalExpr($branch['expr'], $resolveNum);
-        } else {
+            $result = 0.0;
+            foreach ($branch['terms'] ?? [] as $term) {
+                $sign = ($term['sign'] ?? 1) < 0 ? -1 : 1;
+                if (($term['kind'] ?? '') === 'fixed') {
+                    $result += $sign * (float) ($term['value'] ?? 0);
+                } else {
+                    // An unresolvable variable counts as 0 (and flags "missing" for reports).
+                    $result += $sign * (float) ($term['mult'] ?? 1) * ($resolveNum((string) ($term['var'] ?? '')) ?? 0);
+                }
+            }
+        } elseif ($formula !== '' && ! str_contains($formula, '·')) {
+            // Legacy plain-text formula that couldn't be converted to formula_def.
             $result = $this->evalExpr($formula, $resolveNum);
+        } else {
+            return ['value' => null, 'overridden' => false];
         }
 
         if ($result === null || ($this->enteredOnly && $missing)) {
@@ -246,60 +260,22 @@ class HwlibResolver
     }
 
     /**
-     * "Label1: expr1 · Label2: expr2 · ..." -> [{label, expr}, ...]
+     * First branch whose condition holds (a null condition always holds).
      */
-    private function parseBranches(string $formula): array
+    private function selectBranch(array $branches, callable $resolveRaw, array $sameComboCategories): ?array
     {
-        return array_map(function ($part) {
-            $part = trim($part);
-            if (preg_match('/^(.*?):\s*(.*)$/', $part, $m)) {
-                return ['label' => trim($m[1]), 'expr' => trim($m[2])];
+        foreach ($branches as $branch) {
+            $when = $branch['when'] ?? null;
+            if ($when === null) {
+                return $branch;
             }
-
-            return ['label' => '', 'expr' => $part];
-        }, explode('·', $formula));
-    }
-
-    /**
-     * Picks which branch of a conditional formula applies, per variable code.
-     * Only the conditional formulas that actually exist in the catalog are
-     * handled — an unrecognized one resolves to null rather than guessing.
-     */
-    private function selectBranch(string $code, array $branches, callable $resolveRaw, array $sameComboCategories): ?array
-    {
-        $find = fn (string $pattern) => collect($branches)->first(fn ($b) => preg_match($pattern, $b['label']));
-
-        if ($code === 'STRIKEMNT_ADD') {
-            if ($resolveRaw('STRIKEMNT_FRAME') === 'true') {
-                return $find('/frame/i');
+            if (($when['type'] ?? '') === 'var_true' && $resolveRaw((string) ($when['var'] ?? '')) === 'true') {
+                return $branch;
             }
-            if ($resolveRaw('STRIKEMNT_STOP') === 'true') {
-                return $find('/stop/i');
+            if (($when['type'] ?? '') === 'category'
+                && collect($sameComboCategories)->contains(fn ($c) => stripos($c, (string) ($when['match'] ?? '')) !== false)) {
+                return $branch;
             }
-            if ($resolveRaw('STRIKEMNT_MORTISE') === 'true') {
-                return $find('/mortise/i');
-            }
-
-            return null;
-        }
-
-        if ($code === 'EPT_CL_INSET_DR') {
-            if (collect($sameComboCategories)->contains(fn ($c) => preg_match('/continuous hinge/i', $c))) {
-                return $find('/continuous/i');
-            }
-            if (collect($sameComboCategories)->contains(fn ($c) => preg_match('/butt hinge/i', $c))) {
-                return $find('/butt/i');
-            }
-
-            return null;
-        }
-
-        if ($code === 'PANIC_BACKSET') {
-            if (collect($sameComboCategories)->contains(fn ($c) => preg_match('/removable mullion/i', $c))) {
-                return $find('/mullion/i');
-            }
-
-            return $find('/standard/i') ?? end($branches) ?: null;
         }
 
         return null;

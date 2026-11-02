@@ -79,8 +79,16 @@
             </div>
           </div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="hwlib-var-notes" rows="2"></textarea></div>
+          <div class="mb-3" id="hwlib-var-formula-wrap" style="display:none">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">Formula</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hwVarAddBranch()"><i class="ti ti-plus"></i> Condition</button>
+            </div>
+            <div id="hwlib-var-branches"></div>
+            <div class="form-text">Value = sum of signed terms. A term is another variable (optionally × a multiplier, e.g. × 0.5 for half) or a fixed number. Add a condition to pick different terms depending on another variable being true or on the hardware on the opening; the first matching condition wins, and a branch with no condition is the fallback. If nothing matches, the variable has no calculated value.</div>
+          </div>
           <div class="row">
-            <div class="col-md-4"><label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-var-calculated"><span class="form-check-label">Calculated</span></label></div>
+            <div class="col-md-4"><label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-var-calculated" onchange="hwVarToggleFormula()"><span class="form-check-label">Calculated</span></label></div>
             <div class="col-md-4"><label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-var-showreport"><span class="form-check-label">Show in report</span></label></div>
             <div class="col-md-4"><label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-var-inspection"><span class="form-check-label">Inspection field</span></label></div>
           </div>
@@ -189,6 +197,27 @@
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hwItemAddBackerRow()"><i class="ti ti-plus"></i> Backer</button>
           </div>
           <div id="hwlib-item-backers"></div>
+
+          <hr>
+          <label class="form-label">Documents <span class="text-muted">(templates, instructions, parts manuals, spec sheets — uploaded immediately, no need to press Save)</span></label>
+          <div id="hwlib-item-docs-new" class="text-muted small" style="display:none">Save the item first, then reopen it to attach documents.</div>
+          <div id="hwlib-item-docs-wrap">
+            <div id="hwlib-item-docs" class="mb-2"></div>
+            <div class="row g-2 align-items-center">
+              <div class="col-md-3">
+                <select class="form-select form-select-sm" id="hwlib-doc-type">
+                  <option value="template">Template</option>
+                  <option value="instructions">Instructions</option>
+                  <option value="parts_manual">Parts manual</option>
+                  <option value="spec_sheet">Spec sheet</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="col-md-3"><input type="text" class="form-control form-control-sm" id="hwlib-doc-title" placeholder="Title (defaults to file name)"></div>
+              <div class="col-md-4"><input type="file" class="form-control form-control-sm" id="hwlib-doc-file"></div>
+              <div class="col-md-2"><button type="button" class="btn btn-sm btn-outline-primary w-100" id="hwlib-doc-upload" onclick="hwItemUploadDoc()"><i class="ti ti-upload"></i> Upload</button></div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>

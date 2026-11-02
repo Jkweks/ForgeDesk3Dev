@@ -21,6 +21,7 @@ class ConfiguratorHwlibCatalogController extends Controller
             'items.values.variable',
             'items.backers',
             'items.functions',
+            'items.documents',
         ])->orderBy('sort_order')->orderBy('name')->get();
 
         return response()->json(['categories' => $categories]);

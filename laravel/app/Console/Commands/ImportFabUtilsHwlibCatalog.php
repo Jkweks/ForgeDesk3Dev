@@ -195,6 +195,7 @@ class ImportFabUtilsHwlibCatalog extends Command
                 'label' => $v['label'], 'group_name' => $v['group_name'],
                 'var_type' => $v['var_type'], 'unit' => $v['unit'], 'options' => $v['options'] ?? [],
                 'is_calculated' => $v['is_calculated'], 'formula' => $v['formula'],
+                'formula_def' => \App\Services\Configurator\HwlibFormulaConverter::fromLegacy($v['code'], $v['formula'] ?? null),
                 'default_value' => $v['default_value'], 'notes' => $v['notes'], 'sort_order' => $v['sort_order'] ?? 0,
                 'side' => $v['side'], 'show_in_report' => $v['show_in_report'] ?? true, 'is_inspection' => $v['is_inspection'] ?? false,
             ]);

@@ -55,6 +55,11 @@ class ConfiguratorHwlibItem extends Model
         )->orderBy('configurator_hwlib_functions.sort_order')->orderBy('configurator_hwlib_functions.label');
     }
 
+    public function documents()
+    {
+        return $this->hasMany(ConfiguratorHwlibItemDocument::class, 'item_id')->orderBy('doc_type')->orderBy('title');
+    }
+
     public function backers()
     {
         return $this->hasMany(ConfiguratorHwlibItemBacker::class, 'item_id')->orderBy('sort_order');

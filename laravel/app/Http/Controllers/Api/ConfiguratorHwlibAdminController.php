@@ -17,13 +17,18 @@ use App\Models\ConfiguratorHwlibSet;
 use App\Models\ConfiguratorHwlibSetItem;
 use App\Models\ConfiguratorHwlibSetItemValue;
 use App\Models\ConfiguratorHwlibSubcategory;
+use App\Models\ConfiguratorHwlibItemDocument;
 use App\Models\ConfiguratorHwlibVariable;
+use App\Services\Configurator\HwlibFormulaConverter;
 use App\Models\ConfiguratorSetting;
 use App\Models\DoorFrameConfiguration;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ConfiguratorHwlibAdminController extends Controller
 {
@@ -62,7 +67,7 @@ class ConfiguratorHwlibAdminController extends Controller
     public function adminIndex()
     {
         return response()->json([
-            'items' => ConfiguratorHwlibItem::with('values.variable', 'backers.backer', 'functions')->orderBy('name')->get(),
+            'items' => ConfiguratorHwlibItem::with('values.variable', 'backers.backer', 'functions', 'documents')->orderBy('name')->get(),
             'backers' => ConfiguratorHwlibBacker::with('fasteners.fastener')->orderBy('pn')->get(),
             'fasteners' => ConfiguratorHwlibFastener::orderBy('pn')->get(),
             'sets' => ConfiguratorHwlibSet::with('businessJob', 'setItems.item', 'setItems.values.variable', 'setItems.functions')->orderBy('name')->get(),
@@ -177,6 +182,7 @@ class ConfiguratorHwlibAdminController extends Controller
     public function storeVariable(Request $request)
     {
         $data = $this->validateOrFail($request, $this->variableRules());
+        $data = $this->applyFormulaDef($data, null);
 
         return response()->json(['variable' => ConfiguratorHwlibVariable::create($data)], 201);
     }
@@ -185,6 +191,7 @@ class ConfiguratorHwlibAdminController extends Controller
     {
         $variable = ConfiguratorHwlibVariable::findOrFail($id);
         $data = $this->validateOrFail($request, $this->variableRules($id));
+        $data = $this->applyFormulaDef($data, $variable);
         $variable->update($data);
 
         return response()->json(['variable' => $variable]);
@@ -195,6 +202,54 @@ class ConfiguratorHwlibAdminController extends Controller
         ConfiguratorHwlibVariable::findOrFail($id)->delete();
 
         return response()->json(['message' => 'Variable deleted']);
+    }
+
+    /**
+     * Normalises the structured formula: not calculated -> cleared; otherwise the readable
+     * `formula` text is regenerated from it, every referenced code must exist, and it must not
+     * (directly or through other formulas) depend on itself.
+     */
+    private function applyFormulaDef(array $data, ?ConfiguratorHwlibVariable $existing): array
+    {
+        $code = $data['code'];
+        if (empty($data['is_calculated']) || empty($data['formula_def'])) {
+            if (! empty($data['is_calculated']) && empty($data['formula_def'])) {
+                throw ValidationException::withMessages(['formula_def' => 'A calculated variable needs a formula.']);
+            }
+            $data['formula_def'] = null;
+            $data['formula'] = null;
+
+            return $data;
+        }
+
+        $def = $data['formula_def'];
+        $refs = HwlibFormulaConverter::referencedCodes($def);
+        $known = ConfiguratorHwlibVariable::pluck('formula_def', 'code');
+        $unknown = array_values(array_filter($refs, fn ($c) => $c !== $code && ! $known->has($c)));
+        if ($unknown) {
+            throw ValidationException::withMessages(['formula_def' => 'Unknown variable(s): '.implode(', ', $unknown)]);
+        }
+
+        // Cycle check: can $code be reached from its own references?
+        $stack = $refs;
+        $seen = [];
+        while ($stack) {
+            $c = array_pop($stack);
+            if ($c === $code) {
+                throw ValidationException::withMessages(['formula_def' => 'Formula depends on itself (circular reference).']);
+            }
+            if (isset($seen[$c])) {
+                continue;
+            }
+            $seen[$c] = true;
+            if (is_array($known[$c] ?? null)) {
+                array_push($stack, ...HwlibFormulaConverter::referencedCodes($known[$c]));
+            }
+        }
+
+        $data['formula'] = HwlibFormulaConverter::toText($def);
+
+        return $data;
     }
 
     private function variableRules($ignoreId = null): array
@@ -208,6 +263,18 @@ class ConfiguratorHwlibAdminController extends Controller
             'options' => 'nullable|array',
             'is_calculated' => 'boolean',
             'formula' => 'nullable|string',
+            'formula_def' => 'nullable|array',
+            'formula_def.branches' => 'required_with:formula_def|array|min:1',
+            'formula_def.branches.*.when' => 'nullable|array',
+            'formula_def.branches.*.when.type' => 'required_with:formula_def.branches.*.when|in:var_true,category',
+            'formula_def.branches.*.when.var' => 'required_if:formula_def.branches.*.when.type,var_true|nullable|string|max:50',
+            'formula_def.branches.*.when.match' => 'required_if:formula_def.branches.*.when.type,category|nullable|string|max:100',
+            'formula_def.branches.*.terms' => 'required|array|min:1',
+            'formula_def.branches.*.terms.*.sign' => 'required|in:1,-1',
+            'formula_def.branches.*.terms.*.kind' => 'required|in:var,fixed',
+            'formula_def.branches.*.terms.*.var' => 'required_if:formula_def.branches.*.terms.*.kind,var|nullable|string|max:50',
+            'formula_def.branches.*.terms.*.mult' => 'nullable|numeric',
+            'formula_def.branches.*.terms.*.value' => 'required_if:formula_def.branches.*.terms.*.kind,fixed|nullable|numeric',
             'default_value' => 'nullable|string',
             'notes' => 'nullable|string',
             'sort_order' => 'nullable|integer',
@@ -290,9 +357,80 @@ class ConfiguratorHwlibAdminController extends Controller
 
     public function destroyItem($id)
     {
-        ConfiguratorHwlibItem::findOrFail($id)->delete();
+        $item = ConfiguratorHwlibItem::with('documents')->findOrFail($id);
+        $paths = $item->documents->pluck('file_path')->all();
+        $item->delete();
+        Storage::disk('public')->delete($paths); // rows cascade; files don't
 
         return response()->json(['message' => 'Item deleted']);
+    }
+
+    // ---- Item documents (templates, instructions, parts manuals, ...) ----
+
+    public function storeItemDocument(Request $request, $id)
+    {
+        $item = ConfiguratorHwlibItem::findOrFail($id);
+        $request->validate([
+            'file' => ['required', 'file', 'max:51200', $this->safeExtensionRule()],
+            'doc_type' => 'required|in:'.implode(',', array_keys(ConfiguratorHwlibItemDocument::TYPES)),
+            'title' => 'nullable|string|max:255',
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->storeAs(
+            'hwlib-item-documents/'.$item->id,
+            Str::random(12).'.'.strtolower($file->getClientOriginalExtension()),
+            'public'
+        );
+
+        $item->documents()->create([
+            'doc_type' => $request->input('doc_type'),
+            'title' => trim((string) $request->input('title')) ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+            'file_name' => $file->getClientOriginalName(),
+            'file_path' => $path,
+            'file_size' => $file->getSize(),
+            'file_mime' => $file->getMimeType(),
+            'uploaded_by' => $request->user()?->id,
+        ]);
+
+        return response()->json(['documents' => $item->documents()->get()], 201);
+    }
+
+    public function updateItemDocument(Request $request, $docId)
+    {
+        $doc = ConfiguratorHwlibItemDocument::findOrFail($docId);
+        $data = $request->validate([
+            'doc_type' => 'required|in:'.implode(',', array_keys(ConfiguratorHwlibItemDocument::TYPES)),
+            'title' => 'required|string|max:255',
+        ]);
+        $doc->update($data);
+
+        return response()->json(['documents' => $doc->item->documents()->get()]);
+    }
+
+    public function destroyItemDocument($docId)
+    {
+        $doc = ConfiguratorHwlibItemDocument::findOrFail($docId);
+        $item = $doc->item;
+        Storage::disk('public')->delete($doc->file_path);
+        $doc->delete();
+
+        return response()->json(['documents' => $item->documents()->get()]);
+    }
+
+    /**
+     * Uploads land on the public disk and are served same-origin from /storage, so anything a
+     * browser would render or a server would execute is refused (same list as fabrication docs).
+     */
+    private function safeExtensionRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            $blocked = ['php', 'php3', 'php4', 'php5', 'php7', 'phtml', 'phar', 'html', 'htm', 'xhtml', 'shtml', 'svg', 'svgz', 'xml', 'xsl', 'js', 'mjs', 'jsp', 'asp', 'aspx', 'cgi', 'sh', 'exe', 'bat'];
+            $ext = strtolower($value->getClientOriginalExtension());
+            if (in_array($ext, $blocked, true) || preg_match('/\.(?:'.implode('|', $blocked).')\./i', $value->getClientOriginalName())) {
+                $fail('This file type is not allowed.');
+            }
+        };
     }
 
     private function itemRules($ignoreId = null): array
