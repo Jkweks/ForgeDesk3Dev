@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShipmentCheckItem;
 use App\Models\ShipmentType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /** Admin-managed shipment types (Metal, Glass, Doors, ...) and their pre/post checklist items. */
@@ -57,6 +58,27 @@ class ShipmentTypeController extends Controller
         $data['sort_order'] ??= ($type->items()->where('phase', $data['phase'])->max('sort_order') ?? 0) + 10;
 
         return response()->json($type->items()->create($data), 201);
+    }
+
+    /** Drag-and-drop: `ids` is the full new order of one phase's items. */
+    public function reorderItems(Request $request, int $typeId)
+    {
+        $type = ShipmentType::findOrFail($typeId);
+        $data = $request->validate([
+            'phase' => ['required', Rule::in(ShipmentCheckItem::PHASES)],
+            'ids' => 'required|array|max:200', 'ids.*' => 'integer|distinct',
+        ]);
+        $mine = $type->items()->where('phase', $data['phase'])->pluck('id');
+        if ($mine->diff($data['ids'])->isNotEmpty() || collect($data['ids'])->diff($mine)->isNotEmpty()) {
+            return response()->json(['message' => 'The list is out of date. Reload and try again.'], 422);
+        }
+        DB::transaction(function () use ($data) {
+            foreach (array_values($data['ids']) as $pos => $id) {
+                ShipmentCheckItem::whereKey($id)->update(['sort_order' => ($pos + 1) * 10]);
+            }
+        });
+
+        return response()->json($type->load('items'));
     }
 
     public function updateItem(Request $request, int $id)

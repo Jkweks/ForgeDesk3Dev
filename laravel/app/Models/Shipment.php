@@ -12,15 +12,15 @@ class Shipment extends Model
     public const STATUSES = ['draft', 'pre_check_done', 'shipped', 'delivered', 'delivered_issues', 'cancelled'];
 
     protected $fillable = [
-        'shipment_number', 'business_job_id', 'status', 'ship_date', 'destination', 'carrier', 'notes',
+        'shipment_number', 'status', 'ship_date', 'destination', 'carrier', 'notes',
         'created_by', 'shipped_at',
     ];
 
     protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime'];
 
-    public function job()
+    public function jobs()
     {
-        return $this->belongsTo(BusinessJob::class, 'business_job_id');
+        return $this->belongsToMany(BusinessJob::class, 'business_job_shipment')->withTimestamps()->orderBy('business_jobs.job_number');
     }
 
     public function loads()
@@ -52,13 +52,12 @@ class Shipment extends Model
         return sprintf('SHP-%05d', $max + 1);
     }
 
-    /** "Job name (number)" label shown to crews and in lists. */
+    /** "Job name (number)" labels, comma-joined, shown to crews and in lists. */
     public function jobLabel(): ?string
     {
-        if (! $this->job) {
-            return null;
-        }
+        $labels = $this->jobs->map(fn ($j) => trim(($j->job_name ?? '').' '.($j->job_number ? '('.$j->job_number.')' : '')))
+            ->filter()->values();
 
-        return trim(($this->job->job_name ?? '').' '.($this->job->job_number ? '('.$this->job->job_number.')' : ''));
+        return $labels->isEmpty() ? null : $labels->implode(', ');
     }
 }

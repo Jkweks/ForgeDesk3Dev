@@ -74,7 +74,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px s
 .seg span { display: flex; align-items: center; justify-content: center; min-height: 46px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; }
 .seg input:checked + span.pass { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
 .seg input:checked + span.fail { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
-.seg input:checked + span.na { background: var(--line); }
+.seg input:checked + span.na { background: var(--line); border-color: var(--muted); color: var(--text); font-weight: 700; }
 .seg input:focus-visible + span { outline: 3px solid color-mix(in srgb, var(--brand) 45%, transparent); }
 .check-item { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .check-item:last-child { border-bottom: 0; }

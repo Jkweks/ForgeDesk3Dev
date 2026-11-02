@@ -120,6 +120,11 @@ Route::prefix('v1')->group(function () {
     Route::patch('/shop/work-orders/{id}/stages/bulk-complete', [\App\Http\Controllers\Api\ShopFloorController::class, 'bulkCompleteWoStage'])->middleware('throttle:120,1');
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Photo links inside shipment report PDFs: a click from a PDF viewer carries no session, so these are
+    // signed, expiring URLs (see ShipmentController::report).
+    Route::get('/shipments/{shipmentId}/photos/{photoId}/signed', [\App\Http\Controllers\Api\ShipmentController::class, 'photo'])
+        ->middleware(['signed', 'throttle:120,1'])->name('shipments.photo.signed');
+
     // Material checks read live stock and stage uploaded files on disk, so they
     // need a signed-in user with jobs.view (same as the reservation reads).
     Route::post('/fulfillment/material-check', [MaterialCheckController::class, 'checkMaterials'])
@@ -546,6 +551,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/shipments/queue', [$sh, 'queue'])->middleware('permission:shipments.view');
         Route::get('/shipments/job-options', [$sh, 'jobOptions'])->middleware('permission:shipments.view');
         Route::post('/shipments', [$sh, 'store'])->middleware('permission:shipments.manage');
+        Route::get('/shipments/{id}/report', [$sh, 'report'])->middleware('permission:shipments.view');
         Route::get('/shipments/{id}', [$sh, 'show'])->middleware('permission:shipments.view');
         Route::put('/shipments/{id}', [$sh, 'update'])->middleware('permission:shipments.manage');
         Route::delete('/shipments/{id}', [$sh, 'destroy'])->middleware('permission:shipments.manage');
@@ -559,6 +565,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/shipment-types/{id}', [$st, 'update'])->middleware('permission:shipments.types.manage');
         Route::delete('/shipment-types/{id}', [$st, 'destroy'])->middleware('permission:shipments.types.manage');
         Route::post('/shipment-types/{typeId}/items', [$st, 'storeItem'])->middleware('permission:shipments.types.manage');
+        Route::post('/shipment-types/{typeId}/items/reorder', [$st, 'reorderItems'])->middleware('permission:shipments.types.manage');
         Route::put('/shipment-check-items/{id}', [$st, 'updateItem'])->middleware('permission:shipments.types.manage');
         Route::delete('/shipment-check-items/{id}', [$st, 'destroyItem'])->middleware('permission:shipments.types.manage');
 

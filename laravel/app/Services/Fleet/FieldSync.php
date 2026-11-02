@@ -127,7 +127,7 @@ class FieldSync
     private function publishShipments(Connection $remote): int
     {
         $now = now()->toDateTimeString();
-        $rows = Shipment::with(['job:id,job_number,job_name', 'loads'])->awaitingPostCheck()->get()
+        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads'])->awaitingPostCheck()->get()
             ->map(fn (Shipment $s) => [
                 'shipment_number' => $s->shipment_number,
                 'job_label' => $s->jobLabel(),

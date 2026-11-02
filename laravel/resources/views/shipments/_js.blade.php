@@ -6,7 +6,7 @@
       delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], cancelled: ['Cancelled', 'secondary'],
     },
     RESULT: { pass: ['Pass', 'success'], pass_with_issues: ['Pass with issues', 'warning'], fail: ['Fail', 'danger'] },
-    INPUTS: { pass_fail: 'Pass / Fail / N/A', number: 'Number', text: 'Text', choice: 'Choice list' },
+    INPUTS: { pass_fail: 'Pass / Fail / N/A', number: 'Number', text: 'Text', choice: 'Choice list', photo: 'Photos' },
   };
   const shStatus = s => { const m = SH.STATUS[s] || [s, 'secondary']; return flBadge(m[0], m[1]); };
   const shResult = s => { const m = SH.RESULT[s] || [s, 'secondary']; return flBadge(m[0], m[1]); };

@@ -53,12 +53,13 @@
   function render() {
     document.getElementById('hdrNumber').textContent = S.shipment_number;
     document.getElementById('hdrStatus').innerHTML = shStatus(S.status);
-    document.getElementById('hdrJob').textContent = S.job ? `${S.job.job_name} (${S.job.job_number})` : '';
+    document.getElementById('hdrJob').textContent = S.jobs.map(j => `${j.job_name} (${j.job_number})`).join(', ');
     renderDetails();
 
     const acts = [];
     if (S.status === 'pre_check_done') acts.push(`<button class="btn btn-success" data-permission="shipments.manage" onclick="markShipped()"><i class="ti ti-truck me-1"></i>Mark shipped</button>`);
     if (!['delivered', 'delivered_issues', 'cancelled'].includes(S.status)) acts.push(`<button class="btn btn-outline-danger" data-permission="shipments.manage" onclick="cancelShipment()">Cancel</button>`);
+    acts.unshift(`<button class="btn" onclick="openReport(this)"><i class="ti ti-file-type-pdf me-1"></i>Report PDF</button>`);
     document.getElementById('hdrActions').innerHTML = acts.join('');
 
     renderPre();
@@ -87,21 +88,23 @@
   }
 
   function photoBtn(itemId) {
-    return `<label class="btn btn-sm"><i class="ti ti-camera me-1"></i>Take / add photo<input type="file" class="d-none photo-input" accept="image/*" capture="environment" multiple data-item="${itemId ?? ''}"></label>`;
+    return `<label class="btn btn-sm"><i class="ti ti-camera me-1"></i>Add photos<input type="file" class="d-none photo-input" accept="image/*" multiple data-item="${itemId ?? ''}"></label>`;
   }
 
   function itemHtml(i) {
     let input;
     if (i.input_type === 'pass_fail') {
-      input = `<div class="btn-group w-100">${['pass', 'fail', 'na'].map(v => `<label class="btn btn-outline-${v === 'fail' ? 'danger' : v === 'pass' ? 'success' : 'secondary'}">
-        <input type="radio" class="btn-check" name="v${i.id}" value="${v}">${v === 'na' ? 'N/A' : v[0].toUpperCase() + v.slice(1)}</label>`).join('')}</div>`;
+      input = `<div class="btn-group w-100">${['pass', 'fail', 'na'].map(v => `<input type="radio" class="btn-check" name="v${i.id}" id="v${i.id}-${v}" value="${v}" autocomplete="off">
+        <label for="v${i.id}-${v}" class="btn btn-outline-${v === 'fail' ? 'danger' : v === 'pass' ? 'success' : 'secondary'}">${v === 'na' ? 'N/A' : v[0].toUpperCase() + v.slice(1)}</label>`).join('')}</div>`;
     } else if (i.input_type === 'number') {
       input = `<div class="input-group"><input type="number" step="any" inputmode="decimal" class="form-control" name="v${i.id}">${i.unit ? `<span class="input-group-text">${esc(i.unit)}</span>` : ''}</div>`;
     } else if (i.input_type === 'choice') {
       input = `<select class="form-select" name="v${i.id}"><option value="">Select…</option>${(i.options || []).map(o => `<option>${esc(o)}</option>`).join('')}</select>`;
+    } else if (i.input_type === 'photo') {
+      input = '';
     } else input = `<input type="text" class="form-control" name="v${i.id}" maxlength="255">`;
-    return `<div class="border rounded p-2 mb-2" data-item-id="${i.id}">
-      <div class="fw-bold mb-1">${esc(i.label)}${i.required ? '' : ' <span class="text-muted fw-normal small">(optional)</span>'}${i.photo_required ? ' <i class="ti ti-camera text-muted" title="Photo needed"></i>' : ''}</div>
+    return `<div class="border rounded p-2 mb-2" data-item-id="${i.id}" data-type="${i.input_type}">
+      <div class="fw-bold mb-1">${esc(i.label)}${i.required ? '' : ' <span class="text-muted fw-normal small">(optional)</span>'}${i.photo_required || i.input_type === 'photo' ? ' <i class="ti ti-camera text-muted" title="Photo needed"></i>' : ''}</div>
       ${input}
       <div class="d-flex flex-wrap gap-2 align-items-center mt-2">${photoBtn(i.id)}<div class="d-flex flex-wrap gap-2" id="thumbs-${i.id}"></div></div>
       <input type="text" class="form-control form-control-sm mt-2" name="c${i.id}" placeholder="Comment (optional)" maxlength="1000"></div>`;
@@ -151,7 +154,8 @@
       const id = box.dataset.itemId;
       const ctl = box.querySelector(`[name="v${id}"]:checked`) || box.querySelector(`select[name="v${id}"], input[name="v${id}"]:not([type=radio])`);
       const photos = preFiles.map((p, idx) => p.itemId === +id ? idx : -1).filter(x => x >= 0);
-      answers[id] = { value: ctl ? ctl.value : '', comment: form.elements['c' + id].value, photos };
+      const isPhoto = box.dataset.type === 'photo';
+      answers[id] = { value: isPhoto ? String(photos.length) : (ctl ? ctl.value : ''), comment: form.elements['c' + id].value, photos };
     });
     // Unanswered optional items are simply omitted; the server enforces required ones and photos.
     const fd = new FormData();
@@ -170,6 +174,19 @@
     }
   }
 
+  // Session-cookie auth: fetch the PDF with credentials, then open the blob.
+  async function openReport(btn) {
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/v1/shipments/${SHIPMENT_ID}/report`, { credentials: 'include', headers: { Accept: 'application/pdf' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const url = URL.createObjectURL(await res.blob());
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { showNotification('Could not build the report.', 'danger'); }
+    btn.disabled = false;
+  }
+
   async function markShipped() { await flApi(`/shipments/${SHIPMENT_ID}/ship`, 'POST'); showNotification('Marked shipped. The crew can now inspect it on delivery in the field app.', 'success'); load(); }
   function cancelShipment() { flConfirm('Cancel this shipment?', async () => { await flApi(`/shipments/${SHIPMENT_ID}/cancel`, 'POST'); load(); }); }
 
@@ -179,6 +196,7 @@
       const m = { pass: ['Pass', 'success'], fail: ['Fail', 'danger'], na: ['N/A', 'secondary'] }[i.value] || [i.value, 'secondary'];
       return flBadge(m[0], m[1]);
     }
+    if (i.input_type === 'photo') return `<i class="ti ti-camera"></i> ${esc(i.value)} photo${i.value === '1' ? '' : 's'}`;
     return esc(i.value) + (i.unit ? ' ' + esc(i.unit) : '');
   }
 
@@ -213,7 +231,7 @@
 
   function renderDetails() {
     document.querySelector('[data-section="details"]').innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body"><dl class="row mb-0">
-      <dt class="col-sm-3">Job</dt><dd class="col-sm-9">${S.job ? esc(S.job.job_name) + ' <span class="text-muted">' + esc(S.job.job_number) + '</span>' : '—'}</dd>
+      <dt class="col-sm-3">${S.jobs.length > 1 ? 'Jobs' : 'Job'}</dt><dd class="col-sm-9">${S.jobs.length ? S.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').join('<br>') : '—'}</dd>
       <dt class="col-sm-3">Ship date</dt><dd class="col-sm-9">${flDate(S.ship_date)}</dd>
       <dt class="col-sm-3">Carrier</dt><dd class="col-sm-9">${esc(S.carrier || '—')}</dd>
       <dt class="col-sm-3">Destination</dt><dd class="col-sm-9">${esc(S.destination || '—')}</dd>

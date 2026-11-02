@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Reports\CutStationReportsController;
 use App\Http\Controllers\Api\Reports\FabricationReportsController;
 use App\Http\Controllers\Api\Reports\InventoryReportsController;
 use App\Http\Controllers\Api\Reports\JobReportsController;
+use App\Http\Controllers\Api\Reports\ShippingReportsController;
 
 /*
  * Reports registry — drives the Reports page menu (grouped by category, searchable, permission-filtered) and
@@ -26,6 +27,7 @@ return [
         'inventory' => 'Inventory',
         'fabrication' => 'Fabrication',
         'jobs' => 'Jobs',
+        'shipping' => 'Shipping',
     ],
 
     'reports' => [
@@ -45,5 +47,6 @@ return [
         ['key' => 'cutStationWaste', 'title' => 'Stock & Waste', 'icon' => 'ruler-measure-2', 'color' => 'yellow', 'category' => 'fabrication', 'permission' => 'fabrication.work-orders.view', 'controller' => CutStationReportsController::class, 'data' => ['cut-station/waste' => 'wasteReport'], 'export' => [], 'csv' => 'cut_station_waste'],
         ['key' => 'jobStatusSummary', 'title' => 'Job Status', 'icon' => 'clipboard-list', 'color' => 'indigo', 'category' => 'jobs', 'controller' => JobReportsController::class, 'data' => ['job-status-summary' => 'jobStatusSummaryReport'], 'export' => ['job-status-summary/pdf' => 'jobStatusSummaryPdf'], 'csv' => 'job_status_summary'],
         ['key' => 'materialUsage', 'title' => 'Material Usage', 'icon' => 'ruler-measure', 'color' => 'azure', 'category' => 'jobs', 'controller' => JobReportsController::class, 'data' => ['work-order-material-usage' => 'workOrderMaterialUsageReport'], 'export' => []],
+        ['key' => 'shippingSummary', 'title' => 'Shipping Summary', 'icon' => 'truck-delivery', 'color' => 'cyan', 'category' => 'shipping', 'permission' => 'shipments.view', 'controller' => ShippingReportsController::class, 'data' => ['shipping-summary' => 'shippingSummaryReport'], 'export' => ['shipping-summary/pdf' => 'shippingSummaryPdf'], 'csv' => 'shipping_summary'],
     ],
 ];

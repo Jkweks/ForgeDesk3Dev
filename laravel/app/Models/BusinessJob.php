@@ -98,7 +98,7 @@ class BusinessJob extends Model
 
     public function shipments()
     {
-        return $this->hasMany(Shipment::class, 'business_job_id');
+        return $this->belongsToMany(Shipment::class, 'business_job_shipment')->withTimestamps();
     }
 
     /**

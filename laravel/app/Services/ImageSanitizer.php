@@ -18,6 +18,26 @@ class ImageSanitizer
         return isset(self::MIMES[$mime]) ? $mime : null;
     }
 
+    /** Small JPEG thumbnail bytes (for PDFs), or null when the image can't be decoded. */
+    public static function thumbnail(string $bytes, int $maxSide = 360, int $quality = 72): ?string
+    {
+        if (! function_exists('imagecreatefromstring') || ! ($src = @imagecreatefromstring($bytes))) {
+            return null;
+        }
+        [$w, $h] = [imagesx($src), imagesy($src)];
+        $k = min(1, $maxSide / max($w, $h));
+        $dst = imagecreatetruecolor(max(1, (int) round($w * $k)), max(1, (int) round($h * $k)));
+        imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, imagesx($dst), imagesy($dst), $w, $h);
+        ob_start();
+        imagejpeg($dst, null, $quality);
+        $out = ob_get_clean();
+        imagedestroy($src);
+        imagedestroy($dst);
+
+        return $out ?: null;
+    }
+
     /** Re-encode JPEG/PNG through GD; other types pass through unchanged. */
     public static function reencode(string $bytes, string $mime): string
     {

@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\Shipment;
 use App\Models\ShipmentInspectionPhoto;
+use App\Services\ImageSanitizer;
 use App\Services\Shipping\ShipmentInspectionService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 
 /**
@@ -23,18 +26,18 @@ class ShipmentController extends Controller
 
     public function index(Request $request)
     {
-        $q = Shipment::with(['job:id,job_number,job_name', 'loads.type:id,name'])
+        $q = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name'])
             ->withCount('inspections')->orderByDesc('id');
         if ($request->filled('status')) {
             $q->whereIn('status', array_filter(explode(',', (string) $request->query('status'))));
         }
         if ($request->filled('job_id')) {
-            $q->where('business_job_id', (int) $request->query('job_id'));
+            $q->whereHas('jobs', fn ($j) => $j->where('business_jobs.id', (int) $request->query('job_id')));
         }
         if ($request->filled('search')) {
             $s = '%'.$request->query('search').'%';
             $q->where(fn ($w) => $w->where('shipment_number', 'like', $s)->orWhere('destination', 'like', $s)
-                ->orWhereHas('job', fn ($j) => $j->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s)));
+                ->orWhereHas('jobs', fn ($j) => $j->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s)));
         }
 
         return response()->json($q->limit(500)->get());
@@ -51,7 +54,7 @@ class ShipmentController extends Controller
         $to = Carbon::parse($request->query('to', Carbon::parse($from)->addDays(13)))->toDateString();
         $open = ['draft', 'pre_check_done'];
 
-        $rows = Shipment::with(['job:id,job_number,job_name', 'loads.type:id,name', 'inspections:id,shipment_id,phase,result'])
+        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'inspections:id,shipment_id,phase,result'])
             ->where('status', '!=', 'cancelled')
             ->where(fn ($w) => $w->whereBetween('ship_date', [$from, $to])
                 ->orWhere(fn ($x) => $x->whereNull('ship_date')->whereIn('status', $open))
@@ -61,7 +64,7 @@ class ShipmentController extends Controller
         return response()->json(['from' => $from, 'to' => $to, 'shipments' => $rows->map(fn (Shipment $r) => [
             'id' => $r->id, 'shipment_number' => $r->shipment_number, 'status' => $r->status,
             'ship_date' => $r->ship_date?->format('Y-m-d'), 'destination' => $r->destination, 'carrier' => $r->carrier,
-            'job' => $r->job, 'loads' => $r->loads,
+            'jobs' => $r->jobs, 'loads' => $r->loads,
             'pre_result' => $r->inspections->firstWhere('phase', 'pre')?->result,
             'post_result' => $r->inspections->firstWhere('phase', 'post')?->result,
             'movable' => in_array($r->status, $open, true),
@@ -78,12 +81,15 @@ class ShipmentController extends Controller
         $data = $request->validate(['ship_date' => 'present|nullable|date']);
         $shipment->update(['ship_date' => $data['ship_date']]);
 
-        return response()->json($shipment->fresh(['job:id,job_number,job_name', 'loads.type:id,name']));
+        return response()->json($shipment->fresh(['jobs:id,job_number,job_name', 'loads.type:id,name']));
     }
 
     public function jobOptions(Request $request)
     {
         $q = BusinessJob::query()->whereNotIn('status', ['completed', 'cancelled'])->orderByDesc('id');
+        if ($request->filled('id')) {
+            $q->where('id', (int) $request->query('id'));
+        }
         if ($request->filled('search')) {
             $s = '%'.$request->query('search').'%';
             $q->where(fn ($w) => $w->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s));
@@ -99,7 +105,8 @@ class ShipmentController extends Controller
         $shipment = DB::transaction(function () use ($data, $request) {
             $s = Shipment::create([
                 'shipment_number' => Shipment::nextNumber(), 'status' => 'draft', 'created_by' => $request->user()->id,
-            ] + collect($data)->except('loads')->all());
+            ] + collect($data)->except('loads', 'job_ids')->all());
+            $s->jobs()->sync($data['job_ids'] ?? []);
             $s->loads()->createMany($data['loads']);
 
             return $s;
@@ -119,7 +126,10 @@ class ShipmentController extends Controller
         $data = $this->validated($request, false);
 
         DB::transaction(function () use ($shipment, $data) {
-            $shipment->update(collect($data)->except('loads')->all());
+            $shipment->update(collect($data)->except('loads', 'job_ids')->all());
+            if (array_key_exists('job_ids', $data)) {
+                $shipment->jobs()->sync($data['job_ids'] ?? []);
+            }
             if (isset($data['loads'])) {
                 $keep = collect($data['loads'])->pluck('shipment_type_id')->all();
                 $shipment->loads()->whereNotIn('shipment_type_id', $keep)->delete();
@@ -192,6 +202,31 @@ class ShipmentController extends Controller
         return response()->json($this->detail($shipment->fresh()) + ['inspection_id' => $inspection->id], 201);
     }
 
+    /** Per-shipment PDF: jobs, loads, every inspection with thumbnails linked to the full-size photos. */
+    public function report(int $id)
+    {
+        $shipment = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'creator:id,name',
+            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name'])->findOrFail($id);
+
+        $thumbs = [];   // photo id => [data URI, signed full-size URL]
+        foreach ($shipment->inspections as $n) {
+            foreach ($n->photos as $p) {
+                $bytes = Storage::disk('local')->exists($p->file_path) ? Storage::disk('local')->get($p->file_path) : null;
+                $thumb = $bytes ? ImageSanitizer::thumbnail($bytes) : null;
+                $thumbs[$p->id] = [
+                    $thumb ? 'data:image/jpeg;base64,'.base64_encode($thumb) : null,
+                    URL::temporarySignedRoute('shipments.photo.signed', now()->addDays(90), ['shipmentId' => $shipment->id, 'photoId' => $p->id]),
+                ];
+            }
+        }
+
+        $pdf = Pdf::loadView('pdfs.shipment-report', [
+            'shipment' => $shipment, 'inspections' => $shipment->inspections->sortBy('performed_at')->values(), 'thumbs' => $thumbs,
+        ])->setPaper('letter');
+
+        return $pdf->stream($shipment->shipment_number.'-report.pdf');
+    }
+
     public function photo(int $shipmentId, int $photoId)
     {
         $photo = ShipmentInspectionPhoto::whereHas('inspection', fn ($q) => $q->where('shipment_id', $shipmentId))->findOrFail($photoId);
@@ -207,7 +242,8 @@ class ShipmentController extends Controller
         $req = $creating ? 'required' : 'sometimes';
 
         return $request->validate([
-            'business_job_id' => ['nullable', Rule::exists('business_jobs', 'id')],
+            'job_ids' => 'nullable|array|max:50',
+            'job_ids.*' => ['integer', 'distinct', Rule::exists('business_jobs', 'id')],
             'ship_date' => 'nullable|date', 'destination' => 'nullable|string|max:255',
             'carrier' => 'nullable|string|max:255', 'notes' => 'nullable|string|max:5000',
             'loads' => "$req|array|min:1|max:20",
@@ -218,7 +254,7 @@ class ShipmentController extends Controller
 
     private function detail(Shipment $shipment): array
     {
-        $shipment->load(['job:id,job_number,job_name', 'loads.type:id,name', 'creator:id,name',
+        $shipment->load(['jobs:id,job_number,job_name', 'loads.type:id,name', 'creator:id,name',
             'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name']);
 
         return $shipment->toArray() + [

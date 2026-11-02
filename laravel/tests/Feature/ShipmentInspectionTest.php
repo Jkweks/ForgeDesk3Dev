@@ -94,7 +94,8 @@ class ShipmentInspectionTest extends TestCase
     private function shipment(string $status = 'draft', array $types = ['Metal', 'Glass']): Shipment
     {
         $job = BusinessJob::create(['job_number' => 'A-'.random_int(1000, 99999), 'job_name' => 'Tower', 'status' => 'active']);
-        $s = Shipment::create(['shipment_number' => Shipment::nextNumber(), 'business_job_id' => $job->id, 'status' => $status, 'destination' => 'Site 1']);
+        $s = Shipment::create(['shipment_number' => Shipment::nextNumber(), 'status' => $status, 'destination' => 'Site 1']);
+        $s->jobs()->attach($job->id);
         foreach ($types as $name) {
             $s->loads()->create(['shipment_type_id' => ShipmentType::where('name', $name)->value('id')]);
         }
@@ -354,7 +355,7 @@ class ShipmentInspectionTest extends TestCase
         $res = $this->getJson('/api/v1/shipments/queue?from='.now()->startOfWeek()->toDateString())->assertOk();
         $numbers = collect($res->json('shipments'))->pluck('shipment_number');
         $this->assertEqualsCanonicalizing([$in->shipment_number, $late->shipment_number, $none->shipment_number], $numbers->all());
-        $this->assertFalse(collect($res->json('shipments'))->firstWhere('shipment_number', $in->shipment_number)['job'] === null);
+        $this->assertFalse(collect($res->json('shipments'))->firstWhere('shipment_number', $in->shipment_number)['jobs'] === []);
     }
 
     public function test_dragging_reschedules_only_shipments_that_have_not_left(): void
@@ -385,11 +386,105 @@ class ShipmentInspectionTest extends TestCase
         $this->as('admin');
         $a = $this->shipment('shipped');
         $b = $this->shipment('cancelled');
-        $b->update(['business_job_id' => $a->business_job_id]);
-        $a->job; 
-        $row = collect($this->getJson('/api/v1/business-jobs')->assertOk()->json('jobs'))->firstWhere('id', $a->business_job_id);
+        $jobId = $a->jobs()->value('business_jobs.id');
+        $b->jobs()->sync([$jobId]);
+        $row = collect($this->getJson('/api/v1/business-jobs')->assertOk()->json('jobs'))->firstWhere('id', $jobId);
         $this->assertSame(1, $row['shipments_count']);          // cancelled excluded
         $this->assertSame(1, $row['shipments_transit_count']);
         $this->assertSame(0, $row['shipments_issues_count']);
+    }
+
+    public function test_a_shipment_can_carry_several_jobs(): void
+    {
+        $this->as('admin');
+        $j1 = BusinessJob::create(['job_number' => 'A-1', 'job_name' => 'One', 'status' => 'active']);
+        $j2 = BusinessJob::create(['job_number' => 'A-2', 'job_name' => 'Two', 'status' => 'active']);
+        $type = ShipmentType::where('name', 'Metal')->value('id');
+
+        $id = $this->postJson('/api/v1/shipments', [
+            'job_ids' => [$j1->id, $j2->id], 'loads' => [['shipment_type_id' => $type]],
+        ])->assertCreated()->assertJsonCount(2, 'jobs')->json('id');
+
+        $this->getJson("/api/v1/shipments?job_id={$j2->id}")->assertOk()->assertJsonCount(1)->assertJsonPath('0.id', $id);
+        $this->assertSame('One (A-1), Two (A-2)', Shipment::find($id)->load('jobs')->jobLabel());
+
+        $this->putJson("/api/v1/shipments/{$id}", ['job_ids' => [$j2->id]])->assertOk()->assertJsonCount(1, 'jobs');
+        $this->putJson("/api/v1/shipments/{$id}", ['notes' => 'x'])->assertOk()->assertJsonCount(1, 'jobs'); // omitted = untouched
+        $this->postJson('/api/v1/shipments', ['job_ids' => [$j1->id, $j1->id], 'loads' => [['shipment_type_id' => $type]]])->assertStatus(422);
+    }
+
+    public function test_photo_answer_type_takes_several_photos_per_item(): void
+    {
+        $this->as('admin');
+        $metal = ShipmentType::where('name', 'Metal')->value('id');
+        $item = $this->postJson("/api/v1/shipment-types/{$metal}/items", ['phase' => 'pre', 'label' => 'Photo of loading dock', 'input_type' => 'photo', 'required' => true])
+            ->assertCreated()->json('id');
+        $s = $this->shipment('draft', ['Metal']);
+        $answers = $this->passAll($s, 'pre');
+
+        // required photo item with no photo -> rejected
+        $this->post("/api/v1/shipments/{$s->id}/pre-inspection", ['answers' => json_encode($answers)], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonValidationErrors(["items.$item"]);
+
+        $answers[$item] = ['value' => '', 'photos' => [0, 1, 2]];
+        $png = fn () => UploadedFile::fake()->createWithContent('a.png', base64_decode(self::PNG));
+        $this->post("/api/v1/shipments/{$s->id}/pre-inspection", ['answers' => json_encode($answers), 'photos' => [$png(), $png(), $png()]], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $row = $s->inspections()->first()->items()->where('input_type', 'photo')->first();
+        $this->assertSame('3', $row->value);
+        $this->assertSame(3, $row->photos()->count());
+    }
+
+    public function test_items_can_be_reordered_within_a_phase(): void
+    {
+        $this->as('admin');
+        $metal = ShipmentType::where('name', 'Metal')->value('id');
+        $ids = ShipmentCheckItem::where('shipment_type_id', $metal)->where('phase', 'pre')->orderBy('sort_order')->orderBy('id')->pluck('id')->all();
+        $this->assertGreaterThan(1, count($ids));
+        $rev = array_reverse($ids);
+
+        $this->postJson("/api/v1/shipment-types/{$metal}/items/reorder", ['phase' => 'pre', 'ids' => $rev])->assertOk();
+        $this->assertSame($rev, ShipmentCheckItem::where('shipment_type_id', $metal)->where('phase', 'pre')->orderBy('sort_order')->pluck('id')->all());
+
+        $this->postJson("/api/v1/shipment-types/{$metal}/items/reorder", ['phase' => 'pre', 'ids' => array_slice($ids, 1)])->assertStatus(422); // stale list
+        $this->postJson("/api/v1/shipment-types/{$metal}/items/reorder", ['phase' => 'post', 'ids' => $ids])->assertStatus(422);               // wrong phase
+    }
+
+    public function test_shipment_report_pdf_renders_with_signed_photo_links(): void
+    {
+        $this->as('admin');
+        $s = $this->shipment('draft', ['Glass']);
+        $answers = $this->passAll($s, 'pre');
+        $answers[array_key_first($answers)]['photos'] = [0];
+        $this->post("/api/v1/shipments/{$s->id}/pre-inspection", [
+            'answers' => json_encode($answers), 'photos' => [UploadedFile::fake()->createWithContent('a.png', base64_decode(self::PNG))],
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $res = $this->get("/api/v1/shipments/{$s->id}/report")->assertOk();
+        $this->assertSame('application/pdf', $res->headers->get('content-type'));
+        $this->assertStringStartsWith('%PDF', $res->getContent());
+
+        $photo = $s->inspections()->first()->photos()->first();
+        $url = \Illuminate\Support\Facades\URL::temporarySignedRoute('shipments.photo.signed', now()->addDay(), ['shipmentId' => $s->id, 'photoId' => $photo->id]);
+        $this->app['auth']->forgetGuards();
+        $this->get($url)->assertOk();
+        $this->get("/api/v1/shipments/{$s->id}/photos/{$photo->id}/signed")->assertForbidden();   // unsigned
+    }
+
+    public function test_shipping_summary_report_filters_and_exports(): void
+    {
+        $this->as('admin');
+        $a = $this->shipment('shipped');
+        $a->update(['ship_date' => now()->toDateString()]);
+        $old = $this->shipment('delivered');
+        $old->update(['ship_date' => now()->subDays(90)->toDateString()]);
+
+        $res = $this->getJson('/api/v1/reports/shipping-summary')->assertOk();
+        $this->assertSame([$a->shipment_number], collect($res->json('shipments'))->pluck('shipment_number')->all());
+        $this->assertSame(1, $res->json('summary.in_transit'));
+
+        $this->get('/api/v1/reports/export?type=shipping_summary')->assertOk();
+        $this->get('/api/v1/reports/shipping-summary/pdf')->assertOk();
     }
 }

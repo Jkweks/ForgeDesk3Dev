@@ -8,7 +8,7 @@ class ShipmentCheckItem extends Model
 {
     public const PHASES = ['pre', 'post'];
 
-    public const INPUT_TYPES = ['pass_fail', 'number', 'text', 'choice'];
+    public const INPUT_TYPES = ['pass_fail', 'number', 'text', 'choice', 'photo'];
 
     protected $fillable = [
         'shipment_type_id', 'phase', 'label', 'input_type', 'unit', 'options',

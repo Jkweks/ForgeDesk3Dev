@@ -321,7 +321,7 @@ function shrinkImage(file, maxSide = 1600, quality = 0.8) {
 function photoPicker(root, max = 10) {
   const photos = [];
   root.innerHTML = `
-    <label class="btn file-btn"><input type="file" accept="image/*" capture="environment" multiple>Add photos</label>
+    <label class="btn file-btn"><input type="file" accept="image/*" multiple>Add photos</label>
     <div class="thumbs"></div>`;
   const input = root.querySelector('input'), thumbs = root.querySelector('.thumbs');
   const paint = () => {
@@ -466,6 +466,8 @@ function deliveryItemHtml(i) {
     input = `<input type="number" inputmode="decimal" step="any" name="v${id}" aria-label="${esc(i.label)}">${i.unit ? `<div class="small muted">${esc(i.unit)}</div>` : ''}`;
   } else if (i.input_type === 'choice') {
     input = `<select name="v${id}" aria-label="${esc(i.label)}"><option value="">Select…</option>${(i.options || []).map((o) => `<option>${esc(o)}</option>`).join('')}</select>`;
+  } else if (i.input_type === 'photo') {
+    input = '';
   } else {
     input = `<input type="text" name="v${id}" maxlength="255" aria-label="${esc(i.label)}">`;
   }
@@ -493,7 +495,7 @@ function viewDelivery(number) {
     </form>`;
   const form = document.getElementById('f');
   const pickers = {};
-  items.forEach((i) => { pickers[i.id] = photoPicker(form.querySelector(`[data-ph="${i.id}"]`), 5); });
+  items.forEach((i) => { pickers[i.id] = photoPicker(form.querySelector(`[data-ph="${i.id}"]`), i.input_type === 'photo' ? 10 : 5); });
   const general = photoPicker(document.getElementById('ph'), 10);
 
   form.addEventListener('change', (e) => {
@@ -501,7 +503,8 @@ function viewDelivery(number) {
     const item = m && items.find((i) => i.id === +m[1]);
     if (item && item.input_type === 'pass_fail') form.elements[`c${item.id}`].hidden = e.target.value !== 'fail';
   });
-  const answer = (i) => (i.input_type === 'pass_fail'
+  const answer = (i) => i.input_type === 'photo' ? (pickers[i.id].get().length ? String(pickers[i.id].get().length) : '')
+    : (i.input_type === 'pass_fail'
     ? form.querySelector(`input[name=v${i.id}]:checked`)?.value
     : (form.elements[`v${i.id}`].value || '').trim()) || '';
 
@@ -511,7 +514,7 @@ function viewDelivery(number) {
     for (const i of items) {
       const v = answer(i), box = form.querySelector(`[data-item="${i.id}"]`);
       const needsPhoto = i.photo_required && (i.input_type !== 'pass_fail' || v === 'fail');
-      const problem = (i.required && !v) ? `Answer “${i.label}”.`
+      const problem = (i.required && !v) ? (i.input_type === 'photo' ? `Add a photo for “${i.label}”.` : `Answer “${i.label}”.`)
         : (needsPhoto && v && !pickers[i.id].get().length) ? `Add a photo for “${i.label}”.`
         : (i.input_type === 'pass_fail' && v === 'fail' && !(form.elements[`c${i.id}`].value || '').trim()) ? `Say what’s wrong with “${i.label}”.` : '';
       if (problem) { err.textContent = problem; box.scrollIntoView({ block: 'center' }); return; }

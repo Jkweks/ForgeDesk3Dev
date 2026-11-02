@@ -79,6 +79,24 @@ class ShipmentInspectionService
         }
         foreach ($defs as $id => $def) {
             $a = $answers[$id] ?? null;
+            $mine = array_values(array_filter(array_map('intval', (array) ($a['photos'] ?? [])), fn ($i) => isset($photos[$i])));
+            if ($def->input_type === 'photo') {
+                // The answer IS the photos: answered when at least one is attached. The field app enforces
+                // this on the phone, so a photo that got lost on the way must not cost us the rest of the report.
+                $claimed = $a !== null && is_numeric($a['value'] ?? null) && (int) $a['value'] > 0;
+                $given = $mine || (! empty($meta['lenient_photos']) && $claimed);
+                if ($given) {
+                    $rows[$id] = [
+                        'shipment_type_id' => $def->shipment_type_id, 'type_name' => $def->type->name, 'label' => $def->label,
+                        'input_type' => 'photo', 'unit' => null, 'value' => (string) count($mine), 'result' => 'pass', 'critical' => false,
+                        'comment' => Str::limit(trim((string) ($a['comment'] ?? '')), 1000, '') ?: null, '_photos' => $mine,
+                    ];
+                } elseif ($def->required) {
+                    $errors["items.$id"] = "\"{$def->label}\" needs at least one photo.";
+                }
+
+                continue;
+            }
             $given = $a !== null && isset($a['value']) && trim((string) $a['value']) !== '';
             if (! $given) {
                 if ($def->required) {
@@ -93,7 +111,6 @@ class ShipmentInspectionService
 
                 continue;
             }
-            $mine = array_values(array_filter(array_map('intval', (array) ($a['photos'] ?? [])), fn ($i) => isset($photos[$i])));
             if (empty($meta['lenient_photos']) && $def->photo_required && ($def->input_type !== 'pass_fail' || $result === 'fail') && ! $mine) {
                 $errors["items.$id"] = "\"{$def->label}\" needs a photo.";
             }
@@ -194,7 +211,7 @@ class ShipmentInspectionService
         if (! $ok) {
             $this->notify('shipment_post_issues', $inspection->result === 'fail' ? 'danger' : 'warning',
                 "Delivery issues: {$shipment->shipment_number}",
-                "{$by} reported problems on delivery of {$shipment->shipment_number}".($shipment->job ? ' ('.$shipment->jobLabel().')' : '').'.', $shipment, $inspection);
+                "{$by} reported problems on delivery of {$shipment->shipment_number}".($shipment->jobLabel() ? ' ('.$shipment->jobLabel().')' : '').'.', $shipment, $inspection);
         }
     }
 

@@ -79,7 +79,7 @@
       const rows = await authenticatedFetch('/shipments?' + p);
       document.getElementById('shRows').innerHTML = rows.length ? rows.map(r => `<tr style="cursor:pointer" onclick="location.href='/shipments/${r.id}'">
         <td class="text-nowrap fw-bold">${esc(r.shipment_number)}</td>
-        <td>${r.job ? esc(r.job.job_name) + ' <span class="text-muted">' + esc(r.job.job_number) + '</span>' : '—'}</td>
+        <td>${r.jobs.length ? r.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').join('<br>') : '—'}</td>
         <td>${r.loads.map(l => flBadge(l.type.name, 'azure')).join(' ')}</td>
         <td>${shStatus(r.status)}</td><td>${flDate(r.ship_date)}</td><td class="text-muted">${esc(r.destination || '')}</td></tr>`).join('')
         : '<tr><td colspan="6" class="text-center text-muted py-4">No shipments.</td></tr>';
@@ -88,9 +88,32 @@
 
   async function newShipment() {
     shTypes = (await flApi('/shipment-types')).filter(t => t.is_active);
-    const jobs = await flApi('/shipments/job-options');
+    const picked = new Map();
+    const preJob = new URLSearchParams(location.search).get('job');
+    let jobs = await flApi('/shipments/job-options' + (preJob ? '?id=' + encodeURIComponent(preJob) : ''));
+    if (preJob) { const j = jobs.find(x => String(x.id) === preJob); if (j) picked.set(j.id, j); jobs = await flApi('/shipments/job-options'); }
+    const drawPicked = () => {
+      const el = document.getElementById('jobPicked'); if (!el) return;
+      el.innerHTML = picked.size ? [...picked.values()].map(j => `<span class="badge bg-blue-lt me-1 mb-1">${esc(j.job_number)} · ${esc(j.job_name)}
+        <a href="#" class="ms-1 text-reset" onclick="event.preventDefault(); jobToggle(${j.id}, false)">&times;</a></span>`).join('') : '<span class="text-muted small">No jobs selected.</span>';
+    };
+    const drawList = list => {
+      jobs = list; const el = document.getElementById('jobList'); if (!el) return;
+      el.innerHTML = list.map(j => `<label class="list-group-item py-1"><input type="checkbox" class="form-check-input me-2" ${picked.has(j.id) ? 'checked' : ''}
+        onchange="jobToggle(${j.id}, this.checked)">${esc(j.job_number)} · ${esc(j.job_name)}</label>`).join('') || '<div class="list-group-item text-muted">No matching jobs.</div>';
+    };
+    window.jobToggle = (id, on) => {
+      const j = jobs.find(x => x.id === id) || picked.get(id);
+      if (on && j) picked.set(id, j); else picked.delete(id);
+      drawPicked(); drawList(jobs);
+    };
+    let jt; window.jobSearch = v => { clearTimeout(jt); jt = setTimeout(async () => drawList(await flApi('/shipments/job-options?search=' + encodeURIComponent(v))), 250); };
+    setTimeout(() => { drawPicked(); drawList(jobs); }, 0);
     const form = flModal('New Shipment',
-      flSelect('business_job_id', 'Job', flOpts(jobs.map(j => ({ id: j.id, name: `${j.job_number} · ${j.job_name}` })), new URLSearchParams(location.search).get('job') || '', 'No job'), 'col-12') +
+      `<div class="col-12"><label class="form-label">Jobs <span class="text-muted small">(select one or more)</span></label>
+        <div id="jobPicked" class="mb-1"></div>
+        <input type="text" class="form-control form-control-sm mb-1" placeholder="Search jobs…" oninput="jobSearch(this.value)" autocomplete="off">
+        <div id="jobList" class="list-group" style="max-height:11rem;overflow:auto"></div></div>` +
       flField('ship_date', 'Ship date', '', 'date') + flField('carrier', 'Carrier / driver', '') +
       flField('destination', 'Destination', '', 'text', '', 'col-12') +
       `<div class="col-12"><label class="form-label">What is on this shipment?</label>` + shTypes.map(t => `<div class="row g-2 align-items-center mb-1">
@@ -102,6 +125,7 @@
         d.loads = [...f.querySelectorAll('.load-cb:checked')].map(c => ({ shipment_type_id: +c.value, piece_count: f.querySelector(`[data-pieces="${c.value}"]`).value || null }));
         if (!d.loads.length) { showNotification('Pick at least one load type.', 'warning'); throw new Error('no loads'); }
         delete d.undefined;
+        d.job_ids = [...picked.keys()];
         const s = await flApi('/shipments', 'POST', d);
         location.href = '/shipments/' + s.id;
       }, 'Create');
@@ -119,12 +143,34 @@
       <div class="card-body"><div class="row">${['pre', 'post'].map(ph => `<div class="col-lg-6 mb-3">
         <div class="d-flex align-items-center mb-2"><h4 class="mb-0">${ph === 'pre' ? 'Before shipping (shop)' : 'On delivery (field app)'}</h4>
           <button class="btn btn-sm ms-auto" onclick="itemModal(${t.id}, '${ph}')"><i class="ti ti-plus me-1"></i>Add item</button></div>
-        <div class="list-group list-group-flush">${t.items.filter(i => i.phase === ph).map(i => `<div class="list-group-item px-0 d-flex align-items-center gap-2 ${i.is_active ? '' : 'opacity-50'}">
+        <div class="list-group list-group-flush item-list" data-type="${t.id}" data-phase="${ph}" ondragover="itemDragOver(event)" ondrop="itemDrop(event)">${t.items.filter(i => i.phase === ph).map(i => `<div class="list-group-item px-0 d-flex align-items-center gap-2 ${i.is_active ? '' : 'opacity-50'}" data-id="${i.id}" draggable="true" ondragstart="itemDragStart(event)" ondragend="itemDragEnd(event)">
+          <i class="ti ti-grip-vertical text-muted" style="cursor:grab" title="Drag to reorder"></i>
           <div class="flex-grow-1"><div>${esc(i.label)}</div><div class="small text-muted">${esc(SH.INPUTS[i.input_type])}${i.unit ? ' (' + esc(i.unit) + ')' : ''}
-            ${i.required ? ' · required' : ''}${i.photo_required ? ' · photo' : ''}${i.critical ? ' · critical' : ''}</div></div>
+            ${i.required ? ' · required' : ''}${i.photo_required && i.input_type !== 'photo' ? ' · photo' : ''}${i.critical ? ' · critical' : ''}</div></div>
           <button class="btn btn-sm btn-icon" title="Edit" onclick="itemModal(${t.id}, '${ph}', ${i.id})"><i class="ti ti-pencil"></i></button>
           <button class="btn btn-sm btn-icon text-danger" title="Delete" onclick="deleteItem(${i.id})"><i class="ti ti-trash"></i></button></div>`).join('') || '<div class="text-muted small">No items.</div>'}</div></div>`).join('')}
       </div></div></div>`).join('') || '<div class="text-muted">No types yet.</div>';
+  }
+
+  // ---- drag-and-drop ordering of checklist items (within one type + phase) ----
+  let dragEl = null;
+  function itemDragStart(e) { dragEl = e.currentTarget; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragEl.dataset.id); setTimeout(() => dragEl && dragEl.classList.add('opacity-50'), 0); }
+  function itemDragEnd() { if (dragEl) dragEl.classList.remove('opacity-50'); dragEl = null; }
+  function itemDragOver(e) {
+    const list = e.currentTarget;
+    if (!dragEl || dragEl.parentElement !== list) return;   // can't cross types/phases
+    e.preventDefault();
+    const after = [...list.querySelectorAll('[data-id]')].find(el => el !== dragEl && e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2);
+    if (after) list.insertBefore(dragEl, after); else list.appendChild(dragEl);
+  }
+  async function itemDrop(e) {
+    e.preventDefault();
+    const list = e.currentTarget;
+    if (!dragEl || dragEl.parentElement !== list) return;
+    const ids = [...list.querySelectorAll('[data-id]')].map(el => +el.dataset.id);
+    try { await flApi(`/shipment-types/${list.dataset.type}/items/reorder`, 'POST', { phase: list.dataset.phase, ids }); }
+    catch (err) { /* flApi already notified */ }
+    loadTypes();
   }
 
   function addType() {
@@ -155,7 +201,7 @@
       flText('options', 'Choices (one per line, for Choice list)', (it.options || []).join('\n'), 3) +
       chk('required', 'Required', it.required) + chk('photo_required', 'Photo needed', it.photo_required) +
       chk('critical', 'Critical', it.critical) + chk('is_active', 'Active', it.is_active) +
-      `<div class="col-12 small text-muted">Photo needed: pass/fail items require a photo when they fail; other types always. Critical: a failure fails the whole inspection.</div>`,
+      `<div class="col-12 small text-muted">Photos answer type: one or more pictures (e.g. of a certain item or area); Required means at least one. Photo needed: pass/fail items require a photo when they fail; other types always. Critical: a failure fails the whole inspection.</div>`,
       async f => {
         const d = flFormData(f);
         d.options = (d.options || '').split('\n').map(s => s.trim()).filter(Boolean);
