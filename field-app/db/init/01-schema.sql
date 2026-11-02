@@ -23,6 +23,19 @@ CREATE TABLE fa_checklists (
   updated_at    timestamp
 );
 
+-- Shipments awaiting their post-delivery inspection (contract v3). Published by ForgeDesk.
+-- checklist is JSON: [{"type_id":1,"type_name":"Glass","items":[{"id":7,"label":"...","input_type":"pass_fail|number|text|choice",
+--                      "unit":null,"options":null,"required":true,"photo_required":false}]}]
+CREATE TABLE fa_shipments (
+  shipment_number text PRIMARY KEY,
+  job_label       text,
+  destination     text,
+  ship_date       date,
+  checklist       text NOT NULL,
+  is_active       boolean NOT NULL DEFAULT true,
+  synced_at       timestamp
+);
+
 -- Append-only inbox written by the field app, drained by ForgeDesk.
 CREATE TABLE fa_submissions (
   id              bigserial PRIMARY KEY,

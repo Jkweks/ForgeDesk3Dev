@@ -29,11 +29,14 @@ const uuid = () => require('crypto').randomUUID();
 test.before(async () => {
   if (skip) return;
   admin = new Pool({ host: process.env.PGHOST, user: 'fieldadmin', password: ADMIN_PW, database: process.env.PGDATABASE });
-  await admin.query("TRUNCATE fa_sessions, fa_users, fa_submissions, fa_photos, fa_assets, fa_checklists RESTART IDENTITY CASCADE");
+  await admin.query("TRUNCATE fa_sessions, fa_users, fa_submissions, fa_photos, fa_assets, fa_checklists, fa_shipments RESTART IDENTITY CASCADE");
   await admin.query("INSERT INTO fa_users (forgedesk_user_id, login, display_name, password_hash, is_active) VALUES (7, 'terry@example.com', 'Terry Tester', $1, true)", [LARAVEL_HASH]);
   await admin.query("INSERT INTO fa_users (forgedesk_user_id, login, display_name, password_hash, is_active) VALUES (8, 'temp@example.com', 'Temp Password', '', false)");
   await admin.query("INSERT INTO fa_assets (asset_number, name, type_name, meter_type, status, current_meter, is_active) VALUES ('FA-1','Truck 1','Truck','odometer_miles','active',1000,true),('FA-9','Old truck','Truck','odometer_miles','active',5,false)");
   await admin.query("INSERT INTO fa_checklists (type_name, template_name, items) VALUES ('Truck','Truck inspection','[{\"label\":\"Brakes\"}]')");
+  await admin.query(`INSERT INTO fa_shipments (shipment_number, job_label, destination, ship_date, checklist, is_active) VALUES
+    ('SHP-00001','Tower (A-1)','Site 1','2026-10-30',$1,true),('SHP-00002','Old','x',NULL,'[]',false)`,
+  [JSON.stringify([{ type_id: 1, type_name: 'Glass', items: [{ id: 7, label: 'No broken lites', input_type: 'pass_fail', required: true, photo_required: true }] }])]);
   process.env.COOKIE_SECURE = 'false';
   const { createApp } = require('../server/app');
   server = createApp().listen(0);
@@ -94,6 +97,23 @@ test('submissions: photos stored, bad asset / retired asset / spoofed image refu
   assert.equal((await bad({ asset_number: 'NOPE' })).res.status, 422);
   assert.equal((await bad({ asset_number: 'FA-9' })).res.status, 422, 'retired assets are not accepted');
   assert.equal((await bad({ photos: [{ filename: 'x.jpg', data_b64: Buffer.from('MZ not an image').toString('base64') }] })).res.status, 422);
+});
+
+test('shipments: only open ones are published; delivery inspections accepted with photos, closed ones refused', { skip }, async () => {
+  const cookie = await login();
+  const { json } = await call('/api/bootstrap', { cookie });
+  assert.deepEqual(json.shipments.map((x) => x.shipment_number), ['SHP-00001']);
+  assert.equal(json.shipments[0].checklist[0].items[0].id, 7);
+  assert.equal(json.shipments[0].ship_date, '2026-10-30');
+
+  const id = uuid();
+  const body = { submission_uuid: id, kind: 'shipment_inspection', asset_number: 'SHP-00001', payload: { items: [{ item_id: 7, value: 'fail', comment: 'cracked', photos: [0] }] },
+    photos: [{ filename: 'a.jpg', data_b64: JPEG }] };
+  assert.equal((await call('/api/submissions', { method: 'POST', body, cookie })).res.status, 201);
+  assert.equal((await call('/api/submissions', { method: 'POST', body, cookie })).json.status, 'duplicate');
+  assert.equal((await admin.query('SELECT count(*)::int n FROM fa_photos WHERE submission_uuid = $1', [id])).rows[0].n, 1);
+  const closed = await call('/api/submissions', { method: 'POST', cookie, body: { ...body, submission_uuid: uuid(), asset_number: 'SHP-00002' } });
+  assert.equal(closed.res.status, 422);
 });
 
 test('mine: shows the user\'s sends and whether the office has them', { skip }, async () => {

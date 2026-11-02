@@ -539,6 +539,29 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/business-jobs/{jobId}/documents', [\App\Http\Controllers\Api\JobDocumentController::class, 'store'])->middleware('permission:jobs.documents.manage');
         Route::delete('/business-jobs/{jobId}/documents/{documentId}', [\App\Http\Controllers\Api\JobDocumentController::class, 'destroy'])->middleware('permission:jobs.documents.manage');
 
+        // Shipments + pre/post-delivery inspections. Specific routes before {id}.
+        $sh = \App\Http\Controllers\Api\ShipmentController::class;
+        $st = \App\Http\Controllers\Api\ShipmentTypeController::class;
+        Route::get('/shipments', [$sh, 'index'])->middleware('permission:shipments.view');
+        Route::get('/shipments/queue', [$sh, 'queue'])->middleware('permission:shipments.view');
+        Route::get('/shipments/job-options', [$sh, 'jobOptions'])->middleware('permission:shipments.view');
+        Route::post('/shipments', [$sh, 'store'])->middleware('permission:shipments.manage');
+        Route::get('/shipments/{id}', [$sh, 'show'])->middleware('permission:shipments.view');
+        Route::put('/shipments/{id}', [$sh, 'update'])->middleware('permission:shipments.manage');
+        Route::delete('/shipments/{id}', [$sh, 'destroy'])->middleware('permission:shipments.manage');
+        Route::patch('/shipments/{id}/schedule', [$sh, 'schedule'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/cancel', [$sh, 'cancel'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/ship', [$sh, 'ship'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/pre-inspection', [$sh, 'preInspection'])->middleware('permission:shipments.inspect');
+        Route::get('/shipments/{shipmentId}/photos/{photoId}', [$sh, 'photo'])->middleware('permission:shipments.view');
+        Route::get('/shipment-types', [$st, 'index'])->middleware('permission:shipments.view');
+        Route::post('/shipment-types', [$st, 'store'])->middleware('permission:shipments.types.manage');
+        Route::put('/shipment-types/{id}', [$st, 'update'])->middleware('permission:shipments.types.manage');
+        Route::delete('/shipment-types/{id}', [$st, 'destroy'])->middleware('permission:shipments.types.manage');
+        Route::post('/shipment-types/{typeId}/items', [$st, 'storeItem'])->middleware('permission:shipments.types.manage');
+        Route::put('/shipment-check-items/{id}', [$st, 'updateItem'])->middleware('permission:shipments.types.manage');
+        Route::delete('/shipment-check-items/{id}', [$st, 'destroyItem'])->middleware('permission:shipments.types.manage');
+
         // Field & Fleet Assets (vehicles, trailers, swing stages, gang boxes...). Separate from the
         // shop maintenance module above; field crews use the separate field app, synced via DB.
         $fleet = \App\Http\Controllers\Api\FleetController::class;

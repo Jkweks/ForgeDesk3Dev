@@ -7,10 +7,11 @@
  */
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const KINDS = ['inspection', 'meter', 'defect'];
+const KINDS = ['inspection', 'meter', 'defect', 'shipment_inspection'];
 const RESULTS = ['pass', 'fail', 'na'];
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
 const MAX_PHOTOS = 10;
+const MAX_SHIPMENT_PHOTOS = 30;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // decoded; matches ForgeDesk's limit
 
 const fail = (error) => ({ ok: false, error });
@@ -27,9 +28,9 @@ function sniffImage(buf) {
 
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
-function validatePhotos(photos) {
+function validatePhotos(photos, max = MAX_PHOTOS) {
   if (photos == null) return { ok: true, value: [] };
-  if (!Array.isArray(photos) || photos.length > MAX_PHOTOS) return fail(`At most ${MAX_PHOTOS} photos per submission.`);
+  if (!Array.isArray(photos) || photos.length > max) return fail(`At most ${max} photos per submission.`);
   const out = [];
   for (const p of photos) {
     const b64 = typeof p?.data_b64 === 'string' ? p.data_b64.replace(/^data:[^,]*,/, '') : '';
@@ -58,6 +59,27 @@ function validatePayload(kind, p) {
     const severity = SEVERITIES.includes(p.severity) ? p.severity : 'medium';
     const description = str(p.description, 5000);
     return { ok: true, value: { title, severity, ...(description && { description }) } };
+  }
+
+  if (kind === 'shipment_inspection') {
+    if (!Array.isArray(p.items) || p.items.length < 1 || p.items.length > 200) return fail('A delivery inspection needs at least one answer.');
+    const items = [];
+    for (const i of p.items) {
+      if (!Number.isInteger(i?.item_id) || i.item_id < 1) return fail('Every answer needs a checklist item.');
+      if (i.value != null && typeof i.value !== 'string') return fail('Answers must be text.');
+      const out = { item_id: i.item_id, value: str(i.value, 255) };
+      const comment = str(i.comment, 1000);
+      if (comment) out.comment = comment;
+      if (i.photos != null) {
+        if (!Array.isArray(i.photos) || i.photos.length > MAX_SHIPMENT_PHOTOS || !i.photos.every((n) => Number.isInteger(n) && n >= 0 && n < MAX_SHIPMENT_PHOTOS)) return fail('Bad photo reference.');
+        if (i.photos.length) out.photos = i.photos;
+      }
+      items.push(out);
+    }
+    const value = { items };
+    const notes = str(p.notes, 5000);
+    if (notes) value.notes = notes;
+    return { ok: true, value };
   }
 
   // inspection
@@ -89,11 +111,11 @@ function validateSubmission(body, knownAsset) {
   if (!body || typeof body !== 'object') return fail('Bad request.');
   if (!UUID_V4.test(String(body.submission_uuid || ''))) return fail('submission_uuid must be a UUID v4.');
   if (!KINDS.includes(body.kind)) return fail('Unknown submission kind.');
-  if (!knownAsset) return fail('That asset is not available. Refresh your asset list.');
+  if (!knownAsset) return fail(body.kind === 'shipment_inspection' ? 'That delivery is no longer open. Refresh your list.' : 'That asset is not available. Refresh your asset list.');
 
   const payload = validatePayload(body.kind, body.payload);
   if (!payload.ok) return payload;
-  const photos = validatePhotos(body.photos);
+  const photos = validatePhotos(body.photos, body.kind === 'shipment_inspection' ? MAX_SHIPMENT_PHOTOS : MAX_PHOTOS);
   if (!photos.ok) return photos;
 
   // Device clocks are unreliable; fall back to server time if unparseable. ForgeDesk also clamps.

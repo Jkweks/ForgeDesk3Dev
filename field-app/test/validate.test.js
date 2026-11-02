@@ -69,3 +69,20 @@ test('unparseable device time falls back to now', () => {
   assert.equal(r.ok, true);
   assert.ok(Math.abs(Date.now() - new Date(r.value.submitted_at)) < 5000);
 });
+
+test('shipment_inspection: answers keyed by item id, photo refs bounded, up to 30 photos', () => {
+  const ok = validateSubmission(base({ kind: 'shipment_inspection', asset_number: 'SHP-00001', payload: {
+    notes: 'dock', items: [{ item_id: 4, value: 'fail', comment: 'cracked', photos: [0], critical: true }, { item_id: 5, value: '4' }] } }), true);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.value.payload.items[0], { item_id: 4, value: 'fail', comment: 'cracked', photos: [0] });   // client "critical" dropped
+  assert.equal(ok.value.payload.notes, 'dock');
+
+  const bad = (items) => validateSubmission(base({ kind: 'shipment_inspection', payload: { items } }), true).ok;
+  assert.equal(bad([]), false);
+  assert.equal(bad([{ item_id: 'x', value: 'pass' }]), false);
+  assert.equal(bad([{ item_id: 1, value: 5 }]), false);
+  assert.equal(bad([{ item_id: 1, value: 'fail', photos: [99] }]), false);
+  assert.equal(validateSubmission(base({ kind: 'shipment_inspection', payload: { items: [{ item_id: 1, value: 'pass' }] }, photos: Array(30).fill({ filename: 'a.jpg', data_b64: JPEG }) }), true).ok, true);
+  assert.equal(validateSubmission(base({ kind: 'shipment_inspection', payload: { items: [{ item_id: 1, value: 'pass' }] }, photos: Array(31).fill({ filename: 'a.jpg', data_b64: JPEG }) }), true).ok, false);
+  assert.equal(validateSubmission(base({ kind: 'shipment_inspection', payload: { items: [{ item_id: 1, value: 'pass' }] } }), false).ok, false);
+});

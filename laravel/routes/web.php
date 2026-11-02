@@ -59,6 +59,17 @@ Route::get('/fleet/assets/{id}', function ($id) {
     return view('fleet.asset', ['assetId' => (int) $id]);
 })->whereNumber('id');
 
+// Shipments (pre/post-delivery inspections)
+Route::get('/shipments', function () {
+    return view('shipments.index');
+});
+Route::get('/shipments/queue', function () {
+    return view('shipments.queue');
+});
+Route::get('/shipments/{id}', function ($id) {
+    return view('shipments.show', ['shipmentId' => (int) $id]);
+})->whereNumber('id');
+
 Route::get('/cycle-counting', function () {
     return view('cycle-counting');
 });

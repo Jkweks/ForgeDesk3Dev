@@ -38,11 +38,13 @@ router.get('/me', auth.requireAuth, (req, res) => res.json({ user: publicUser(re
 /** Everything the phone needs to work offline: assets, checklists, and this user's recent sends. */
 router.get('/bootstrap', auth.requireAuth, async (req, res, next) => {
   try {
-    const [assets, checklists, mine] = await Promise.all([
+    const [assets, checklists, shipments, mine] = await Promise.all([
       query(`SELECT asset_number, name, type_name, meter_type, status, current_meter::float8 AS current_meter,
                     current_job_label, synced_at
                FROM fa_assets WHERE is_active ORDER BY asset_number`),
       query('SELECT type_name, template_name, items FROM fa_checklists ORDER BY type_name'),
+      query(`SELECT shipment_number, job_label, destination, to_char(ship_date, 'YYYY-MM-DD') AS ship_date, checklist
+               FROM fa_shipments WHERE is_active ORDER BY shipment_number`),
       recent(req.user.display_name),
     ]);
     res.json({
@@ -50,6 +52,7 @@ router.get('/bootstrap', auth.requireAuth, async (req, res, next) => {
       server_time: new Date().toISOString(),
       assets: assets.rows,
       checklists: checklists.rows.map((c) => ({ ...c, items: safeJson(c.items, []) })),
+      shipments: shipments.rows.map((r) => ({ ...r, checklist: safeJson(r.checklist, []) })),
       recent: mine,
     });
   } catch (e) { next(e); }
@@ -76,8 +79,14 @@ router.post('/submissions', auth.requireAuth, async (req, res, next) => {
   const client = await pool.connect().catch(next);
   if (!client) return;
   try {
-    const asset = await client.query('SELECT 1 FROM fa_assets WHERE asset_number = $1 AND is_active', [String(req.body?.asset_number || '')]);
-    const v = validateSubmission(req.body, asset.rowCount === 1);
+    // For delivery inspections asset_number carries the shipment number (contract v3).
+    const known = await client.query(
+      req.body?.kind === 'shipment_inspection'
+        ? 'SELECT 1 FROM fa_shipments WHERE shipment_number = $1 AND is_active'
+        : 'SELECT 1 FROM fa_assets WHERE asset_number = $1 AND is_active',
+      [String(req.body?.asset_number || '')],
+    );
+    const v = validateSubmission(req.body, known.rowCount === 1);
     if (!v.ok) return res.status(422).json({ error: v.error });
     const s = v.value;
 

@@ -200,9 +200,7 @@ class CycleCountController extends Controller
                         $systemQtyEaches = $invLoc->quantity ?? 0;
 
                         // Convert to packs if product has pack_size > 1
-                        $systemQtyForCount = $product->hasPackSize()
-                            ? $product->eachesToFullPacks($systemQtyEaches)
-                            : $systemQtyEaches;
+                        $systemQtyForCount = $this->systemQuantityFor($product, $systemQtyEaches);
 
                         $session->items()->create([
                             'product_id' => $product->id,
@@ -223,9 +221,7 @@ class CycleCountController extends Controller
                         foreach ($inventoryLocations as $invLoc) {
                             $systemQtyEaches = $invLoc->quantity ?? 0;
 
-                            $systemQtyForCount = $product->hasPackSize()
-                                ? $product->eachesToFullPacks($systemQtyEaches)
-                                : $systemQtyEaches;
+                            $systemQtyForCount = $this->systemQuantityFor($product, $systemQtyEaches);
 
                             $session->items()->create([
                                 'product_id' => $product->id,
@@ -241,9 +237,7 @@ class CycleCountController extends Controller
                         // product-level aggregate item so it still gets counted.
                         $systemQtyEaches = $product->quantity_on_hand ?? 0;
 
-                        $systemQtyForCount = $product->hasPackSize()
-                            ? $product->eachesToFullPacks($systemQtyEaches)
-                            : $systemQtyEaches;
+                        $systemQtyForCount = $this->systemQuantityFor($product, $systemQtyEaches);
 
                         $session->items()->create([
                             'product_id' => $product->id,
@@ -284,6 +278,18 @@ class CycleCountController extends Controller
                 'file' => basename($e->getFile()),
             ], 500);
         }
+    }
+
+    /**
+     * Expected count for a cycle count item. Stock quantities are tenths-precision decimals
+     * (numeric(12,1), so "14.0" comes back as a string), but cycle_count_items stores whole units:
+     * whole packs for pack products, otherwise eaches rounded to the nearest unit.
+     */
+    private function systemQuantityFor(Product $product, $eaches): int
+    {
+        $eaches = (float) ($eaches ?? 0);
+
+        return $product->hasPackSize() ? (int) $product->eachesToFullPacks($eaches) : (int) round($eaches);
     }
 
     /**

@@ -84,6 +84,15 @@ return [
         'href' => '/reports', 'active' => ['reports'],
     ],
     [
+        'label' => 'Shipments', 'icon' => 'package', 'permission' => 'nav.shipments',
+        'active' => ['shipments*'],
+        'items' => [
+            ['label' => 'Shipping Queue', 'href' => '/shipments/queue', 'active' => ['shipments/queue']],
+            ['label' => 'Shipments', 'href' => '/shipments', 'active' => ['shipments']],
+            ['label' => 'Types & Checklists', 'href' => '/shipments#types', 'permission' => 'shipments.types.manage'],
+        ],
+    ],
+    [
         'label' => 'Field & Fleet', 'icon' => 'truck', 'permission' => 'nav.fleet',
         'active' => ['fleet*'],
         'items' => [

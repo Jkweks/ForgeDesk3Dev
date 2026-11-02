@@ -8,13 +8,17 @@ use App\Models\FieldAssetInspection;
 use App\Models\FieldAssetType;
 use App\Models\FieldAssetWorkOrder;
 use App\Models\FieldSyncLog;
+use App\Models\Shipment;
 use App\Models\User;
+use App\Services\ImageSanitizer;
+use App\Services\Shipping\ShipmentInspectionService;
 use Carbon\Carbon;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -33,7 +37,7 @@ class FieldSync
 
     private const PHOTO_MIMES = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
 
-    public function __construct(private FleetService $fleet) {}
+    public function __construct(private FleetService $fleet, private ShipmentInspectionService $shipments) {}
 
     public function enabled(): bool
     {
@@ -66,7 +70,7 @@ class FieldSync
      * Publish the minimal snapshot the crews need. Deliberately excludes costs, purchase
      * info, VIN/plate, documents and notes.
      *
-     * @return array{assets: int, checklists: int, users: int}
+     * @return array{assets: int, checklists: int, users: int, shipments: int}
      */
     public function publish(): array
     {
@@ -108,10 +112,41 @@ class FieldSync
         // Assets are committed first; a field DB that predates fa_users (contract v2) then fails
         // loudly here instead of silently leaving crews unable to sign in.
         $users = $this->publishUsers($remote);
+        $shipments = $this->publishShipments($remote);
 
         Cache::forever(self::CACHE_LAST_OUT, now()->toIso8601String());
 
-        return ['assets' => count($rows), 'checklists' => count($checklists), 'users' => $users];
+        return ['assets' => count($rows), 'checklists' => count($checklists), 'users' => $users, 'shipments' => $shipments];
+    }
+
+    /**
+     * Shipments awaiting their post-delivery inspection (contract v3). Each carries the post checklist
+     * resolved for its load types (item ids included; `critical` is deliberately not published).
+     * Shipments that are no longer awaiting a check are hidden, never deleted.
+     */
+    private function publishShipments(Connection $remote): int
+    {
+        $now = now()->toDateTimeString();
+        $rows = Shipment::with(['job:id,job_number,job_name', 'loads'])->awaitingPostCheck()->get()
+            ->map(fn (Shipment $s) => [
+                'shipment_number' => $s->shipment_number,
+                'job_label' => $s->jobLabel(),
+                'destination' => $s->destination,
+                'ship_date' => $s->ship_date?->format('Y-m-d'),
+                'checklist' => json_encode($this->shipments->checklist($s, 'post')),
+                'is_active' => true,
+                'synced_at' => $now,
+            ])->all();
+
+        $remote->transaction(function () use ($remote, $rows) {
+            foreach (array_chunk($rows, 200) as $chunk) {
+                $remote->table('fa_shipments')->upsert($chunk, ['shipment_number'],
+                    ['job_label', 'destination', 'ship_date', 'checklist', 'is_active', 'synced_at']);
+            }
+            $remote->table('fa_shipments')->whereNotIn('shipment_number', array_column($rows, 'shipment_number'))->update(['is_active' => false]);
+        });
+
+        return count($rows);
     }
 
     /**
@@ -210,12 +245,16 @@ class FieldSync
         if (! is_array($payload)) {
             return ['rejected', 'Payload is not valid JSON.', null];
         }
-        if (! in_array($row->kind, ['inspection', 'meter', 'defect'], true)) {
+        if (! in_array($row->kind, ['inspection', 'meter', 'defect', 'shipment_inspection'], true)) {
             return ['rejected', 'Unknown submission kind.', null];
         }
         $by = Str::limit(trim((string) ($row->submitted_by ?? '')), 100, '') ?: 'field app';
         if (! Str::isUuid((string) $row->submission_uuid) && ! preg_match('/^[A-Za-z0-9_-]{8,64}$/', (string) $row->submission_uuid)) {
             return ['rejected', 'Invalid submission_uuid.', null];
+        }
+
+        if ($row->kind === 'shipment_inspection') {
+            return $this->ingestShipmentInspection($row, $payload, $by, $this->deviceTime($row->submitted_at ?? null), $remote);
         }
 
         $asset = FieldAsset::with('type')->where('asset_number', (string) $row->asset_number)->first();
@@ -233,6 +272,58 @@ class FieldSync
             'defect' => $this->ingestDefect($asset, $row, $payload, $by, $remote),
             'inspection' => $this->ingestInspection($asset, $row, $payload, $by, $at, $remote),
         });
+    }
+
+    /** The shipment number travels in fa_submissions.asset_number for this kind. */
+    private function ingestShipmentInspection(object $row, array $p, string $by, Carbon $at, Connection $remote): array
+    {
+        $shipment = Shipment::where('shipment_number', (string) $row->asset_number)->first();
+        if (! $shipment) {
+            return ['rejected', 'Unknown shipment number.', null];
+        }
+        if ($shipment->status === 'cancelled') {
+            return ['rejected', 'Shipment was cancelled.', null];
+        }
+        if ($shipment->status !== 'shipped') {
+            return ['needs_review', "Shipment is {$shipment->status}, not awaiting a delivery inspection.", null];
+        }
+
+        $v = Validator::make($p, [
+            'notes' => 'nullable|string|max:5000', 'items' => 'required|array|min:1|max:200',
+            'items.*.item_id' => 'required|integer', 'items.*.value' => 'nullable|string|max:255',
+            'items.*.comment' => 'nullable|string|max:1000', 'items.*.photos' => 'nullable|array|max:30',
+            'items.*.photos.*' => 'integer|min:0',
+        ]);
+        if ($v->fails()) {
+            return ['rejected', $v->errors()->first(), null];
+        }
+
+        $answers = [];
+        foreach ($p['items'] as $i) {
+            $answers[(int) $i['item_id']] = ['value' => $i['value'] ?? null, 'comment' => $i['comment'] ?? null, 'photos' => $i['photos'] ?? []];
+        }
+
+        // Photos are matched to items by their position in upload order (ids ascend with insertion).
+        $max = (int) config('fleet.sync.max_photo_bytes');
+        $photos = [];
+        foreach ($remote->table('fa_photos')->where('submission_uuid', (string) $row->submission_uuid)->orderBy('id')->limit(ShipmentInspectionService::MAX_PHOTOS)->get() as $photo) {
+            $bytes = base64_decode((string) $photo->data_b64, true);
+            $photos[] = ['bytes' => ($bytes !== false && strlen($bytes) <= $max) ? $bytes : '', 'name' => (string) $photo->filename];
+        }
+
+        try {
+            $inspection = $this->shipments->record($shipment, 'post', $answers, $photos, [
+                'external' => $by, 'source' => 'field_app', 'at' => $at, 'notes' => $p['notes'] ?? null, 'uuid' => (string) $row->submission_uuid, 'lenient_photos' => true,
+            ]);
+        } catch (ValidationException $e) {
+            return ['rejected', collect($e->errors())->flatten()->first(), null];
+        }
+
+        if ($photos && config('fleet.sync.purge_ingested_photos')) {
+            $remote->table('fa_photos')->where('submission_uuid', (string) $row->submission_uuid)->delete();
+        }
+
+        return ['ingested', null, ['shipment_inspection', $inspection->id]];
     }
 
     private function ingestMeter(FieldAsset $asset, array $p, string $by, Carbon $at): array
@@ -346,11 +437,11 @@ class FieldSync
             if ($bytes === false || $bytes === '' || strlen($bytes) > $max) {
                 continue;
             }
-            $mime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
-            if (! isset(self::PHOTO_MIMES[$mime])) {
+            $mime = ImageSanitizer::sniff($bytes);
+            if (! $mime) {
                 continue; // spoofed filename / not an image
             }
-            $bytes = $this->reencode($bytes, $mime);
+            $bytes = ImageSanitizer::reencode($bytes, $mime);
             $path = "field_assets/{$asset->id}/".Str::uuid().'.'.self::PHOTO_MIMES[$mime];
             Storage::disk('local')->put($path, $bytes);
 
@@ -364,23 +455,5 @@ class FieldSync
         if ($photos->isNotEmpty() && config('fleet.sync.purge_ingested_photos')) {
             $remote->table('fa_photos')->where('submission_uuid', $uuid)->delete();
         }
-    }
-
-    /** Re-encode JPEG/PNG through GD: strips EXIF (incl. GPS) and any trailing payload. */
-    private function reencode(string $bytes, string $mime): string
-    {
-        if (! function_exists('imagecreatefromstring') || ! in_array($mime, ['image/jpeg', 'image/png'], true)) {
-            return $bytes;
-        }
-        $img = @imagecreatefromstring($bytes);
-        if (! $img) {
-            return $bytes;
-        }
-        ob_start();
-        $mime === 'image/png' ? imagepng($img) : imagejpeg($img, null, 88);
-        $out = ob_get_clean();
-        imagedestroy($img);
-
-        return $out ?: $bytes;
     }
 }

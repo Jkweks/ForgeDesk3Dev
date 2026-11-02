@@ -163,6 +163,7 @@
                             <th data-col="status">Status</th>
                             <th class="text-center" data-col="reservations">Res.</th>
                             <th class="text-center" data-col="work_orders">WOs</th>
+                            <th class="text-center" data-col="shipments">Ship.</th>
                             <th data-col="start">Start</th>
                             <th data-col="target">Target</th>
                             <th class="text-end" data-col="days_left">Days&nbsp;left</th>
@@ -953,6 +954,7 @@
             status:       (a, b) => String(a.status_label || a.status).localeCompare(String(b.status_label || b.status)),
             reservations: (a, b) => (a.reservations_count || 0) - (b.reservations_count || 0),
             work_orders:  (a, b) => (a.work_orders_count || 0) - (b.work_orders_count || 0),
+            shipments:    (a, b) => (a.shipments_count || 0) - (b.shipments_count || 0),
             start:        (a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')),
             target:       (a, b) => String(a.target_completion_date || '').localeCompare(String(b.target_completion_date || '')),
             days_left:    (a, b) => Number(a.days_until_completion) - Number(b.days_until_completion),
@@ -1083,6 +1085,7 @@
                     <td data-col="status"><span class="badge bg-${getStatusColor(job.status)}">${job.status_label}</span></td>
                     <td class="text-center" data-col="reservations">${countCell(resCount, 'bg-blue-lt text-blue')}</td>
                     <td class="text-center" data-col="work_orders">${countCell(woCount, 'bg-purple-lt text-purple')}</td>
+                    <td class="text-center" data-col="shipments">${job.shipments_count ? `<span class="badge ${job.shipments_issues_count ? 'bg-red-lt text-red' : job.shipments_transit_count ? 'bg-cyan-lt text-cyan' : 'bg-azure-lt text-azure'} job-count" title="${job.shipments_transit_count ? job.shipments_transit_count + ' in transit' : ''}${job.shipments_issues_count ? ' ' + job.shipments_issues_count + ' with delivery issues' : ''}">${job.shipments_count}</span>` : '<span class="text-secondary job-count">–</span>'}</td>
                     <td class="col-meta" data-col="start">${jobDate(job.start_date)}</td>
                     <td class="col-meta" data-col="target">${jobDate(job.target_completion_date)}</td>
                     <td class="text-end" data-col="days_left">${getDaysRemaining(job.days_until_completion)}</td>
@@ -1104,7 +1107,7 @@
                 detailTr.id = `job-detail-${job.id}`;
                 detailTr.style.display = 'none';
                 detailTr.innerHTML = `
-                    <td colspan="10" id="job-detail-cell-${job.id}" class="p-0">
+                    <td colspan="11" id="job-detail-cell-${job.id}" class="p-0">
                         <div class="border-top border-bottom job-expand-wrap">
                             <!-- Job header bar -->
                             <div class="job-expand-head d-flex flex-wrap align-items-center gap-2 px-3 py-2">
@@ -1159,6 +1162,13 @@
                                         onclick="switchJobTab(${job.id}, 'hwsets')" type="button">
                                         <i class="ti ti-tools me-1"></i>Hardware Sets
                                         <span class="badge bg-secondary-lt text-secondary ms-1" id="job-hwsets-badge-${job.id}">0</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation" data-permission="shipments.view">
+                                    <button class="nav-link" id="job-tab-ship-btn-${job.id}"
+                                        onclick="switchJobTab(${job.id}, 'ship')" type="button">
+                                        <i class="ti ti-package me-1"></i>Shipments
+                                        <span class="badge bg-secondary-lt text-secondary ms-1" id="job-ship-badge-${job.id}">${job.shipments_count || 0}</span>
                                     </button>
                                 </li>
                             </ul>
@@ -1282,6 +1292,13 @@
                                         <div class="form-text mt-2">Sets are applied to openings from the Configurator's Hardware tab.</div>
                                     </div>
                                 </div>
+                                <!-- Shipments pane -->
+                                <div id="job-pane-ship-${job.id}" style="display:none;">
+                                    <div id="detail-ship-loading-${job.id}" class="text-muted small py-2">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                                    </div>
+                                    <div id="detail-ship-content-${job.id}" style="display:none;"></div>
+                                </div>
                             </div>
                         </div>
                     </td>
@@ -1350,7 +1367,7 @@
 
         function switchJobTab(jobId, tab) {
             // Update button active states
-            ['wo', 'res', 'tx', 'doc', 'doorcfg', 'hwsets'].forEach(t => {
+            ['wo', 'res', 'tx', 'doc', 'doorcfg', 'hwsets', 'ship'].forEach(t => {
                 const btn = document.getElementById(`job-tab-${t}-btn-${jobId}`);
                 const pane = document.getElementById(`job-pane-${t}-${jobId}`);
                 if (btn) btn.classList.toggle('active', t === tab);
@@ -1368,6 +1385,7 @@
                 else if (tab === 'doc') loadJobDocuments(jobId);
                 else if (tab === 'doorcfg') loadJobDoorConfigs(jobId);
                 else if (tab === 'hwsets') loadJobHwSets(jobId);
+                else if (tab === 'ship') loadJobShipments(jobId);
             }
         }
 
@@ -1393,6 +1411,9 @@
                     <button class="btn btn-sm btn-outline-primary" onclick="showJobTxForm(${jobId})">
                         <i class="ti ti-plus me-1"></i>Add Transaction
                     </button>`;
+            } else if (tab === 'ship') {
+                actionsEl.innerHTML = `<a class="btn btn-sm btn-outline-secondary" href="/shipments/queue"><i class="ti ti-calendar-event me-1"></i>Shipping Queue</a>
+                    <a class="btn btn-sm btn-outline-primary" data-permission="shipments.manage" href="/shipments?job=${jobId}"><i class="ti ti-plus me-1"></i>New Shipment</a>`;
             } else if (tab === 'doc') {
                 actionsEl.innerHTML = jobDocCanManage() ? `
                     <button class="btn btn-sm btn-outline-primary" data-permission="jobs.documents.manage" onclick="showJobDocForm(${jobId})">
@@ -1550,6 +1571,42 @@
             if (b < 1024) return b + ' B';
             if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
             return (b / 1048576).toFixed(1) + ' MB';
+        }
+
+        const SHIP_STATUS = {
+            draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'],
+            delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], cancelled: ['Cancelled', 'secondary'],
+        };
+
+        async function loadJobShipments(jobId) {
+            const loadingEl = document.getElementById(`detail-ship-loading-${jobId}`);
+            const contentEl = document.getElementById(`detail-ship-content-${jobId}`);
+            try {
+                const r = await jobsAPI(`/api/v1/shipments?job_id=${jobId}`);
+                if (!r.ok) {
+                    contentEl.innerHTML = '<div class="job-detail-empty">You don’t have access to shipments.</div>';
+                } else {
+                    const rows = await r.json();
+                    const badge = document.getElementById(`job-ship-badge-${jobId}`);
+                    if (badge) badge.textContent = rows.filter(x => x.status !== 'cancelled').length;
+                    contentEl.innerHTML = rows.length ? `<div class="table-responsive"><table class="table table-sm table-vcenter mb-0">
+                        <thead><tr><th>Shipment</th><th>Loads</th><th>Status</th><th>Ship date</th><th>Destination</th></tr></thead><tbody>${rows.map(x => {
+                            const st = SHIP_STATUS[x.status] || [x.status, 'secondary'];
+                            return `<tr style="cursor:pointer" onclick="location.href='/shipments/${x.id}'">
+                                <td class="fw-bold text-nowrap"><a href="/shipments/${x.id}">${escapeHtml(x.shipment_number)}</a></td>
+                                <td>${x.loads.map(l => `<span class="badge bg-azure-lt">${escapeHtml(l.type.name)}</span>`).join(' ')}</td>
+                                <td><span class="badge bg-${st[1]}-lt">${st[0]}</span></td>
+                                <td>${x.ship_date ? x.ship_date.substring(0, 10) : '–'}</td>
+                                <td class="text-secondary">${escapeHtml(x.destination || '')}</td></tr>`;
+                        }).join('')}</tbody></table></div>` : '<div class="job-detail-empty">No shipments for this job yet.</div>';
+                }
+            } catch (e) {
+                console.error(e);
+                contentEl.innerHTML = '<div class="job-detail-empty">Failed to load shipments.</div>';
+            } finally {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (contentEl) contentEl.style.display = 'block';
+            }
         }
 
         async function loadJobDocuments(jobId) {
@@ -2398,6 +2455,7 @@
             { key: 'status',       label: 'Status' },
             { key: 'reservations', label: 'Res.' },
             { key: 'work_orders',  label: 'WOs' },
+            { key: 'shipments',    label: 'Ship.' },
             { key: 'start',        label: 'Start' },
             { key: 'target',       label: 'Target' },
             { key: 'days_left',    label: 'Days left' },

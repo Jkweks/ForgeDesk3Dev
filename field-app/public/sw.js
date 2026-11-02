@@ -1,6 +1,6 @@
 'use strict';
 // App-shell cache only. Data (assets, checklists, the outbox) lives in IndexedDB, managed by app.js.
-const CACHE = 'field-shell-v1';
+const CACHE = 'field-shell-v2';
 const SHELL = ['/', '/style.css', '/app.js', '/vendor/jsqr.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

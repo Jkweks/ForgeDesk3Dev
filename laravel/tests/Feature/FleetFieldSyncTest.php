@@ -66,6 +66,15 @@ class FleetFieldSyncTest extends TestCase
             $t->boolean('is_active')->default(true);
             $t->string('synced_at')->nullable();
         });
+        $s->create('fa_shipments', function ($t) {
+            $t->string('shipment_number')->primary();
+            $t->string('job_label')->nullable();
+            $t->string('destination')->nullable();
+            $t->string('ship_date')->nullable();
+            $t->text('checklist');
+            $t->boolean('is_active')->default(true);
+            $t->string('synced_at')->nullable();
+        });
         $s->create('fa_photos', function ($t) {
             $t->id();
             $t->string('submission_uuid');

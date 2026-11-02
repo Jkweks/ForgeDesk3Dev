@@ -96,6 +96,11 @@ class BusinessJob extends Model
         return $this->hasMany(\App\Models\FdWorkOrder::class, 'business_job_id')->orderBy('release_number');
     }
 
+    public function shipments()
+    {
+        return $this->hasMany(Shipment::class, 'business_job_id');
+    }
+
     /**
      * Division derived from first character of job_number
      */

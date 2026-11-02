@@ -122,7 +122,8 @@ class CycleCountSession extends Model
     public static function generateSessionNumber()
     {
         $date = date('Ymd');
-        $lastSession = self::where('session_number', 'like', "CC-{$date}-%")
+        // withTrashed: the unique index still covers soft-deleted sessions.
+        $lastSession = self::withTrashed()->where('session_number', 'like', "CC-{$date}-%")
             ->orderBy('session_number', 'desc')
             ->first();
 

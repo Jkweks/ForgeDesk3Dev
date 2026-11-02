@@ -87,11 +87,11 @@ async function api(path, { method = 'GET', body } = {}) {
 
 // ---------- state -----------------------------------------------------------------------
 
-const state = { user: null, assets: [], checklists: [], recent: [], syncedAt: null, online: navigator.onLine, outbox: [], needLogin: false };
+const state = { user: null, assets: [], checklists: [], shipments: [], recent: [], syncedAt: null, online: navigator.onLine, outbox: [], needLogin: false };
 
 async function loadCache() {
   const snap = await db.get('snapshot');
-  if (snap) Object.assign(state, { user: snap.user, assets: snap.assets, checklists: snap.checklists, recent: snap.recent || [], syncedAt: snap.syncedAt });
+  if (snap) Object.assign(state, { user: snap.user, assets: snap.assets, checklists: snap.checklists, shipments: snap.shipments || [], recent: snap.recent || [], syncedAt: snap.syncedAt });
   state.outbox = await db.outbox();
 }
 
@@ -99,9 +99,9 @@ async function loadCache() {
 async function refresh() {
   try {
     const d = await api('/bootstrap');
-    state.user = d.user; state.assets = d.assets; state.checklists = d.checklists; state.recent = d.recent;
+    state.user = d.user; state.assets = d.assets; state.checklists = d.checklists; state.shipments = d.shipments || []; state.recent = d.recent;
     state.syncedAt = d.server_time; state.online = true; state.needLogin = false;
-    await db.set('snapshot', { user: d.user, assets: d.assets, checklists: d.checklists, recent: d.recent, syncedAt: d.server_time });
+    await db.set('snapshot', { user: d.user, assets: d.assets, checklists: d.checklists, shipments: d.shipments || [], recent: d.recent, syncedAt: d.server_time });
     return true;
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) { state.needLogin = true; throw e; }
@@ -181,6 +181,7 @@ async function render() {
     case 'inspect': return viewInspect(arg);
     case 'meter': return viewMeter(arg);
     case 'defect': return viewDefect(arg);
+    case 'delivery': return viewDelivery(arg);
     case 'scan': return viewScan();
     case 'queue': return viewQueue();
     default: return viewHome();
@@ -247,6 +248,7 @@ function viewHome() {
       <button class="btn small" data-go="#/queue">Sent${pendingCount() + failedCount() ? ` (${pendingCount() + failedCount()})` : ''}</button>
       <button class="btn small" id="logout">Sign out</button></div>
     ${statusBanner()}
+    ${deliveriesCard()}
     <button class="btn primary" data-go="#/scan">Scan asset QR code</button>
     <label for="q" class="small muted">Or search by number, name or job</label>
     <input id="q" type="search" placeholder="e.g. FA-0012 or Ford F-250" value="${esc(sessionStorage.getItem('q') || '')}" autocomplete="off">
@@ -259,6 +261,22 @@ function viewHome() {
     <p class="small muted" style="text-align:center">${state.syncedAt ? `Asset list updated ${new Date(state.syncedAt).toLocaleString()}` : ''} · ${esc(state.user.display_name)}</p>`;
   document.getElementById('q').addEventListener('input', (e) => { sessionStorage.setItem('q', e.target.value); const pos = e.target.selectionStart; viewHome(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(pos, pos); });
   document.getElementById('logout').addEventListener('click', logout);
+}
+
+/** Shipments on the road that this phone hasn't inspected yet (a send still in the outbox or just accepted counts as done). */
+function openDeliveries() {
+  const done = new Set([...state.outbox, ...state.recent].filter((r) => r.kind === 'shipment_inspection').map((r) => r.asset_number));
+  return state.shipments.filter((sh) => !done.has(sh.shipment_number));
+}
+
+function deliveriesCard() {
+  const list = openDeliveries();
+  if (!list.length) return '';
+  return `<div class="card"><h2>Deliveries to inspect</h2><ul class="list">${list.map((sh) => `
+    <li><a href="#/delivery/${encodeURIComponent(sh.shipment_number)}"><div class="grow">
+      <div><span class="num">${esc(sh.shipment_number)}</span> ${esc(sh.job_label || '')}</div>
+      <div class="small muted">${esc(sh.destination || '')}${sh.ship_date ? ` · shipped ${esc(sh.ship_date)}` : ''} · ${esc(sh.checklist.map((g) => g.type_name).join(', '))}</div></div>
+      <span class="chip warn">Inspect</span></a></li>`).join('')}</ul></div>`;
 }
 
 function viewAsset(number) {
@@ -300,7 +318,7 @@ function shrinkImage(file, maxSide = 1600, quality = 0.8) {
   });
 }
 
-function photoPicker(root) {
+function photoPicker(root, max = 10) {
   const photos = [];
   root.innerHTML = `
     <label class="btn file-btn"><input type="file" accept="image/*" capture="environment" multiple>Add photos</label>
@@ -311,7 +329,7 @@ function photoPicker(root) {
   };
   input.addEventListener('change', async () => {
     for (const f of input.files) {
-      if (photos.length >= 10) { toast('Up to 10 photos'); break; }
+      if (photos.length >= max) { toast(`Up to ${max} photos`); break; }
       try { photos.push({ filename: `photo-${photos.length + 1}.jpg`, data_b64: await shrinkImage(f) }); } catch (e) { toast(e.message); }
     }
     input.value = '';
@@ -434,6 +452,92 @@ function viewDefect(number) {
   });
 }
 
+// ----- delivery (post-delivery) inspection
+
+function deliveryItemHtml(i) {
+  const id = i.id;
+  let input;
+  if (i.input_type === 'pass_fail') {
+    input = `<div class="seg" role="radiogroup" aria-label="${esc(i.label)}">
+      <label><input type="radio" name="v${id}" value="pass"><span class="pass">Pass</span></label>
+      <label><input type="radio" name="v${id}" value="fail"><span class="fail">Fail</span></label>
+      <label><input type="radio" name="v${id}" value="na"><span class="na">N/A</span></label></div>`;
+  } else if (i.input_type === 'number') {
+    input = `<input type="number" inputmode="decimal" step="any" name="v${id}" aria-label="${esc(i.label)}">${i.unit ? `<div class="small muted">${esc(i.unit)}</div>` : ''}`;
+  } else if (i.input_type === 'choice') {
+    input = `<select name="v${id}" aria-label="${esc(i.label)}"><option value="">Select…</option>${(i.options || []).map((o) => `<option>${esc(o)}</option>`).join('')}</select>`;
+  } else {
+    input = `<input type="text" name="v${id}" maxlength="255" aria-label="${esc(i.label)}">`;
+  }
+  return `<div class="check-item" data-item="${id}">
+    <div class="lbl">${esc(i.label)}${i.required ? '' : ' <span class="muted">(optional)</span>'}</div>
+    ${input}
+    <textarea name="c${id}" placeholder="Comment${i.input_type === 'pass_fail' ? ' — what’s wrong?' : ' (optional)'}" ${i.input_type === 'pass_fail' ? 'hidden' : ''} maxlength="1000"></textarea>
+    <div class="ph" data-ph="${id}"></div></div>`;
+}
+
+function viewDelivery(number) {
+  const sh = state.shipments.find((x) => x.shipment_number === number);
+  if (!sh) { toast('That delivery is no longer open.'); return go('#/'); }
+  const items = sh.checklist.flatMap((g) => g.items);
+  $app.innerHTML = `
+    ${topbar('Delivery inspection', '#/')}${statusBanner()}
+    <p class="muted" style="margin-top:0"><strong>${esc(sh.shipment_number)}</strong> · ${esc(sh.job_label || '')}${sh.destination ? `<br>${esc(sh.destination)}` : ''}</p>
+    <form id="f" novalidate>
+      ${sh.checklist.map((g) => `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${esc(g.type_name)}</h2></div>
+        ${g.items.map(deliveryItemHtml).join('')}</div>`).join('')}
+      <div class="card"><label for="n" style="margin-top:0">Notes</label><textarea id="n" maxlength="5000"></textarea>
+        <label>Photos of the delivery</label><div id="ph"></div></div>
+      <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
+      <div class="sticky-submit"><button class="btn primary" type="submit">Submit inspection</button></div>
+    </form>`;
+  const form = document.getElementById('f');
+  const pickers = {};
+  items.forEach((i) => { pickers[i.id] = photoPicker(form.querySelector(`[data-ph="${i.id}"]`), 5); });
+  const general = photoPicker(document.getElementById('ph'), 10);
+
+  form.addEventListener('change', (e) => {
+    const m = /^v(\d+)$/.exec(e.target.name || '');
+    const item = m && items.find((i) => i.id === +m[1]);
+    if (item && item.input_type === 'pass_fail') form.elements[`c${item.id}`].hidden = e.target.value !== 'fail';
+  });
+  const answer = (i) => (i.input_type === 'pass_fail'
+    ? form.querySelector(`input[name=v${i.id}]:checked`)?.value
+    : (form.elements[`v${i.id}`].value || '').trim()) || '';
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('err');
+    for (const i of items) {
+      const v = answer(i), box = form.querySelector(`[data-item="${i.id}"]`);
+      const needsPhoto = i.photo_required && (i.input_type !== 'pass_fail' || v === 'fail');
+      const problem = (i.required && !v) ? `Answer “${i.label}”.`
+        : (needsPhoto && v && !pickers[i.id].get().length) ? `Add a photo for “${i.label}”.`
+        : (i.input_type === 'pass_fail' && v === 'fail' && !(form.elements[`c${i.id}`].value || '').trim()) ? `Say what’s wrong with “${i.label}”.` : '';
+      if (problem) { err.textContent = problem; box.scrollIntoView({ block: 'center' }); return; }
+    }
+    const photos = [];
+    const answers = [];
+    for (const i of items) {
+      const v = answer(i);
+      if (!v) continue;
+      const mine = pickers[i.id].get();
+      const idx = mine.map((p) => photos.push(p) - 1);
+      const comment = (form.elements[`c${i.id}`].value || '').trim();
+      answers.push({ item_id: i.id, value: v, ...(comment && { comment }), ...(idx.length && { photos: idx }) });
+    }
+    general.get().forEach((p) => photos.push(p));
+    if (photos.length > 30) { err.textContent = 'Too many photos (30 max). Remove a few.'; return; }
+    const notes = document.getElementById('n').value.trim();
+    const failed = answers.some((a) => a.value === 'fail');
+    document.querySelectorAll('button[type=submit]').forEach((b) => { b.disabled = true; });
+    await enqueue('shipment_inspection', sh.shipment_number, { items: answers, ...(notes && { notes }) }, photos);
+    await sleep(150);
+    toast(`${failed ? 'Inspection saved with problems. The office will be notified.' : 'Inspection saved.'}${state.online ? '' : ' It will send when you’re online.'}`);
+    go('#/');
+  });
+}
+
 async function finish(kind, asset, payload, photos, message) {
   document.querySelectorAll('button[type=submit]').forEach((b) => { b.disabled = true; });
   await enqueue(kind, asset.asset_number, payload, photos);
@@ -516,7 +620,7 @@ function loadScript(src) {
 
 // ----- queue / history
 
-const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report' };
+const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report', shipment_inspection: 'Delivery inspection' };
 
 async function viewQueue() {
   state.outbox = await db.outbox();

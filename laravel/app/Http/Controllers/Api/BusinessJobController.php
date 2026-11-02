@@ -44,6 +44,11 @@ class BusinessJobController extends Controller
             $jobs = $query
                 ->with('createdBy')
                 ->withCount(['jobReservations', 'workOrders'])
+                ->withCount([
+                    'shipments as shipments_count' => fn ($q) => $q->where('status', '!=', 'cancelled'),
+                    'shipments as shipments_transit_count' => fn ($q) => $q->where('status', 'shipped'),
+                    'shipments as shipments_issues_count' => fn ($q) => $q->where('status', 'delivered_issues'),
+                ])
                 ->orderByRaw("CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END")
                 ->orderBy('created_at', 'desc')
                 ->get()
@@ -65,6 +70,9 @@ class BusinessJobController extends Controller
                         'days_until_completion' => $job->days_until_completion,
                         'reservations_count' => $job->job_reservations_count,
                         'work_orders_count' => $job->work_orders_count,
+                        'shipments_count' => $job->shipments_count,
+                        'shipments_transit_count' => $job->shipments_transit_count,
+                        'shipments_issues_count' => $job->shipments_issues_count,
                         'created_by' => $job->createdBy ? [
                             'id' => $job->createdBy->id,
                             'name' => $job->createdBy->name,

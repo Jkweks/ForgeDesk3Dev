@@ -1,6 +1,11 @@
-# Field app ⇄ ForgeDesk sync contract (v2)
+# Field app ⇄ ForgeDesk sync contract (v3)
 
-`schema_version: 2`. Two codebases depend on this; change it deliberately.
+`schema_version: 3`. Two codebases depend on this; change it deliberately.
+
+**v3 (additive):** shipment post-delivery inspections. ForgeDesk publishes shipments awaiting a delivery check into
+`fa_shipments`; the field app submits kind `shipment_inspection` (shipment number in `fa_submissions.asset_number`).
+Existing field databases are upgraded with `field-app/db/upgrades/003-shipments.sql` (run it **before** ForgeDesk's
+next `fleet:sync-out`, which fails loudly until `fa_shipments` exists). See "Shipments (v3)" below.
 
 **v2 (additive):** ForgeDesk now also publishes crew logins into `fa_users` (see below). Payloads and the
 other tables are unchanged. Existing field databases are upgraded with `field-app/db/upgrades/002-forgedesk-users.sql`
@@ -140,3 +145,33 @@ Opens a `repair` work order flagged as coming from the field app.
 - Build the inspection form from `fa_checklists.items`.
 - Authenticate against `fa_users` only (`is_active AND password_hash <> ''`), keep your own sessions, and take `submitted_by` from the signed-in user's `display_name`, never from the request.
 - Re-check `fa_users` on every request so a revoked account stops working as soon as the sync lands.
+
+
+## Shipments (v3)
+
+```sql
+-- Published by ForgeDesk (read-only for the field app). Only shipments with status `shipped` are active;
+-- once a delivery is inspected (or cancelled) the row is flagged is_active=false, never deleted.
+CREATE TABLE fa_shipments (
+  shipment_number text PRIMARY KEY,   -- SHP-00001
+  job_label       text,
+  destination     text,
+  ship_date       date,
+  checklist       text NOT NULL,      -- JSON, post-delivery items for the shipment's load types (below)
+  is_active       boolean NOT NULL DEFAULT true,
+  synced_at       timestamp
+);
+```
+`checklist`: `[{"type_id":1,"type_name":"Glass","items":[{"id":7,"label":"...","input_type":"pass_fail|number|text|choice","unit":null,"options":null,"required":true,"photo_required":false}]}]`.
+As with fleet checklists, no `critical` flag is published; ForgeDesk decides criticality from its own definitions.
+
+**`shipment_inspection`** (`fa_submissions.asset_number` = shipment number)
+```json
+{ "notes": "optional, ≤5000", "items": [ {"item_id": 7, "value": "pass|fail|na | number | text | choice", "comment": "≤1000", "photos": [0, 2]} ] }
+```
+`photos` are zero-based indexes into this submission's `fa_photos` rows in insertion (`id`) order; max 30 photos.
+ForgeDesk validates every answer against the item definition by id, ignores anything unknown, and **does not reject for a
+missing required photo** (the phone enforces it; a lost photo must not cost us a damage report). Outcomes:
+unknown shipment => `rejected`; shipment not `shipped` (e.g. already inspected) => `needs_review`; invalid answers => `rejected`;
+otherwise the shipment becomes `delivered` (all pass) or `delivered_issues` (any failure) and an alert is raised on failures.
+`fa_shipments` grants: `field_app` SELECT; `forgedesk_sync` SELECT/INSERT/UPDATE.
