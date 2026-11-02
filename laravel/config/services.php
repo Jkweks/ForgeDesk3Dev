@@ -51,6 +51,11 @@ return [
         // every response instead of making an HTTP call.
         'fake' => env('TIGER_BRIDGE_FAKE', false),
 
+        // Where the bridge's source lives, for the admin "Download bridge" button on the
+        // CutFlow settings page. The image bakes a copy at /opt/tiger-bridge (dev compose
+        // bind-mounts the repo's tiger-bridge/ there); on a bare checkout it is ../tiger-bridge.
+        'source_dir' => env('TIGER_BRIDGE_SOURCE_DIR'),
+
         // Fake mode only: simulated TigerStop travel limits in inches, so the
         // out-of-range handling can be exercised without a bridge. Null = none.
         'fake_limit_min' => env('TIGER_BRIDGE_FAKE_LIMIT_MIN') !== null ? (float) env('TIGER_BRIDGE_FAKE_LIMIT_MIN') : null,

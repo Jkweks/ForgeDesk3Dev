@@ -45,3 +45,8 @@ laravel/.phpunit*
 
 # Scripts not needed in image
 scripts/sync-from-prod.sh
+
+# tiger-bridge: ship source only, never its installed deps, logs or live .env (holds the bridge token)
+tiger-bridge/node_modules
+tiger-bridge/logs
+tiger-bridge/.env

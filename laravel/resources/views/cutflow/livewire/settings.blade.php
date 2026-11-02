@@ -75,6 +75,14 @@
                 </div>
 
                 <button class="btn btn-accent" wire:click="save">Save Settings</button>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--surface);border-radius:10px;">
+                    <div>
+                        <div style="font-size:14px;font-weight:600;">tiger-bridge</div>
+                        <div style="font-size:12px;color:var(--muted);">Download the bridge service to install on the shop PC wired to the TigerStop and Zebra printer. Run <code>npm install</code>, copy <code>.env.example</code> to <code>.env</code> and set its token (it is shipped blank), then <code>npm start</code>. Setup steps are in the included README.</div>
+                    </div>
+                    <button class="btn btn-accent" wire:click="downloadBridge" wire:loading.attr="disabled" wire:target="downloadBridge" style="white-space:nowrap;">Download</button>
+                </div>
             @endif
         </div>
     </div>

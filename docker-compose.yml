@@ -41,6 +41,7 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./laravel:/var/www/html
+      - ./tiger-bridge:/opt/tiger-bridge:ro
       - ./php/php.ini:/usr/local/etc/php/conf.d/custom.ini
     environment:
       - DB_CONNECTION=pgsql

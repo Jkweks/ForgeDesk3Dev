@@ -4,6 +4,7 @@ namespace App\Livewire\CutFlow;
 
 use App\Models\CutFlow\CutFlowSetting;
 use App\Models\FdUser;
+use App\Services\CutFlow\BridgePackager;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Attributes\Layout;
@@ -103,6 +104,29 @@ class Settings extends Component
         ]);
 
         session()->flash('settings_status', 'Settings saved.');
+    }
+
+    /**
+     * Admin-only (the PIN unlock gates the whole page, and the action re-checks it): the
+     * tiger-bridge source as a zip, to copy onto the shop PC the TigerStop is wired into.
+     */
+    public function downloadBridge()
+    {
+        if (! $this->unlocked) {
+            return null;
+        }
+
+        $zip = BridgePackager::build();
+        if ($zip === null) {
+            session()->flash('settings_status', 'The tiger-bridge source is not available on this server.');
+
+            return null;
+        }
+
+        return response()->streamDownload(function () use ($zip) {
+            readfile($zip);
+            @unlink($zip);
+        }, 'tiger-bridge.zip', ['Content-Type' => 'application/zip']);
     }
 
     public function render()

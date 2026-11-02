@@ -30,6 +30,9 @@ RUN npm ci
 # Copy full application
 COPY laravel/ .
 
+# tiger-bridge source, packaged on demand by the CutFlow settings page's "Download bridge" button
+COPY tiger-bridge/ /opt/tiger-bridge/
+
 # Build frontend assets and clean up dev dependencies
 RUN npm run build && rm -rf node_modules
 
