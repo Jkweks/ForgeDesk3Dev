@@ -185,9 +185,8 @@
                                                         <td><span class="badge {{ $statusClass }}">{{ $part->status_label }}</span></td>
                                                         <td>
                                                             @if ($part->qty_remaining < $part->qty_original)
-                                                                <span wire:click="recutPart({{ $part->id }})"
-                                                                      wire:confirm="Flag one {{ number_format($part->dimension_inches, 3) }}&quot; piece for recut?"
-                                                                      title="Flag one piece for recut" style="cursor:pointer;font-size:14px;color:var(--accent);">&#8635;</span>
+                                                                <span wire:click="openRecut" title="Recut a piece"
+                                                                      style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:20px;color:var(--accent);">&#8635;</span>
                                                             @endif
                                                         </td>
                                                     </tr>
@@ -260,6 +259,29 @@
                                 </p>
                             </div>
                             <button class="btn btn-accent" wire:click="openStick" style="margin-top:4px;">Enter Stick Length</button>
+                        </div>
+                    @elseif ($nextProfiles->isNotEmpty())
+                        <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:12px;">
+                            <div>
+                                <div class="title">{{ $profileComplete ? 'Profile Complete' : 'Select a Profile' }}</div>
+                                <p>Tap the next profile to cut.</p>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-height:340px;overflow-y:auto;">
+                                @foreach ($nextProfiles as $p)
+                                    <div wire:click="pickProfile('{{ $p->name }}', '{{ $p->finish }}')"
+                                         style="cursor:pointer;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:6px;padding:10px;border-radius:12px;background:var(--surface);text-align:center;">
+                                        <div style="height:90px;width:100%;display:flex;align-items:center;justify-content:center;">
+                                            @if ($p->photo_url)
+                                                <img src="{{ $p->photo_url }}" alt="{{ $p->name }}" style="max-width:100%;max-height:90px;object-fit:contain;">
+                                            @else
+                                                <span style="font-size:11px;color:var(--muted);">No photo</span>
+                                            @endif
+                                        </div>
+                                        <div style="font-size:13.5px;font-weight:700;">{{ $p->finish ? "{$p->name} · {$p->finish}" : $p->name }}</div>
+                                        <div class="mono" style="font-size:12px;color:var(--muted-2);">{{ $p->qty_remaining_total }} pcs</div>
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                     @else
                         <span style="width:52px;height:52px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:24px;">&#128207;</span>
@@ -466,9 +488,9 @@
                                 {{ number_format($entry->dimension_inches, 3) }}"
                                 @if ($entry->stick_length_label) on {{ $entry->stick_length_label }}" stick @endif
                             </span>
-                            <span wire:click="reprintEntry({{ $entry->id }})" title="Reprint label" style="cursor:pointer;font-size:12px;color:var(--muted-2);">&#128424;</span>
+                            <span wire:click="reprintEntry({{ $entry->id }})" title="Reprint label" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:20px;color:var(--muted-2);">&#128424;</span>
                             @if ($entry->part_id)
-                                <span wire:click="recutEntry({{ $entry->id }})" title="Flag for recut" style="cursor:pointer;font-size:12px;color:var(--accent);">&#8635;</span>
+                                <span wire:click="recutEntry({{ $entry->id }})" title="Flag for recut" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:20px;color:var(--accent);">&#8635;</span>
                             @endif
                         </div>
                     </div>
@@ -542,8 +564,43 @@
         </div>
     @endif
 
+    {{-- Recut picker: large tap rows for every already-cut piece, including ones hidden from the cut list. --}}
+    @if ($modal === 'recut')
+        <div class="modal-overlay" wire:keydown.window.escape="closeModal">
+            <div class="modal" style="width:620px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <div class="display" style="font-size:18px;font-weight:700;">Recut a piece</div>
+                        <div style="font-size:12.5px;color:var(--muted);">Tap a piece to send one back to be cut again</div>
+                    </div>
+                    <div wire:click="closeModal" style="cursor:pointer;width:48px;height:48px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;">&#10005;</div>
+                </div>
+                <div style="max-height:480px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+                    @forelse ($recutGroups as $group)
+                        @php $first = $group->first(); @endphp
+                        <div style="font-size:12px;font-weight:700;color:var(--muted-2);padding:8px 2px 0;">{{ $first->finish ? "{$first->name} · {$first->finish}" : $first->name }}</div>
+                        @foreach ($group as $part)
+                            <div wire:click="recutPart({{ $part->id }})"
+                                 style="cursor:pointer;min-height:64px;display:flex;align-items:center;gap:14px;padding:10px 16px;border-radius:12px;background:var(--surface);">
+                                <span class="mono" style="font-size:18px;font-weight:700;min-width:96px;">{{ number_format($part->dimension_inches, 3) }}"</span>
+                                <span style="flex-grow:1;font-size:13px;color:var(--muted-2);">{{ $part->phase }} {{ $part->description }}</span>
+                                <span class="mono" style="font-size:12.5px;color:var(--muted);">{{ $part->qty_original - $part->qty_remaining }} cut / {{ $part->qty_original }}</span>
+                                <span style="min-width:48px;min-height:48px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--accent-bg);color:var(--accent);font-size:22px;">&#8635;</span>
+                            </div>
+                        @endforeach
+                    @empty
+                        <div style="font-size:13px;color:var(--muted);padding:16px 2px;">Nothing has been cut yet on the selected lists.</div>
+                    @endforelse
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                    <button class="btn btn-accent" wire:click="closeModal" style="min-height:48px;">Done</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Shared modal: operator login, manual override entry, or new stick length entry --}}
-    @if ($modal && $modal !== 'jobs')
+    @if ($modal && ! in_array($modal, ['jobs', 'recut'], true))
         <div class="modal-overlay"
              wire:keydown.window.enter="confirmModal"
              wire:keydown.window.escape="closeModal"

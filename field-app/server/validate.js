@@ -7,7 +7,9 @@
  */
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const KINDS = ['inspection', 'meter', 'defect', 'shipment_inspection'];
+const KINDS = ['inspection', 'meter', 'defect', 'shipment_inspection', 'shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship'];
+const SHIPMENT_CHECKS = ['shipment_inspection', 'shipment_precheck'];
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const RESULTS = ['pass', 'fail', 'na'];
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
 const MAX_PHOTOS = 10;
@@ -61,7 +63,34 @@ function validatePayload(kind, p) {
     return { ok: true, value: { title, severity, ...(description && { description }) } };
   }
 
-  if (kind === 'shipment_inspection') {
+  if (kind === 'shipment_create') {
+    const out = {};
+    if (p.ship_date != null && p.ship_date !== '') { if (!DATE.test(p.ship_date)) return fail('Ship date is not a valid date.'); out.ship_date = p.ship_date; }
+    for (const [k, max] of [['carrier', 255], ['destination', 255], ['notes', 5000]]) { const v = str(p[k], max); if (v) out[k] = v; }
+    const jobs = p.job_numbers == null ? [] : p.job_numbers;
+    if (!Array.isArray(jobs) || jobs.length > 50 || !jobs.every((j) => typeof j === 'string' && j.trim() && j.length <= 60)) return fail('Bad job selection.');
+    out.job_numbers = [...new Set(jobs.map((j) => j.trim()))];
+    if (!Array.isArray(p.loads) || p.loads.length < 1 || p.loads.length > 20) return fail('Pick at least one load type.');
+    const seen = new Set();
+    out.loads = [];
+    for (const l of p.loads) {
+      if (!Number.isInteger(l?.type_id) || l.type_id < 1 || seen.has(l.type_id)) return fail('Bad load type.');
+      seen.add(l.type_id);
+      if (l.piece_count != null && !(Number.isInteger(l.piece_count) && l.piece_count >= 0 && l.piece_count <= 100000)) return fail('Pieces must be a whole number.');
+      out.loads.push({ type_id: l.type_id, ...(l.piece_count != null && { piece_count: l.piece_count }) });
+    }
+    return { ok: true, value: out };
+  }
+
+  if (kind === 'shipment_ship') return { ok: true, value: {} };
+
+  if (kind === 'shipment_reschedule') {
+    if (p.ship_date == null || p.ship_date === '') return { ok: true, value: { ship_date: null } };
+    if (!DATE.test(p.ship_date)) return fail('Ship date is not a valid date.');
+    return { ok: true, value: { ship_date: p.ship_date } };
+  }
+
+  if (SHIPMENT_CHECKS.includes(kind)) {
     if (!Array.isArray(p.items) || p.items.length < 1 || p.items.length > 200) return fail('A delivery inspection needs at least one answer.');
     const items = [];
     for (const i of p.items) {
@@ -111,11 +140,12 @@ function validateSubmission(body, knownAsset) {
   if (!body || typeof body !== 'object') return fail('Bad request.');
   if (!UUID_V4.test(String(body.submission_uuid || ''))) return fail('submission_uuid must be a UUID v4.');
   if (!KINDS.includes(body.kind)) return fail('Unknown submission kind.');
-  if (!knownAsset) return fail(body.kind === 'shipment_inspection' ? 'That delivery is no longer open. Refresh your list.' : 'That asset is not available. Refresh your asset list.');
+  if (!knownAsset) return fail(body.kind === 'shipment_inspection' ? 'That delivery is no longer open. Refresh your list.'
+    : (['shipment_precheck', 'shipment_reschedule', 'shipment_ship'].includes(body.kind)) ? 'That shipment has shipped or is no longer open. Refresh your list.' : 'That asset is not available. Refresh your asset list.');
 
   const payload = validatePayload(body.kind, body.payload);
   if (!payload.ok) return payload;
-  const photos = validatePhotos(body.photos, body.kind === 'shipment_inspection' ? MAX_SHIPMENT_PHOTOS : MAX_PHOTOS);
+  const photos = validatePhotos(body.photos, SHIPMENT_CHECKS.includes(body.kind) ? MAX_SHIPMENT_PHOTOS : MAX_PHOTOS);
   if (!photos.ok) return photos;
 
   // Device clocks are unreliable; fall back to server time if unparseable. ForgeDesk also clamps.

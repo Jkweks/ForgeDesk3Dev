@@ -54,6 +54,7 @@ class FleetFieldSyncTest extends TestCase
             $t->string('kind');
             $t->string('asset_number');
             $t->string('submitted_by')->nullable();
+            $t->unsignedBigInteger('submitted_by_user_id')->nullable();
             $t->string('submitted_at')->nullable();
             $t->text('payload');
             $t->string('ingested_at')->nullable();
@@ -63,6 +64,7 @@ class FleetFieldSyncTest extends TestCase
             $t->string('login');
             $t->string('display_name');
             $t->string('password_hash');
+            $t->text('permissions')->nullable();
             $t->boolean('is_active')->default(true);
             $t->string('synced_at')->nullable();
         });
@@ -72,6 +74,23 @@ class FleetFieldSyncTest extends TestCase
             $t->string('destination')->nullable();
             $t->string('ship_date')->nullable();
             $t->text('checklist');
+            $t->string('carrier')->nullable();
+            $t->string('status')->default('shipped');
+            $t->string('loads')->nullable();
+            $t->text('pre_checklist')->nullable();
+            $t->boolean('is_active')->default(true);
+            $t->string('synced_at')->nullable();
+        });
+        $s->create('fa_jobs', function ($t) {
+            $t->string('job_number')->primary();
+            $t->string('job_name')->nullable();
+            $t->boolean('is_active')->default(true);
+            $t->string('synced_at')->nullable();
+        });
+        $s->create('fa_shipment_types', function ($t) {
+            $t->unsignedBigInteger('type_id')->primary();
+            $t->string('name');
+            $t->integer('sort_order')->default(0);
             $t->boolean('is_active')->default(true);
             $t->string('synced_at')->nullable();
         });

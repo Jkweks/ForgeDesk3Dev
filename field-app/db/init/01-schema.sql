@@ -23,7 +23,7 @@ CREATE TABLE fa_checklists (
   updated_at    timestamp
 );
 
--- Shipments awaiting their post-delivery inspection (contract v3). Published by ForgeDesk.
+-- Open shipments (contract v4: drafts, ready and shipped). Published by ForgeDesk.
 -- checklist is JSON: [{"type_id":1,"type_name":"Glass","items":[{"id":7,"label":"...","input_type":"pass_fail|number|text|choice",
 --                      "unit":null,"options":null,"required":true,"photo_required":false}]}]
 CREATE TABLE fa_shipments (
@@ -31,9 +31,30 @@ CREATE TABLE fa_shipments (
   job_label       text,
   destination     text,
   ship_date       date,
-  checklist       text NOT NULL,
+  checklist       text NOT NULL,                       -- post-delivery items (see above)
+  carrier         text,
+  status          text NOT NULL DEFAULT 'shipped',     -- draft | pre_check_done | shipped
+  loads           text,                                -- "Glass x4, Metal"
+  pre_checklist   text NOT NULL DEFAULT '[]',          -- same JSON shape, pre-shipment items
   is_active       boolean NOT NULL DEFAULT true,
   synced_at       timestamp
+);
+
+-- Jobs a new shipment can be tagged with (contract v4). Number + name only. Published by ForgeDesk.
+CREATE TABLE fa_jobs (
+  job_number text PRIMARY KEY,
+  job_name   text NOT NULL DEFAULT '',
+  is_active  boolean NOT NULL DEFAULT true,
+  synced_at  timestamp
+);
+
+-- Load types for a new shipment (contract v4). Published by ForgeDesk.
+CREATE TABLE fa_shipment_types (
+  type_id    bigint PRIMARY KEY,
+  name       text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  is_active  boolean NOT NULL DEFAULT true,
+  synced_at  timestamp
 );
 
 -- Append-only inbox written by the field app, drained by ForgeDesk.
@@ -43,6 +64,7 @@ CREATE TABLE fa_submissions (
   kind            text NOT NULL,
   asset_number    text NOT NULL,
   submitted_by    text,
+  submitted_by_user_id bigint,        -- fa_users.forgedesk_user_id, set by the server from the session (contract v4)
   submitted_at    timestamp,
   payload         text NOT NULL,
   ingested_at     timestamp
@@ -68,6 +90,7 @@ CREATE TABLE fa_users (
   login             text NOT NULL,              -- ForgeDesk email, lowercased
   display_name      text NOT NULL,              -- shown in ForgeDesk as submitted_by
   password_hash     text NOT NULL DEFAULT '',
+  permissions       text NOT NULL DEFAULT '[]', -- JSON list of the shipments.* permissions the user holds (contract v4); UI hint only
   is_active         boolean NOT NULL DEFAULT true,
   synced_at         timestamp
 );

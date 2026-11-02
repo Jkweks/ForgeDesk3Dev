@@ -175,3 +175,27 @@ missing required photo** (the phone enforces it; a lost photo must not cost us a
 unknown shipment => `rejected`; shipment not `shipped` (e.g. already inspected) => `needs_review`; invalid answers => `rejected`;
 otherwise the shipment becomes `delivered` (all pass) or `delivered_issues` (any failure) and an alert is raised on failures.
 `fa_shipments` grants: `field_app` SELECT; `forgedesk_sync` SELECT/INSERT/UPDATE.
+
+
+## Shipping queue, pre-checks and new shipments (v4)
+
+Upgrade an existing field DB with `field-app/db/upgrades/004-shipping-queue.sql` **before** ForgeDesk publishes (sync-out fails loudly until it exists).
+
+**Published by ForgeDesk (read-only for the field app)**
+- `fa_shipments` now holds every *open* shipment (`status` = `draft` | `pre_check_done` | `shipped`), not only shipped ones; delivered and cancelled are flagged `is_active=false`, never deleted. New columns: `status`, `carrier`, `loads` (text such as "Glass x4, Metal"), `pre_checklist` (same JSON shape as `checklist`, pre-shipment items). `checklist` stays the post-delivery list. No `critical` flag in either.
+- `fa_jobs(job_number PK, job_name, is_active, synced_at)`: jobs not completed/cancelled. Number and name only; nothing else about a job leaves ForgeDesk.
+- `fa_shipment_types(type_id PK, name, sort_order, is_active, synced_at)`.
+- `fa_users.permissions`: JSON list limited to `shipments.view|manage|inspect`. A UI hint only; ForgeDesk re-checks on ingest.
+- `fa_submissions.submitted_by_user_id` is set by the field server from the session (never from the request body).
+
+**New submission kinds** (`fa_submissions.kind`, all ≤ 20 chars)
+| kind | `asset_number` | payload | needs (checked by ForgeDesk against `submitted_by_user_id`) |
+|---|---|---|---|
+| `shipment_precheck` | shipment number | same as `shipment_inspection`, answers keyed by `pre_checklist` item ids | `shipments.inspect` |
+| `shipment_create` | `NEW-xxxxxx` (client reference) | `{"job_numbers":["A-1"],"ship_date":"YYYY-MM-DD","carrier":"","destination":"","notes":"","loads":[{"type_id":1,"piece_count":4}]}` | `shipments.manage` |
+| `shipment_reschedule` | shipment number | `{"ship_date":"YYYY-MM-DD"|null}` | `shipments.manage` |
+| `shipment_ship` | shipment number | `{}` | `shipments.manage` |
+
+Outcomes: a submitter without the permission (or with no `submitted_by_user_id`, or no longer allowed in) => `rejected`. `shipment_precheck` follows the web rules (records a `pre` inspection; passing moves `draft` to `pre_check_done`; a critical failure alerts). `shipment_create` makes a `draft` shipment numbered by ForgeDesk; job numbers that no longer match are noted on the shipment, not guessed; an unknown/inactive load type => `rejected`. `shipment_precheck` / `shipment_reschedule` on a shipment that is no longer `draft`/`pre_check_done` => `needs_review`. The field server also refuses these kinds for shipments not currently published in the right status.
+
+`shipment_ship` = the web "Mark shipped": only from `pre_check_done` (otherwise `needs_review`); sets `shipped`, stamps `shipped_at`, and defaults `ship_date` to today. The field server accepts it only for shipments currently published as `pre_check_done`, and accepts a `shipment_inspection` for a `pre_check_done` shipment while a `shipment_ship` for it is still in the inbox.

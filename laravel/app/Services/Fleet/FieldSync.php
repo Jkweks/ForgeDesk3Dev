@@ -2,6 +2,7 @@
 
 namespace App\Services\Fleet;
 
+use App\Models\BusinessJob;
 use App\Models\FieldAsset;
 use App\Models\FieldAssetDocument;
 use App\Models\FieldAssetInspection;
@@ -9,6 +10,7 @@ use App\Models\FieldAssetType;
 use App\Models\FieldAssetWorkOrder;
 use App\Models\FieldSyncLog;
 use App\Models\Shipment;
+use App\Models\ShipmentType;
 use App\Models\User;
 use App\Services\ImageSanitizer;
 use App\Services\Shipping\ShipmentInspectionService;
@@ -34,6 +36,8 @@ class FieldSync
     public const CACHE_LAST_OUT = 'fleet:sync:last_out';
 
     public const CACHE_LAST_IN = 'fleet:sync:last_in';
+
+    private const SHIPMENT_PERMISSIONS = ['shipments.view', 'shipments.manage', 'shipments.inspect'];
 
     private const PHOTO_MIMES = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
 
@@ -70,7 +74,7 @@ class FieldSync
      * Publish the minimal snapshot the crews need. Deliberately excludes costs, purchase
      * info, VIN/plate, documents and notes.
      *
-     * @return array{assets: int, checklists: int, users: int, shipments: int}
+     * @return array{assets: int, checklists: int, users: int, shipments: int, jobs: int, shipment_types: int}
      */
     public function publish(): array
     {
@@ -113,26 +117,32 @@ class FieldSync
         // loudly here instead of silently leaving crews unable to sign in.
         $users = $this->publishUsers($remote);
         $shipments = $this->publishShipments($remote);
+        $jobs = $this->publishJobs($remote);
+        $types = $this->publishShipmentTypes($remote);
 
         Cache::forever(self::CACHE_LAST_OUT, now()->toIso8601String());
 
-        return ['assets' => count($rows), 'checklists' => count($checklists), 'users' => $users, 'shipments' => $shipments];
+        return ['assets' => count($rows), 'checklists' => count($checklists), 'users' => $users, 'shipments' => $shipments, 'jobs' => $jobs, 'shipment_types' => $types];
     }
 
     /**
-     * Shipments awaiting their post-delivery inspection (contract v3). Each carries the post checklist
-     * resolved for its load types (item ids included; `critical` is deliberately not published).
-     * Shipments that are no longer awaiting a check are hidden, never deleted.
+     * Open shipments (contract v4): drafts and ready-to-ship ones for the phone's queue and pre-check, shipped
+     * ones for the delivery check. Each carries both checklists resolved for its load types (item ids included;
+     * `critical` is deliberately not published). Shipments that are delivered or cancelled are hidden, never deleted.
      */
     private function publishShipments(Connection $remote): int
     {
         $now = now()->toDateTimeString();
-        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads'])->awaitingPostCheck()->get()
+        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name'])->whereIn('status', Shipment::OPEN_STATUSES)->get()
             ->map(fn (Shipment $s) => [
                 'shipment_number' => $s->shipment_number,
                 'job_label' => $s->jobLabel(),
                 'destination' => $s->destination,
+                'carrier' => $s->carrier,
                 'ship_date' => $s->ship_date?->format('Y-m-d'),
+                'status' => $s->status,
+                'loads' => $s->loads->map(fn ($l) => $l->type->name.($l->piece_count ? ' x'.$l->piece_count : ''))->implode(', '),
+                'pre_checklist' => json_encode($this->shipments->checklist($s, 'pre')),
                 'checklist' => json_encode($this->shipments->checklist($s, 'post')),
                 'is_active' => true,
                 'synced_at' => $now,
@@ -141,9 +151,45 @@ class FieldSync
         $remote->transaction(function () use ($remote, $rows) {
             foreach (array_chunk($rows, 200) as $chunk) {
                 $remote->table('fa_shipments')->upsert($chunk, ['shipment_number'],
-                    ['job_label', 'destination', 'ship_date', 'checklist', 'is_active', 'synced_at']);
+                    ['job_label', 'destination', 'carrier', 'ship_date', 'status', 'loads', 'pre_checklist', 'checklist', 'is_active', 'synced_at']);
             }
             $remote->table('fa_shipments')->whereNotIn('shipment_number', array_column($rows, 'shipment_number'))->update(['is_active' => false]);
+        });
+
+        return count($rows);
+    }
+
+    /** Job number + name of jobs still in play, so the phone can tag a new shipment. Nothing else about a job leaves. */
+    private function publishJobs(Connection $remote): int
+    {
+        $now = now()->toDateTimeString();
+        $rows = BusinessJob::whereNotIn('status', ['completed', 'cancelled'])->orderByDesc('id')->limit(1000)
+            ->get(['job_number', 'job_name'])->filter(fn ($j) => $j->job_number)
+            ->map(fn ($j) => ['job_number' => Str::limit($j->job_number, 60, ''), 'job_name' => Str::limit((string) $j->job_name, 150, ''), 'is_active' => true, 'synced_at' => $now])
+            ->unique('job_number')->values()->all();
+
+        $remote->transaction(function () use ($remote, $rows) {
+            foreach (array_chunk($rows, 200) as $chunk) {
+                $remote->table('fa_jobs')->upsert($chunk, ['job_number'], ['job_name', 'is_active', 'synced_at']);
+            }
+            $remote->table('fa_jobs')->whereNotIn('job_number', array_column($rows, 'job_number'))->update(['is_active' => false]);
+        });
+
+        return count($rows);
+    }
+
+    private function publishShipmentTypes(Connection $remote): int
+    {
+        $now = now()->toDateTimeString();
+        $rows = ShipmentType::orderBy('sort_order')->orderBy('name')->get()->map(fn ($t) => [
+            'type_id' => $t->id, 'name' => $t->name, 'sort_order' => $t->sort_order, 'is_active' => (bool) $t->is_active, 'synced_at' => $now,
+        ])->all();
+
+        $remote->transaction(function () use ($remote, $rows) {
+            foreach (array_chunk($rows, 200) as $chunk) {
+                $remote->table('fa_shipment_types')->upsert($chunk, ['type_id'], ['name', 'sort_order', 'is_active', 'synced_at']);
+            }
+            $remote->table('fa_shipment_types')->whereNotIn('type_id', array_column($rows, 'type_id'))->update(['is_active' => false]);
         });
 
         return count($rows);
@@ -168,6 +214,8 @@ class FieldSync
                 'login' => mb_strtolower(trim($u->email)),
                 'display_name' => Str::limit($u->full_name ?: $u->name, 100, ''),
                 'password_hash' => $canSignIn ? $u->password : '',
+                // Only the shipment permissions are published, to hide buttons on the phone. ForgeDesk re-checks them on ingest.
+                'permissions' => json_encode($canSignIn ? array_values(array_filter(self::SHIPMENT_PERMISSIONS, fn ($p) => $u->hasPermission($p))) : []),
                 'is_active' => (bool) $canSignIn,
                 'synced_at' => $now,
             ];
@@ -175,7 +223,7 @@ class FieldSync
 
         $remote->transaction(function () use ($remote, $rows) {
             foreach (array_chunk($rows, 200) as $chunk) {
-                $remote->table('fa_users')->upsert($chunk, ['forgedesk_user_id'], ['login', 'display_name', 'password_hash', 'is_active', 'synced_at']);
+                $remote->table('fa_users')->upsert($chunk, ['forgedesk_user_id'], ['login', 'display_name', 'password_hash', 'permissions', 'is_active', 'synced_at']);
             }
             // Revoked or deleted: keep the row (sessions/history reference it) but strip the credential.
             $remote->table('fa_users')->whereNotIn('forgedesk_user_id', array_column($rows, 'forgedesk_user_id'))
@@ -245,7 +293,7 @@ class FieldSync
         if (! is_array($payload)) {
             return ['rejected', 'Payload is not valid JSON.', null];
         }
-        if (! in_array($row->kind, ['inspection', 'meter', 'defect', 'shipment_inspection'], true)) {
+        if (! in_array($row->kind, ['inspection', 'meter', 'defect', 'shipment_inspection', 'shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship'], true)) {
             return ['rejected', 'Unknown submission kind.', null];
         }
         $by = Str::limit(trim((string) ($row->submitted_by ?? '')), 100, '') ?: 'field app';
@@ -255,6 +303,20 @@ class FieldSync
 
         if ($row->kind === 'shipment_inspection') {
             return $this->ingestShipmentInspection($row, $payload, $by, $this->deviceTime($row->submitted_at ?? null), $remote);
+        }
+        if (in_array($row->kind, ['shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship'], true)) {
+            // These change shipments, so the submitting person must hold the matching ForgeDesk permission.
+            $user = $this->submitter($row, $row->kind === 'shipment_precheck' ? 'shipments.inspect' : 'shipments.manage');
+            if (! $user) {
+                return ['rejected', 'The submitting user does not have permission for this.', null];
+            }
+
+            return match ($row->kind) {
+                'shipment_precheck' => $this->ingestShipmentInspection($row, $payload, $by, $this->deviceTime($row->submitted_at ?? null), $remote, 'pre'),
+                'shipment_create' => DB::transaction(fn () => $this->ingestShipmentCreate($row, $payload, $user)),
+                'shipment_reschedule' => $this->ingestShipmentReschedule($row, $payload),
+                'shipment_ship' => $this->ingestShipmentShip($row),
+            };
         }
 
         $asset = FieldAsset::with('type')->where('asset_number', (string) $row->asset_number)->first();
@@ -275,7 +337,7 @@ class FieldSync
     }
 
     /** The shipment number travels in fa_submissions.asset_number for this kind. */
-    private function ingestShipmentInspection(object $row, array $p, string $by, Carbon $at, Connection $remote): array
+    private function ingestShipmentInspection(object $row, array $p, string $by, Carbon $at, Connection $remote, string $phase = 'post'): array
     {
         $shipment = Shipment::where('shipment_number', (string) $row->asset_number)->first();
         if (! $shipment) {
@@ -284,8 +346,8 @@ class FieldSync
         if ($shipment->status === 'cancelled') {
             return ['rejected', 'Shipment was cancelled.', null];
         }
-        if ($shipment->status !== 'shipped') {
-            return ['needs_review', "Shipment is {$shipment->status}, not awaiting a delivery inspection.", null];
+        if ($phase === 'pre' ? ! in_array($shipment->status, ['draft', 'pre_check_done'], true) : $shipment->status !== 'shipped') {
+            return ['needs_review', "Shipment is {$shipment->status}, not awaiting a ".($phase === 'pre' ? 'pre-shipment' : 'delivery').' inspection.', null];
         }
 
         $v = Validator::make($p, [
@@ -312,7 +374,7 @@ class FieldSync
         }
 
         try {
-            $inspection = $this->shipments->record($shipment, 'post', $answers, $photos, [
+            $inspection = $this->shipments->record($shipment, $phase, $answers, $photos, [
                 'external' => $by, 'source' => 'field_app', 'at' => $at, 'notes' => $p['notes'] ?? null, 'uuid' => (string) $row->submission_uuid, 'lenient_photos' => true,
             ]);
         } catch (ValidationException $e) {
@@ -324,6 +386,85 @@ class FieldSync
         }
 
         return ['ingested', null, ['shipment_inspection', $inspection->id]];
+    }
+
+    /** The submitting person, only if they are still allowed in and hold `$permission` in ForgeDesk. */
+    private function submitter(object $row, string $permission): ?User
+    {
+        $id = (int) ($row->submitted_by_user_id ?? 0);
+        $user = $id ? User::find($id) : null;
+
+        return $user && $user->is_active && ! $user->is_disabled && $user->mobile_app_access && $user->hasPermission($permission) ? $user : null;
+    }
+
+    /** A shipment started on the phone. Job numbers that no longer match are noted on the shipment, not guessed. */
+    private function ingestShipmentCreate(object $row, array $p, User $user): array
+    {
+        $v = Validator::make($p, [
+            'ship_date' => 'nullable|date_format:Y-m-d', 'carrier' => 'nullable|string|max:255', 'destination' => 'nullable|string|max:255',
+            'notes' => 'nullable|string|max:5000', 'job_numbers' => 'nullable|array|max:50', 'job_numbers.*' => 'string|max:60',
+            'loads' => 'required|array|min:1|max:20', 'loads.*.type_id' => 'required|integer|distinct',
+            'loads.*.piece_count' => 'nullable|integer|min:0|max:100000',
+        ]);
+        if ($v->fails()) {
+            return ['rejected', $v->errors()->first(), null];
+        }
+        $typeIds = ShipmentType::where('is_active', true)->whereIn('id', array_column($p['loads'], 'type_id'))->pluck('id')->all();
+        if (count($typeIds) !== count($p['loads'])) {
+            return ['rejected', 'A load type is unknown or no longer active.', null];
+        }
+        $numbers = array_values(array_unique($p['job_numbers'] ?? []));
+        $jobs = BusinessJob::whereIn('job_number', $numbers)->get();
+        $missing = array_diff($numbers, $jobs->pluck('job_number')->all());
+        $notes = trim((string) ($p['notes'] ?? ''));
+        if ($missing) {
+            $notes = trim($notes."\nJobs from the phone not found: ".implode(', ', $missing));
+        }
+
+        $shipment = Shipment::create([
+            'shipment_number' => Shipment::nextNumber(), 'status' => 'draft', 'created_by' => $user->id,
+            'ship_date' => $p['ship_date'] ?? null, 'carrier' => $p['carrier'] ?? null, 'destination' => $p['destination'] ?? null,
+            'notes' => $notes !== '' ? Str::limit($notes, 5000, '') : null,
+        ]);
+        $shipment->jobs()->sync($jobs->pluck('id')->all());
+        foreach ($p['loads'] as $l) {
+            $shipment->loads()->create(['shipment_type_id' => (int) $l['type_id'], 'piece_count' => $l['piece_count'] ?? null]);
+        }
+
+        return ['ingested', null, ['shipment', $shipment->id]];
+    }
+
+    /** Same rule as the web "Mark shipped": only after a passing pre-check. This is what publishes it for the delivery check. */
+    private function ingestShipmentShip(object $row): array
+    {
+        $shipment = Shipment::where('shipment_number', (string) $row->asset_number)->first();
+        if (! $shipment) {
+            return ['rejected', 'Unknown shipment number.', null];
+        }
+        if ($shipment->status !== 'pre_check_done') {
+            return ['needs_review', "Shipment is {$shipment->status}, not ready to ship.", null];
+        }
+        $shipment->update(['status' => 'shipped', 'shipped_at' => now(), 'ship_date' => $shipment->ship_date ?? now()->toDateString()]);
+
+        return ['ingested', null, ['shipment', $shipment->id]];
+    }
+
+    private function ingestShipmentReschedule(object $row, array $p): array
+    {
+        $v = Validator::make($p, ['ship_date' => 'present|nullable|date_format:Y-m-d']);
+        if ($v->fails()) {
+            return ['rejected', $v->errors()->first(), null];
+        }
+        $shipment = Shipment::where('shipment_number', (string) $row->asset_number)->first();
+        if (! $shipment) {
+            return ['rejected', 'Unknown shipment number.', null];
+        }
+        if (! in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
+            return ['needs_review', "Shipment is {$shipment->status} and cannot be rescheduled.", null];
+        }
+        $shipment->update(['ship_date' => $p['ship_date']]);
+
+        return ['ingested', null, ['shipment', $shipment->id]];
     }
 
     private function ingestMeter(FieldAsset $asset, array $p, string $by, Carbon $at): array

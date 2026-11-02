@@ -16,7 +16,7 @@ GRANT USAGE ON SCHEMA public TO field_app, forgedesk_sync;
 
 -- Public-facing app: read the published data, append submissions. No UPDATE/DELETE on the
 -- inbox, so a compromised app cannot rewrite or erase what crews already sent.
-GRANT SELECT         ON fa_assets, fa_checklists, fa_shipments TO field_app;
+GRANT SELECT         ON fa_assets, fa_checklists, fa_shipments, fa_jobs, fa_shipment_types TO field_app;
 GRANT SELECT, INSERT ON fa_submissions                    TO field_app;
 GRANT INSERT         ON fa_photos                         TO field_app;
 GRANT SELECT                 ON fa_users                  TO field_app;   -- logins come from ForgeDesk
@@ -24,7 +24,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON fa_sessions       TO field_app;
 GRANT USAGE ON SEQUENCE fa_submissions_id_seq, fa_photos_id_seq TO field_app;
 
 -- ForgeDesk: publish assets, checklists and crew logins; drain the inbox. Never sees sessions.
-GRANT SELECT, INSERT, UPDATE ON fa_assets, fa_checklists, fa_users, fa_shipments TO forgedesk_sync;
+GRANT SELECT, INSERT, UPDATE ON fa_assets, fa_checklists, fa_users, fa_shipments, fa_jobs, fa_shipment_types TO forgedesk_sync;
 GRANT SELECT                 ON fa_submissions            TO forgedesk_sync;
 GRANT UPDATE (ingested_at)   ON fa_submissions            TO forgedesk_sync;
 GRANT SELECT, DELETE         ON fa_photos                 TO forgedesk_sync;

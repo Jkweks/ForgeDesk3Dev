@@ -87,21 +87,31 @@ async function api(path, { method = 'GET', body } = {}) {
 
 // ---------- state -----------------------------------------------------------------------
 
-const state = { user: null, assets: [], checklists: [], shipments: [], recent: [], syncedAt: null, online: navigator.onLine, outbox: [], needLogin: false };
+const state = { user: null, assets: [], checklists: [], shipments: [], jobs: [], types: [], recent: [], syncedAt: null, online: navigator.onLine, outbox: [], needLogin: false };
 
 async function loadCache() {
   const snap = await db.get('snapshot');
-  if (snap) Object.assign(state, { user: snap.user, assets: snap.assets, checklists: snap.checklists, shipments: snap.shipments || [], recent: snap.recent || [], syncedAt: snap.syncedAt });
+  if (snap) Object.assign(state, { user: snap.user, assets: snap.assets, checklists: snap.checklists, shipments: snap.shipments || [], jobs: snap.jobs || [], types: snap.shipment_types || [], recent: snap.recent || [], syncedAt: snap.syncedAt });
   state.outbox = await db.outbox();
 }
+
+const saveSnapshot = () => db.set('snapshot', {
+  user: state.user, assets: state.assets, checklists: state.checklists, shipments: state.shipments, jobs: state.jobs, shipment_types: state.types, recent: state.recent, syncedAt: state.syncedAt,
+});
+
+/** UI hint only: ForgeDesk re-checks permissions when the submission arrives. */
+const can = (perm) => (state.user?.permissions || []).includes(perm);
+const canInspect = () => can('shipments.inspect');
+const canManage = () => can('shipments.manage');
+const canSeeQueue = () => can('shipments.view') || canManage() || canInspect();
 
 /** Pull fresh assets/checklists. Returns false when offline; throws ApiError(401) if signed out. */
 async function refresh() {
   try {
     const d = await api('/bootstrap');
-    state.user = d.user; state.assets = d.assets; state.checklists = d.checklists; state.shipments = d.shipments || []; state.recent = d.recent;
+    state.user = d.user; state.assets = d.assets; state.checklists = d.checklists; state.shipments = d.shipments || []; state.jobs = d.jobs || []; state.types = d.shipment_types || []; state.recent = d.recent;
     state.syncedAt = d.server_time; state.online = true; state.needLogin = false;
-    await db.set('snapshot', { user: d.user, assets: d.assets, checklists: d.checklists, shipments: d.shipments || [], recent: d.recent, syncedAt: d.server_time });
+    await saveSnapshot();
     return true;
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) { state.needLogin = true; throw e; }
@@ -159,7 +169,7 @@ async function flush() {
   } finally {
     flushing = false;
     state.outbox = await db.outbox();
-    if (location.hash.startsWith('#/queue') || location.hash === '' || location.hash === '#/') render();
+    if (['#/queue', '#/pre', '#/post', '#/shipping'].some((h) => location.hash.startsWith(h)) || location.hash === '' || location.hash === '#/') render();
   }
 }
 
@@ -181,7 +191,13 @@ async function render() {
     case 'inspect': return viewInspect(arg);
     case 'meter': return viewMeter(arg);
     case 'defect': return viewDefect(arg);
-    case 'delivery': return viewDelivery(arg);
+    case 'delivery': return viewShipmentCheck(arg, 'post');
+    case 'precheck': return viewShipmentCheck(arg, 'pre');
+    case 'pre': return viewPre();
+    case 'post': return viewPost();
+    case 'shipping': return viewShipping();
+    case 'shipment': return viewShipment(arg);
+    case 'newshipment': return viewNewShipment();
     case 'scan': return viewScan();
     case 'queue': return viewQueue();
     default: return viewHome();
@@ -193,6 +209,17 @@ const findAsset = (n) => state.assets.find((a) => a.asset_number === n);
 
 function topbar(title, back) {
   return `<div class="topbar">${back ? `<button class="back" data-go="${back}" aria-label="Back">‹ Back</button>` : ''}<h1>${esc(title)}</h1></div>`;
+}
+
+/** Bottom navigation on the top-level screens. Sections the signed-in user can't use are left out. */
+function tabs(active) {
+  const items = [['fleet', '#/', 'Fleet', '🚚', 0]];
+  if (canInspect()) items.push(['pre', '#/pre', 'Pre-check', '📋', openPreChecks().length]);
+  items.push(['post', '#/post', 'Deliveries', '📦', openDeliveries().length]);
+  if (canSeeQueue()) items.push(['shipping', '#/shipping', 'Queue', '🗓️', 0]);
+  return `<nav class="tabs" aria-label="Sections">${items.map(([k, h, label, icon, n]) => `
+    <a href="${h}" data-go="${h}" class="${k === active ? 'on' : ''}" ${k === active ? 'aria-current="page"' : ''}>
+      <span class="ico" aria-hidden="true">${icon}</span><span>${label}</span>${n ? `<b class="dot">${n}</b>` : ''}</a>`).join('')}</nav>`;
 }
 
 function statusBanner() {
@@ -244,11 +271,10 @@ function viewHome() {
   const q = (sessionStorage.getItem('q') || '').toLowerCase();
   const list = state.assets.filter((a) => !q || [a.asset_number, a.name, a.type_name, a.current_job_label].some((v) => String(v || '').toLowerCase().includes(q)));
   $app.innerHTML = `
-    <div class="topbar"><h1>Assets</h1>
+    <div class="topbar"><h1>Fleet</h1>
       <button class="btn small" data-go="#/queue">Sent${pendingCount() + failedCount() ? ` (${pendingCount() + failedCount()})` : ''}</button>
       <button class="btn small" id="logout">Sign out</button></div>
     ${statusBanner()}
-    ${deliveriesCard()}
     <button class="btn primary" data-go="#/scan">Scan asset QR code</button>
     <label for="q" class="small muted">Or search by number, name or job</label>
     <input id="q" type="search" placeholder="e.g. FA-0012 or Ford F-250" value="${esc(sessionStorage.getItem('q') || '')}" autocomplete="off">
@@ -258,25 +284,81 @@ function viewHome() {
         <div class="small muted">${esc(a.type_name)}${a.current_job_label ? ` · ${esc(a.current_job_label)}` : ''}</div></div>
         ${statusChip(a.status)}</a></li>`).join('') || `<li class="item muted">${state.assets.length ? 'No matches.' : 'No assets yet. Connect once to download them.'}</li>`}
     </ul></div>
-    <p class="small muted" style="text-align:center">${state.syncedAt ? `Asset list updated ${new Date(state.syncedAt).toLocaleString()}` : ''} · ${esc(state.user.display_name)}</p>`;
+    <p class="small muted" style="text-align:center">${state.syncedAt ? `Asset list updated ${new Date(state.syncedAt).toLocaleString()}` : ''} · ${esc(state.user.display_name)}</p>${tabs('fleet')}`;
   document.getElementById('q').addEventListener('input', (e) => { sessionStorage.setItem('q', e.target.value); const pos = e.target.selectionStart; viewHome(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(pos, pos); });
   document.getElementById('logout').addEventListener('click', logout);
 }
 
-/** Shipments on the road that this phone hasn't inspected yet (a send still in the outbox or just accepted counts as done). */
+// ---------- shipping lists (queue, pre-checks, deliveries) --------------------------------
+
+const SHIP_STATUS = { draft: ['Draft', ''], pre_check_done: ['Ready', 'ok'], shipped: ['In transit', 'warn'] };
+const shipChip = (s) => { const [t, c] = SHIP_STATUS[s] || [s, '']; return `<span class="chip ${c}">${esc(t)}</span>`; };
+const pad2 = (n) => String(n).padStart(2, '0');
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const prettyDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const findShipment = (n) => state.shipments.find((x) => x.shipment_number === n);
+
+/** What this phone has already sent for a kind (still queued, or recently accepted), by shipment number. */
+const sentFor = (kind) => new Set([...state.outbox, ...state.recent].filter((r) => r.kind === kind).map((r) => r.asset_number));
+
+/** Shipments on the road that this phone hasn't inspected yet. */
 function openDeliveries() {
-  const done = new Set([...state.outbox, ...state.recent].filter((r) => r.kind === 'shipment_inspection').map((r) => r.asset_number));
-  return state.shipments.filter((sh) => !done.has(sh.shipment_number));
+  const done = sentFor('shipment_inspection');
+  return state.shipments.filter((sh) => sh.status === 'shipped' && !done.has(sh.shipment_number));
 }
 
-function deliveriesCard() {
+/** Drafts waiting for their pre-shipment check. */
+function openPreChecks() {
+  const done = sentFor('shipment_precheck');
+  return state.shipments.filter((sh) => sh.status === 'draft' && !done.has(sh.shipment_number));
+}
+
+function shipRow(sh, href, chipHtml) {
+  return `<li><a href="${href}" data-go="${href}"><div class="grow">
+    <div><span class="num">${esc(sh.shipment_number)}</span> ${esc(sh.job_label || 'No job')}</div>
+    <div class="small muted">${esc([sh.ship_date ? prettyDate(sh.ship_date) : 'No date', sh.destination, sh.loads].filter(Boolean).join(' · '))}</div></div>
+    ${chipHtml ?? shipChip(sh.status)}</a></li>`;
+}
+
+const newShipmentButton = () => (canManage() ? '<button class="btn small primary" data-go="#/newshipment">+ New</button>' : '');
+
+function viewPre() {
+  if (!canInspect()) return go('#/');
+  const list = openPreChecks();
+  $app.innerHTML = `
+    <div class="topbar"><h1>Pre-shipment checks</h1>${newShipmentButton()}</div>${statusBanner()}
+    <div class="card"><ul class="list">${list.map((sh) => shipRow(sh, `#/precheck/${encodeURIComponent(sh.shipment_number)}`, '<span class="chip warn">Check</span>')).join('')
+      || '<li class="item muted">Nothing waiting for a pre-shipment check.</li>'}</ul></div>${tabs('pre')}`;
+}
+
+function viewPost() {
   const list = openDeliveries();
-  if (!list.length) return '';
-  return `<div class="card"><h2>Deliveries to inspect</h2><ul class="list">${list.map((sh) => `
-    <li><a href="#/delivery/${encodeURIComponent(sh.shipment_number)}"><div class="grow">
-      <div><span class="num">${esc(sh.shipment_number)}</span> ${esc(sh.job_label || '')}</div>
-      <div class="small muted">${esc(sh.destination || '')}${sh.ship_date ? ` · shipped ${esc(sh.ship_date)}` : ''} · ${esc(sh.checklist.map((g) => g.type_name).join(', '))}</div></div>
-      <span class="chip warn">Inspect</span></a></li>`).join('')}</ul></div>`;
+  $app.innerHTML = `
+    <div class="topbar"><h1>Deliveries to inspect</h1></div>${statusBanner()}
+    <div class="card"><ul class="list">${list.map((sh) => shipRow(sh, `#/delivery/${encodeURIComponent(sh.shipment_number)}`, '<span class="chip warn">Inspect</span>')).join('')
+      || '<li class="item muted">No deliveries waiting for inspection.</li>'}</ul></div>${tabs('post')}`;
+}
+
+function viewShipping() {
+  if (!canSeeQueue()) return go('#/');
+  const today = todayStr();
+  const late = [], unscheduled = [], byDate = new Map();
+  for (const sh of state.shipments) {
+    if (!sh.ship_date) unscheduled.push(sh);
+    else if (sh.ship_date < today && sh.status !== 'shipped') late.push(sh);
+    else { if (!byDate.has(sh.ship_date)) byDate.set(sh.ship_date, []); byDate.get(sh.ship_date).push(sh); }
+  }
+  const section = (title, list, cls = '') => (list.length ? `<div class="card"><h2 class="${cls}">${esc(title)}</h2><ul class="list">${list.map((sh) => shipRow(sh, `#/shipment/${encodeURIComponent(sh.shipment_number)}`)).join('')}</ul></div>` : '');
+  const unsent = state.outbox.filter((r) => r.kind === 'shipment_create');
+  $app.innerHTML = `
+    <div class="topbar"><h1>Shipping queue</h1>${newShipmentButton()}</div>${statusBanner()}
+    ${unsent.length ? `<div class="card"><h2>Waiting to send</h2><ul class="list">${unsent.map((r) => `<li><div class="item"><div class="grow"><strong>New shipment</strong>
+      <div class="small muted">${esc([r.payload.destination, r.payload.job_numbers?.join(', ')].filter(Boolean).join(' · ') || 'No details')}</div></div><span class="chip warn">Waiting</span></div></li>`).join('')}</ul></div>` : ''}
+    ${section('Late', late, 'late')}
+    ${[...byDate.keys()].sort().map((d) => section(d === today ? `Today · ${prettyDate(d)}` : prettyDate(d), byDate.get(d))).join('')}
+    ${section('Not scheduled', unscheduled)}
+    ${state.shipments.length ? '' : '<div class="card"><p class="muted" style="margin:0">No open shipments.</p></div>'}
+    ${tabs('shipping')}`;
 }
 
 function viewAsset(number) {
@@ -452,7 +534,7 @@ function viewDefect(number) {
   });
 }
 
-// ----- delivery (post-delivery) inspection
+// ----- shipment checks (pre-shipment and post-delivery share one form)
 
 function deliveryItemHtml(i) {
   const id = i.id;
@@ -478,20 +560,26 @@ function deliveryItemHtml(i) {
     <div class="ph" data-ph="${id}"></div></div>`;
 }
 
-function viewDelivery(number) {
-  const sh = state.shipments.find((x) => x.shipment_number === number);
-  if (!sh) { toast('That delivery is no longer open.'); return go('#/'); }
-  const items = sh.checklist.flatMap((g) => g.items);
+/** phase 'post' = delivery inspection (shipped shipments); 'pre' = pre-shipment check (drafts). */
+function viewShipmentCheck(number, phase) {
+  const pre = phase === 'pre';
+  const sh = findShipment(number);
+  const back = pre ? '#/pre' : '#/post';
+  if (!sh || (pre ? !['draft', 'pre_check_done'].includes(sh.status) : sh.status !== 'shipped')) { toast(pre ? 'That shipment is no longer open for a pre-check.' : 'That delivery is no longer open.'); return go(back); }
+  if (pre && !canInspect()) { toast('You don’t have access to pre-shipment checks.'); return go('#/'); }
+  const groups = (pre ? sh.pre_checklist : sh.checklist) || [];
+  const items = groups.flatMap((g) => g.items);
+  if (!items.length) { toast('This shipment has no checklist for that step.'); return go(back); }
   $app.innerHTML = `
-    ${topbar('Delivery inspection', '#/')}${statusBanner()}
+    ${topbar(pre ? 'Pre-shipment check' : 'Delivery inspection', back)}${statusBanner()}
     <p class="muted" style="margin-top:0"><strong>${esc(sh.shipment_number)}</strong> · ${esc(sh.job_label || '')}${sh.destination ? `<br>${esc(sh.destination)}` : ''}</p>
     <form id="f" novalidate>
-      ${sh.checklist.map((g) => `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${esc(g.type_name)}</h2></div>
+      ${groups.map((g) => `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${esc(g.type_name)}</h2></div>
         ${g.items.map(deliveryItemHtml).join('')}</div>`).join('')}
       <div class="card"><label for="n" style="margin-top:0">Notes</label><textarea id="n" maxlength="5000"></textarea>
-        <label>Photos of the delivery</label><div id="ph"></div></div>
+        <label>${pre ? 'Photos of the load' : 'Photos of the delivery'}</label><div id="ph"></div></div>
       <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
-      <div class="sticky-submit"><button class="btn primary" type="submit">Submit inspection</button></div>
+      <div class="sticky-submit"><button class="btn primary" type="submit">${pre ? 'Submit pre-check' : 'Submit inspection'}</button></div>
     </form>`;
   const form = document.getElementById('f');
   const pickers = {};
@@ -534,10 +622,132 @@ function viewDelivery(number) {
     const notes = document.getElementById('n').value.trim();
     const failed = answers.some((a) => a.value === 'fail');
     document.querySelectorAll('button[type=submit]').forEach((b) => { b.disabled = true; });
-    await enqueue('shipment_inspection', sh.shipment_number, { items: answers, ...(notes && { notes }) }, photos);
+    await enqueue(pre ? 'shipment_precheck' : 'shipment_inspection', sh.shipment_number, { items: answers, ...(notes && { notes }) }, photos);
     await sleep(150);
-    toast(`${failed ? 'Inspection saved with problems. The office will be notified.' : 'Inspection saved.'}${state.online ? '' : ' It will send when you’re online.'}`);
-    go('#/');
+    toast(`${failed ? `${pre ? 'Pre-check' : 'Inspection'} saved with problems. The office will be notified.` : `${pre ? 'Pre-check' : 'Inspection'} saved.`}${state.online ? '' : ' It will send when you’re online.'}`);
+    go(back);
+  });
+}
+
+// ----- one shipment: details, start its check, reschedule
+
+function viewShipment(number) {
+  const sh = findShipment(number);
+  if (!sh) { toast('That shipment is no longer open.'); return go('#/shipping'); }
+  const enc = encodeURIComponent(sh.shipment_number);
+  const preDone = sentFor('shipment_precheck').has(sh.shipment_number), postDone = sentFor('shipment_inspection').has(sh.shipment_number);
+  const movable = ['draft', 'pre_check_done'].includes(sh.status);
+  const shipSent = sentFor('shipment_ship').has(sh.shipment_number);
+  $app.innerHTML = `
+    ${topbar(sh.shipment_number, '#/shipping')}${statusBanner()}
+    <div class="card">
+      <div class="row"><div class="grow"><strong>${esc(sh.job_label || 'No job')}</strong><div class="muted">${esc(sh.loads || '')}</div></div>${shipChip(sh.status)}</div>
+      <p class="small" style="margin:10px 0 0">Ship date: <strong>${sh.ship_date ? esc(prettyDate(sh.ship_date)) : 'not scheduled'}</strong></p>
+      ${sh.destination ? `<p class="small" style="margin:6px 0 0">Destination: ${esc(sh.destination)}</p>` : ''}
+      ${sh.carrier ? `<p class="small" style="margin:6px 0 0">Carrier / driver: ${esc(sh.carrier)}</p>` : ''}
+    </div>
+    <div class="actions">
+      ${movable && canInspect() && !preDone && sh.pre_checklist?.length ? `<button class="btn primary" data-go="#/precheck/${enc}">Start pre-shipment check</button>` : ''}
+      ${movable && preDone ? '<div class="banner ok">Pre-shipment check sent.</div>' : ''}
+      ${sh.status === 'pre_check_done' && !shipSent ? `<div class="banner ok">Pre-check passed. Ready to go.</div>${canManage() ? '<button class="btn primary" id="ship">Mark shipped</button>' : ''}` : ''}
+      ${sh.status === 'pre_check_done' && shipSent ? '<div class="banner ok">Marked shipped. Waiting for the office system to confirm.</div>' : ''}
+      ${sh.status === 'shipped' && !postDone ? `<button class="btn primary" data-go="#/delivery/${enc}">Start delivery inspection</button>` : ''}
+      ${sh.status === 'shipped' && postDone ? '<div class="banner ok">Delivery inspection sent.</div>' : ''}
+    </div>
+    ${movable && canManage() ? `<form id="resched" class="card" style="margin-top:12px"><h2>Reschedule</h2>
+      <label for="d" style="margin-top:0">Ship date</label><input id="d" type="date" value="${esc(sh.ship_date || '')}">
+      <button class="btn" style="margin-top:10px" type="submit">Save date</button></form>` : ''}`;
+  document.getElementById('ship')?.addEventListener('click', async (e) => {
+    if (!confirm(`Mark ${sh.shipment_number} as shipped? It will then show up under Deliveries.`)) return;
+    e.target.disabled = true;
+    await enqueue('shipment_ship', sh.shipment_number, {}, []);
+    sh.status = 'shipped';               // show it right away; the next sync confirms it
+    sh.ship_date = sh.ship_date || todayStr();
+    await saveSnapshot();
+    toast(`Marked shipped.${state.online ? '' : ' It will send when you’re online.'}`);
+    go('#/shipping');
+  });
+  document.getElementById('resched')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const date = document.getElementById('d').value || null;
+    e.target.querySelector('button').disabled = true;
+    await enqueue('shipment_reschedule', sh.shipment_number, { ship_date: date }, []);
+    sh.ship_date = date;                 // show it right away; the next sync confirms it
+    await saveSnapshot();
+    toast(`Date saved.${state.online ? '' : ' It will send when you’re online.'}`);
+    go('#/shipping');
+  });
+}
+
+// ----- new shipment
+
+function viewNewShipment() {
+  if (!canManage()) { toast('You don’t have access to create shipments.'); return go('#/'); }
+  const picked = new Map();
+  const types = state.types;
+  $app.innerHTML = `
+    ${topbar('New shipment', '#/shipping')}${statusBanner()}
+    <form id="f" novalidate>
+      <div class="card"><h2>Jobs</h2>
+        <div id="chips" class="chips"></div>
+        <input id="js" type="search" placeholder="Search jobs by number or name" autocomplete="off">
+        <ul class="list pick" id="jl"></ul></div>
+      <div class="card"><h2>Details</h2>
+        <label for="sd" style="margin-top:0">Ship date</label><input id="sd" type="date">
+        <label for="ca">Carrier / driver</label><input id="ca" maxlength="255" autocomplete="off">
+        <label for="de">Destination</label><input id="de" maxlength="255" autocomplete="off">
+        <label for="no">Notes</label><textarea id="no" maxlength="5000"></textarea></div>
+      <div class="card"><h2>What is on this shipment?</h2>
+        ${types.map((t) => `<div class="loadrow"><label class="chk"><input type="checkbox" data-type="${t.type_id}"> ${esc(t.name)}</label>
+          <input type="number" inputmode="numeric" min="0" placeholder="Pieces" data-pieces="${t.type_id}" aria-label="Pieces of ${esc(t.name)}"></div>`).join('')
+          || '<p class="muted small" style="margin:0">No load types yet. Connect once to download them.</p>'}</div>
+      <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
+      <div class="sticky-submit"><button class="btn primary" type="submit">Create shipment</button></div>
+    </form>`;
+  const form = document.getElementById('f');
+  const drawChips = () => {
+    document.getElementById('chips').innerHTML = picked.size
+      ? [...picked.values()].map((j) => `<span class="chip">${esc(j.job_number)}<button type="button" data-rm="${esc(j.job_number)}" aria-label="Remove ${esc(j.job_number)}">×</button></span>`).join('')
+      : '<span class="small muted">No jobs selected (optional).</span>';
+  };
+  const drawJobs = () => {
+    const q = document.getElementById('js').value.trim().toLowerCase();
+    const hits = state.jobs.filter((j) => !q || `${j.job_number} ${j.job_name}`.toLowerCase().includes(q)).slice(0, 25);
+    document.getElementById('jl').innerHTML = hits.map((j) => `<li><label class="chk"><input type="checkbox" data-job="${esc(j.job_number)}" ${picked.has(j.job_number) ? 'checked' : ''}>
+      <span><strong>${esc(j.job_number)}</strong> ${esc(j.job_name)}</span></label></li>`).join('') || `<li class="item muted">${state.jobs.length ? 'No matches.' : 'No jobs downloaded yet.'}</li>`;
+  };
+  drawChips(); drawJobs();
+  document.getElementById('js').addEventListener('input', drawJobs);
+  form.addEventListener('change', (e) => {
+    const n = e.target.dataset?.job;
+    if (n == null) return;
+    if (e.target.checked) picked.set(n, state.jobs.find((j) => j.job_number === n)); else picked.delete(n);
+    drawChips();
+  });
+  form.addEventListener('click', (e) => {
+    const n = e.target.dataset?.rm;
+    if (n == null) return;
+    picked.delete(n); drawChips(); drawJobs();
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('err');
+    const loads = [...form.querySelectorAll('[data-type]:checked')].map((c) => {
+      const raw = form.querySelector(`[data-pieces="${c.dataset.type}"]`).value;
+      return { type_id: +c.dataset.type, ...(raw !== '' && { piece_count: Math.max(0, parseInt(raw, 10) || 0) }) };
+    });
+    if (!loads.length) { err.textContent = 'Pick at least one thing that is on the shipment.'; return; }
+    const val = (id) => document.getElementById(id).value.trim();
+    const payload = {
+      job_numbers: [...picked.keys()], loads,
+      ...(val('sd') && { ship_date: val('sd') }), ...(val('ca') && { carrier: val('ca') }),
+      ...(val('de') && { destination: val('de') }), ...(val('no') && { notes: val('no') }),
+    };
+    form.querySelector('[type=submit]').disabled = true;
+    await enqueue('shipment_create', `NEW-${uuidv4().slice(0, 6).toUpperCase()}`, payload, []);
+    await sleep(150);
+    toast(`Shipment saved.${state.online ? ' The office will see it shortly.' : ' It will send when you’re online.'}`);
+    go('#/shipping');
   });
 }
 
@@ -623,7 +833,7 @@ function loadScript(src) {
 
 // ----- queue / history
 
-const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report', shipment_inspection: 'Delivery inspection' };
+const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report', shipment_inspection: 'Delivery inspection', shipment_precheck: 'Pre-shipment check', shipment_create: 'New shipment', shipment_reschedule: 'Reschedule', shipment_ship: 'Marked shipped' };
 
 async function viewQueue() {
   state.outbox = await db.outbox();

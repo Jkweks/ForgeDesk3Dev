@@ -11,6 +11,9 @@ class Shipment extends Model
 
     public const STATUSES = ['draft', 'pre_check_done', 'shipped', 'delivered', 'delivered_issues', 'cancelled'];
 
+    /** Not yet delivered or cancelled: what the field app is shown. */
+    public const OPEN_STATUSES = ['draft', 'pre_check_done', 'shipped'];
+
     protected $fillable = [
         'shipment_number', 'status', 'ship_date', 'destination', 'carrier', 'notes',
         'created_by', 'shipped_at',

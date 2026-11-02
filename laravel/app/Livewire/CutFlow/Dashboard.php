@@ -39,6 +39,9 @@ class Dashboard extends Component
 
     public ?int $activeStickId = null;
 
+    // true right after a profile's last piece is cut, so the idle panel can say so
+    public bool $profileComplete = false;
+
     // which part_id+finish list the sidebar/stick-entry flow is scoped to
     public ?string $activeProfileName = null;
 
@@ -324,6 +327,7 @@ class Dashboard extends Component
 
         $this->activeProfileName = $name;
         $this->activeProfileFinish = $finish;
+        $this->profileComplete = false;
     }
 
     // --- operator crew (multiple signed-in operators) ----------------------
@@ -1063,7 +1067,38 @@ class Dashboard extends Component
         if ($pool->isNotEmpty()) {
             $this->modal = 'stick';
             $this->keypadValue = '';
+
+            return;
         }
+
+        // Nothing left to cut in this profile: don't ask for another stick of it. Clear the profile; the
+        // main panel then offers the remaining profiles (with photos) to pick from.
+        $this->activeProfileName = null;
+        $this->activeProfileFinish = null;
+        $this->profileComplete = true;
+    }
+
+    /** Picks the next profile from the profile tiles shown on the main panel. */
+    public function pickProfile(string $name, ?string $finish): void
+    {
+        if (! $this->signedIn() || $this->activeStickId) {
+            return;
+        }
+
+        $this->activeProfileName = $name;
+        $this->activeProfileFinish = $finish ?: null;
+        $this->profileComplete = false;
+    }
+
+    /** Opens the recut picker: every already-cut piece on the selected lists, however far down or hidden. */
+    public function openRecut(): void
+    {
+        if (! $this->signedIn() || empty($this->activeJobIds)) {
+            return;
+        }
+
+        $this->modal = 'recut';
+        $this->keypadValue = '';
     }
 
     protected function recordPieceCut(StickItem $item, StickSession $stickSession, bool $manual = false): void
@@ -1421,6 +1456,12 @@ class Dashboard extends Component
 
         $part->increment('qty_remaining');
 
+        // With no stick loaded, point the working profile at the recut piece so the next stick entry picks it up.
+        if (! $this->activeStickId) {
+            $this->activeProfileName = $part->name;
+            $this->activeProfileFinish = $part->finish;
+        }
+
         CutLogEntry::create([
             'uuid' => (string) Str::uuid(),
             'part_id' => $part->id,
@@ -1529,6 +1570,16 @@ class Dashboard extends Component
 
         $currentItem = $signedIn ? $this->currentItem() : null;
 
+        $recutGroups = collect();
+        if ($signedIn && $this->modal === 'recut') {
+            $recutGroups = Part::whereIn('cut_job_id', $this->activeJobIds)
+                ->whereColumn('qty_remaining', '<', 'qty_original')
+                ->orderBy('name')->orderBy('finish')->orderByDesc('dimension_inches')
+                ->get()
+                ->groupBy(fn ($p) => $p->name.'|'.$p->finish)
+                ->sortBy(fn ($g, $k) => ($g->first()->name === $this->activeProfileName && $g->first()->finish === $this->activeProfileFinish) ? 0 : 1);
+        }
+
         return view('cutflow.livewire.dashboard', [
             'signedIn' => $signedIn,
             'tigerPollIntervalMs' => $this->bridgePollIntervalMs(),
@@ -1544,6 +1595,10 @@ class Dashboard extends Component
             'profilePhotoUrl' => ($signedIn && $this->activeProfileName && ! $this->activeStickId)
                 ? Part::photoProductFor($this->activeProfileName, $this->activeProfileFinish)?->photo_url
                 : null,
+            'recutGroups' => $recutGroups,
+            'nextProfiles' => ($signedIn && ! $this->activeStickId && ! $this->activeProfileName)
+                ? $planner->activeProfiles($this->activeJobIds)->each(fn ($p) => $p->photo_url = Part::photoProductFor($p->name, $p->finish)?->photo_url)
+                : collect(),
             'currentItem' => $currentItem,
             'currentItemState' => $currentItem ? $this->currentItemState($currentItem) : null,
             'awaitingSensor' => $this->awaitingSensor(),

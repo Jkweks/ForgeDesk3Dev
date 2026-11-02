@@ -86,3 +86,31 @@ test('shipment_inspection: answers keyed by item id, photo refs bounded, up to 3
   assert.equal(validateSubmission(base({ kind: 'shipment_inspection', payload: { items: [{ item_id: 1, value: 'pass' }] }, photos: Array(31).fill({ filename: 'a.jpg', data_b64: JPEG }) }), true).ok, false);
   assert.equal(validateSubmission(base({ kind: 'shipment_inspection', payload: { items: [{ item_id: 1, value: 'pass' }] } }), false).ok, false);
 });
+
+test('shipment_create keeps known fields, dedupes jobs and needs at least one load', () => {
+  const ok = validateSubmission(base({ kind: 'shipment_create', asset_number: 'NEW-AB12CD', payload: {
+    job_numbers: ['A-1', 'A-1', ' A-2 '], ship_date: '2026-12-01', destination: 'Dock', evil: 'x',
+    loads: [{ type_id: 2, piece_count: 4 }, { type_id: 3 }],
+  } }), true);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.value.payload, { ship_date: '2026-12-01', destination: 'Dock', job_numbers: ['A-1', 'A-2'], loads: [{ type_id: 2, piece_count: 4 }, { type_id: 3 }] });
+
+  const bad = (payload) => validateSubmission(base({ kind: 'shipment_create', asset_number: 'NEW-1', payload }), true).ok;
+  assert.equal(bad({ loads: [] }), false);
+  assert.equal(bad({ loads: [{ type_id: 1 }, { type_id: 1 }] }), false);          // duplicate type
+  assert.equal(bad({ loads: [{ type_id: 1, piece_count: -3 }] }), false);
+  assert.equal(bad({ loads: [{ type_id: 1 }], ship_date: '12/01/2026' }), false);
+  assert.equal(bad({ loads: [{ type_id: 1 }], job_numbers: 'A-1' }), false);
+});
+
+test('shipment_reschedule takes a date or clears it; precheck reuses the delivery answer rules', () => {
+  const r = (payload) => validateSubmission(base({ kind: 'shipment_reschedule', asset_number: 'SHP-1', payload }), true);
+  assert.deepEqual(r({ ship_date: '2026-12-24' }).value.payload, { ship_date: '2026-12-24' });
+  assert.deepEqual(r({ ship_date: null }).value.payload, { ship_date: null });
+  assert.equal(r({ ship_date: 'soon' }).ok, false);
+
+  const pre = validateSubmission(base({ kind: 'shipment_precheck', asset_number: 'SHP-1', payload: { items: [{ item_id: 5, value: 'pass', photos: [0] }] }, photos: [{ filename: 'a.jpg', data_b64: JPEG }] }), true);
+  assert.equal(pre.ok, true);
+  assert.equal(pre.value.photos.length, 1);
+  assert.equal(validateSubmission(base({ kind: 'shipment_precheck', asset_number: 'SHP-1', payload: { items: [] } }), true).ok, false);
+});

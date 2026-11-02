@@ -53,6 +53,7 @@ class ShipmentInspectionTest extends TestCase
             $t->string('kind');
             $t->string('asset_number');
             $t->string('submitted_by')->nullable();
+            $t->unsignedBigInteger('submitted_by_user_id')->nullable();
             $t->string('submitted_at')->nullable();
             $t->text('payload');
             $t->string('ingested_at')->nullable();
@@ -62,6 +63,7 @@ class ShipmentInspectionTest extends TestCase
             $t->string('login');
             $t->string('display_name');
             $t->string('password_hash');
+            $t->text('permissions')->nullable();
             $t->boolean('is_active')->default(true);
             $t->string('synced_at')->nullable();
         });
@@ -71,6 +73,23 @@ class ShipmentInspectionTest extends TestCase
             $t->string('destination')->nullable();
             $t->string('ship_date')->nullable();
             $t->text('checklist');
+            $t->string('carrier')->nullable();
+            $t->string('status')->default('shipped');
+            $t->string('loads')->nullable();
+            $t->text('pre_checklist')->nullable();
+            $t->boolean('is_active')->default(true);
+            $t->string('synced_at')->nullable();
+        });
+        $s->create('fa_jobs', function ($t) {
+            $t->string('job_number')->primary();
+            $t->string('job_name')->nullable();
+            $t->boolean('is_active')->default(true);
+            $t->string('synced_at')->nullable();
+        });
+        $s->create('fa_shipment_types', function ($t) {
+            $t->unsignedBigInteger('type_id')->primary();
+            $t->string('name');
+            $t->integer('sort_order')->default(0);
             $t->boolean('is_active')->default(true);
             $t->string('synced_at')->nullable();
         });
@@ -234,17 +253,122 @@ class ShipmentInspectionTest extends TestCase
         $this->assertArrayNotHasKey('critical', $list[0]['items'][0]);   // criticality never leaves ForgeDesk
     }
 
-    public function test_unshipped_shipments_are_not_published_and_delivered_ones_are_hidden(): void
+    public function test_open_shipments_are_published_with_status_and_both_checklists_and_closed_ones_hidden(): void
     {
         $draft = $this->shipment('draft');
         $shipped = $this->shipment('shipped');
+        $gone = $this->shipment('cancelled');
         $this->artisan('fleet:sync-out')->assertSuccessful();
         $remote = DB::connection('fieldsync')->table('fa_shipments');
-        $this->assertSame([$shipped->shipment_number], $remote->pluck('shipment_number')->all());
+        $this->assertEqualsCanonicalizing([$draft->shipment_number, $shipped->shipment_number], $remote->pluck('shipment_number')->all());
+
+        $row = DB::connection('fieldsync')->table('fa_shipments')->where('shipment_number', $draft->shipment_number)->first();
+        $this->assertSame('draft', $row->status);
+        $this->assertNotEmpty(json_decode($row->pre_checklist, true));
+        $this->assertNotEmpty(json_decode($row->checklist, true));
+        $this->assertArrayNotHasKey('critical', json_decode($row->pre_checklist, true)[0]['items'][0]);
 
         $shipped->update(['status' => 'delivered']);
         $this->artisan('fleet:sync-out')->assertSuccessful();
-        $this->assertEquals(0, DB::connection('fieldsync')->table('fa_shipments')->value('is_active'));
+        $this->assertEquals(0, DB::connection('fieldsync')->table('fa_shipments')->where('shipment_number', $shipped->shipment_number)->value('is_active'));
+    }
+
+    public function test_jobs_types_and_user_permissions_are_published(): void
+    {
+        BusinessJob::create(['job_number' => 'A-77', 'job_name' => 'Open job', 'status' => 'active']);
+        BusinessJob::create(['job_number' => 'A-78', 'job_name' => 'Done job', 'status' => 'completed']);
+        $u = $this->as('office_staff');
+        $u->update(['mobile_app_access' => true, 'must_change_password' => false]);
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+
+        $this->assertSame(['A-77'], DB::connection('fieldsync')->table('fa_jobs')->where('is_active', 1)->pluck('job_number')->all());
+        $this->assertContains('Metal', DB::connection('fieldsync')->table('fa_shipment_types')->where('is_active', 1)->pluck('name')->all());
+        $perms = json_decode(DB::connection('fieldsync')->table('fa_users')->where('forgedesk_user_id', $u->id)->value('permissions'), true);
+        $this->assertEqualsCanonicalizing(['shipments.view', 'shipments.manage', 'shipments.inspect'], $perms);
+    }
+
+    private function phoneSubmit(string $kind, string $number, array $payload, ?int $userId): string
+    {
+        $uuid = (string) \Illuminate\Support\Str::uuid();
+        DB::connection('fieldsync')->table('fa_submissions')->insert([
+            'submission_uuid' => $uuid, 'kind' => $kind, 'asset_number' => $number, 'submitted_by' => 'Phone User',
+            'submitted_by_user_id' => $userId, 'submitted_at' => now()->toDateTimeString(), 'payload' => json_encode($payload),
+        ]);
+
+        return $uuid;
+    }
+
+    private function mobileUser(string $role): User
+    {
+        $u = $this->as($role);
+        $u->update(['mobile_app_access' => true]);
+
+        return $u->fresh();
+    }
+
+    public function test_phone_can_create_a_shipment_with_jobs_and_loads(): void
+    {
+        $u = $this->mobileUser('office_staff');
+        $j1 = BusinessJob::create(['job_number' => 'B-1', 'job_name' => 'One', 'status' => 'active']);
+        $j2 = BusinessJob::create(['job_number' => 'B-2', 'job_name' => 'Two', 'status' => 'active']);
+        $glass = ShipmentType::where('name', 'Glass')->value('id');
+
+        $uuid = $this->phoneSubmit('shipment_create', 'NEW-ABC123', [
+            'job_numbers' => ['B-1', 'B-2', 'ZZ-9'], 'ship_date' => '2026-12-01', 'destination' => 'Dock 4', 'carrier' => 'Sam',
+            'loads' => [['type_id' => $glass, 'piece_count' => 6]],
+        ], $u->id);
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+
+        $log = \App\Models\FieldSyncLog::where('submission_uuid', $uuid)->first();
+        $this->assertSame('ingested', $log->status);
+        $s = Shipment::findOrFail($log->target_id);
+        $this->assertSame('draft', $s->status);
+        $this->assertEqualsCanonicalizing([$j1->id, $j2->id], $s->jobs()->pluck('business_jobs.id')->all());
+        $this->assertSame(6, $s->loads()->first()->piece_count);
+        $this->assertSame('2026-12-01', $s->ship_date->toDateString());
+        $this->assertStringContainsString('ZZ-9', $s->notes);   // unmatched job is noted, not guessed
+        $this->assertSame($u->id, $s->created_by);
+    }
+
+    public function test_phone_actions_need_the_matching_forgedesk_permission(): void
+    {
+        $viewer = $this->mobileUser('viewer');
+        $glass = ShipmentType::where('name', 'Glass')->value('id');
+        $create = $this->phoneSubmit('shipment_create', 'NEW-X', ['loads' => [['type_id' => $glass]]], $viewer->id);
+        $noUser = $this->phoneSubmit('shipment_create', 'NEW-Y', ['loads' => [['type_id' => $glass]]], null);
+        $s = $this->shipment('draft');
+        $pre = $this->phoneSubmit('shipment_precheck', $s->shipment_number, ['items' => [['item_id' => 1, 'value' => 'pass']]], $viewer->id);
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+
+        foreach ([$create, $noUser, $pre] as $uuid) {
+            $this->assertSame('rejected', \App\Models\FieldSyncLog::where('submission_uuid', $uuid)->value('status'));
+        }
+        $this->assertSame(1, Shipment::count());   // only the helper's draft; nothing was created
+        $this->assertSame(0, $s->inspections()->count());
+    }
+
+    public function test_phone_pre_check_moves_the_shipment_and_reschedule_only_while_open(): void
+    {
+        $u = $this->mobileUser('office_staff');
+        $s = $this->shipment('draft', ['Glass']);
+        $items = collect(app(\App\Services\Shipping\ShipmentInspectionService::class)->items($s, 'pre'))
+            ->map(fn ($i) => ['item_id' => $i->id, 'value' => $i->input_type === 'number' ? '4' : ($i->input_type === 'pass_fail' ? 'pass' : 'x')])->all();
+
+        $pre = $this->phoneSubmit('shipment_precheck', $s->shipment_number, ['items' => $items], $u->id);
+        $move = $this->phoneSubmit('shipment_reschedule', $s->shipment_number, ['ship_date' => '2026-12-24'], $u->id);
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+        $this->assertSame('ingested', \App\Models\FieldSyncLog::where('submission_uuid', $pre)->value('status'));
+        $this->assertSame('ingested', \App\Models\FieldSyncLog::where('submission_uuid', $move)->value('status'));
+        $s->refresh();
+        $this->assertSame('pre_check_done', $s->status);
+        $this->assertSame('2026-12-24', $s->ship_date->toDateString());
+        $this->assertSame('pre', $s->inspections()->first()->phase);
+
+        $s->update(['status' => 'shipped']);
+        $late = $this->phoneSubmit('shipment_reschedule', $s->shipment_number, ['ship_date' => '2027-01-01'], $u->id);
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+        $this->assertSame('needs_review', \App\Models\FieldSyncLog::where('submission_uuid', $late)->value('status'));
+        $this->assertSame('2026-12-24', $s->fresh()->ship_date->toDateString());
     }
 
     private function fieldSubmit(Shipment $s, array $items, array $extra = [], ?string $uuid = null): string
@@ -486,5 +610,25 @@ class ShipmentInspectionTest extends TestCase
 
         $this->get('/api/v1/reports/export?type=shipping_summary')->assertOk();
         $this->get('/api/v1/reports/shipping-summary/pdf')->assertOk();
+    }
+
+    public function test_phone_can_mark_a_ready_shipment_shipped_but_only_with_manage_permission(): void
+    {
+        $mgr = $this->mobileUser('office_staff');
+        $ready = $this->shipment('pre_check_done');
+        $draft = $this->shipment('draft');
+        $viewer = $this->mobileUser('viewer');
+
+        $ok = $this->phoneSubmit('shipment_ship', $ready->shipment_number, [], $mgr->id);
+        $early = $this->phoneSubmit('shipment_ship', $draft->shipment_number, [], $mgr->id);
+        $denied = $this->phoneSubmit('shipment_ship', $ready->shipment_number, [], $viewer->id);
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+
+        $this->assertSame('ingested', FieldSyncLog::where('submission_uuid', $ok)->value('status'));
+        $this->assertSame('needs_review', FieldSyncLog::where('submission_uuid', $early)->value('status'));
+        $this->assertSame('rejected', FieldSyncLog::where('submission_uuid', $denied)->value('status'));
+        $this->assertSame('shipped', $ready->fresh()->status);
+        $this->assertNotNull($ready->fresh()->shipped_at);
+        $this->assertSame('draft', $draft->fresh()->status);
     }
 }

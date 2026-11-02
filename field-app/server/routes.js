@@ -8,7 +8,10 @@ const router = express.Router();
 router.use(auth.csrfGuard);
 router.use(auth.loadUser);
 
-const publicUser = (u) => ({ id: u.id, username: u.username, display_name: u.display_name });
+const SHIPMENT_PERMS = ['shipments.view', 'shipments.manage', 'shipments.inspect'];
+/** Permissions are a UI hint only; ForgeDesk re-checks them when the submission is ingested. */
+const permsOf = (u) => { try { const p = JSON.parse(u.permissions || '[]'); return Array.isArray(p) ? p.filter((x) => SHIPMENT_PERMS.includes(x)) : []; } catch { return []; } };
+const publicUser = (u) => ({ id: u.id, username: u.username, display_name: u.display_name, permissions: permsOf(u) });
 
 router.post('/login', async (req, res, next) => {
   try {
@@ -38,13 +41,16 @@ router.get('/me', auth.requireAuth, (req, res) => res.json({ user: publicUser(re
 /** Everything the phone needs to work offline: assets, checklists, and this user's recent sends. */
 router.get('/bootstrap', auth.requireAuth, async (req, res, next) => {
   try {
-    const [assets, checklists, shipments, mine] = await Promise.all([
+    const [assets, checklists, shipments, jobs, types, mine] = await Promise.all([
       query(`SELECT asset_number, name, type_name, meter_type, status, current_meter::float8 AS current_meter,
                     current_job_label, synced_at
                FROM fa_assets WHERE is_active ORDER BY asset_number`),
       query('SELECT type_name, template_name, items FROM fa_checklists ORDER BY type_name'),
-      query(`SELECT shipment_number, job_label, destination, to_char(ship_date, 'YYYY-MM-DD') AS ship_date, checklist
-               FROM fa_shipments WHERE is_active ORDER BY shipment_number`),
+      query(`SELECT shipment_number, job_label, destination, carrier, status, loads, to_char(ship_date, 'YYYY-MM-DD') AS ship_date,
+                    checklist, pre_checklist
+               FROM fa_shipments WHERE is_active ORDER BY ship_date NULLS FIRST, shipment_number`),
+      query('SELECT job_number, job_name FROM fa_jobs WHERE is_active ORDER BY job_number DESC'),
+      query('SELECT type_id, name FROM fa_shipment_types WHERE is_active ORDER BY sort_order, name'),
       recent(req.user.display_name),
     ]);
     res.json({
@@ -52,7 +58,9 @@ router.get('/bootstrap', auth.requireAuth, async (req, res, next) => {
       server_time: new Date().toISOString(),
       assets: assets.rows,
       checklists: checklists.rows.map((c) => ({ ...c, items: safeJson(c.items, []) })),
-      shipments: shipments.rows.map((r) => ({ ...r, checklist: safeJson(r.checklist, []) })),
+      shipments: shipments.rows.map((r) => ({ ...r, checklist: safeJson(r.checklist, []), pre_checklist: safeJson(r.pre_checklist, []) })),
+      jobs: jobs.rows,
+      shipment_types: types.rows,
       recent: mine,
     });
   } catch (e) { next(e); }
@@ -79,22 +87,30 @@ router.post('/submissions', auth.requireAuth, async (req, res, next) => {
   const client = await pool.connect().catch(next);
   if (!client) return;
   try {
-    // For delivery inspections asset_number carries the shipment number (contract v3).
-    const known = await client.query(
-      req.body?.kind === 'shipment_inspection'
-        ? 'SELECT 1 FROM fa_shipments WHERE shipment_number = $1 AND is_active'
-        : 'SELECT 1 FROM fa_assets WHERE asset_number = $1 AND is_active',
-      [String(req.body?.asset_number || '')],
-    );
+    // For shipment kinds asset_number carries the shipment number (contract v3/v4); a new shipment has none yet.
+    const kind = req.body?.kind;
+    const num = String(req.body?.asset_number || '');
+    let known;
+    if (kind === 'shipment_create') known = { rowCount: 1 };
+    else if (kind === 'shipment_inspection') known = await client.query(
+      // Also accepted while a "mark shipped" from this app is still waiting for ForgeDesk to publish the new status.
+      `SELECT 1 FROM fa_shipments sh WHERE sh.shipment_number = $1 AND sh.is_active AND (sh.status = 'shipped' OR
+         (sh.status = 'pre_check_done' AND EXISTS (SELECT 1 FROM fa_submissions x WHERE x.kind = 'shipment_ship' AND x.asset_number = sh.shipment_number)))`, [num]);
+    else if (kind === 'shipment_ship') known = await client.query("SELECT 1 FROM fa_shipments WHERE shipment_number = $1 AND is_active AND status = 'pre_check_done'", [num]);
+    else if (kind === 'shipment_precheck' || kind === 'shipment_reschedule') known = await client.query("SELECT 1 FROM fa_shipments WHERE shipment_number = $1 AND is_active AND status IN ('draft','pre_check_done')", [num]);
+    else known = await client.query('SELECT 1 FROM fa_assets WHERE asset_number = $1 AND is_active', [num]);
+    if (kind === 'shipment_create' && !permsOf(req.user).includes('shipments.manage')) return res.status(403).json({ error: 'You do not have permission to create shipments.' });
+    if ((kind === 'shipment_reschedule' || kind === 'shipment_ship') && !permsOf(req.user).includes('shipments.manage')) return res.status(403).json({ error: 'You do not have permission to reschedule shipments.' });
+    if (kind === 'shipment_precheck' && !permsOf(req.user).includes('shipments.inspect')) return res.status(403).json({ error: 'You do not have permission to do pre-shipment checks.' });
     const v = validateSubmission(req.body, known.rowCount === 1);
     if (!v.ok) return res.status(422).json({ error: v.error });
     const s = v.value;
 
     await client.query('BEGIN');
     const ins = await client.query(
-      `INSERT INTO fa_submissions (submission_uuid, kind, asset_number, submitted_by, submitted_at, payload)
-       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (submission_uuid) DO NOTHING RETURNING id`,
-      [s.submission_uuid, s.kind, s.asset_number, req.user.display_name, s.submitted_at, JSON.stringify(s.payload)],
+      `INSERT INTO fa_submissions (submission_uuid, kind, asset_number, submitted_by, submitted_by_user_id, submitted_at, payload)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (submission_uuid) DO NOTHING RETURNING id`,
+      [s.submission_uuid, s.kind, s.asset_number, req.user.display_name, req.user.id, s.submitted_at, JSON.stringify(s.payload)],
     );
     if (ins.rowCount === 0) {
       await client.query('ROLLBACK');

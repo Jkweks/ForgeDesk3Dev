@@ -59,7 +59,7 @@ async function loadUser(req, _res, next) {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) {
       const { rows } = await query(
-        `SELECT u.forgedesk_user_id AS id, u.login AS username, u.display_name, s.expires_at
+        `SELECT u.forgedesk_user_id AS id, u.login AS username, u.display_name, u.permissions, s.expires_at
            FROM fa_sessions s JOIN fa_users u ON u.forgedesk_user_id = s.user_id
           WHERE s.token_hash = $1 AND s.expires_at > (now() at time zone 'utc') AND u.is_active AND u.password_hash <> ''`,
         [sha256(token)],

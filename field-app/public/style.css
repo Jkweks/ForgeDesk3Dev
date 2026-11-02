@@ -94,3 +94,24 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px s
 #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); background: #17202b; color: #fff; padding: 12px 18px; border-radius: 12px; opacity: 0; transition: .25s; pointer-events: none; z-index: 50; max-width: 90vw; text-align: center; }
 #toast.show { opacity: 1; transform: translateX(-50%); }
 .sticky-submit { position: sticky; bottom: 0; padding: 12px 0 4px; background: linear-gradient(transparent, var(--bg) 30%); }
+
+/* bottom navigation */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center; gap: 0; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+.tabs a { position: relative; flex: 1; max-width: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; color: var(--muted); text-decoration: none; font-size: .74rem; font-weight: 600; }
+.tabs a .ico { font-size: 1.25rem; line-height: 1; }
+.tabs a.on { color: var(--brand); }
+.tabs a.on::before { content: ""; position: absolute; top: 0; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--brand); }
+.tabs .dot { position: absolute; top: 6px; left: calc(50% + 8px); min-width: 18px; padding: 0 5px; height: 18px; border-radius: 9px; background: var(--bad); color: #fff; font-size: .7rem; line-height: 18px; text-align: center; }
+.card h2.late { color: var(--bad); }
+
+/* new shipment form */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chips .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--warn-bg); color: var(--warn); }
+.chips .chip button { all: unset; cursor: pointer; padding: 0 4px; font-size: 1.1rem; line-height: 1; }
+.list.pick { margin-top: 8px; max-height: 240px; overflow: auto; }
+.chk { display: flex; align-items: center; gap: 10px; font-weight: 500; margin: 0; padding: 8px 2px; min-height: 48px; }
+.chk input { width: 22px; height: 22px; min-height: 0; flex: none; }
+.loadrow { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
+.loadrow:last-child { border-bottom: 0; }
+.loadrow .chk { flex: 1; }
+.loadrow > input[type=number] { width: 96px; flex: none; }

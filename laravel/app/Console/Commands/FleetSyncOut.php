@@ -21,7 +21,7 @@ class FleetSyncOut extends Command
         }
         try {
             $r = $sync->publish();
-            $this->info("Published {$r['assets']} assets, {$r['checklists']} checklists, {$r['users']} mobile users, {$r['shipments']} open shipments.");
+            $this->info("Published {$r['assets']} assets, {$r['checklists']} checklists, {$r['users']} mobile users, {$r['shipments']} open shipments, {$r['jobs']} jobs, {$r['shipment_types']} shipment types.");
 
             return self::SUCCESS;
         } catch (Throwable $e) {
