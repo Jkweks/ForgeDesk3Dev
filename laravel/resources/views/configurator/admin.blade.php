@@ -1400,6 +1400,157 @@
     });
   });
 
+  // ==================== Shared admin table helper (search / filters / sort / count) ====================
+  // Each table registers columns (th order; `sort` is the value accessor), a `text` accessor for search and
+  // optional dropdown `filters`. hwtApply() filters + sorts the data inside the table's existing render
+  // function, and hwtMount() builds the toolbar. Sort and filters are remembered per table in localStorage.
+  const HWT = {};
+  const hwtStore = {
+    get(k) { try { return JSON.parse(localStorage.getItem('hwt:' + k) || 'null'); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('hwt:' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+  };
+
+  function hwtDefine(key, cfg) {
+    const saved = hwtStore.get(key) || {};
+    HWT[key] = Object.assign({ filters: [] }, cfg, { state: { q: '', sort: saved.sort ?? null, dir: saved.dir ?? 1, f: saved.f || {} } });
+  }
+
+  function hwtSave(key) { const s = HWT[key].state; hwtStore.set(key, { sort: s.sort, dir: s.dir, f: s.f }); }
+
+  function hwtMount(key) {
+    const t = HWT[key];
+    const tbody = document.getElementById(t.tbody);
+    const wrap = tbody.closest('.table-responsive');
+    const table = tbody.closest('table');
+    t.wrap = wrap;
+    wrap.classList.add('hwt-scroll');
+    table.classList.add('table-sm');
+
+    const bar = document.createElement('div');
+    bar.className = 'd-flex flex-wrap gap-2 align-items-center px-3 py-2 border-bottom hwt-bar';
+    bar.innerHTML = `
+      <div class="input-icon" style="width:230px"><span class="input-icon-addon"><i class="ti ti-search"></i></span>
+        <input type="search" class="form-control form-control-sm hwt-q" placeholder="${esc(t.placeholder || 'Search…')}" autocomplete="off"></div>
+      ${t.filters.map(f => `<select class="form-select form-select-sm w-auto hwt-f" data-f="${f.id}" title="${esc(f.label)}"></select>`).join('')}
+      <button type="button" class="btn btn-sm btn-link hwt-clear" style="display:none">Clear filters</button>
+      <span class="ms-auto text-muted small hwt-count"></span>`;
+    wrap.parentNode.insertBefore(bar, wrap);
+    t.bar = bar;
+
+    let timer;
+    bar.querySelector('.hwt-q').addEventListener('input', e => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { t.state.q = e.target.value; t.render(); }, 150);
+    });
+    bar.querySelectorAll('.hwt-f').forEach(sel => sel.addEventListener('change', () => {
+      t.state.f[sel.dataset.f] = sel.value; hwtSave(key); t.render();
+    }));
+    bar.querySelector('.hwt-clear').addEventListener('click', () => {
+      t.state.q = ''; t.state.f = {}; bar.querySelector('.hwt-q').value = ''; hwtSave(key); t.render();
+    });
+
+    table.querySelectorAll('thead th').forEach((th, idx) => {
+      const col = t.cols[idx];
+      if (!col || !col.sort) return;
+      th.classList.add('hwt-sortable');
+      th.dataset.col = idx;
+      th.addEventListener('click', () => {
+        if (t.state.sort === idx) t.state.dir = -t.state.dir; else { t.state.sort = idx; t.state.dir = 1; }
+        hwtSave(key); t.render();
+      });
+    });
+  }
+
+  function hwtApply(key, data) {
+    const t = HWT[key];
+    if (!t || !t.bar) return data;
+    const st = t.state, q = st.q.trim().toLowerCase();
+
+    // Dropdown options follow the data; only rewrite when they change so an open select isn't disturbed.
+    t.filters.forEach(f => {
+      const sel = t.bar.querySelector(`[data-f="${f.id}"]`);
+      const opts = f.options(data);
+      const sig = JSON.stringify(opts);
+      if (sel.dataset.sig !== sig) {
+        sel.dataset.sig = sig;
+        sel.innerHTML = `<option value="">${esc(f.label)}</option>` + opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+      }
+      if (st.f[f.id] && !opts.some(o => o[0] === st.f[f.id])) st.f[f.id] = '';
+      sel.value = st.f[f.id] || '';
+    });
+
+    let list = data.filter(r => (!q || t.text(r).toLowerCase().includes(q))
+      && t.filters.every(f => !st.f[f.id] || f.test(r, st.f[f.id])));
+
+    if (st.sort !== null && t.cols[st.sort]?.sort) {
+      const get = t.cols[st.sort].sort;
+      list = list.slice().sort((a, b) => {
+        const x = get(a), y = get(b);
+        const r = (typeof x === 'number' && typeof y === 'number') ? x - y : String(x ?? '').localeCompare(String(y ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+        return r * st.dir;
+      });
+    }
+
+    const filtered = q || t.filters.some(f => st.f[f.id]);
+    t.bar.querySelector('.hwt-clear').style.display = filtered ? '' : 'none';
+    t.bar.querySelector('.hwt-count').textContent = filtered ? `${list.length} of ${data.length}` : `${data.length} total`;
+    t.wrap.querySelectorAll('thead th.hwt-sortable').forEach(th => {
+      const on = +th.dataset.col === st.sort;
+      th.querySelector('.hwt-arrow')?.remove();
+      if (on) th.insertAdjacentHTML('beforeend', `<i class="ti ti-arrow-${st.dir > 0 ? 'up' : 'down'} ms-1 hwt-arrow"></i>`);
+      th.setAttribute('aria-sort', on ? (st.dir > 0 ? 'ascending' : 'descending') : 'none');
+    });
+
+    return list;
+  }
+
+  const hwtActiveFilter = { id: 'status', label: 'Any status', options: () => [['active', 'Active'], ['inactive', 'Inactive']], test: (r, v) => (v === 'active') === !!r.active };
+  const hwtDistinct = fn => data => [...new Set(data.map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b)).map(x => [x, x]);
+
+  function hwtDefineAll() {
+    const catName = i => (hwFindCategory(i.category_id)?.name || '') + (i.subcategory_id ? ' - ' + (hwFindSubcategory(i.subcategory_id)?.name || '') : '');
+    hwtDefine('cat', { tbody: 'hwlib-cat-tbody', placeholder: 'Search categories…', render: hwCatRender,
+      text: c => [c.name, c.description, ...(c.subcategories || []).map(s => s.name)].join(' '),
+      cols: [{ sort: c => c.name }, { sort: c => c.description || '' }, { sort: c => (c.variables || []).length }, { sort: c => (c.items || []).length }] });
+    hwtDefine('var', { tbody: 'hwlib-var-tbody', placeholder: 'Search code, label or group…', render: hwVarRender,
+      text: v => [v.code, v.label, v.group_name, v.var_type].join(' '),
+      cols: [{ sort: v => v.code }, { sort: v => v.label }, { sort: v => v.group_name }, { sort: v => v.var_type }, null],
+      filters: [
+        { id: 'group', label: 'Any group', options: hwtDistinct(v => v.group_name), test: (v, x) => v.group_name === x },
+        { id: 'type', label: 'Any type', options: hwtDistinct(v => v.var_type), test: (v, x) => v.var_type === x },
+        { id: 'calc', label: 'Entered or calculated', options: () => [['calc', 'Calculated'], ['manual', 'Entered']], test: (v, x) => (x === 'calc') === !!v.is_calculated },
+      ] });
+    hwtDefine('func', { tbody: 'hwlib-func-tbody', placeholder: 'Search code, label or group…', render: hwFuncRender,
+      text: f => [f.code, f.label, f.group_name].join(' '),
+      cols: [{ sort: f => f.code }, { sort: f => f.label }, { sort: f => f.group_name || '' }, { sort: f => (f.active ? 0 : 1) }],
+      filters: [{ id: 'group', label: 'Any group', options: hwtDistinct(f => f.group_name), test: (f, x) => f.group_name === x }, hwtActiveFilter] });
+    hwtDefine('item', { tbody: 'hwlib-item-tbody', placeholder: 'Search name, PN or manufacturer…', render: hwItemRender,
+      text: i => [i.name, i.pn, i.manufacturer, catName(i)].join(' '),
+      cols: [{ sort: i => i.name }, { sort: catName }, { sort: i => i.manufacturer || '' }, { sort: i => i.pn || '' }, { sort: i => (i.active ? 0 : 1) }, { sort: i => (i.needs_review ? 0 : 1) }],
+      filters: [{ id: 'mfr', label: 'Any manufacturer', options: hwtDistinct(i => i.manufacturer), test: (i, x) => i.manufacturer === x }, hwtActiveFilter] });
+    hwtDefine('backer', { tbody: 'hwlib-backer-tbody', placeholder: 'Search PN, description or fastener…', render: hwBackerRender,
+      text: b => [b.pn, b.description, ...(b.fasteners || []).map(f => hwFindFastener(f.fastener_id)?.pn)].join(' '),
+      cols: [{ sort: b => b.pn }, { sort: b => b.description || '' }, { sort: b => (b.fasteners || []).length }, { sort: b => (b.active ? 0 : 1) }],
+      filters: [hwtActiveFilter] });
+    hwtDefine('fastener', { tbody: 'hwlib-fastener-tbody', placeholder: 'Search PN or description…', render: hwFastenerRender,
+      text: f => [f.pn, f.description].join(' '),
+      cols: [{ sort: f => f.pn }, { sort: f => f.description || '' }, { sort: f => (f.active ? 0 : 1) }],
+      filters: [hwtActiveFilter] });
+    hwtDefine('set', { tbody: 'hwlib-set-tbody', placeholder: 'Search set or job…', render: hwSetRender,
+      text: x => [x.name, x.business_job?.job_number, x.business_job?.job_name].join(' '),
+      cols: [{ sort: x => x.name }, { sort: x => x.business_job?.job_name || x.business_job?.job_number || '' }, { sort: x => (x.set_items || []).length }, { sort: x => (x.is_pair ? 0 : 1) }],
+      filters: [
+        { id: 'job', label: 'Any job', test: (x, v) => String(x.business_job?.id) === v,
+          options: data => {
+            const jobs = new Map();
+            data.forEach(x => { if (x.business_job) jobs.set(String(x.business_job.id), x.business_job.job_name || x.business_job.job_number); });
+            return [...jobs].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => [id, name]);
+          } },
+        { id: 'pair', label: 'Pair or single', options: () => [['pair', 'Pairs'], ['single', 'Single']], test: (x, v) => (v === 'pair') === !!x.is_pair },
+      ] });
+    Object.keys(HWT).forEach(hwtMount);
+  }
+
   // ==================== Hardware Library Admin ====================
   let hwCategories = [];
   let hwVariables = [];
@@ -1429,6 +1580,7 @@
     const funcsData = await authenticatedFetch('/config/hwlib-functions');
     hwFunctions = funcsData.functions || [];
 
+    if (!Object.keys(HWT).length) hwtDefineAll();
     hwCatRender();
     hwVarRender();
     hwFuncRender();
@@ -1457,7 +1609,7 @@
   // ---- Categories ----
   function hwCatRender() {
     const tbody = document.getElementById('hwlib-cat-tbody');
-    tbody.innerHTML = hwCategories.map(c => `
+    tbody.innerHTML = hwtApply('cat', hwCategories).map(c => `
       <tr>
         <td>${esc(c.name)}${(c.subcategories || []).length ? `<div class="text-muted small">${(c.subcategories || []).map(s => esc(s.name)).join(', ')}</div>` : ''}</td>
         <td class="text-muted small">${esc(c.description || '')}</td>
@@ -1467,7 +1619,7 @@
           <button type="button" class="btn btn-sm btn-icon" onclick="hwCatOpenModal(${c.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwCatDelete(${c.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No categories yet.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No categories match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -1594,9 +1746,8 @@
   }
 
   function hwVarRender() {
-    const search = (document.getElementById('hwlib-var-search').value || '').toLowerCase();
     const tbody = document.getElementById('hwlib-var-tbody');
-    const list = hwVariables.filter(v => !search || v.code.toLowerCase().includes(search) || v.label.toLowerCase().includes(search) || v.group_name.toLowerCase().includes(search));
+    const list = hwtApply('var', hwVariables);
     tbody.innerHTML = list.map(v => `
       <tr>
         <td><code>${esc(v.code)}</code></td>
@@ -1608,7 +1759,7 @@
           <button type="button" class="btn btn-sm btn-icon" onclick="hwVarOpenModal(${v.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwVarDelete(${v.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="6" class="text-muted">No variables found.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="6" class="text-muted">No variables match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -1772,7 +1923,7 @@
   // ---- Functions ----
   function hwFuncRender() {
     const tbody = document.getElementById('hwlib-func-tbody');
-    tbody.innerHTML = hwFunctions.map(f => `
+    tbody.innerHTML = hwtApply('func', hwFunctions).map(f => `
       <tr>
         <td><code>${esc(f.code)}</code></td>
         <td>${esc(f.label)}</td>
@@ -1782,7 +1933,7 @@
           <button type="button" class="btn btn-sm btn-icon" onclick="hwFuncOpenModal(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwFuncDelete(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No functions yet.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No functions match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -1854,7 +2005,7 @@
     const catFilter = document.getElementById('hwlib-item-catfilter').value;
     const reviewOnly = document.getElementById('hwlib-item-reviewfilter').checked;
     const tbody = document.getElementById('hwlib-item-tbody');
-    let list = hwItems;
+    let list = hwtApply('item', hwItems);
     if (catFilter.startsWith('s')) list = list.filter(i => i.subcategory_id == catFilter.slice(1));
     else if (catFilter.startsWith('c')) list = list.filter(i => i.category_id == catFilter.slice(1) && !i.subcategory_id);
     if (reviewOnly) list = list.filter(i => i.needs_review);
@@ -1870,7 +2021,7 @@
           <button type="button" class="btn btn-sm btn-icon" onclick="hwItemOpenModal(${i.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwItemDelete(${i.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="7" class="text-muted">No items found.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="7" class="text-muted">No items match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -2131,7 +2282,7 @@
   // ---- Backers ----
   function hwBackerRender() {
     const tbody = document.getElementById('hwlib-backer-tbody');
-    tbody.innerHTML = hwBackers.map(b => `
+    tbody.innerHTML = hwtApply('backer', hwBackers).map(b => `
       <tr>
         <td>${esc(b.pn)}</td>
         <td class="text-muted small">${esc(b.description || '')}</td>
@@ -2141,7 +2292,7 @@
           <button type="button" class="btn btn-sm btn-icon" onclick="hwBackerOpenModal(${b.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwBackerDelete(${b.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No backers yet.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No backers match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -2215,7 +2366,7 @@
   // ---- Fasteners ----
   function hwFastenerRender() {
     const tbody = document.getElementById('hwlib-fastener-tbody');
-    tbody.innerHTML = hwFasteners.map(f => `
+    tbody.innerHTML = hwtApply('fastener', hwFasteners).map(f => `
       <tr>
         <td>${esc(f.pn)}</td>
         <td class="text-muted small">${esc(f.description || '')}</td>
@@ -2224,7 +2375,7 @@
           <button type="button" class="btn btn-sm btn-icon" onclick="hwFastenerOpenModal(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwFastenerDelete(${f.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="4" class="text-muted">No fasteners yet.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="4" class="text-muted">No fasteners match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -2265,17 +2416,17 @@
   // ---- Sets ----
   function hwSetRender() {
     const tbody = document.getElementById('hwlib-set-tbody');
-    tbody.innerHTML = hwSets.map(s => `
+    tbody.innerHTML = hwtApply('set', hwSets).map(s => `
       <tr>
         <td>${esc(s.name)}</td>
-        <td>${esc(s.business_job?.job_number || '')}</td>
+        <td>${esc(s.business_job?.job_name || s.business_job?.job_number || '')}${s.business_job?.job_name && s.business_job?.job_number ? ` <span class="text-muted small">${esc(s.business_job.job_number)}</span>` : ''}</td>
         <td>${(s.set_items || []).length}</td>
         <td>${s.is_pair ? 'Yes' : 'No'}</td>
         <td class="text-end">
           <button type="button" class="btn btn-sm btn-icon" onclick="hwSetOpenModal(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-pencil"></i></button>
           <button type="button" class="btn btn-sm btn-icon text-danger" onclick="hwSetDelete(${s.id})" data-permission="configurator.catalog.manage"><i class="ti ti-trash"></i></button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No sets yet.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">No sets match.</td></tr>';
     applyActionPermissions();
   }
 
@@ -2346,6 +2497,41 @@
     }).join('');
   }
 
+  // Prep-value defaults for one set row: what openings using the set start with. Blank = the item's own
+  // catalog default. Calculated variables are formulas (nothing to set); per-angle (degree matrix) defaults
+  // are edited from an opening in the configurator, so they're shown read-only and carried through untouched.
+  function hwSiRenderValues(rowEl, itemId, rowValues) {
+    const wrap = rowEl.querySelector('.hwlib-si-values');
+    const item = itemId ? hwFindItem(itemId) : null;
+    const catVars = (item ? (hwFindCategory(item.category_id)?.variables || []) : [])
+      .map(cv => hwFindVariable(cv.id) || cv).filter(v => v && !v.is_calculated);
+    if (!catVars.length) { wrap.innerHTML = ''; return; }
+
+    const mine = new Map((rowValues || []).map(v => [Number(v.variable_id), v.value_text]));
+    const itemDefaults = new Map((item.values || []).map(v => [Number(v.variable_id), v.value_text]));
+    const setCount = catVars.filter(v => (mine.get(v.id) ?? '') !== '').length;
+
+    const field = v => {
+      const cur = mine.get(v.id) ?? '';
+      const def = itemDefaults.get(v.id);
+      const ph = def !== undefined && v.var_type !== 'degree_matrix' ? `item: ${def}` : 'item default';
+      let input;
+      if (v.var_type === 'degree_matrix') {
+        input = `<input type="text" class="form-control form-control-sm hwlib-si-val" data-var-id="${v.id}" data-keep="${esc(cur)}" value="${cur ? 'per-angle values set' : ''}" placeholder="per opening angle" disabled title="Per-angle defaults are edited from an opening in the Configurator">`;
+      } else if (v.var_type === 'boolean') {
+        input = `<select class="form-select form-select-sm hwlib-si-val" data-var-id="${v.id}"><option value="">${esc(ph)}</option><option value="true" ${cur === 'true' ? 'selected' : ''}>Yes</option><option value="false" ${cur === 'false' ? 'selected' : ''}>No</option></select>`;
+      } else if (v.var_type === 'select') {
+        input = `<select class="form-select form-select-sm hwlib-si-val" data-var-id="${v.id}"><option value="">${esc(ph)}</option>${(v.options || []).map(o => `<option value="${esc(o)}" ${cur === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      } else {
+        input = `<input type="${v.var_type === 'number' ? 'number' : 'text'}" ${v.var_type === 'number' ? 'step="any"' : ''} class="form-control form-control-sm hwlib-si-val" data-var-id="${v.id}" value="${esc(cur)}" placeholder="${esc(ph)}">`;
+      }
+      return `<div class="col-md-4"><label class="form-label small mb-0 text-muted">${esc(v.label)}${v.unit ? ' (' + esc(v.unit) + ')' : ''}</label>${input}</div>`;
+    };
+
+    wrap.innerHTML = `<details ${setCount ? 'open' : ''}><summary class="small text-muted" style="cursor:pointer">Prep values <span class="badge bg-purple-lt">${setCount} set</span></summary>
+      <div class="row g-2 mt-1">${catVars.map(field).join('')}</div></details>`;
+  }
+
   function hwSiOnCategoryChange(selectEl) {
     const rowEl = selectEl.closest('.hwlib-set-item-row');
     const mfrSelect = rowEl.querySelector('.hwlib-si-manufacturer');
@@ -2362,7 +2548,9 @@
   }
 
   function hwSiOnPartChange(selectEl) {
-    hwSiRenderFunctions(selectEl.closest('.hwlib-set-item-row'), selectEl.value, []);
+    const rowEl = selectEl.closest('.hwlib-set-item-row');
+    hwSiRenderFunctions(rowEl, selectEl.value, []);
+    hwSiRenderValues(rowEl, selectEl.value, []);
   }
 
   function hwSiToggleQuickAdd(link) {
@@ -2396,6 +2584,7 @@
       const partSelect = rowEl.querySelector('.hwlib-si-part');
       partSelect.innerHTML = hwSiPartOptionsHtml(categoryId, manufacturer, res.item.id);
       hwSiRenderFunctions(rowEl, res.item.id, []);
+      hwSiRenderValues(rowEl, res.item.id, []);
 
       rowEl.querySelector('.hwlib-si-quickadd-form').classList.add('d-none');
       rowEl.querySelector('.hwlib-si-qa-mfr').value = '';
@@ -2412,7 +2601,7 @@
     const manufacturer = item?.manufacturer ?? '';
 
     return `
-      <div class="border rounded p-2 mb-2 hwlib-set-item-row" data-row-uid="${rowUid}">
+      <div class="border rounded p-2 mb-2 hwlib-set-item-row" data-row-uid="${rowUid}" data-set-item-id="${row?.id ?? ''}">
         <div class="row g-2 align-items-center mb-2">
           <div class="col-md-3">
             <select class="form-select form-select-sm hwlib-si-category" onchange="hwSiOnCategoryChange(this)">
@@ -2438,6 +2627,7 @@
           <div class="col-md-6"><input type="text" class="form-control form-control-sm hwlib-si-notes" placeholder="notes" value="${esc(row?.notes || '')}"></div>
         </div>
         <div class="hwlib-si-functions mb-1"></div>
+        <div class="hwlib-si-values mb-1"></div>
         <div class="small">
           <a href="#" onclick="event.preventDefault(); hwSiToggleQuickAdd(this)">+ Add new part</a>
           <div class="hwlib-si-quickadd-form d-none d-flex gap-2 mt-1 align-items-center">
@@ -2455,6 +2645,7 @@
     if (row?.item_id) {
       const rows = document.querySelectorAll('.hwlib-set-item-row');
       hwSiRenderFunctions(rows[rows.length - 1], row.item_id, (row.functions || []).map(f => f.id));
+      hwSiRenderValues(rows[rows.length - 1], row.item_id, row.values || []);
     }
   }
 
@@ -2464,7 +2655,14 @@
         const radios = Array.from(row.querySelectorAll('.hwlib-si-func-radio:checked')).map(r => r.value).filter(Boolean);
         const checks = Array.from(row.querySelectorAll('.hwlib-si-func-cb:checked')).map(c => c.value);
 
+        const values = Array.from(row.querySelectorAll('.hwlib-si-val')).map(el => ({
+          variable_id: parseInt(el.dataset.varId, 10),
+          value_text: el.dataset.keep !== undefined ? el.dataset.keep : el.value,
+        })).filter(v => v.value_text !== '' && v.value_text != null);
+
         return {
+          id: row.dataset.setItemId ? parseInt(row.dataset.setItemId, 10) : undefined,
+          values,
           item_id: row.querySelector('.hwlib-si-part').value,
           quantity: parseInt(row.querySelector('.hwlib-si-qty').value || 1, 10),
           series: row.querySelector('.hwlib-si-series').value,
@@ -2480,7 +2678,7 @@
     const s = id ? hwFindSet(id) : null;
     document.getElementById('hwlib-set-id').value = id || '';
     document.getElementById('hwlib-set-job').innerHTML = '<option value="">— select —</option>' +
-      hwJobs.map(j => `<option value="${j.id}" ${s?.business_job_id == j.id ? 'selected' : ''}>${esc(j.job_number)} — ${esc(j.job_name)}</option>`).join('');
+      hwJobs.map(j => `<option value="${j.id}" ${s?.business_job_id == j.id ? 'selected' : ''}>${esc(j.job_name)} — ${esc(j.job_number)}</option>`).join('');
     document.getElementById('hwlib-set-name').value = s?.name || '';
     document.getElementById('hwlib-set-notes').value = s?.notes || '';
     document.getElementById('hwlib-set-ispair').checked = !!s?.is_pair;

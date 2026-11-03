@@ -27,6 +27,10 @@
 .pq-chip.progress { border-left-color:var(--tblr-blue); background:var(--tblr-blue-lt); }
 .pq-chip strong, .pq-chip small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pq-chip small { color:var(--tblr-secondary-color); }
+.pq-grip { cursor:grab; color:var(--tblr-secondary-color); width:1.5rem; text-align:center; user-select:none; }
+.pq-row.dragging { opacity:.4; }
+.pq-row.drop-above td { box-shadow:inset 0 3px 0 var(--tblr-primary); }
+.pq-row.drop-below td { box-shadow:inset 0 -3px 0 var(--tblr-primary); }
 .pq-toast { position:fixed; bottom:1rem; right:1rem; z-index:2000; max-width:360px; }
 @endsection
 
@@ -50,6 +54,9 @@
       </div>
       <div class="text-secondary small mt-1">
         Every elevation (line item) with a CNC programming step still to do, ranked by work-order priority.
+        <span data-permission="fabrication.work-orders.edit">Drag a line by its handle to set your own order.</span>
+        <span id="pq-manual" style="display:none"><span class="badge bg-blue-lt">Custom order</span>
+          <a href="#" class="ms-1" data-permission="fabrication.work-orders.edit" onclick="pqResetOrder(); return false;">Reset to priority order</a></span>
         <span class="text-danger">Locked</span> lines are waiting on an earlier step but can still be assigned.
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
@@ -94,11 +101,11 @@
           <table class="table table-vcenter card-table">
             <thead>
               <tr>
-                <th>Job / release</th><th>Line</th><th>Steps</th><th>Requested</th><th>Due</th>
+                <th></th><th>Job / release</th><th>Line</th><th>Steps</th><th>Requested</th><th>Due</th>
                 <th>Programmer</th><th>Status</th><th class="text-end"></th>
               </tr>
             </thead>
-            <tbody id="pq-body"><tr><td colspan="8" class="text-center text-muted py-5">Loading…</td></tr></tbody>
+            <tbody id="pq-body"><tr><td colspan="9" class="text-center text-muted py-5">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -144,7 +151,7 @@ async function pqLoad(fromPoll) {
     pqRender();
   } catch (e) {
     console.error(e);
-    document.getElementById('pq-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-5">Could not load the programming queue.</td></tr>';
+    document.getElementById('pq-body').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-5">Could not load the programming queue.</td></tr>';
   }
 }
 
@@ -182,9 +189,10 @@ function pqRender() {
   document.getElementById('pq-s-locked').textContent = open.filter(r => r.gated).length;
   document.getElementById('pq-s-overdue').textContent = open.filter(r => isPast(r.due_date)).length;
 
+  document.getElementById('pq-manual').style.display = pqRows.some(r => r.programming_rank != null) ? '' : 'none';
   const rows = pqRows.filter(pqVisible);
   document.getElementById('pq-body').innerHTML = rows.length ? rows.map(pqRowHtml).join('')
-    : '<tr><td colspan="8" class="text-center text-muted py-5">Nothing waiting for programming.</td></tr>';
+    : '<tr><td colspan="9" class="text-center text-muted py-5">Nothing waiting for programming.</td></tr>';
 }
 
 function pqRowHtml(r) {
@@ -201,7 +209,9 @@ function pqRowHtml(r) {
   else if (r.status === 'in_progress') action = `<button class="btn btn-sm btn-success" data-permission="fabrication.work-orders.edit" onclick="pqSet(${r.stage_id}, 'complete')">Complete</button>`;
   else action = `<button class="btn btn-sm btn-outline-secondary" data-permission="fabrication.work-orders.edit" onclick="pqSet(${r.stage_id}, 'pending')">Reopen</button>`;
 
-  return `<tr class="pq-row${r.gated && !done ? ' gated' : ''}${overdue ? ' overdue' : ''}">
+  const canDrag = !done && typeof hasPermission === 'function' && hasPermission('fabrication.work-orders.edit');
+  return `<tr class="pq-row${r.gated && !done ? ' gated' : ''}${overdue ? ' overdue' : ''}" data-stage="${r.stage_id}"${canDrag ? ' draggable="true"' : ''}>
+    <td class="pq-grip" title="${canDrag ? 'Drag to reorder' : ''}">${canDrag ? '<i class="ti ti-grip-vertical"></i>' : ''}</td>
     <td><a href="/fabrication/work-orders?wo=${r.work_order_id}" class="fw-medium">${esc(r.job_name || r.job_number || 'No job')}</a>
         <div class="small text-muted">${esc(r.release_label)}${r.priority != null ? ` · #${esc(r.priority)}` : ''}</div></td>
     <td>${esc(r.elevation_tag)}${r.elevation_type ? `<div class="small text-muted">${esc(r.elevation_type)}${r.quantity > 1 ? ` · qty ${esc(r.quantity)}` : ''}</div>` : ''}
@@ -213,6 +223,69 @@ function pqRowHtml(r) {
     <td><span class="badge ${badge}">${label}</span></td>
     <td class="text-end text-nowrap">${action}</td>
   </tr>`;
+}
+
+// ── Drag and drop ordering ─────────────────────────────────────────────
+// Native HTML5 DnD on the list rows. The dragged line is moved relative to the row it is dropped on,
+// within the FULL list (so it works with filters on), and the whole open order is saved.
+let pqDragId = null;
+const pqBody = document.getElementById('pq-body');
+
+function pqClearDropMarks() { pqBody.querySelectorAll('.drop-above,.drop-below').forEach(el => el.classList.remove('drop-above', 'drop-below')); }
+
+pqBody.addEventListener('dragstart', e => {
+  const tr = e.target.closest('tr.pq-row');
+  if (!tr || !tr.draggable) return;
+  pqDragId = parseInt(tr.dataset.stage);
+  tr.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(pqDragId));
+});
+pqBody.addEventListener('dragover', e => {
+  const tr = e.target.closest('tr.pq-row');
+  if (pqDragId == null || !tr || !tr.draggable || parseInt(tr.dataset.stage) === pqDragId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const below = e.clientY > tr.getBoundingClientRect().top + tr.offsetHeight / 2;
+  pqClearDropMarks();
+  tr.classList.add(below ? 'drop-below' : 'drop-above');
+});
+pqBody.addEventListener('dragleave', e => { if (!pqBody.contains(e.relatedTarget)) pqClearDropMarks(); });
+pqBody.addEventListener('dragend', () => { pqDragId = null; pqBody.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging')); pqClearDropMarks(); });
+pqBody.addEventListener('drop', async e => {
+  const tr = e.target.closest('tr.pq-row');
+  if (pqDragId == null || !tr) return;
+  e.preventDefault();
+  const targetId = parseInt(tr.dataset.stage);
+  const below = e.clientY > tr.getBoundingClientRect().top + tr.offsetHeight / 2;
+  const moving = pqDragId;
+  pqDragId = null;
+  pqClearDropMarks();
+  if (targetId === moving) return;
+
+  const open = pqRows.filter(r => r.status !== 'complete').map(r => r.stage_id).filter(id => id !== moving);
+  const at = open.indexOf(targetId);
+  if (at < 0) return;
+  open.splice(below ? at + 1 : at, 0, moving);
+
+  // Optimistic: reorder locally, then persist; reload on failure to show the truth.
+  const rank = new Map(open.map((id, i) => [id, i + 1]));
+  pqRows.forEach(r => { if (rank.has(r.stage_id)) r.programming_rank = rank.get(r.stage_id); });
+  pqRows.sort((a, b) => (a.status === 'complete') - (b.status === 'complete') || (a.programming_rank ?? 1e9) - (b.programming_rank ?? 1e9));
+  pqRender();
+  try {
+    const r = await API('/programming-queue/reorder', { method: 'POST', body: JSON.stringify({ ordered_ids: open }) });
+    if (!r.ok) throw new Error('Could not save the new order.');
+  } catch (err) { pqToast(err.message); pqLoad(); }
+});
+
+async function pqResetOrder() {
+  if (!confirm('Go back to priority order for the whole queue?')) return;
+  try {
+    const r = await API('/programming-queue/order', { method: 'DELETE' });
+    if (!r.ok) throw new Error('Could not reset the order.');
+  } catch (err) { pqToast(err.message); }
+  pqLoad();
 }
 
 async function pqPatch(id, body) {
@@ -321,6 +394,6 @@ function pqRenderSchedule() {
 
 if (new URLSearchParams(location.search).get('view') === 'schedule') { pqView = 'schedule'; document.querySelectorAll('#pq-view button').forEach(b => b.classList.toggle('active', b.dataset.v === 'schedule')); }
 pqLoad();
-setInterval(() => pqLoad(true), 30000);
+setInterval(() => { if (pqDragId == null) pqLoad(true); }, 30000);
 </script>
 @endpush

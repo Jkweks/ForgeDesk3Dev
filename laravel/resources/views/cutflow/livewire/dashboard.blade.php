@@ -332,11 +332,11 @@
                                 'printing' => ['text' => 'Printing…', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
                             ];
                             $stateMap = [
-                                'red' => ['text' => 'Needs move + label', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
+                                'red' => ['text' => $printerEnabled ? 'Needs move + label' : 'Needs move', 'dot' => 'var(--accent)', 'bg' => 'var(--accent-bg)', 'color' => 'var(--accent)'],
                                 'orange' => ['text' => 'Label printed — not in position', 'dot' => 'var(--warning)', 'bg' => 'var(--warning-bg)', 'color' => 'var(--warning)'],
                                 'yellow' => ['text' => 'In position — needs label', 'dot' => 'var(--caution)', 'bg' => 'var(--caution-bg)', 'color' => 'var(--caution)'],
                                 'range' => ['text' => 'Outside TigerStop range', 'dot' => 'var(--muted-2)', 'bg' => 'var(--surface)', 'color' => 'var(--text-2)'],
-                                'manual' => ['text' => 'Label printed — cut by hand', 'dot' => 'var(--muted-2)', 'bg' => 'var(--surface)', 'color' => 'var(--text-2)'],
+                                'manual' => ['text' => $printerEnabled ? 'Label printed — cut by hand' : 'Outside TigerStop range — cut by hand', 'dot' => 'var(--muted-2)', 'bg' => 'var(--surface)', 'color' => 'var(--text-2)'],
                                 'green' => $awaitingSensor
                                     ? ['text' => 'Ready — waiting for cut sensor…', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)']
                                     : ['text' => 'Ready to cut', 'dot' => 'var(--success)', 'bg' => 'var(--success-bg)', 'color' => 'var(--success)'],
@@ -345,6 +345,7 @@
                             $busy = in_array($tigerStatus, ['positioning', 'printing']);
                         @endphp
                         <div class="now-cutting @if ($currentItemState !== 'red') state-{{ $currentItemState }} @endif"
+                             wire:loading.class="is-working" wire:target="moveAndPrintCurrent,moveCurrentToPosition,printCurrentLabel,confirmCutAndAdvance,skipCurrent"
                              @if ($awaitingSensor) wire:poll.1s="checkSensor" @endif>
                             <div style="display:flex;align-items:center;justify-content:space-between;">
                                 <div style="display:flex;align-items:center;gap:14px;">
@@ -366,9 +367,23 @@
                                 </span>
                             </div>
                             <div class="dim">{{ number_format($currentItem->dimension_inches, 3) }}"</div>
+                            {{-- Shown for as long as the request is in flight: the saw move waits on the TigerStop's
+                                 acknowledgement and the print on the Zebra, so this is the "working…" signal. --}}
+                            <div class="work-progress" wire:loading wire:target="moveAndPrintCurrent,moveCurrentToPosition,printCurrentLabel,confirmCutAndAdvance,skipCurrent" role="status" aria-live="polite">
+                                <div class="work-progress-text">
+                                    <span wire:loading wire:target="moveAndPrintCurrent">{{ $printerEnabled ? 'Moving saw and printing label — waiting for TigerStop…' : 'Moving saw — waiting for TigerStop…' }}</span>
+                                    <span wire:loading wire:target="moveCurrentToPosition">Moving saw — waiting for TigerStop…</span>
+                                    <span wire:loading wire:target="printCurrentLabel">Printing label…</span>
+                                    <span wire:loading wire:target="confirmCutAndAdvance,skipCurrent">Recording cut — moving to the next piece…</span>
+                                </div>
+                                <div class="work-progress-bar"><span></span></div>
+                            </div>
+                            @if (! $printerEnabled)
+                                <div style="font-size:12px;color:var(--muted-2);">Label printer is off &mdash; no label will print.</div>
+                            @endif
                             @if ($currentItemState === 'red')
                                 <button class="btn btn-accent" style="width:100%;" wire:click="moveAndPrintCurrent" @if ($busy) disabled @endif>
-                                    Move to position and print label
+                                    {{ $printerEnabled ? 'Move to position and print label' : 'Move to position' }}
                                 </button>
                             @elseif ($currentItemState === 'orange')
                                 <button class="btn btn-warning" style="width:100%;" wire:click="moveCurrentToPosition" @if ($busy) disabled @endif>
@@ -397,11 +412,13 @@
                                     <button class="btn btn-success" style="flex:1;" wire:click="confirmCutAndAdvance" @if ($busy) disabled @endif>
                                         Hand cut done
                                     </button>
+                                    @if ($printerEnabled)
                                     <button class="btn btn-outline" style="flex:0 0 auto;" wire:click="printCurrentLabel" @if ($busy) disabled @endif>
                                         Reprint
                                     </button>
+                                    @endif
                                     <button class="btn btn-outline" style="flex:0 0 auto;" wire:click="skipCurrent"
-                                            wire:confirm="Skip this piece? Its label is already printed — discard it. The piece goes back on the cut list."
+                                            wire:confirm="{{ $printerEnabled ? 'Skip this piece? Its label is already printed — discard it. The piece goes back on the cut list.' : 'Skip this piece? It goes back on the cut list.' }}"
                                             @if ($busy) disabled @endif>
                                         Skip
                                     </button>
@@ -488,7 +505,9 @@
                                 {{ number_format($entry->dimension_inches, 3) }}"
                                 @if ($entry->stick_length_label) on {{ $entry->stick_length_label }}" stick @endif
                             </span>
+                            @if ($printerEnabled)
                             <span wire:click="reprintEntry({{ $entry->id }})" title="Reprint label" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:20px;color:var(--muted-2);">&#128424;</span>
+                            @endif
                             @if ($entry->part_id)
                                 <span wire:click="recutEntry({{ $entry->id }})" title="Flag for recut" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:20px;color:var(--accent);">&#8635;</span>
                             @endif
@@ -689,11 +708,18 @@
                         <button class="btn btn-accent" style="flex:1;" wire:click="confirmModal">Sign In &rarr;</button>
                     @else
                         <button class="btn btn-outline" style="flex:1;" wire:click="closeModal">Cancel</button>
-                        <button class="btn btn-accent" style="flex:1.4;" wire:click="confirmModal">
+                        <button class="btn btn-accent" style="flex:1.4;" wire:click="confirmModal" wire:loading.attr="disabled" wire:target="confirmModal">
                             {{ $modal === 'stick' ? 'Build Cut Plan →' : 'Go →' }}
                         </button>
                     @endif
                 </div>
+
+                @if ($modal === 'manual')
+                    <div class="work-progress" wire:loading wire:target="confirmModal" role="status" aria-live="polite">
+                        <div class="work-progress-text">Moving saw &mdash; waiting for TigerStop&hellip;</div>
+                        <div class="work-progress-bar"><span></span></div>
+                    </div>
+                @endif
             </div>
         </div>
     @endif
@@ -702,6 +728,16 @@
          bottom-right (see Dashboard::announceCutStarted() /
          resources/css/cutflow.css .cut-toast*). Settings-gated. --}}
     <div class="cut-toast-stack" id="cut-toast-stack"></div>
+
+    <style>
+        .now-cutting.is-working .btn { pointer-events: none; opacity: .55; }
+        .work-progress { display: flex; flex-direction: column; gap: 8px; }
+        .work-progress-text { font-size: 13px; font-weight: 600; color: var(--accent); }
+        .work-progress-bar { position: relative; height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+        .work-progress-bar span { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 3px; background: var(--accent); animation: work-progress-slide 1.1s ease-in-out infinite; }
+        @keyframes work-progress-slide { 0% { left: -40%; } 100% { left: 100%; } }
+        @media (prefers-reduced-motion: reduce) { .work-progress-bar span { animation: none; left: 0; width: 100%; opacity: .5; } }
+    </style>
 
     <script>
         function openPartPhoto() {

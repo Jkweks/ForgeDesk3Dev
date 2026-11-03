@@ -18,6 +18,7 @@ use App\Services\Configurator\DoorBomGenerator;
 use App\Services\Configurator\FrameBomGenerator;
 use App\Services\Configurator\HwlibBomGenerator;
 use App\Services\Configurator\HwlibResolver;
+use App\Services\Configurator\HwlibSetSync;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -2585,7 +2586,7 @@ class DoorFrameConfigurationController extends Controller
      * opening stops re-syncing from the set), so it needs an explicit confirmation first.
      * Returns a response to send back when confirmation is missing, null when it's fine to proceed.
      */
-    private function confirmSetDecouple(Request $request, DoorFrameConfiguration $config, ConfiguratorHwlibLink $link): ?\Illuminate\Http\JsonResponse
+    private function confirmSetDecouple(Request $request, DoorFrameConfiguration $config, ConfiguratorHwlibLink $link, bool $canUpdateSet = false): ?\Illuminate\Http\JsonResponse
     {
         if (! $link->source_set_id) {
             return null;
@@ -2600,6 +2601,9 @@ class DoorFrameConfigurationController extends Controller
                 'message' => "This item came from the hardware set \"{$setName}\". Editing it detaches the whole set from this opening: all of its hardware stays here as normal editable items, but later changes to the set will no longer update this opening.",
                 'set_id' => $link->source_set_id,
                 'set_name' => $setName,
+                // Prep-value edits can instead be written back to the set's defaults (and re-synced to every opening).
+                'can_update_set' => $canUpdateSet && app(HwlibSetSync::class)->setItemForLink($link) !== null,
+                'set_opening_count' => app(HwlibSetSync::class)->openingCount((int) $link->source_set_id),
             ], 409);
         }
 
@@ -2700,7 +2704,14 @@ class DoorFrameConfigurationController extends Controller
 
         $link = ConfiguratorHwlibLink::with('item.category.variables', 'sourceSet')->where('configuration_id', $config->id)->findOrFail($linkId);
 
-        if ($blocked = $this->confirmSetDecouple($request, $config, $link)) {
+        // `update_set`: write the edit into the set's defaults instead of detaching this opening from it.
+        $sync = app(HwlibSetSync::class);
+        $setItem = $request->boolean('update_set') ? $sync->setItemForLink($link) : null;
+        if ($request->boolean('update_set') && ! $setItem) {
+            return response()->json(['message' => 'This item is no longer part of its hardware set, so there is no set default to update.'], 422);
+        }
+
+        if (! $setItem && ($blocked = $this->confirmSetDecouple($request, $config, $link, true))) {
             return $blocked;
         }
 
@@ -2737,6 +2748,20 @@ class DoorFrameConfigurationController extends Controller
                 return response()->json(['message' => $problem, 'errors' => ['values' => [$problem]]], 422);
             }
             $operations[] = [$variable, $text];
+        }
+
+        if ($setItem) {
+            $sync->writeSetItemValues($setItem, $operations, $angle);
+            $result = $sync->cascade($setItem->set);
+
+            return response()->json([
+                'message' => 'Set defaults updated',
+                'set_updated' => true,
+                'set_name' => $setItem->set->name,
+                'reapplied_to' => $result['reapplied'],
+                'skipped_released' => $result['skipped_released'],
+                'bom_stale' => true,
+            ]);
         }
 
         DB::transaction(function () use ($link, $operations, $angle) {

@@ -27,7 +27,7 @@
           <div data-section="details"></div>
           <div data-section="pre" class="d-none"><div id="preCard"></div><div id="preResults"></div></div>
           <div data-section="pre-photos" class="d-none"></div>
-          <div data-section="post" class="d-none"></div>
+          <div data-section="post" class="d-none"><div id="postCard"></div><div id="postResults"></div></div>
           <div data-section="post-photos" class="d-none"></div>
         </div>
       </div>
@@ -62,7 +62,8 @@
     acts.unshift(`<button class="btn" onclick="openReport(this)"><i class="ti ti-file-type-pdf me-1"></i>Report PDF</button>`);
     document.getElementById('hdrActions').innerHTML = acts.join('');
 
-    renderPre();
+    renderInspectForm('pre');
+    renderInspectForm('post');
     renderInspections();
     renderNav();
     showSection(section);
@@ -70,20 +71,23 @@
   }
 
   // ---- pre-shipment checklist form (phone friendly, with camera capture) ----
-  function renderPre() {
-    const el = document.getElementById('preCard');
-    if (!['draft', 'pre_check_done'].includes(S.status)) { el.innerHTML = ''; return; }
-    if (!S.pre_checklist.length) { el.innerHTML = '<div class="alert alert-warning">None of this shipment\'s types has a pre-shipment checklist yet.</div>'; return; }
+  function renderInspectForm(phase) {
+    const el = document.getElementById(phase + 'Card');
+    const open = phase === 'pre' ? ['draft', 'pre_check_done'].includes(S.status) : S.status === 'shipped';
+    if (!open) { el.innerHTML = ''; return; }
+    const checklist = S[phase + '_checklist'];
+    const label = phase === 'pre' ? 'Pre-shipment' : 'Delivery';
+    if (!checklist.length) { el.innerHTML = `<div class="alert alert-warning">None of this shipment\'s types has a ${phase === 'pre' ? 'pre-shipment' : 'post-delivery'} checklist yet.</div>`; return; }
     preFiles = [];
-    el.innerHTML = `<form class="card mb-3" id="preForm" data-permission="shipments.inspect" novalidate>
-      <div class="card-header"><h3 class="card-title">Pre-shipment inspection</h3></div>
-      <div class="card-body">${S.pre_checklist.map(g => `<h4 class="mt-2">${esc(g.type_name)}</h4>` + g.items.map(itemHtml).join('')).join('')}
-        <div class="mt-3"><label class="form-label">Other photos (whole load, strapping, labels…)</label>${photoBtn(null)}<div class="d-flex flex-wrap gap-2 mt-2" id="thumbs-general"></div></div>
+    el.innerHTML = `<form class="card mb-3" id="${phase}Form" data-permission="shipments.inspect" novalidate>
+      <div class="card-header"><h3 class="card-title">${phase === 'pre' ? 'Pre-shipment inspection' : 'Record delivery — condition on arrival'}</h3></div>
+      <div class="card-body">${checklist.map(g => `<h4 class="mt-2">${esc(g.type_name)}</h4>` + g.items.map(itemHtml).join('')).join('')}
+        <div class="mt-3"><label class="form-label">${phase === 'pre' ? 'Other photos (whole load, strapping, labels…)' : 'Delivery photos (load as delivered, any damage, signed paperwork…)'}</label>${photoBtn(null)}<div class="d-flex flex-wrap gap-2 mt-2" id="thumbs-general"></div></div>
         <div class="mt-3"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
       </div>
-      <div class="card-footer text-end"><button type="submit" class="btn btn-primary">Save inspection</button></div></form>`;
+      <div class="card-footer text-end"><button type="submit" class="btn btn-primary">${phase === 'pre' ? 'Save inspection' : 'Save delivery inspection'}</button></div></form>`;
     el.querySelectorAll('.photo-input').forEach(inp => inp.addEventListener('change', onPhotos));
-    el.querySelector('form').addEventListener('submit', submitPre);
+    el.querySelector('form').addEventListener('submit', ev => submitInspection(ev, phase));
     el.querySelectorAll('[data-item-id] input[type=radio]').forEach(r => r.addEventListener('change', () => { r.closest('[data-item-id]').classList.remove('border-danger'); }));
   }
 
@@ -146,7 +150,7 @@
   }
   function removePhoto(idx) { preFiles.splice(idx, 1); drawThumbs(); }
 
-  async function submitPre(e) {
+  async function submitInspection(e, phase) {
     e.preventDefault();
     const form = e.target;
     const answers = {};
@@ -164,8 +168,8 @@
     preFiles.forEach(p => fd.append('photos[]', p.file, 'photo.jpg'));
     const btn = form.querySelector('[type=submit]'); btn.disabled = true;
     try {
-      await authenticatedUpload(`/shipments/${SHIPMENT_ID}/pre-inspection`, fd);
-      showNotification('Pre-shipment inspection saved.', 'success');
+      await authenticatedUpload(`/shipments/${SHIPMENT_ID}/${phase}-inspection`, fd);
+      showNotification(phase === 'pre' ? 'Pre-shipment inspection saved.' : 'Delivery recorded.', 'success');
       await load();
     } catch (err) {
       const msgs = err.data && err.data.errors ? Object.values(err.data.errors).flat() : [err.message || 'Could not save'];
@@ -268,10 +272,10 @@
     document.getElementById('preResults').innerHTML = byPhase('pre').map(inspectionCard).join('');
     let post = byPhase('post').map(inspectionCard).join('');
     if (!post) {
-      post = S.status === 'shipped' ? '<div class="alert alert-info">Waiting for the post-delivery inspection from the field app.</div>'
+      post = S.status === 'shipped' ? '<div class="alert alert-info">Waiting for the post-delivery inspection — record it below, or the crew can submit it from the field app.</div>'
         : `<div class="card"><div class="card-body text-muted">${['draft', 'pre_check_done'].includes(S.status) ? 'This shipment has not shipped yet.' : 'No post-delivery inspection recorded.'}</div></div>`;
     }
-    document.querySelector('[data-section="post"]').innerHTML = post;
+    document.getElementById('postResults').innerHTML = post;
     renderPhotos('pre');
     renderPhotos('post');
   }

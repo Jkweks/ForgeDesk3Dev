@@ -25,6 +25,8 @@ class Settings extends Component
 
     public bool $showCutToast = true;
 
+    public bool $printerEnabled = true;
+
     public ?float $kerfInches = null;
 
     public ?float $standardStockLength = null;
@@ -36,6 +38,7 @@ class Settings extends Component
         $settings = CutFlowSetting::current();
         $this->cutSensorActive = $settings->cut_sensor_active;
         $this->showCutToast = $settings->show_cut_toast;
+        $this->printerEnabled = $settings->printerEnabled();
         $this->kerfInches = $settings->kerf_inches !== null ? (float) $settings->kerf_inches : null;
         $this->standardStockLength = $settings->standard_stock_length !== null ? (float) $settings->standard_stock_length : null;
 
@@ -98,6 +101,7 @@ class Settings extends Component
         CutFlowSetting::current()->update([
             'cut_sensor_active' => $this->cutSensorActive,
             'show_cut_toast' => $this->showCutToast,
+            'printer_enabled' => $this->printerEnabled,
             'kerf_inches' => $this->kerfInches,
             'standard_stock_length' => $this->standardStockLength,
             'optimizer' => array_key_exists($this->optimizer, CutFlowSetting::OPTIMIZERS) ? $this->optimizer : CutFlowSetting::OPTIMIZER_OLD,

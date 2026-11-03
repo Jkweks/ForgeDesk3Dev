@@ -412,6 +412,47 @@ class ShipmentInspectionTest extends TestCase
         $this->assertSame(0, DB::connection('fieldsync')->table('fa_photos')->count());
     }
 
+    public function test_office_can_record_a_delivery_with_photos_and_it_marks_delivered(): void
+    {
+        $this->as('admin');
+        $s = $this->shipment('shipped');
+        $answers = $this->passAll($s, 'post');
+        $answers[array_key_first($answers)]['photos'] = [0];
+
+        $this->post("/api/v1/shipments/{$s->id}/post-inspection", [
+            'answers' => json_encode($answers), 'notes' => 'Received by foreman',
+            'photos' => [UploadedFile::fake()->createWithContent('a.png', base64_decode(self::PNG))],
+        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'delivered');
+
+        $insp = $s->inspections()->where('phase', 'post')->first();
+        $this->assertSame('office', $insp->source);
+        $this->assertSame(1, $insp->photos()->count());
+
+        // Already recorded: a second one is refused.
+        $this->postJson("/api/v1/shipments/{$s->id}/post-inspection", ['answers' => json_encode($answers)])->assertStatus(422);
+    }
+
+    public function test_office_delivery_with_damage_flags_issues_and_needs_permission_and_shipped_status(): void
+    {
+        $s = $this->shipment('shipped', ['Glass']);
+        $answers = $this->passAll($s, 'post');
+        $damage = ShipmentCheckItem::where('label', 'No broken or chipped lites')->where('phase', 'post')->first();
+        $answers[$damage->id] = ['value' => 'fail', 'comment' => 'Two lites cracked', 'photos' => [0]];
+
+        $this->as('viewer');
+        $this->postJson("/api/v1/shipments/{$s->id}/post-inspection", ['answers' => json_encode($answers)])->assertForbidden();
+
+        $this->as('admin');
+        $draft = $this->shipment('draft');
+        $this->postJson("/api/v1/shipments/{$draft->id}/post-inspection", ['answers' => json_encode($this->passAll($draft, 'post'))])->assertStatus(422);
+
+        $this->post("/api/v1/shipments/{$s->id}/post-inspection", [
+            'answers' => json_encode($answers),
+            'photos' => [UploadedFile::fake()->createWithContent('d.png', base64_decode(self::PNG))],
+        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'delivered_issues');
+        $this->assertDatabaseHas('system_notifications', ['type' => 'shipment_post_issues']);
+    }
+
     public function test_field_failure_flags_delivery_issues_and_alerts(): void
     {
         $s = $this->shipment('shipped', ['Glass']);

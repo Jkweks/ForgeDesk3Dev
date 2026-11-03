@@ -762,7 +762,8 @@ class Dashboard extends Component
     protected function currentItemState(StickItem $item): string
     {
         $positioned = $this->positionMatches($item);
-        $printed = $item->isLabelPrinted();
+        // With the printer off there is no label to wait for.
+        $printed = $item->isLabelPrinted() || ! $this->printerEnabled();
 
         return match (true) {
             // Outside the stop's travel: it never moves, so position is moot.
@@ -1355,8 +1356,18 @@ class Dashboard extends Component
      * not from finalizeCutAndAdvance() — the toast previews the label at
      * print time, whenever that happens to fall relative to the move.
      */
+    protected function printerEnabled(): bool
+    {
+        return CutFlowSetting::current()->printerEnabled();
+    }
+
     protected function announceCutStarted(array $label): void
     {
+        // The toast previews a label; no label, no toast.
+        if (! $this->printerEnabled()) {
+            return;
+        }
+
         if (! CutFlowSetting::current()->show_cut_toast) {
             return;
         }
@@ -1493,6 +1504,12 @@ class Dashboard extends Component
             return;
         }
 
+        if (! $this->printerEnabled()) {
+            $this->lastError = 'The label printer is turned off in Settings.';
+
+            return;
+        }
+
         $entry = CutLogEntry::findOrFail($cutLogEntryId);
 
         $reprint = CutLogEntry::create([
@@ -1601,6 +1618,7 @@ class Dashboard extends Component
                 : collect(),
             'currentItem' => $currentItem,
             'currentItemState' => $currentItem ? $this->currentItemState($currentItem) : null,
+            'printerEnabled' => $this->printerEnabled(),
             'awaitingSensor' => $this->awaitingSensor(),
             'log' => CutLogEntry::latest()->limit(6)->get(),
         ]);

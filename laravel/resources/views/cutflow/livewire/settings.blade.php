@@ -43,6 +43,14 @@
 
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border-radius:10px;">
                     <div>
+                        <div style="font-size:14px;font-weight:600;">Label Printer</div>
+                        <div style="font-size:12px;color:var(--muted);">Turn off for parts with all finished surfaces, where a label would mar the part. While off, nothing prints (including drop tags and reprints) and the saw just moves and cuts. Turn back on for the next run.</div>
+                    </div>
+                    <input type="checkbox" wire:model="printerEnabled" style="width:22px;height:22px;">
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border-radius:10px;">
+                    <div>
                         <div style="font-size:14px;font-weight:600;">Show Cut-Start Toast</div>
                         <div style="font-size:12px;color:var(--muted);">Pop up a preview of the label in the bottom-right corner when a cut begins.</div>
                     </div>

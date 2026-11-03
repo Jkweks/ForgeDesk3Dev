@@ -299,7 +299,17 @@ const prettyDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undef
 const findShipment = (n) => state.shipments.find((x) => x.shipment_number === n);
 
 /** What this phone has already sent for a kind (still queued, or recently accepted), by shipment number. */
-const sentFor = (kind) => new Set([...state.outbox, ...state.recent].filter((r) => r.kind === kind).map((r) => r.asset_number));
+const SENT_GRACE_MS = 2 * 3600 * 1000;
+const sentFor = (kind) => {
+  const now = Date.now();
+  const stale = (r) => {
+    // Accepted by the field server but the shipment is still in the same state on ForgeDesk after the
+    // grace window (sync lag): ForgeDesk never applied it, so offer it again instead of hiding it.
+    if (!r.processed || !r.submitted_at) return false;
+    return now - new Date(r.submitted_at).getTime() > SENT_GRACE_MS && kind.startsWith('shipment_');
+  };
+  return new Set([...state.outbox, ...state.recent].filter((r) => r.kind === kind && !stale(r)).map((r) => r.asset_number));
+};
 
 /** Shipments on the road that this phone hasn't inspected yet. */
 function openDeliveries() {

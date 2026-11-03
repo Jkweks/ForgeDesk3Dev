@@ -559,6 +559,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/shipments/{id}/cancel', [$sh, 'cancel'])->middleware('permission:shipments.manage');
         Route::post('/shipments/{id}/ship', [$sh, 'ship'])->middleware('permission:shipments.manage');
         Route::post('/shipments/{id}/pre-inspection', [$sh, 'preInspection'])->middleware('permission:shipments.inspect');
+        Route::post('/shipments/{id}/post-inspection', [$sh, 'postInspection'])->middleware('permission:shipments.inspect');
         Route::get('/shipments/{shipmentId}/photos/{photoId}', [$sh, 'photo'])->middleware('permission:shipments.view');
         Route::get('/shipment-types', [$st, 'index'])->middleware('permission:shipments.view');
         Route::post('/shipment-types', [$st, 'store'])->middleware('permission:shipments.types.manage');
@@ -799,6 +800,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
             Route::get('/work-queue', [\App\Http\Controllers\Api\WorkQueueController::class, 'index']);
             Route::get('/programming-queue', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'index']);
+            Route::post('/programming-queue/reorder', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'reorder'])->middleware('permission:fabrication.work-orders.edit');
+            Route::delete('/programming-queue/order', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'resetOrder'])->middleware('permission:fabrication.work-orders.edit');
             $se = \App\Http\Controllers\Api\ScheduleEntryController::class;
             Route::post('/schedule-entries', [$se, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::patch('/schedule-entries/{id}', [$se, 'update'])->middleware('permission:fabrication.work-orders.edit');

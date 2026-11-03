@@ -100,7 +100,7 @@ function sqVisible(r) {
 function sqCard(r, late) {
   const checks = [r.pre_result ? `<i class="ti ti-clipboard-check ${r.pre_result === 'fail' ? 'text-danger' : 'text-success'}" title="Pre-check ${r.pre_result}"></i>` : '',
     r.post_result ? `<i class="ti ti-truck-delivery ${r.post_result === 'pass' ? 'text-success' : 'text-danger'}" title="Delivery check ${r.post_result}"></i>` : ''].join(' ');
-  return `<a class="sq-card st-${r.status}${late ? ' late' : ''}" href="/shipments/${r.id}" ${r.movable && canManage() ? `draggable="true" ondragstart="sqDragStart(event, ${r.id})" ondragend="sqDragEnd(event)"` : ''}
+  return `<a class="sq-card st-${r.status}${late ? ' late' : ''}" href="/shipments/${r.id}" ${r.movable && sqCanMove() ? `draggable="true" ondragstart="sqDragStart(event, ${r.id})" ondragend="sqDragEnd(event)"` : ''}
       title="${esc(r.jobs.map(j => j.job_name).join(', '))} — ${esc(r.destination || '')}">
     <strong>${esc(r.shipment_number)} <span class="float-end">${checks}</span></strong>
     <small>${esc(r.jobs.length ? r.jobs.map(j => j.job_name).join(', ') : 'No job')}</small>
@@ -108,7 +108,7 @@ function sqCard(r, late) {
     <small>${shStatusText(r.status)}</small></a>`;
 }
 const shStatusText = s => (SH.STATUS[s] || [s])[0];
-const canManage = () => typeof hasPermission !== 'function' || hasPermission('shipments.manage');
+const sqCanMove = () => typeof hasPermission !== 'function' || hasPermission('shipments.manage');
 
 function sqRender() {
   const todayStr = ymd(new Date());

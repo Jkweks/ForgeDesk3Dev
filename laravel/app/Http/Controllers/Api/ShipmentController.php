@@ -178,9 +178,28 @@ class ShipmentController extends Controller
      */
     public function preInspection(Request $request, int $id)
     {
+        return $this->recordInspection($request, $id, 'pre');
+    }
+
+    /**
+     * Office-entered post-delivery inspection (the field app is the usual route, via FieldSync): same
+     * checklist, photos and outcome handling, so a delivery marked undamaged/damaged here behaves identically.
+     */
+    public function postInspection(Request $request, int $id)
+    {
+        return $this->recordInspection($request, $id, 'post');
+    }
+
+    private function recordInspection(Request $request, int $id, string $phase)
+    {
         $shipment = Shipment::findOrFail($id);
-        if (! in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
+        if ($phase === 'pre' && ! in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
             return response()->json(['message' => 'This shipment has already shipped.'], 422);
+        }
+        if ($phase === 'post' && $shipment->status !== 'shipped') {
+            return response()->json(['message' => $shipment->inspections()->where('phase', 'post')->exists()
+                ? 'A delivery inspection was already recorded for this shipment.'
+                : 'Only a shipment that has shipped can be inspected on delivery.'], 422);
         }
         $request->validate([
             'answers' => 'required|string', 'notes' => 'nullable|string|max:5000',
@@ -195,7 +214,7 @@ class ShipmentController extends Controller
             'bytes' => (string) file_get_contents($f->getRealPath()), 'name' => $f->getClientOriginalName(),
         ])->all();
 
-        $inspection = $this->inspections->record($shipment, 'pre', $answers, $photos, [
+        $inspection = $this->inspections->record($shipment, $phase, $answers, $photos, [
             'user_id' => $request->user()->id, 'notes' => $request->input('notes'), 'source' => 'office',
         ]);
 

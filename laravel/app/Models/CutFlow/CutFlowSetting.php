@@ -28,6 +28,7 @@ class CutFlowSetting extends Model
     protected $fillable = [
         'cut_sensor_active',
         'show_cut_toast',
+        'printer_enabled',
         'kerf_inches',
         'standard_stock_length',
         'optimizer',
@@ -40,6 +41,7 @@ class CutFlowSetting extends Model
     protected $casts = [
         'cut_sensor_active' => 'boolean',
         'show_cut_toast' => 'boolean',
+        'printer_enabled' => 'boolean',
         'kerf_inches' => 'decimal:3',
         'standard_stock_length' => 'decimal:3',
         'bridge_fake' => 'boolean',
@@ -52,6 +54,12 @@ class CutFlowSetting extends Model
     public static function current(): self
     {
         return static::query()->firstOrCreate([]);
+    }
+
+    /** Master switch for the label printer (off = nothing is sent to the Zebra, labels count as handled). */
+    public function printerEnabled(): bool
+    {
+        return (bool) ($this->attributes['printer_enabled'] ?? true);
     }
 
     public function kerfInches(): float

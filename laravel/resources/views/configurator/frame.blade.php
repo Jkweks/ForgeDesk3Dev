@@ -1276,18 +1276,63 @@ function fbSetName(setId) {
   return s ? s.name : 'set';
 }
 
+// Set whenever a prep-value edit was written into a set's defaults (the opening stays attached).
+let fbSetDefaultsUpdated = null;
+
+// Three-way prompt for a prep-value edit on set-applied hardware: 'update' | 'detach' | null (cancel).
+function fbAskSetValueChoice(data) {
+  return new Promise(resolve => {
+    document.getElementById('fb-set-choice-modal')?.remove();
+    const n = data.set_opening_count || 1;
+    const el = document.createElement('div');
+    el.className = 'modal modal-blur fade';
+    el.id = 'fb-set-choice-modal';
+    el.tabIndex = -1;
+    el.innerHTML = `<div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Part of hardware set "${esc(data.set_name)}"</h5><button type="button" class="btn-close" data-choice="cancel"></button></div>
+      <div class="modal-body">
+        <p>This item follows the set. How should this change apply?</p>
+        <div class="list-group">
+          <button type="button" class="list-group-item list-group-item-action" data-choice="update">
+            <div class="fw-bold">Update the set defaults to match</div>
+            <div class="text-muted small">Changes the set itself, so ${n === 1 ? 'this opening keeps' : `all ${n} openings using it get`} the new value. Released openings are left as they are.</div></button>
+          <button type="button" class="list-group-item list-group-item-action" data-choice="detach">
+            <div class="fw-bold">Only this opening (detach from the set)</div>
+            <div class="text-muted small">All of the set's hardware stays here as normal editable items, but later changes to the set no longer update this opening.</div></button>
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn" data-choice="cancel">Cancel</button></div></div></div>`;
+    document.body.appendChild(el);
+    let done = false;
+    const finish = choice => { if (done) return; done = true; hideModal(el); resolve(choice); };
+    el.querySelectorAll('[data-choice]').forEach(b => b.addEventListener('click', () => finish(b.dataset.choice === 'cancel' ? null : b.dataset.choice)));
+    el.addEventListener('hidden.bs.modal', () => { finish(null); el.remove(); });
+    showModal(el);
+  });
+}
+
 // Runs one hardware-link request, asking before it detaches a set (asked once per user action).
+// Prep-value edits can instead update the set's own defaults when the API offers it.
 async function fbHwLinkCall(path, method, body) {
-  const send = (confirmDecouple) => authenticatedFetch(path, {
-    method, body: body || confirmDecouple ? JSON.stringify({ ...(body || {}), ...(confirmDecouple ? { confirm_decouple: true } : {}) }) : undefined,
+  const send = (extra) => authenticatedFetch(path, {
+    method, body: body || extra ? JSON.stringify({ ...(body || {}), ...(extra || {}) }) : undefined,
   });
   try {
-    return await send(fbSetDecoupleConfirmed);
+    return await send(fbSetDecoupleConfirmed ? { confirm_decouple: true } : null);
   } catch (err) {
     if (err.code !== 'set_decouple') throw err;
-    if (!confirm(err.message + '\n\nDetach the set and continue?')) { const cancel = new Error('Cancelled'); cancel.cancelled = true; throw cancel; }
+    const cancel = () => { const c = new Error('Cancelled'); c.cancelled = true; return c; };
+    if (err.data?.can_update_set) {
+      const choice = await fbAskSetValueChoice(err.data);
+      if (!choice) throw cancel();
+      if (choice === 'update') {
+        const res = await send({ update_set: true });
+        fbSetDefaultsUpdated = res;
+        return res;
+      }
+    } else if (!confirm(err.message + '\n\nDetach the set and continue?')) throw cancel();
     fbSetDecoupleConfirmed = true;
-    return await send(true);
+    return await send({ confirm_decouple: true });
   }
 }
 
@@ -1395,7 +1440,7 @@ const fbIsStdLink = (l) => l.section ? l.section === 'standard' : !!(l.item && l
 function fbHwLinkRowHtml(l, showStd = false) {
   return `
     <tr>
-      <td>${esc(l.item.name)}${showStd && fbIsStdLink(l) ? ' <span class="badge bg-blue-lt">Standard</span>' : ''}${l.source_set_id ? ` <span class="badge bg-purple-lt" title="Follows this hardware set; editing it detaches the set from this opening">Set: ${esc(fbSetName(l.source_set_id))}</span>` : ''}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
+      <td>${esc(l.item.name)}${showStd && fbIsStdLink(l) ? ' <span class="badge bg-blue-lt">Standard</span>' : ''}${l.source_set_id ? ` <span class="badge bg-purple-lt" title="Follows this hardware set; changing a prep value can update the set, other edits detach it from this opening">Set: ${esc(fbSetName(l.source_set_id))}</span>` : ''}${l.item.pn ? '<div class="text-muted small">' + esc(l.item.pn) + '</div>' : ''}${(l.functions || []).length ? '<div>' + l.functions.map(f => `<span class="badge bg-blue-lt me-1">${esc(f.code)}</span>`).join('') + '</div>' : ''}</td>
       <td>${esc(l.item.category.name)}${l.item.subcategory ? ' - ' + esc(l.item.subcategory.name) : ''}</td>
       <td>${esc(l.series)}</td>
       <td>${esc(l.leaf)}</td>
@@ -1503,11 +1548,16 @@ async function fbLoadHwResolvedValues() {
 
 async function fbSavePrepValue(linkId, code, value) {
   fbSetDecoupleConfirmed = false;
+  fbSetDefaultsUpdated = null;
   try {
     await fbHwLinkCall(`/door-frame-configurations/${fbSelectedId}/hardware-links/${linkId}/values`, 'PUT', { values: { [code]: value } });
     fbPrepStale = true;
     fbShowBomStale();
-    if (fbSetDecoupleConfirmed) await fbLoadDetail(); // a set was just detached
+    if (fbSetDefaultsUpdated) {
+      const n = (fbSetDefaultsUpdated.reapplied_to || []).length;
+      showNotification(`Set "${fbSetDefaultsUpdated.set_name}" updated${n > 1 ? ` — ${n} openings re-synced` : ''}.`, 'success');
+      await fbLoadDetail(); // links were rebuilt from the set
+    } else if (fbSetDecoupleConfirmed) await fbLoadDetail(); // a set was just detached
     else await fbLoadHwResolvedValues();
   } catch (err) {
     if (!err.cancelled) showNotification(err.message, 'danger');

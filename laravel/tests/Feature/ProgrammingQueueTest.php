@@ -189,4 +189,48 @@ class ProgrammingQueueTest extends TestCase
     {
         $this->get('/fabrication/programming-queue')->assertOk()->assertSee('Programming Queue');
     }
+
+    public function test_drag_order_overrides_priority_until_reset(): void
+    {
+        $hi = $this->line($this->wo(['priority' => 1]), 'HI', [['Programmed', 'pending']])['Programmed'];
+        $lo = $this->line($this->wo(['priority' => 2]), 'LO', [['Programmed', 'pending']])['Programmed'];
+        $new = $this->line($this->wo(['priority' => 3]), 'NEW', [['Programmed', 'pending']])['Programmed'];
+
+        $this->assertSame([$hi->id, $lo->id, $new->id], $this->ids($this->getJson('/api/v1/programming-queue')->json()));
+
+        $this->postJson('/api/v1/programming-queue/reorder', ['ordered_ids' => [$lo->id, $hi->id]])->assertOk();
+
+        $json = $this->getJson('/api/v1/programming-queue')->json();
+        // Hand-ordered first in dragged order; the unranked line follows by default ranking.
+        $this->assertSame([$lo->id, $hi->id, $new->id], $this->ids($json));
+        $this->assertSame(1, $json['rows'][0]['programming_rank']);
+
+        $this->deleteJson('/api/v1/programming-queue/order')->assertOk();
+        $this->assertSame([$hi->id, $lo->id, $new->id], $this->ids($this->getJson('/api/v1/programming-queue')->json()));
+    }
+
+    public function test_reorder_ignores_non_programming_steps_and_keeps_completed_last(): void
+    {
+        $steps = $this->line($this->wo(['priority' => 1]), 'A', [['Programmed', 'pending'], ['Assembly', 'pending']]);
+        $done = $this->line($this->wo(['priority' => 2]), 'B', [['Programmed', 'complete']])['Programmed'];
+        $done->update(['completed_at' => now()]);
+        $open = $this->line($this->wo(['priority' => 3]), 'C', [['Programmed', 'pending']])['Programmed'];
+
+        $this->postJson('/api/v1/programming-queue/reorder', [
+            'ordered_ids' => [$done->id, $steps['Assembly']->id, $open->id, $steps['Programmed']->id],
+        ])->assertOk();
+
+        $this->assertNull($steps['Assembly']->fresh()->programming_rank);
+        $this->assertSame([$open->id, $steps['Programmed']->id, $done->id], $this->ids($this->getJson('/api/v1/programming-queue?include_done=1')->json()));
+    }
+
+    public function test_reorder_needs_edit_permission(): void
+    {
+        $role = \App\Models\Role::create(['name' => 'wo-viewer-only', 'display_name' => 'WO viewer only']);
+        $role->permissions()->attach(\App\Models\Permission::firstOrCreate(['name' => 'fabrication.work-orders.view'], ['display_name' => 'View work orders'])->id);
+        Sanctum::actingAs(User::factory()->create(['role' => 'wo-viewer-only', 'is_active' => true]), ['*']);
+
+        $this->postJson('/api/v1/programming-queue/reorder', ['ordered_ids' => [1]])->assertForbidden();
+        $this->deleteJson('/api/v1/programming-queue/order')->assertForbidden();
+    }
 }

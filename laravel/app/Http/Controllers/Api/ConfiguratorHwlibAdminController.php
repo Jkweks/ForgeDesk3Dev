@@ -20,6 +20,7 @@ use App\Models\ConfiguratorHwlibSubcategory;
 use App\Models\ConfiguratorHwlibItemDocument;
 use App\Models\ConfiguratorHwlibVariable;
 use App\Services\Configurator\HwlibFormulaConverter;
+use App\Services\Configurator\HwlibSetSync;
 use App\Models\ConfiguratorSetting;
 use App\Models\DoorFrameConfiguration;
 use Illuminate\Database\QueryException;
@@ -759,6 +760,7 @@ class ConfiguratorHwlibAdminController extends Controller
             'items.*.series' => 'required|string|max:50',
             'items.*.leaf' => 'required|string|max:50',
             'items.*.notes' => 'nullable|string',
+            'items.*.id' => 'nullable|integer',
             'items.*.values' => 'nullable|array',
             'items.*.values.*.variable_id' => 'required_with:items.*.values|integer|exists:configurator_hwlib_variables,id',
             'items.*.values.*.value_text' => 'nullable|string',
@@ -766,9 +768,17 @@ class ConfiguratorHwlibAdminController extends Controller
             'items.*.function_ids.*' => 'integer|exists:configurator_hwlib_functions,id',
         ]);
 
-        DB::transaction(function () use ($set, $data) {
+        // A row sent without a `values` key keeps the defaults it already had (matched by its set-item id),
+        // so saving a set from a screen that doesn't edit prep values can never wipe them.
+        $previous = $set->setItems()->with('values')->get()->keyBy('id');
+
+        DB::transaction(function () use ($set, $data, $previous) {
             $set->setItems()->delete();
             foreach ($data['items'] as $row) {
+                if (! array_key_exists('values', $row) && isset($row['id']) && $previous->has((int) $row['id'])) {
+                    $row['values'] = $previous[(int) $row['id']]->values
+                        ->map(fn ($v) => ['variable_id' => $v->variable_id, 'value_text' => $v->value_text])->all();
+                }
                 $setItem = ConfiguratorHwlibSetItem::create([
                     'set_id' => $set->id,
                     'item_id' => $row['item_id'],
@@ -791,21 +801,9 @@ class ConfiguratorHwlibAdminController extends Controller
             }
         });
 
-        $set->load('setItems.values', 'setItems.functions');
-
-        $reappliedTo = [];
-        $skippedReleased = [];
-        foreach ($set->appliedConfigurations as $configuration) {
-            if (! $configuration->canEditHardware()) {
-                $skippedReleased[] = $configuration->id;
-
-                continue;
-            }
-            DB::transaction(function () use ($set, $configuration) {
-                $this->materializeSetIntoConfiguration($set, $configuration);
-            });
-            $reappliedTo[] = $configuration->id;
-        }
+        $result = app(HwlibSetSync::class)->cascade($set);
+        $reappliedTo = $result['reapplied'];
+        $skippedReleased = $result['skipped_released'];
 
         return response()->json([
             'message' => 'Set items updated',
@@ -867,7 +865,7 @@ class ConfiguratorHwlibAdminController extends Controller
 
         foreach ($configurations as $configuration) {
             DB::transaction(function () use ($set, $configuration) {
-                $this->materializeSetIntoConfiguration($set, $configuration);
+                app(HwlibSetSync::class)->materialize($set, $configuration);
                 DB::table('door_frame_configuration_hwlib_sets')->updateOrInsert(
                     ['configuration_id' => $configuration->id, 'set_id' => $set->id],
                     ['applied_at' => now(), 'updated_at' => now(), 'created_at' => now()]
@@ -906,40 +904,6 @@ class ConfiguratorHwlibAdminController extends Controller
         });
 
         return response()->json(['message' => 'Set removed from configuration']);
-    }
-
-    /**
-     * Full delete-then-reinsert of the hardware links a set previously
-     * materialized on this configuration, replaced with its current items —
-     * shared by applySet (first application) and setSetItems' cascade
-     * (re-sync after an edit).
-     */
-    private function materializeSetIntoConfiguration(ConfiguratorHwlibSet $set, DoorFrameConfiguration $configuration): void
-    {
-        ConfiguratorHwlibLink::where('configuration_id', $configuration->id)
-            ->where('source_set_id', $set->id)
-            ->delete();
-
-        foreach ($set->setItems as $setItem) {
-            $link = ConfiguratorHwlibLink::updateOrCreate(
-                ['configuration_id' => $configuration->id, 'item_id' => $setItem->item_id, 'leaf' => $setItem->leaf],
-                ['quantity' => $setItem->quantity, 'series' => $setItem->series, 'notes' => $setItem->notes, 'source_set_id' => $set->id]
-            );
-
-            ConfiguratorHwlibLinkValue::where('link_id', $link->id)->delete();
-            foreach ($setItem->values as $value) {
-                if (($value->value_text ?? '') === '') {
-                    continue;
-                }
-                ConfiguratorHwlibLinkValue::create([
-                    'link_id' => $link->id,
-                    'variable_id' => $value->variable_id,
-                    'value_text' => $value->value_text,
-                ]);
-            }
-
-            $link->functions()->sync($setItem->functions->pluck('id'));
-        }
     }
 
     private function validateOrFail(Request $request, array $rules): array

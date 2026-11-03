@@ -98,6 +98,11 @@ class TigerBridgeClient
 
     public function printLabel(array $payload): array
     {
+        // Printer switched off in CutFlow settings: nothing goes to the Zebra, and callers treat it as done.
+        if (! CutFlowSetting::current()->printerEnabled()) {
+            return ['ok' => true, 'data' => ['printerDisabled' => true]];
+        }
+
         if ($this->fake) {
             Log::info('[tiger-bridge:fake] printLabel', $payload);
 

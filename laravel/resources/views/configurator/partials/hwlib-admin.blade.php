@@ -50,7 +50,6 @@
       <div class="card-header">
         <h3 class="card-title">Variables</h3>
         <div class="card-actions">
-          <input type="text" class="form-control form-control-sm me-2" id="hwlib-var-search" placeholder="Search…" style="width:200px" oninput="hwVarRender()">
           <button class="btn btn-sm btn-primary" onclick="hwVarOpenModal()" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Variable</button>
         </div>
       </div>
@@ -164,3 +163,10 @@
   </div>
 
 </div>
+
+<style>
+  .hwt-scroll { max-height: 68vh; overflow: auto; }
+  .hwt-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface, #fff); box-shadow: 0 1px 0 var(--tblr-border-color, #e6e7e9); }
+  .hwt-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  .hwt-sortable:hover { color: var(--tblr-primary, #206bc4); }
+</style>

@@ -8,12 +8,15 @@ use App\Models\FdWoStage;
 use App\Services\StageGateService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The CNC programmers' worklist: one row per elevation (line item) that has a
  * programming step ("Program", "Programmed", "CNC Programming"... — any step
  * whose name contains "program"). Ranked like the Work Queue: in-progress
- * first, then work-order priority, then the line's requested date.
+ * first, then work-order priority, then the line's requested date. A programmer can drag lines into
+ * their own order (programming_rank), which takes precedence until reset; it never touches the work
+ * orders' own priority, which the Work Queue owns.
  */
 class ProgrammingQueueController extends Controller
 {
@@ -55,6 +58,9 @@ class ProgrammingQueueController extends Controller
         }
 
         $stages = $query
+            // Finished lines stay at the bottom; among the rest, hand-ordered lines come first in their dragged order.
+            ->orderByRaw("CASE WHEN fd_wo_stages.status = 'complete' THEN 1 ELSE 0 END")
+            ->orderByRaw('fd_wo_stages.programming_rank IS NULL, fd_wo_stages.programming_rank ASC')
             ->orderByRaw("CASE fd_wo_stages.status WHEN 'in_progress' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
             ->orderByRaw('w.priority IS NULL, w.priority ASC')
             ->orderByRaw('e.date_requested IS NULL, e.date_requested ASC')
@@ -87,6 +93,7 @@ class ProgrammingQueueController extends Controller
                 'stage_id' => $s->id,
                 'stage_name' => $s->name,
                 'status' => $s->status,
+                'programming_rank' => $s->programming_rank,
                 'started_at' => $s->started_at?->toIso8601String(),
                 'completed_at' => $s->completed_at?->toIso8601String(),
                 'gated' => $blocker !== null || $configReason !== null,
@@ -124,6 +131,41 @@ class ProgrammingQueueController extends Controller
             'rows' => $rows,
             'fab_users' => FdUser::where('active', true)->orderBy('name')->get(['id', 'name', 'initials']),
         ]);
+    }
+
+    /**
+     * Saves a drag-and-drop order. Body: { ordered_ids: [stage ids, top to bottom] }. Only programming
+     * steps are touched; ids that aren't (or are unknown) are ignored.
+     */
+    public function reorder(Request $request)
+    {
+        $ids = $request->validate([
+            'ordered_ids' => 'required|array|min:1|max:2000',
+            'ordered_ids.*' => 'integer|distinct',
+        ])['ordered_ids'];
+
+        $valid = FdWoStage::whereIn('id', $ids)
+            ->whereRaw("LOWER(name) LIKE '%program%'")
+            ->pluck('id')->flip();
+
+        DB::transaction(function () use ($ids, $valid) {
+            $rank = 0;
+            foreach ($ids as $id) {
+                if ($valid->has($id)) {
+                    FdWoStage::whereKey($id)->update(['programming_rank' => ++$rank]);
+                }
+            }
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Drops the hand ordering so the queue goes back to priority order. */
+    public function resetOrder()
+    {
+        FdWoStage::whereNotNull('programming_rank')->update(['programming_rank' => null]);
+
+        return response()->json(['ok' => true]);
     }
 
     /** The Monday-to-Friday day before $date (a Monday start means programming is due the Friday before). */
