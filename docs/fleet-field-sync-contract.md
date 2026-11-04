@@ -177,6 +177,12 @@ otherwise the shipment becomes `delivered` (all pass) or `delivered_issues` (any
 `fa_shipments` grants: `field_app` SELECT; `forgedesk_sync` SELECT/INSERT/UPDATE.
 
 
+## Pickup / drop-off locations (v5)
+
+Upgrade an existing field DB with `field-app/db/upgrades/005-shipment-locations.sql` **before** ForgeDesk publishes (sync-out fails loudly until the columns exist).
+
+`fa_shipments` gains, all nullable and published by ForgeDesk (read-only for the field app): `pickup_name`, `pickup_address`, `pickup_lat`, `pickup_lng`, `dropoff_name`, `dropoff_address`, `dropoff_lat`, `dropoff_lng`. The phone shows each stop with a **Navigate** link that opens the maps app (coordinates when present, else the address). Shipments created from the phone carry no locations.
+
 ## Shipping queue, pre-checks and new shipments (v4)
 
 Upgrade an existing field DB with `field-app/db/upgrades/004-shipping-queue.sql` **before** ForgeDesk publishes (sync-out fails loudly until it exists).

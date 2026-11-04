@@ -94,8 +94,22 @@ class HwlibBomGenerator
                 $pieceQty = $variantQty * $openingQty;
                 $stockPn = $item->pn ? $item->pn.$hand : null;
 
-                $itemProductId = $this->resolveProduct($stockPn, $finish);
-                if ($itemProductId) {
+                // By-others items (e.g. the ASA strike) are supplied by someone else: listed with their
+                // backers/fasteners, but never tied to a stock product, so nothing is reserved for them.
+                $itemProductId = $item->by_others ? null : $this->resolveProduct($stockPn, $finish);
+                if ($item->by_others) {
+                    $rows[] = [
+                        'part_label' => $item->name.' (by others)',
+                        'manufacturer' => $item->manufacturer,
+                        'model_number' => ($item->model_number ?: $item->pn).$hand ?: null,
+                        'product_id' => null,
+                        'quantity' => $pieceQty,
+                        'source_type' => 'item',
+                        'hwlib_link_id' => $attributedTo,
+                        'is_auto_generated' => true,
+                        'sort_order' => $sortOrder++,
+                    ];
+                } elseif ($itemProductId) {
                     $rows[] = [
                         'part_label' => $item->name,
                         'product_id' => $itemProductId,

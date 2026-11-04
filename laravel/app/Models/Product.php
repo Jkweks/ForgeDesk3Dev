@@ -598,6 +598,20 @@ class Product extends Model
     }
 
     /**
+     * Net price (products.net_cost, "Net Price") per single stock unit, or null when none is set.
+     * For pack products the net price is per pack while quantities are in eaches, so it is divided
+     * by pack_size; sticks, rolls and plain each items are priced as entered.
+     */
+    public function netUnitPrice(): ?float
+    {
+        if ($this->net_cost === null) {
+            return null;
+        }
+
+        return (float) $this->net_cost / ($this->hasPackSize() ? (int) $this->pack_size : 1);
+    }
+
+    /**
      * Check if product is tracked in packs (has a pack_size > 1)
      */
     public function hasPackSize()

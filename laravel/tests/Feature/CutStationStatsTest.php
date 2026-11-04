@@ -87,6 +87,19 @@ class CutStationStatsTest extends TestCase
             ->assertOk()->assertJson(['caption' => '2026', 'total' => 5]);
     }
 
+    public function test_widget_can_show_several_periods_at_once(): void
+    {
+        $this->admin();
+        $this->entry('2026-06-15 14:00:00');   // Monday, today
+        $this->entry('2026-06-02 12:00:00');   // earlier this month, before this week
+        $this->entry('2026-02-10 12:00:00');   // earlier this year
+
+        $r = $this->getJson('/api/v1/dashboard/widgets/cutflow/cuts?periods[]=year&periods[]=day&periods[]=week&periods[]=bogus')->assertOk();
+        $this->assertSame(['day', 'week', 'year'], array_column($r->json('periods'), 'period'));
+        $this->assertSame([1, 1, 3], array_column($r->json('periods'), 'total'));
+        $this->assertSame(1, $r->json('total')); // first period keeps the single-value fields
+    }
+
     public function test_widget_period_defaults_to_day_for_missing_or_invalid_values(): void
     {
         $this->admin();
@@ -95,7 +108,9 @@ class CutStationStatsTest extends TestCase
 
         $this->getJson('/api/v1/dashboard/widgets/cutflow/cuts')->assertOk()->assertJson(['period' => 'day', 'total' => 1]);
         $this->getJson('/api/v1/dashboard/widgets/cutflow/cuts?period=decade')->assertOk()->assertJson(['period' => 'day', 'total' => 1]);
-        $this->assertSame('day', WidgetRegistry::resolveSettings('cutflow_cuts_total', [])['period']);
+        $this->assertSame(['day'], WidgetRegistry::resolveSettings('cutflow_cuts_total', [])['periods']);
+        // A layout saved before multi-period support still resolves.
+        $this->assertSame(['month'], WidgetRegistry::sanitizeSettings('cutflow_cuts_total', ['period' => 'month'])['periods']);
     }
 
     public function test_productivity_report_groups_by_operator_and_excludes_drops(): void

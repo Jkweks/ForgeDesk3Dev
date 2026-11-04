@@ -1,0 +1,89 @@
+# ForgeDesk Field app, from PREBUILT images (published to GHCR by the "Build and Publish Field App
+# Images" workflow on each release). Needs only this file and a .env; no source checkout:
+#   cp .env.example .env   # fill in the passwords and domain
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+# Pin a release with FIELD_IMAGE_TAG=1.2.3 in .env (default: latest). If the packages are private:
+#   echo <PAT with read:packages> | docker login ghcr.io -u <github-user> --password-stdin
+# ForgeDesk connects OUT to the db service (see README.md); nothing here ever reaches ForgeDesk.
+name: forgedesk-field
+
+services:
+  db:
+    image: ghcr.io/jkweks/forgedesk-field-db:${FIELD_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fieldadmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: fieldapp
+      FIELD_APP_DB_PASSWORD: ${FIELD_APP_DB_PASSWORD:?set FIELD_APP_DB_PASSWORD in .env}
+      FORGEDESK_SYNC_DB_PASSWORD: ${FORGEDESK_SYNC_DB_PASSWORD:?set FORGEDESK_SYNC_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # The one port ForgeDesk needs. Bind it to this server's LAN/VPN address and firewall it
+    # to ForgeDesk's IP only; the default keeps it local to this machine.
+    ports:
+      - "${FIELDSYNC_DB_BIND:-127.0.0.1}:${FIELDSYNC_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldadmin -d fieldapp"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: ghcr.io/jkweks/forgedesk-field-app:${FIELD_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: fieldapp
+      PGUSER: field_app
+      PGPASSWORD: ${FIELD_APP_DB_PASSWORD}
+      PORT: "3000"
+      # Cookies are Secure (HTTPS-only) unless you explicitly turn this off for a plain-HTTP test.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      FIELD_DOMAIN: ${FIELD_DOMAIN:?set FIELD_DOMAIN in .env}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+# Inline so the server needs no Caddyfile (Compose 2.23+).
+configs:
+  caddyfile:
+    content: |
+      {
+        default_sni {$$FIELD_DOMAIN}
+      }
+      {$$FIELD_DOMAIN} {
+        encode gzip
+        reverse_proxy app:3000
+      }
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

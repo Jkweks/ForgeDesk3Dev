@@ -9,6 +9,9 @@
       /* Widgets fill their grid cell; the remove (x) only shows while editing. */
       #dashboardGrid .grid-stack-item-content { overflow: hidden; inset: 4px; }
       #dashboardGrid .dash-widget-body { position: relative; min-height: 0; }
+      /* Compact stat cards: the title wraps to two lines instead of forcing a wide card. */
+      #dashboardGrid .dash-title-wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; }
+      #dashboardGrid .dash-multistat { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: .5rem .75rem; margin-bottom: .25rem; }
       #dashboardGrid .dash-chart { position: absolute; inset: 0; }
       #dashboardGrid .dash-table thead th { position: sticky; top: 0; background: var(--tblr-bg-surface, #fff); z-index: 1; }
       #dashboardGrid .dash-table tbody tr[data-href] { cursor: pointer; }

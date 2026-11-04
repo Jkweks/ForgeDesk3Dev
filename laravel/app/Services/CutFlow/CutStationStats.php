@@ -24,7 +24,7 @@ class CutStationStats
 {
     public const SHOP_TIMEZONE = 'America/New_York';
 
-    public const PERIODS = ['day' => 'Today', 'month' => 'This calendar month', 'year' => 'This calendar year'];
+    public const PERIODS = ['day' => 'Today', 'week' => 'This week (from Monday)', 'month' => 'This calendar month', 'year' => 'This calendar year'];
 
     /** @return Builder<CutLogEntry> */
     public static function cuts(): Builder
@@ -44,6 +44,7 @@ class CutStationStats
         $local = ($now ?? now())->clone()->setTimezone(self::SHOP_TIMEZONE);
 
         $start = match ($period) {
+            'week' => $local->startOfWeek(),
             'month' => $local->startOfMonth(),
             'year' => $local->startOfYear(),
             default => $local->startOfDay(),
@@ -58,6 +59,7 @@ class CutStationStats
         $local = ($now ?? now())->clone()->setTimezone(self::SHOP_TIMEZONE);
 
         return match ($period) {
+            'week' => 'Week of '.$local->startOfWeek()->format('M j'),
             'month' => $local->format('F Y'),
             'year' => $local->format('Y'),
             default => $local->format('M j, Y'),

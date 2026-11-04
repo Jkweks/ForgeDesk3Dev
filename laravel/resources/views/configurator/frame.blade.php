@@ -73,6 +73,7 @@
                 <span class="badge" id="fb-status-badge"></span>
                 <div class="btn-group" role="group">
                   <button class="btn btn-outline-secondary" id="fb-material-btn" onclick="fbOpenMaterial()" style="display:none" data-permission="configurator.view" title="Preview the stock this draft would consume before reserving"><i class="ti ti-list-details me-1"></i>Material</button>
+                  <button class="btn btn-outline-secondary" id="fb-cost-btn" onclick="fbOpenCost()" data-permission="pricing.view" title="Material cost from the BOM and each item's net price"><i class="ti ti-currency-dollar me-1"></i>Cost</button>
                   <button class="btn btn-outline-secondary" id="fb-reserve-toggle-btn" onclick="fbToggleReserve()" style="display:none" data-permission="configurator.release"><i class="ti ti-bookmark me-1"></i>Reserve</button>
                   <button class="btn btn-outline-secondary" id="fb-reserve-btn" onclick="fbCreateReservation()" style="display:none" data-permission="configurator.release"><i class="ti ti-package me-1"></i>Create Reservation</button>
                   <button class="btn btn-outline-success" id="fb-cutrelease-btn" onclick="fbOpenRelease('cut')" style="display:none" data-permission="configurator.release" title="Send the cut list to CutFlow now; hardware stays editable"><i class="ti ti-cut me-1"></i>Release to CutFlow&hellip;</button>
@@ -789,6 +790,22 @@
       </div>
       <div class="modal-body" id="fb-material-body">Loading&hellip;</div>
       <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="fb-cost-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Material cost</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="fb-cost-body">Loading&hellip;</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-primary me-auto" onclick="fbExportCostPdf()"><i class="ti ti-file-type-pdf me-1"></i>Export PDF</button>
         <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
@@ -2550,6 +2567,46 @@ async function fbOpenMaterial(scope) {
   } catch (e) {
     body.innerHTML = '<div class="alert alert-danger">' + esc(e.message || 'Could not load material consumption.') + '</div>';
   }
+}
+
+// ---- Material cost (BOM quantities x product net price) ----
+async function fbOpenCost() {
+  const body = document.getElementById('fb-cost-body');
+  body.textContent = 'Loading…';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('fb-cost-modal')).show();
+  const money = (v, maxDp = 2) => v == null ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: maxDp });
+  try {
+    const d = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/cost`);
+    const notes = [...d.warnings];
+    if (d.missing_price) notes.push(`${d.missing_price} item(s) have no net price set and are counted at $0 — the total is understated.`);
+    if (d.unpriced_special_order) notes.push(`${d.unpriced_special_order} special-order hardware item(s) have no inventory product and are not priced.`);
+    const rows = d.rows.map(r => `<tr class="${r.net_price > 0 ? '' : 'table-warning'}">
+        <td>${esc(r.part_number)}${r.finish ? ' <span class="text-muted">' + esc(r.finish) + '</span>' : ''}<div class="text-muted small">${esc(r.description || '')}</div></td>
+        <td class="text-end">${r.quantity}</td><td class="text-end">${r.net_price > 0 ? money(r.net_price, 4) + (r.pack_size > 1 ? '<div class="text-muted small">' + money(r.pack_net_price) + ' / pack of ' + r.pack_size + '</div>' : '') : '<span class="badge bg-yellow-lt">no net price</span>'}</td>
+        <td class="text-end">${money(r.extended)}</td></tr>`).join('');
+    body.innerHTML = `${notes.map(w => `<div class="alert alert-warning py-2">${esc(w)}</div>`).join('')}
+      ${d.rows.length ? `<table class="table table-sm"><thead><tr><th>Part</th><th class="text-end">Qty</th><th class="text-end">Net price</th><th class="text-end">Extended</th></tr></thead>
+        <tbody>${rows}</tbody><tfoot><tr><th colspan="3" class="text-end">Material total</th><th class="text-end">${money(d.total)}</th></tr></tfoot></table>
+        <div class="text-muted small">Quantities match the material list (extrusions and roll stock in tenths of a stick/roll); price is the item's Net Price per stock unit (per piece for pack items, from the pack price).</div>`
+        : '<div class="text-muted">No parts generated yet.</div>'}`;
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">' + esc(e.message || 'Could not load cost.') + '</div>';
+  }
+}
+
+async function fbExportCostPdf() {
+  try {
+    const res = await fetch(`/api/v1/door-frame-configurations/${fbSelectedId}/cost/export`, {
+      credentials: 'include',
+      headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+    });
+    if (!res.ok) throw new Error('Export failed');
+    const name = (res.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/)?.[1] || `Cost_${fbSelectedId}.pdf`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) { showNotification(err.message, 'danger'); }
 }
 
 // ---- Reserve ----

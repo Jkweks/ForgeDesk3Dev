@@ -326,18 +326,26 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                       <div class="row">
                         <div class="col-md-6">
                           <div class="mb-3">
-                            <label class="form-label">Product SKU</label>
-                            <input type="text" class="form-control" id="newItemSKU" placeholder="Search by SKU...">
+                            <label class="form-label">Product (search SKU, part #, finish or description)</label>
+                            <input type="text" class="form-control" id="newItemSKU" placeholder="Type to search..." autocomplete="off">
                             <input type="hidden" id="newItemProductId">
                           </div>
+                          <div id="newItemResults" class="list-group mb-3" style="max-height: 200px; overflow-y: auto; display: none;"></div>
+                          <div id="newItemSelected" style="display: none;" class="alert alert-success mb-3"><strong>Selected:</strong> <span id="newItemInfo"></span></div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                          <div class="mb-3">
+                            <label class="form-label">Unit</label>
+                            <select class="form-select" id="newItemUnit" disabled><option value="each">Each</option></select>
+                          </div>
+                        </div>
+                        <div class="col-md-2">
                           <div class="mb-3">
                             <label class="form-label">Requested Qty</label>
                             <input type="number" class="form-control" id="newItemRequestedQty" min="0.1" step="0.1" value="1">
                           </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                           <div class="mb-3">
                             <label class="form-label">Committed Qty</label>
                             <input type="number" class="form-control" id="newItemCommittedQty" min="0" step="0.1" value="0">
@@ -516,9 +524,9 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     <div class="card-body">
                       <h4 class="card-title">Add Item</h4>
                       <div class="row">
-                        <div class="col-md-8">
+                        <div class="col-md-6">
                           <div class="mb-3">
-                            <label class="form-label">Product (Search by SKU, Part #, or Description)</label>
+                            <label class="form-label">Product (Search by SKU, Part #, Finish or Description)</label>
                             <input type="text" class="form-control" id="manualItemSearch" placeholder="Type to search...">
                             <input type="hidden" id="manualItemProductId">
                           </div>
@@ -527,6 +535,12 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                           </div>
                           <div id="manualSelectedProduct" style="display: none;" class="alert alert-success mb-3">
                             <strong>Selected:</strong> <span id="manualProductInfo"></span>
+                          </div>
+                        </div>
+                        <div class="col-md-2">
+                          <div class="mb-3">
+                            <label class="form-label">Unit</label>
+                            <select class="form-select" id="manualItemUnit" disabled><option value="each">Each</option></select>
                           </div>
                         </div>
                         <div class="col-md-2">
@@ -908,6 +922,54 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             }
         }
 
+        const fmtMoney = (v, maxDp = 2) => v == null ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: maxDp });
+
+        async function loadReservationCost(id) {
+            const box = document.getElementById('reservationCostSection');
+            try {
+                const response = await fetch(`/api/v1/job-reservations/${id}/cost`, {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                if (!response.ok) throw new Error('Could not load the price summary');
+                const d = await response.json();
+                const rows = d.rows.map(r => `<tr class="${r.net_price > 0 ? '' : 'table-warning'}">
+                    <td><strong>${escapeHtml(r.part_number)}</strong>${r.finish ? ' <span class="text-muted">' + escapeHtml(r.finish) + '</span>' : ''}<div class="text-muted small">${escapeHtml(r.description || '')}</div></td>
+                    <td class="text-end">${fmtQty(r.quantity)}</td>
+                    <td class="text-end">${r.net_price > 0 ? fmtMoney(r.net_price, 4) + (r.pack_size > 1 ? `<div class="text-muted small">${fmtMoney(r.pack_net_price)} / pack of ${r.pack_size}</div>` : '') : '<span class="badge bg-yellow-lt">no net price</span>'}</td>
+                    <td class="text-end">${fmtMoney(r.extended)}</td></tr>`).join('');
+                box.innerHTML = `<div class="d-flex justify-content-between align-items-center mb-2">
+                        <h4 class="mb-0">Price Summary</h4>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="exportReservationCost(${id})"><i class="ti ti-file-type-pdf me-1"></i>Export PDF</button>
+                    </div>
+                    ${d.missing_price ? `<div class="alert alert-warning py-2">${d.missing_price} item(s) have no net price and are counted at $0 — the total is understated.</div>` : ''}
+                    <div class="table-responsive"><table class="table table-sm">
+                        <thead><tr><th>Part</th><th class="text-end">Qty</th><th class="text-end">Net price</th><th class="text-end">Extended</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                        <tfoot><tr><th colspan="3" class="text-end">Material total</th><th class="text-end">${fmtMoney(d.total)}</th></tr>
+                        ${d.consumed_total > 0 ? `<tr><td colspan="3" class="text-end text-muted">Consumed so far</td><td class="text-end text-muted">${fmtMoney(d.consumed_total)}</td></tr>` : ''}</tfoot>
+                    </table></div>
+                    <div class="text-muted small">Requested quantity x the item's Net Price (per piece for pack items, from the pack price).</div>`;
+            } catch (e) {
+                box.innerHTML = `<h4>Price Summary</h4><div class="alert alert-danger">${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        async function exportReservationCost(id) {
+            try {
+                const response = await fetch(`/api/v1/job-reservations/${id}/cost/export`, {
+                    credentials: 'include',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                if (!response.ok) throw new Error('Export failed');
+                const name = (response.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/)?.[1] || `Reservation_Cost_${id}.pdf`;
+                const url = URL.createObjectURL(await response.blob());
+                const a = Object.assign(document.createElement('a'), { href: url, download: name });
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) { alert(e.message); }
+        }
+
         function showDetailsModal(data) {
             const res = data.reservation;
             const items = data.items;
@@ -996,7 +1058,9 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                         </tbody>
                     </table>
                 </div>
+                ${hasPermission('reservations.cost.view') ? `<div id="reservationCostSection" class="mt-4"><h4>Price Summary</h4><div class="text-muted">Loading…</div></div>` : ''}
             `;
+            if (hasPermission('reservations.cost.view')) loadReservationCost(res.id);
 
             // Add Edit / Complete buttons if not in terminal state — writers only
             const detailModalActions = document.getElementById('detailModalActions');
@@ -1504,14 +1568,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                 return;
             }
 
-            if (field === 'committed_qty' && numValue > item.committed_qty) {
-                const increase = numValue - item.committed_qty;
-                if (increase > item.product.quantity_available) {
-                    alert(`Only ${item.product.quantity_available} available. Cannot increase by ${increase}.`);
-                    renderEditItems();
-                    return;
-                }
-            }
+            // Committing more than is available is allowed (overcommit): it drives replenishment demand.
 
             item[field] = numValue;
         }
@@ -1523,6 +1580,17 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             document.getElementById('newItemProductId').value = '';
             document.getElementById('newItemRequestedQty').value = 1;
             document.getElementById('newItemCommittedQty').value = 0;
+            document.getElementById('newItemResults').style.display = 'none';
+            document.getElementById('newItemSelected').style.display = 'none';
+            window.tempNewItemProduct = null;
+            setUnitSelect('newItemUnit', null);
+            attachProductSearch('newItemSKU', 'newItemResults', (p) => {
+                window.tempNewItemProduct = p;
+                document.getElementById('newItemProductId').value = p ? p.id : '';
+                setUnitSelect('newItemUnit', p);
+                document.getElementById('newItemSelected').style.display = p ? 'block' : 'none';
+                if (p) document.getElementById('newItemInfo').textContent = `${productLabel(p)} (${p.quantity_available} available)`;
+            });
         }
 
         function hideAddItemForm() {
@@ -1532,36 +1600,35 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
 
         async function addNewItem() {
             const sku = document.getElementById('newItemSKU').value.trim();
-            const requestedQty = Math.round(parseFloat(document.getElementById('newItemRequestedQty').value) * 10) / 10;
-            const committedQty = Math.round(parseFloat(document.getElementById('newItemCommittedQty').value) * 10) / 10;
+            let product = window.tempNewItemProduct || null;
+            const factor = unitFactor('newItemUnit', product);
+            const requestedQty = Math.round(parseFloat(document.getElementById('newItemRequestedQty').value) * factor * 10) / 10;
+            const committedQty = Math.round((parseFloat(document.getElementById('newItemCommittedQty').value) || 0) * factor * 10) / 10;
 
             if (!sku) {
-                alert('Please enter a product SKU');
+                alert('Please search for and select a product');
                 return;
             }
 
-            // Find product by SKU using dedicated search endpoint
             try {
-                const response = await fetch(`/api/v1/job-reservations/search-product?sku=${encodeURIComponent(sku)}`, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    alert(error.message || 'Product not found');
-                    return;
-                }
-
-                const data = await response.json();
-                const product = data.product;
-
+                // A typed SKU that was never picked from the list falls back to an exact SKU match.
                 if (!product) {
-                    alert('Product not found with SKU: ' + sku);
-                    return;
+                    const response = await fetch(`/api/v1/job-reservations/search-product?sku=${encodeURIComponent(sku)}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        }
+                    });
+                    if (!response.ok) {
+                        alert('Pick a product from the search results');
+                        return;
+                    }
+                    product = (await response.json()).product;
+                    if (!product) {
+                        alert('Product not found with SKU: ' + sku);
+                        return;
+                    }
                 }
 
                 // Check if already in list
@@ -1570,11 +1637,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                     return;
                 }
 
-                // Check available inventory
-                if (committedQty > product.quantity_available) {
-                    alert(`Only ${product.quantity_available} available. Cannot commit ${committedQty}.`);
-                    return;
-                }
+                // Overcommitting beyond available is allowed; the shortfall shows up in replenishment.
 
                 // Add to items array
                 editingItems.push({
@@ -1856,6 +1919,60 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
         }
 
         // ===== MANUAL RESERVATION FUNCTIONS =====
+        // ── Shared product search + Each/Pack unit helpers (manual + edit add-item forms) ──
+        function productLabel(p) {
+            return `${p.sku} - ${p.part_number || ''} ${p.finish || ''}`.replace(/\s+/g, ' ').trim();
+        }
+        // Wires a search box to /search-products. onPick(product) fires when a result is chosen.
+        function attachProductSearch(inputId, resultsId, onPick) {
+            const input = document.getElementById(inputId);
+            const box = document.getElementById(resultsId);
+            let timer, seq = 0;
+            input.oninput = function () {
+                onPick(null); // typing again clears the previous selection
+                clearTimeout(timer);
+                const q = this.value.trim();
+                if (q.length < 2) { box.style.display = 'none'; return; }
+                timer = setTimeout(async () => {
+                    const mine = ++seq;
+                    try {
+                        const res = await fetch(`/api/v1/job-reservations/search-products?q=${encodeURIComponent(q)}&per_page=10`, {
+                            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                        });
+                        if (!res.ok || mine !== seq) return;
+                        const list = (await res.json()).data || [];
+                        box.innerHTML = list.length ? list.map((p, i) => `
+                            <button type="button" class="list-group-item list-group-item-action" data-i="${i}">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <strong>${escapeHtml(p.sku)}</strong>
+                                    <span class="badge bg-${p.quantity_available > 0 ? 'success' : 'warning'}">${p.quantity_available} avail${p.pack_size > 1 ? ` · pack of ${p.pack_size}` : ''}</span>
+                                </div>
+                                <small>${escapeHtml(p.part_number || '')} ${escapeHtml(p.finish || '')} - ${escapeHtml(p.description || '')}</small>
+                            </button>`).join('') : '<div class="list-group-item">No products found</div>';
+                        box.querySelectorAll('button[data-i]').forEach(btn => btn.onclick = () => {
+                            const p = list[parseInt(btn.dataset.i, 10)];
+                            input.value = p.sku;
+                            box.style.display = 'none';
+                            onPick(p);
+                        });
+                        box.style.display = 'block';
+                    } catch (e) { console.error('Error searching products:', e); }
+                }, 250);
+            };
+        }
+        // Shows/hides the Pack option for the chosen product; quantities are always stored in eaches.
+        function setUnitSelect(selectId, product) {
+            const sel = document.getElementById(selectId);
+            const pack = product && product.pack_size > 1 ? product.pack_size : 0;
+            sel.innerHTML = '<option value="each">Each</option>' + (pack ? `<option value="pack">Pack (${pack})</option>` : '');
+            sel.value = 'each';
+            sel.disabled = !pack;
+        }
+        function unitFactor(selectId, product) {
+            const pack = product && product.pack_size > 1 ? product.pack_size : 1;
+            return document.getElementById(selectId).value === 'pack' ? pack : 1;
+        }
+
         let manualItems = [];
         let manualItemSearchTimeout;
 
@@ -1931,12 +2048,15 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             document.getElementById('manualSearchResults').style.display = 'none';
             document.getElementById('manualSelectedProduct').style.display = 'none';
 
-            // Setup search handler
-            const searchInput = document.getElementById('manualItemSearch');
-            searchInput.oninput = function() {
-                clearTimeout(manualItemSearchTimeout);
-                manualItemSearchTimeout = setTimeout(() => searchManualProduct(this.value), 300);
-            };
+            window.tempManualProduct = null;
+            setUnitSelect('manualItemUnit', null);
+            attachProductSearch('manualItemSearch', 'manualSearchResults', (p) => {
+                window.tempManualProduct = null;
+                document.getElementById('manualItemProductId').value = '';
+                document.getElementById('manualSelectedProduct').style.display = 'none';
+                setUnitSelect('manualItemUnit', p);
+                if (p) selectManualProduct(p.id, p.sku, p.part_number || '', p.finish || '', p.description || '', Number(p.quantity_available) || 0, p.pack_size || 1);
+            });
         }
 
         function hideManualAddItemForm() {
@@ -1984,7 +2104,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             }
         }
 
-        function selectManualProduct(productId, sku, partNumber, finish, description, available) {
+        function selectManualProduct(productId, sku, partNumber, finish, description, available, packSize) {
             document.getElementById('manualItemProductId').value = productId;
             document.getElementById('manualSearchResults').style.display = 'none';
             document.getElementById('manualItemSearch').value = sku;
@@ -1992,13 +2112,15 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
             document.getElementById('manualSelectedProduct').style.display = 'block';
 
             // Store product details for later
-            window.tempManualProduct = { productId, sku, partNumber, finish, description, available };
+            window.tempManualProduct = { productId, sku, partNumber, finish, description, available, pack_size: packSize || 1 };
         }
 
         function addManualItem() {
             const productId = document.getElementById('manualItemProductId').value;
-            const requestedQty = Math.round(parseFloat(document.getElementById('manualItemRequestedQty').value) * 10) / 10;
-            const committedQty = Math.round(parseFloat(document.getElementById('manualItemCommittedQty').value) * 10) / 10;
+            const mProduct = window.tempManualProduct;
+            const mFactor = unitFactor('manualItemUnit', mProduct);
+            const requestedQty = Math.round(parseFloat(document.getElementById('manualItemRequestedQty').value) * mFactor * 10) / 10;
+            const committedQty = Math.round((parseFloat(document.getElementById('manualItemCommittedQty').value) || 0) * mFactor * 10) / 10;
 
             if (!productId) {
                 alert('Please select a product');

@@ -6,15 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\Shipment;
 use App\Models\ShipmentInspectionPhoto;
+use App\Models\ShipmentLocation;
 use App\Services\ImageSanitizer;
 use App\Services\Shipping\ShipmentInspectionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Shipments and their pre-shipment inspection. Post-delivery inspections arrive from the
@@ -26,7 +31,7 @@ class ShipmentController extends Controller
 
     public function index(Request $request)
     {
-        $q = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name'])
+        $q = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name'])
             ->withCount('inspections')->orderByDesc('id');
         if ($request->filled('status')) {
             $q->whereIn('status', array_filter(explode(',', (string) $request->query('status'))));
@@ -37,6 +42,7 @@ class ShipmentController extends Controller
         if ($request->filled('search')) {
             $s = '%'.$request->query('search').'%';
             $q->where(fn ($w) => $w->where('shipment_number', 'like', $s)->orWhere('destination', 'like', $s)
+                ->orWhereRaw('CAST(custom_jobs AS TEXT) like ?', [$s])
                 ->orWhereHas('jobs', fn ($j) => $j->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s)));
         }
 
@@ -54,7 +60,7 @@ class ShipmentController extends Controller
         $to = Carbon::parse($request->query('to', Carbon::parse($from)->addDays(13)))->toDateString();
         $open = ['draft', 'pre_check_done'];
 
-        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'inspections:id,shipment_id,phase,result'])
+        $rows = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'inspections:id,shipment_id,phase,result'])
             ->where('status', '!=', 'cancelled')
             ->where(fn ($w) => $w->whereBetween('ship_date', [$from, $to])
                 ->orWhere(fn ($x) => $x->whereNull('ship_date')->whereIn('status', $open))
@@ -64,7 +70,7 @@ class ShipmentController extends Controller
         return response()->json(['from' => $from, 'to' => $to, 'shipments' => $rows->map(fn (Shipment $r) => [
             'id' => $r->id, 'shipment_number' => $r->shipment_number, 'status' => $r->status,
             'ship_date' => $r->ship_date?->format('Y-m-d'), 'destination' => $r->destination, 'carrier' => $r->carrier,
-            'jobs' => $r->jobs, 'loads' => $r->loads,
+            'jobs' => $r->jobs, 'custom_jobs' => $r->custom_jobs ?? [], 'loads' => $r->loads,
             'pre_result' => $r->inspections->firstWhere('phase', 'pre')?->result,
             'post_result' => $r->inspections->firstWhere('phase', 'post')?->result,
             'movable' => in_array($r->status, $open, true),
@@ -81,7 +87,7 @@ class ShipmentController extends Controller
         $data = $request->validate(['ship_date' => 'present|nullable|date']);
         $shipment->update(['ship_date' => $data['ship_date']]);
 
-        return response()->json($shipment->fresh(['jobs:id,job_number,job_name', 'loads.type:id,name']));
+        return response()->json($shipment->fresh(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name']));
     }
 
     public function jobOptions(Request $request)
@@ -91,21 +97,130 @@ class ShipmentController extends Controller
             $q->where('id', (int) $request->query('id'));
         }
         if ($request->filled('search')) {
-            $s = '%'.$request->query('search').'%';
-            $q->where(fn ($w) => $w->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s));
+            $s = '%'.mb_strtolower($request->query('search')).'%';
+            $q->where(fn ($w) => $w->whereRaw('LOWER(job_number) like ?', [$s])->orWhereRaw('LOWER(job_name) like ?', [$s]));
         }
 
-        return response()->json($q->limit(30)->get(['id', 'job_number', 'job_name']));
+        return response()->json($q->limit(30)->get(['id', 'job_number', 'job_name', 'site_address']));
+    }
+
+    public function locations()
+    {
+        return response()->json(ShipmentLocation::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get());
+    }
+
+    /**
+     * Address lookup for the jobsite / custom drop-off. Proxied through the server (OpenStreetMap Nominatim) so
+     * the browser never talks to a third party, results are cached, and the usage policy's User-Agent is honoured.
+     */
+    public function addressSearch(Request $request)
+    {
+        $q = trim((string) $request->validate(['q' => 'required|string|min:3|max:200'])['q']);
+        $results = Cache::remember('nominatim2:'.md5(mb_strtolower($q)), now()->addDay(), function () use ($q) {
+            $res = Http::withUserAgent('ForgeDesk/1.0 (shipping address lookup)')->timeout(8)
+                ->get('https://nominatim.openstreetmap.org/search', [
+                    'q' => $q, 'format' => 'jsonv2', 'limit' => 6, 'countrycodes' => 'us,ca',
+                ]);
+            if (! $res->ok()) {
+                return null;   // not cached
+            }
+
+            return collect($res->json())->map(fn ($r) => [
+                'label' => $r['display_name'], 'name' => $r['name'] ?? '', 'lat' => round((float) $r['lat'], 7), 'lng' => round((float) $r['lon'], 7),
+            ])->values()->all();
+        });
+        if ($results === null) {
+            Cache::forget('nominatim2:'.md5(mb_strtolower($q)));
+
+            return response()->json(['message' => 'Address search is unavailable right now. Try again in a moment.'], 503);
+        }
+
+        return response()->json($results);
+    }
+
+    /** "Other" picks are remembered under their business name so they're in the list next time. */
+    private function saveVisited(string $p, array $data): ShipmentLocation
+    {
+        $name = trim((string) ($data["{$p}_new_name"] ?? ''));
+        if ($name === '') {
+            throw ValidationException::withMessages(["{$p}_new_name" => 'Enter the business name to save this location under.']);
+        }
+        $existing = ShipmentLocation::whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->first();
+        if ($existing) {
+            if (trim((string) $existing->address) === trim((string) $data["{$p}_address"])) {
+                return $existing;
+            }
+            throw ValidationException::withMessages(["{$p}_new_name" => "A location called \"{$existing->name}\" is already saved with a different address. Pick it from the list or use another name."]);
+        }
+
+        return ShipmentLocation::create([
+            'name' => $name, 'kind' => 'both', 'requires_address' => false, 'saves_visits' => false,
+            'address' => $data["{$p}_address"], 'lat' => $data["{$p}_lat"] ?? null, 'lng' => $data["{$p}_lng"] ?? null,
+            'sort_order' => 500,
+        ]);
+    }
+
+    /** A jobsite address searched for on a shipment is written back to the job (only if the job has none and the user may edit jobs). */
+    private function saveJobSite(Request $request, array $data): void
+    {
+        $jobId = (int) ($data['save_site_to_job_id'] ?? 0);
+        if (! $jobId || blank($data['dropoff_address'] ?? null) || ! in_array($jobId, $data['job_ids'] ?? [], true)
+            || ! $request->user()->hasPermission('jobs.edit')) {
+            return;
+        }
+        $job = BusinessJob::find($jobId);
+        if ($job && blank($job->site_address)) {
+            $job->update(['site_address' => Str::limit($data['dropoff_address'], 500, '')]);
+        }
+    }
+
+    /** Validates the pickup / drop-off picks and snapshots each one's address onto the shipment. */
+    private function withLocations(array $data, bool $creating): array
+    {
+        foreach (['pickup' => ['pickup', 'both'], 'dropoff' => ['dropoff', 'both']] as $p => $kinds) {
+            if (! array_key_exists("{$p}_location_id", $data)) {
+                continue;
+            }
+            $loc = $data["{$p}_location_id"] ? ShipmentLocation::find($data["{$p}_location_id"]) : null;
+            if (! $loc) {
+                if ($creating) {
+                    throw ValidationException::withMessages(["{$p}_location_id" => 'Choose a '.($p === 'pickup' ? 'pickup' : 'drop-off').' location.']);
+                }
+                foreach (['address', 'lat', 'lng'] as $f) {
+                    $data["{$p}_{$f}"] = null;
+                }
+                continue;
+            }
+            if (! in_array($loc->kind, $kinds, true)) {
+                throw ValidationException::withMessages(["{$p}_location_id" => "{$loc->name} can't be used as a ".($p === 'pickup' ? 'pickup' : 'drop-off').' location.']);
+            }
+            if ($loc->requires_address) {
+                if (blank($data["{$p}_address"] ?? null)) {
+                    throw ValidationException::withMessages(["{$p}_address" => "Search for and pick the {$loc->name} address."]);
+                }
+                if ($loc->saves_visits) {
+                    $saved = $this->saveVisited($p, $data);
+                    $data["{$p}_location_id"] = $saved->id;
+                }
+            } else {
+                $data["{$p}_address"] = $loc->address;
+                $data["{$p}_lat"] = $loc->lat;
+                $data["{$p}_lng"] = $loc->lng;
+            }
+        }
+
+        return $data;
     }
 
     public function store(Request $request)
     {
-        $data = $this->validated($request, true);
+        $data = $this->withLocations($this->validated($request, true), true);
+        $this->saveJobSite($request, $data);
 
         $shipment = DB::transaction(function () use ($data, $request) {
             $s = Shipment::create([
                 'shipment_number' => Shipment::nextNumber(), 'status' => 'draft', 'created_by' => $request->user()->id,
-            ] + collect($data)->except('loads', 'job_ids')->all());
+            ] + collect($data)->except('loads', 'job_ids', 'pickup_new_name', 'dropoff_new_name', 'save_site_to_job_id')->all());
             $s->jobs()->sync($data['job_ids'] ?? []);
             $s->loads()->createMany($data['loads']);
 
@@ -123,10 +238,12 @@ class ShipmentController extends Controller
     public function update(Request $request, int $id)
     {
         $shipment = Shipment::findOrFail($id);
-        $data = $this->validated($request, false);
+        $data = $this->withLocations($this->validated($request, false), false);
+        $this->saveJobSite($request, $data);
 
         DB::transaction(function () use ($shipment, $data) {
-            $shipment->update(collect($data)->except('loads', 'job_ids')->all());
+            $before = $shipment->loads()->pluck('shipment_type_id')->sort()->values()->all();
+            $shipment->update(collect($data)->except('loads', 'job_ids', 'pickup_new_name', 'dropoff_new_name', 'save_site_to_job_id')->all());
             if (array_key_exists('job_ids', $data)) {
                 $shipment->jobs()->sync($data['job_ids'] ?? []);
             }
@@ -135,6 +252,10 @@ class ShipmentController extends Controller
                 $shipment->loads()->whereNotIn('shipment_type_id', $keep)->delete();
                 foreach ($data['loads'] as $l) {
                     $shipment->loads()->updateOrCreate(['shipment_type_id' => $l['shipment_type_id']], $l);
+                }
+                // The pre-check was done against a different checklist: it has to be redone.
+                if ($shipment->status === 'pre_check_done' && $keep !== [] && collect($keep)->sort()->values()->all() !== $before) {
+                    $shipment->update(['status' => 'draft']);
                 }
             }
         });
@@ -153,9 +274,17 @@ class ShipmentController extends Controller
         return response()->json(['message' => 'Shipment deleted']);
     }
 
-    public function cancel(int $id)
+    public function cancel(Request $request, int $id)
     {
-        Shipment::findOrFail($id)->update(['status' => 'cancelled']);
+        $data = $request->validate(['reason' => 'required|string|min:3|max:1000']);
+        $shipment = Shipment::findOrFail($id);
+        if (in_array($shipment->status, ['delivered', 'delivered_issues', 'cancelled'], true)) {
+            return response()->json(['message' => 'This shipment can no longer be cancelled.'], 422);
+        }
+        $shipment->update([
+            'status' => 'cancelled', 'cancel_reason' => trim($data['reason']),
+            'cancelled_at' => now(), 'cancelled_by' => $request->user()->id,
+        ]);
 
         return response()->json(['message' => 'Shipment cancelled']);
     }
@@ -224,7 +353,7 @@ class ShipmentController extends Controller
     /** Per-shipment PDF: jobs, loads, every inspection with thumbnails linked to the full-size photos. */
     public function report(int $id)
     {
-        $shipment = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'creator:id,name',
+        $shipment = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'creator:id,name', 'canceller:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name',
             'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name'])->findOrFail($id);
 
         $thumbs = [];   // photo id => [data URI, signed full-size URL]
@@ -263,6 +392,14 @@ class ShipmentController extends Controller
         return $request->validate([
             'job_ids' => 'nullable|array|max:50',
             'job_ids.*' => ['integer', 'distinct', Rule::exists('business_jobs', 'id')],
+            'pickup_location_id' => ($creating ? 'required' : 'sometimes').'|nullable|integer|exists:shipment_locations,id',
+            'dropoff_location_id' => ($creating ? 'required' : 'sometimes').'|nullable|integer|exists:shipment_locations,id',
+            'pickup_new_name' => 'nullable|string|max:120', 'dropoff_new_name' => 'nullable|string|max:120',
+            'save_site_to_job_id' => 'nullable|integer',
+            'pickup_address' => 'nullable|string|max:500', 'dropoff_address' => 'nullable|string|max:500',
+            'pickup_lat' => 'nullable|numeric|between:-90,90', 'pickup_lng' => 'nullable|numeric|between:-180,180',
+            'dropoff_lat' => 'nullable|numeric|between:-90,90', 'dropoff_lng' => 'nullable|numeric|between:-180,180',
+            'custom_jobs' => 'nullable|array|max:20', 'custom_jobs.*' => 'string|max:120',
             'ship_date' => 'nullable|date', 'destination' => 'nullable|string|max:255',
             'carrier' => 'nullable|string|max:255', 'notes' => 'nullable|string|max:5000',
             'loads' => "$req|array|min:1|max:20",
@@ -273,7 +410,7 @@ class ShipmentController extends Controller
 
     private function detail(Shipment $shipment): array
     {
-        $shipment->load(['jobs:id,job_number,job_name', 'loads.type:id,name', 'creator:id,name',
+        $shipment->load(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'creator:id,name', 'canceller:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name',
             'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name']);
 
         return $shipment->toArray() + [

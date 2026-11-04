@@ -9,6 +9,7 @@ use App\Models\CutFlow\Part;
 use App\Models\CutFlow\StickItem;
 use App\Models\CutFlow\StickSession;
 use App\Models\FdUser;
+use App\Services\CutFlow\CutListProgress;
 use App\Services\CutFlow\CutPlanner;
 use App\Services\CutFlow\DropLabel;
 use App\Services\CutFlow\TigerBridgeClient;
@@ -254,6 +255,16 @@ class Dashboard extends Component
         $this->modal = 'jobs';
         $this->jobSearch = '';
         $this->showCompletedJobs = false;
+    }
+
+    /** Parts-cut breakdown for the selected cut lists, with a projected time to finish. */
+    public function openProgressModal(): void
+    {
+        if (! $this->signedIn() || $this->activeJobIds === []) {
+            return;
+        }
+
+        $this->modal = 'progress';
     }
 
     public function toggleShowCompletedJobs(): void
@@ -1600,6 +1611,7 @@ class Dashboard extends Component
         return view('cutflow.livewire.dashboard', [
             'signedIn' => $signedIn,
             'tigerPollIntervalMs' => $this->bridgePollIntervalMs(),
+            'progress' => ($signedIn && $this->modal === 'progress') ? CutListProgress::forJobs($this->activeJobIds) : null,
             'jobs' => $this->modal === 'jobs' ? $this->filteredJobs() : collect(),
             'selectedJobs' => $signedIn ? CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get()) : collect(),
             'totalJobCount' => CutJob::count(),

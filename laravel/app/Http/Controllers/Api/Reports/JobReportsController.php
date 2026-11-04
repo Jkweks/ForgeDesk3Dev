@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api\Reports;
 use App\Http\Controllers\Api\Reports\Concerns\GeneratesCsv;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
+use App\Models\JobDocument;
+use App\Services\EzEstimateSummaryReader;
+use App\Services\ReservationCostSummary;
 use Illuminate\Http\Request;
 
 /** Job-level reports: job status and cut material usage per work order. */
@@ -152,8 +155,106 @@ class JobReportsController extends Controller
         switch ($type) {
             case 'job_status_summary':
                 return $this->exportJobStatusSummary($request);
+            case 'sof_savings':
+                return $this->exportSofSavings($request);
             default:
                 return null;
         }
+    }
+
+    /**
+     * SOF Savings: per job, the EZ Estimate's Summary-sheet net total against the calculated net cost of the
+     * reservation each (non-archived) EZ upload was reserved with. Like-for-like: only reservations that have a
+     * reserved upload count, and a reservation with several uploads uses the latest one. Savings = EZ − reservation.
+     * Cost figures, so it needs reservations.cost.view on top of the report permissions.
+     */
+    private function sofSavingsData(Request $request, bool $readUnread = true): array
+    {
+        abort_unless($request->user()->hasPermission('reservations.cost.view'), 403, 'You do not have access to cost figures.');
+
+        $reader = app(EzEstimateSummaryReader::class);
+        $docs = JobDocument::where('doc_type', 'ez_estimate')->active()->whereNotNull('job_reservation_id')
+            ->with(['businessJob:id,job_number,job_name', 'reservation'])
+            ->orderByDesc('id')->get()
+            ->unique('job_reservation_id')->values();
+
+        $stale = $docs->filter(fn ($d) => $request->boolean('refresh') || ! $d->ez_summary_read_at);
+        if ($readUnread) {
+            $stale->take(EzEstimateSummaryReader::INLINE_LIMIT)->each(fn ($d) => $reader->sync($d));
+        }
+        $pending = $readUnread ? max(0, $stale->count() - EzEstimateSummaryReader::INLINE_LIMIT) : $stale->count();
+
+        $costs = app(ReservationCostSummary::class);
+        $jobs = [];
+        $errors = [];
+        foreach ($docs as $d) {
+            $job = $d->businessJob;
+            if (! $job || ! $d->reservation) {
+                continue;
+            }
+            $row = &$jobs[$job->id];
+            $row ??= ['job_id' => $job->id, 'job_number' => $job->job_number, 'job_name' => $job->job_name,
+                'uploads' => 0, 'ez_net' => 0.0, 'ez_grand_total' => 0.0, 'reservation_cost' => 0.0, 'missing_price' => 0, 'unread' => 0, 'errors' => 0];
+
+            if ($d->ez_summary_error) {
+                $row['errors']++;
+                $errors[] = ['job_number' => $job->job_number, 'document' => $d->original_name, 'error' => $d->ez_summary_error];
+            } elseif (! $d->ez_summary_read_at) {
+                $row['unread']++;
+            } else {
+                $row['uploads']++;
+                $row['ez_net'] += (float) $d->ez_total_net;
+                $row['ez_grand_total'] += (float) $d->ez_grand_total;
+                $c = $costs->summarize($d->reservation);
+                $row['reservation_cost'] += $c['total'];
+                $row['missing_price'] += $c['missing_price'];
+            }
+            unset($row);
+        }
+
+        $rows = collect($jobs)->map(function ($r) {
+            $r['ez_net'] = round($r['ez_net'], 2);
+            $r['ez_grand_total'] = round($r['ez_grand_total'], 2);
+            $r['reservation_cost'] = round($r['reservation_cost'], 2);
+            $r['savings'] = $r['uploads'] ? round($r['ez_net'] - $r['reservation_cost'], 2) : null;
+            $r['savings_pct'] = $r['uploads'] && $r['ez_net'] > 0 ? round($r['savings'] / $r['ez_net'] * 100, 1) : null;
+
+            return $r;
+        })->sortBy('job_number', SORT_NATURAL)->values();
+
+        $counted = $rows->where('uploads', '>', 0);
+        $ez = round($counted->sum('ez_net'), 2);
+        $res = round($counted->sum('reservation_cost'), 2);
+
+        return [
+            'summary' => [
+                'jobs' => $counted->count(),
+                'total_ez_net' => $ez,
+                'total_reservation_cost' => $res,
+                'total_savings' => round($ez - $res, 2),
+                'savings_pct' => $ez > 0 ? round(($ez - $res) / $ez * 100, 1) : null,
+                'missing_price_items' => (int) $counted->sum('missing_price'),
+                'pending_reads' => $pending,
+                'read_errors' => count($errors),
+            ],
+            'jobs' => $rows,
+            'errors' => $errors,
+        ];
+    }
+
+    public function sofSavingsReport(Request $request)
+    {
+        return response()->json($this->sofSavingsData($request));
+    }
+
+    private function exportSofSavings(Request $request)
+    {
+        $data = $this->sofSavingsData($request, false);
+        $rows = $data['jobs']->where('uploads', '>', 0)->map(fn ($r) => [
+            $r['job_number'], $r['job_name'], $r['uploads'], $r['ez_net'], $r['reservation_cost'], $r['savings'], $r['savings_pct'],
+            $r['ez_grand_total'], $r['missing_price'],
+        ]);
+
+        return $this->generateCSV($rows, 'sof_savings', ['Job #', 'Job Name', 'EZ Uploads', 'EZ Total Net', 'Reservation Cost', 'Savings', 'Savings %', 'EZ Grand Total', 'Items Without Net Price']);
     }
 }

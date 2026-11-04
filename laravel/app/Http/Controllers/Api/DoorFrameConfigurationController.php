@@ -2003,7 +2003,37 @@ class DoorFrameConfigurationController extends Controller
         ]);
     }
 
-    public function reserveConfiguration($id, \App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
+    /** Material cost of one opening (any status): BOM stock quantities x product net price. */
+    public function cost($id, \App\Services\Configurator\ConfigurationCostEstimator $estimator)
+    {
+        $config = DoorFrameConfiguration::findOrFail($id);
+
+        return response()->json($estimator->estimate($config));
+    }
+
+    /** Opening/door/frame/hardware data plus the material cost, as a PDF. */
+    public function exportCostPdf($id, \App\Services\Configurator\ConfigurationCostEstimator $estimator)
+    {
+        $config = DoorFrameConfiguration::with([
+            'businessJob', 'workOrder', 'doors',
+            'openingSpecs.hingeSpacingStandard',
+            'frameConfig.frameSeries.frameSystem', 'frameConfig.parts.product',
+            'doorConfigs.parts.product',
+            'hardwareParts.product',
+        ])->findOrFail($id);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.configurator-cost', [
+            'config' => $config,
+            'cost' => $estimator->estimate($config),
+        ]);
+        $pdf->setPaper('letter', 'portrait');
+
+        $tags = $config->doors->pluck('door_tag')->implode('-') ?: $config->id;
+
+        return $pdf->download('Cost_'.preg_replace('/[^A-Za-z0-9_-]/', '_', $config->businessJob->job_number.'_'.$tags).'.pdf');
+    }
+
+    public function reserveConfiguration($id,\App\Services\Configurator\ConfigurationReservationBridge $reservationBridge)
     {
         $config = DoorFrameConfiguration::findOrFail($id);
 

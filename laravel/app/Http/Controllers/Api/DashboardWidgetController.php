@@ -23,6 +23,8 @@ use App\Models\MaintenanceTask;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\QualityReport;
+use App\Models\Shipment;
+use App\Models\ShipmentInspection;
 use App\Models\StorageLocation;
 use App\Services\CutFlow\CutStationStats;
 use Carbon\Carbon;
@@ -216,6 +218,60 @@ class DashboardWidgetController extends Controller
      * stage name. Stage names come from per-elevation-type templates, so they
      * are returned as data rather than a fixed list.
      */
+    /**
+     * Programming steps (any stage whose name contains "program") on live work orders: the same set the
+     * Programming Queue page lists. Returns the figures the widget's settings ask for, in a fixed order.
+     */
+    public function programmingQueue(Request $request)
+    {
+        $settings = WidgetRegistry::resolveSettings('programming_queue', $request->query());
+        $order = ['waiting', 'in_progress', 'ready', 'blocked', 'overdue', 'done_week', 'hours'];
+        $picked = array_values(array_intersect($order, $settings['metrics'] ?: ['waiting']));
+        $unassignedOnly = $settings['scope'] === 'unassigned';
+
+        $base = fn () => FdWoStage::query()
+            ->join('fd_wo_elevations as e', 'e.id', '=', 'fd_wo_stages.elevation_id')
+            ->join('fd_work_orders as w', 'w.id', '=', 'e.work_order_id')
+            ->whereRaw("LOWER(fd_wo_stages.name) LIKE '%program%'")
+            ->where('w.archived', false)
+            ->when($unassignedOnly, fn ($q) => $q->whereNull('fd_wo_stages.assigned_to_id')
+                ->whereDoesntHave('assignees'));
+        $open = fn () => $base()->whereIn('fd_wo_stages.status', ['pending', 'in_progress'])->whereNull('e.date_completed');
+
+        $values = [];
+        if (array_intersect($picked, ['ready', 'blocked'])) {
+            $gate = app(\App\Services\StageGateService::class);
+            $stages = $open()->select('fd_wo_stages.*')->with('elevation.stages')->get();
+            $blocked = $stages->filter(fn ($s) => $gate->blockingStageForLoaded($s, $s->elevation->stages) !== null
+                || $gate->blockingConfigurationReasonFor($s) !== null);
+            $values['blocked'] = $blocked->count();
+            $values['ready'] = $stages->where('status', 'pending')->reject(fn ($s) => $blocked->contains('id', $s->id))->count();
+        }
+        $values += [
+            'waiting' => $open()->where('fd_wo_stages.status', 'pending')->count(),
+            'in_progress' => $open()->where('fd_wo_stages.status', 'in_progress')->count(),
+            'overdue' => $open()->whereNotNull('e.date_requested')->where('e.date_requested', '<', today()->toDateString())->count(),
+            'done_week' => $base()->where('fd_wo_stages.status', 'complete')->where('fd_wo_stages.completed_at', '>=', now()->startOfWeek())->count(),
+            'hours' => round($open()->whereNotNull('fd_wo_stages.minutes_per_joint')->whereNotNull('e.joint_qty')
+                ->sum(\Illuminate\Support\Facades\DB::raw('e.joint_qty * fd_wo_stages.minutes_per_joint')) / 60, 1),
+        ];
+        $labels = [
+            'waiting' => 'Waiting', 'in_progress' => 'In progress', 'ready' => 'Ready', 'blocked' => 'Blocked',
+            'overdue' => 'Overdue', 'done_week' => 'Done this week', 'hours' => 'Hours left',
+        ];
+
+        $figures = array_map(fn ($k) => ['key' => $k, 'label' => $labels[$k], 'total' => $values[$k], 'caption' => $labels[$k]], $picked);
+
+        return response()->json([
+            'figures' => $figures,
+            // One figure has no column heading, so the caption names it.
+            'caption' => count($figures) === 1
+                ? $figures[0]['label'].($unassignedOnly ? ' (unassigned)' : '')
+                : ($unassignedOnly ? 'Unassigned only' : null),
+            'total' => $figures[0]['total'],
+        ]);
+    }
+
     public function workOrderStages()
     {
         $rows = FdWoStage::actionable()
@@ -425,6 +481,13 @@ class DashboardWidgetController extends Controller
      * Storage health. Deliberately not /storage-locations-stats, which loads every location and its
      * inventory rows and sums value in PHP.
      */
+    public function productImages()
+    {
+        return response()->json([
+            'missing' => \App\Http\Controllers\Api\Reports\SystemReportsController::missingImagesQuery()->count(),
+        ]);
+    }
+
     public function storage()
     {
         return response()->json([
@@ -466,19 +529,30 @@ class DashboardWidgetController extends Controller
     /** Cuts for the chosen period (day / calendar month / calendar year, shop-local), drops and reprints excluded. */
     public function cutflowCuts(Request $request)
     {
-        $period = WidgetRegistry::resolveSettings('cutflow_cuts_total', $request->query())['period'];
+        // `periods[]` is the setting; a bare `period` (older saved layouts, API callers) still works.
+        $picked = WidgetRegistry::resolveSettings('cutflow_cuts_total', $request->query())['periods'];
+        $picked = array_values(array_intersect(array_keys(CutStationStats::PERIODS), $picked ?: ['day']));
 
         try {
+            $rows = array_map(fn ($p) => [
+                'period' => $p,
+                'label' => CutStationStats::PERIODS[$p],
+                'caption' => CutStationStats::periodCaption($p),
+                'total' => CutStationStats::totalSince(CutStationStats::periodStart($p)),
+            ], $picked);
+
             return response()->json([
                 'available' => true,
-                'period' => $period,
-                'caption' => CutStationStats::periodCaption($period),
-                'total' => CutStationStats::totalSince(CutStationStats::periodStart($period)),
+                'periods' => $rows,
+                // Single-value shape kept for the first period (same fields as before).
+                'period' => $rows[0]['period'],
+                'caption' => $rows[0]['caption'],
+                'total' => $rows[0]['total'],
             ]);
         } catch (\Throwable $e) {
             report($e);
 
-            return response()->json(['available' => false, 'period' => $period, 'caption' => null, 'total' => null]);
+            return response()->json(['available' => false, 'periods' => [], 'period' => $picked[0], 'caption' => null, 'total' => null]);
         }
     }
 
@@ -520,6 +594,133 @@ class DashboardWidgetController extends Controller
             })->values();
 
         return response()->json(['items' => $items]);
+    }
+
+    // ── Shipments ─────────────────────────────────────────────────────────
+
+    /** Not-yet-shipped = draft or pre_check_done; "in transit" = shipped, awaiting delivery. */
+    public function shipments()
+    {
+        $today = today()->toDateString();
+        $notShipped = ['draft', 'pre_check_done'];
+
+        return response()->json([
+            'open' => Shipment::whereIn('status', Shipment::OPEN_STATUSES)->count(),
+            'scheduled_today' => Shipment::whereIn('status', $notShipped)->whereDate('ship_date', $today)->count(),
+            'awaiting_pre_check' => Shipment::where('status', 'draft')->count(),
+            'in_transit' => Shipment::where('status', 'shipped')->count(),
+            'overdue' => Shipment::whereIn('status', $notShipped)->whereNotNull('ship_date')->whereDate('ship_date', '<', $today)->count(),
+            'delivered_issues_30d' => Shipment::where('status', 'delivered_issues')->where('updated_at', '>=', now()->subDays(30))->count(),
+        ]);
+    }
+
+    /** Open shipments, soonest ship date first (undated last); shipped ones show as in transit. */
+    public function shipmentsUpcoming(Request $request)
+    {
+        $items = Shipment::whereIn('status', Shipment::OPEN_STATUSES)
+            ->with('jobs:business_jobs.id,job_number,job_name')
+            ->orderByRaw('ship_date IS NULL, ship_date ASC')
+            ->orderBy('shipment_number')
+            ->limit($this->limitFor($request, 'shipments_upcoming'))
+            ->get()
+            ->map(function (Shipment $s) {
+                if ($s->status === 'shipped') {
+                    [$meta, $class] = ['In transit', 'bg-blue-lt'];
+                } elseif ($s->ship_date) {
+                    [$meta, $class] = $this->dueMeta($s->ship_date);
+                } else {
+                    [$meta, $class] = ['No date', 'bg-secondary-lt'];
+                }
+
+                return [
+                    'label' => $s->shipment_number,
+                    'sub' => ($s->jobLabel() ?? 'No job').($s->destination ? ' · '.$s->destination : ''),
+                    'meta' => $meta,
+                    'meta_class' => $class,
+                    'link' => '/shipments/'.$s->id,
+                ];
+            })->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** Shipments delivered with issues, latest first. */
+    public function shipmentsIssues(Request $request)
+    {
+        $items = Shipment::where('status', 'delivered_issues')
+            ->with('jobs:business_jobs.id,job_number,job_name')
+            ->orderByDesc('updated_at')
+            ->limit($this->limitFor($request, 'shipments_issues_list'))
+            ->get()
+            ->map(fn (Shipment $s) => [
+                'label' => $s->shipment_number,
+                'sub' => ($s->jobLabel() ?? 'No job').($s->destination ? ' · '.$s->destination : ''),
+                'meta' => $s->updated_at->diffForHumans(),
+                'meta_class' => 'bg-red-lt',
+                'link' => '/shipments/'.$s->id,
+            ])->values();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /** Shipments sent out per week (Monday-based, by ship date); empty weeks are kept so the axis is continuous. */
+    public function shipmentsWeekly(Request $request)
+    {
+        $weeks = (int) WidgetRegistry::resolveSettings('shipments_weekly', $request->query())['weeks'];
+        $start = today()->startOfWeek()->subWeeks($weeks - 1);
+
+        $buckets = [];
+        for ($i = 0; $i < $weeks; $i++) {
+            $buckets[$start->copy()->addWeeks($i)->toDateString()] = ['shipped' => 0, 'with_issues' => 0];
+        }
+        Shipment::whereIn('status', ['shipped', 'delivered', 'delivered_issues'])
+            ->whereDate('ship_date', '>=', $start->toDateString())->whereDate('ship_date', '<=', today()->endOfWeek()->toDateString())
+            ->get(['status', 'ship_date'])
+            ->each(function (Shipment $s) use (&$buckets) {
+                $key = $s->ship_date->copy()->startOfWeek()->toDateString();
+                if (! isset($buckets[$key])) {
+                    return;
+                }
+                $buckets[$key][$s->status === 'delivered_issues' ? 'with_issues' : 'shipped']++;
+            });
+
+        if (collect($buckets)->sum(fn ($b) => $b['shipped'] + $b['with_issues']) === 0) {
+            return response()->json(['data' => []]);
+        }
+
+        return response()->json(['data' => collect($buckets)->map(fn ($b, $week) => [
+            'week' => Carbon::parse($week)->format('M j'),
+            'shipped' => $b['shipped'],
+            'with_issues' => $b['with_issues'],
+        ])->values()]);
+    }
+
+    /** Inspection outcomes per calendar month, optionally one phase (pre|post). */
+    public function shipmentsInspections(Request $request)
+    {
+        $settings = WidgetRegistry::resolveSettings('shipments_inspections', $request->query());
+        $months = (int) $settings['months'];
+        $start = today()->startOfMonth()->subMonths($months - 1);
+
+        $buckets = [];
+        for ($i = 0; $i < $months; $i++) {
+            $m = $start->copy()->addMonths($i);
+            $buckets[$m->format('Y-m')] = ['month_label' => $m->format('M Y'), 'pass' => 0, 'pass_with_issues' => 0, 'fail' => 0];
+        }
+        $total = 0;
+        ShipmentInspection::where('performed_at', '>=', $start)
+            ->when($settings['phase'] !== 'all', fn ($q) => $q->where('phase', $settings['phase']))
+            ->get(['result', 'performed_at'])
+            ->each(function (ShipmentInspection $i) use (&$buckets, &$total) {
+                $key = $i->performed_at->format('Y-m');
+                $result = $i->result === 'needs_attention' ? 'pass_with_issues' : $i->result;
+                if (isset($buckets[$key], $buckets[$key][$result])) {
+                    $buckets[$key][$result]++;
+                    $total++;
+                }
+            });
+
+        return response()->json(['data' => $total ? array_values($buckets) : []]);
     }
 
     // ── Jobs and reservations ─────────────────────────────────────────────

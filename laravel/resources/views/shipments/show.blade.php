@@ -53,12 +53,13 @@
   function render() {
     document.getElementById('hdrNumber').textContent = S.shipment_number;
     document.getElementById('hdrStatus').innerHTML = shStatus(S.status);
-    document.getElementById('hdrJob').textContent = S.jobs.map(j => `${j.job_name} (${j.job_number})`).join(', ');
+    document.getElementById('hdrJob').textContent = S.jobs.map(j => `${j.job_name} (${j.job_number})`).concat(S.custom_jobs || []).join(', ');
     renderDetails();
 
     const acts = [];
     if (S.status === 'pre_check_done') acts.push(`<button class="btn btn-success" data-permission="shipments.manage" onclick="markShipped()"><i class="ti ti-truck me-1"></i>Mark shipped</button>`);
     if (!['delivered', 'delivered_issues', 'cancelled'].includes(S.status)) acts.push(`<button class="btn btn-outline-danger" data-permission="shipments.manage" onclick="cancelShipment()">Cancel</button>`);
+    if (!['delivered', 'delivered_issues', 'cancelled'].includes(S.status)) acts.unshift(`<button class="btn" data-permission="shipments.manage" onclick="shipmentForm(S)"><i class="ti ti-edit me-1"></i>Edit</button>`);
     acts.unshift(`<button class="btn" onclick="openReport(this)"><i class="ti ti-file-type-pdf me-1"></i>Report PDF</button>`);
     document.getElementById('hdrActions').innerHTML = acts.join('');
 
@@ -192,7 +193,17 @@
   }
 
   async function markShipped() { await flApi(`/shipments/${SHIPMENT_ID}/ship`, 'POST'); showNotification('Marked shipped. The crew can now inspect it on delivery in the field app.', 'success'); load(); }
-  function cancelShipment() { flConfirm('Cancel this shipment?', async () => { await flApi(`/shipments/${SHIPMENT_ID}/cancel`, 'POST'); load(); }); }
+  function cancelShipment() {
+    flModal('Cancel ' + S.shipment_number,
+      `<div class="col-12"><div class="alert alert-warning mb-0">This takes the shipment off the queue and hides it from the field app.</div></div>` +
+      flText('reason', 'Reason for cancelling (required)', '', 3),
+      async f => {
+        const reason = (f.querySelector('[name=reason]').value || '').trim();
+        if (reason.length < 3) { showNotification('Enter a reason for cancelling.', 'warning'); throw new Error('no reason'); }
+        await flApi(`/shipments/${SHIPMENT_ID}/cancel`, 'POST', { reason });
+        await load();
+      }, 'Cancel shipment');
+  }
 
   // ---- results ----
   function valueCell(i) {
@@ -233,9 +244,14 @@
     document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === key));
   }
 
+  const placeLine = (loc, addr) => !loc ? '—' : esc(loc.name) + (addr ? ` <span class="text-muted">· ${esc(addr)}</span>` : '');
+
   function renderDetails() {
     document.querySelector('[data-section="details"]').innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body"><dl class="row mb-0">
-      <dt class="col-sm-3">${S.jobs.length > 1 ? 'Jobs' : 'Job'}</dt><dd class="col-sm-9">${S.jobs.length ? S.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').join('<br>') : '—'}</dd>
+      <dt class="col-sm-3">${S.jobs.length + (S.custom_jobs || []).length > 1 ? 'Jobs' : 'Job'}</dt><dd class="col-sm-9">${(S.jobs.length || (S.custom_jobs || []).length) ? S.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').concat((S.custom_jobs || []).map(n => esc(n) + ' <span class="text-muted">(custom)</span>')).join('<br>') : '—'}</dd>
+      ${S.status === 'cancelled' ? `<dt class="col-sm-3 text-danger">Cancelled</dt><dd class="col-sm-9">${esc(S.cancel_reason || '—')}<div class="text-muted small">${S.canceller ? esc(S.canceller.name) + ' · ' : ''}${flDate(S.cancelled_at)}</div></dd>` : ''}
+      <dt class="col-sm-3">Pickup</dt><dd class="col-sm-9">${placeLine(S.pickup_location, S.pickup_address)}</dd>
+      <dt class="col-sm-3">Drop off</dt><dd class="col-sm-9">${placeLine(S.dropoff_location, S.dropoff_address)}</dd>
       <dt class="col-sm-3">Ship date</dt><dd class="col-sm-9">${flDate(S.ship_date)}</dd>
       <dt class="col-sm-3">Carrier</dt><dd class="col-sm-9">${esc(S.carrier || '—')}</dd>
       <dt class="col-sm-3">Destination</dt><dd class="col-sm-9">${esc(S.destination || '—')}</dd>

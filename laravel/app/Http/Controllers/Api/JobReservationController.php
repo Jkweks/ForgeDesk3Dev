@@ -103,6 +103,24 @@ class JobReservationController extends Controller
     /**
      * Get detailed reservation with line items
      */
+    /** Net-price cost summary of one reservation (office staff, managers, admins). */
+    public function cost($id, \App\Services\ReservationCostSummary $summary)
+    {
+        return response()->json($summary->summarize(JobReservation::findOrFail($id)));
+    }
+
+    /** The same summary as a PDF download. */
+    public function exportCost($id, \App\Services\ReservationCostSummary $summary)
+    {
+        $data = $summary->summarize(JobReservation::findOrFail($id));
+        $r = $data['reservation'];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.reservation-cost', ['data' => $data]);
+        $pdf->setPaper('letter', 'portrait');
+
+        return $pdf->download('Reservation_Cost_'.preg_replace('/[^A-Za-z0-9_-]/', '_', ($r['job_number'] ?? 'job').'_'.($r['release_number'] ?? '')).'_'.date('Ymd').'.pdf');
+    }
+
     public function show($id)
     {
         try {
@@ -933,6 +951,7 @@ class JobReservationController extends Controller
                     'description' => $product->description,
                     'quantity_on_hand' => $product->quantity_on_hand,
                     'quantity_available' => $product->quantity_available,
+                    'pack_size' => $product->hasPackSize() ? (int) $product->pack_size : 1,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -966,19 +985,20 @@ class JobReservationController extends Controller
                 ]);
             }
 
-            // Search across SKU, part number, and description (case-insensitive)
-            $searchTerm = '%'.strtolower($query).'%';
+            // Every word must match SKU, part number, finish or description (case-insensitive),
+            // so "1000 c2" finds part 1000 in C2 finish.
+            $terms = array_values(array_filter(preg_split('/\s+/', strtolower(trim($query)))));
 
-            $products = Product::where(function ($q) use ($searchTerm) {
-                $q->whereRaw('LOWER(sku) LIKE ?', [$searchTerm])
-                    ->orWhere(function ($subQ) use ($searchTerm) {
-                        $subQ->whereNotNull('part_number')
-                            ->whereRaw('LOWER(part_number) LIKE ?', [$searchTerm]);
-                    })
-                    ->orWhere(function ($subQ) use ($searchTerm) {
-                        $subQ->whereNotNull('description')
-                            ->whereRaw('LOWER(description) LIKE ?', [$searchTerm]);
+            $products = Product::where(function ($outer) use ($terms) {
+                foreach ($terms as $term) {
+                    $like = '%'.$term.'%';
+                    $outer->where(function ($q) use ($like) {
+                        $q->whereRaw('LOWER(sku) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(COALESCE(part_number, \'\')) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(COALESCE(finish, \'\')) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(COALESCE(description, \'\')) LIKE ?', [$like]);
                     });
+                }
             })
                 ->orderBy('sku')
                 ->limit($perPage)
@@ -995,6 +1015,7 @@ class JobReservationController extends Controller
                     'quantity_available' => $product->quantity_available ?? 0,
                     'location' => $product->location ?? '',
                     'unit_of_measure' => $product->unit_of_measure ?? '',
+                    'pack_size' => $product->hasPackSize() ? (int) $product->pack_size : 1,
                 ];
             });
 

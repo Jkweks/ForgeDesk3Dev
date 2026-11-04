@@ -46,7 +46,8 @@ router.get('/bootstrap', auth.requireAuth, async (req, res, next) => {
                     current_job_label, synced_at
                FROM fa_assets WHERE is_active ORDER BY asset_number`),
       query('SELECT type_name, template_name, items FROM fa_checklists ORDER BY type_name'),
-      query(`SELECT shipment_number, job_label, destination, carrier, status, loads, to_char(ship_date, 'YYYY-MM-DD') AS ship_date,
+      query(`SELECT shipment_number, job_label, destination, carrier, pickup_name, pickup_address, pickup_lat, pickup_lng,
+                    dropoff_name, dropoff_address, dropoff_lat, dropoff_lng, status, loads, to_char(ship_date, 'YYYY-MM-DD') AS ship_date,
                     checklist, pre_checklist
                FROM fa_shipments WHERE is_active ORDER BY ship_date NULLS FIRST, shipment_number`),
       query('SELECT job_number, job_name FROM fa_jobs WHERE is_active ORDER BY job_number DESC'),

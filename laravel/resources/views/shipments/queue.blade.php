@@ -93,7 +93,7 @@ async function sqLoad(fromPoll) {
 function sqVisible(r) {
   const q = document.getElementById('sq-search').value.trim().toLowerCase();
   if (!q) return true;
-  const hay = `${r.shipment_number} ${r.jobs.map(j => j.job_name + ' ' + j.job_number).join(' ')} ${r.destination || ''} ${r.loads.map(l => l.type.name).join(' ')}`.toLowerCase();
+  const hay = `${r.shipment_number} ${r.jobs.map(j => j.job_name + ' ' + j.job_number).concat(r.custom_jobs || []).join(' ')} ${r.destination || ''} ${r.loads.map(l => l.type.name).join(' ')}`.toLowerCase();
   return q.split(/\s+/).every(t => hay.includes(t));
 }
 
@@ -101,9 +101,9 @@ function sqCard(r, late) {
   const checks = [r.pre_result ? `<i class="ti ti-clipboard-check ${r.pre_result === 'fail' ? 'text-danger' : 'text-success'}" title="Pre-check ${r.pre_result}"></i>` : '',
     r.post_result ? `<i class="ti ti-truck-delivery ${r.post_result === 'pass' ? 'text-success' : 'text-danger'}" title="Delivery check ${r.post_result}"></i>` : ''].join(' ');
   return `<a class="sq-card st-${r.status}${late ? ' late' : ''}" href="/shipments/${r.id}" ${r.movable && sqCanMove() ? `draggable="true" ondragstart="sqDragStart(event, ${r.id})" ondragend="sqDragEnd(event)"` : ''}
-      title="${esc(r.jobs.map(j => j.job_name).join(', '))} — ${esc(r.destination || '')}">
+      title="${esc(r.jobs.map(j => j.job_name).concat(r.custom_jobs || []).join(', '))} — ${esc(r.destination || '')}">
     <strong>${esc(r.shipment_number)} <span class="float-end">${checks}</span></strong>
-    <small>${esc(r.jobs.length ? r.jobs.map(j => j.job_name).join(', ') : 'No job')}</small>
+    <small>${esc((r.jobs.length || (r.custom_jobs||[]).length) ? r.jobs.map(j => j.job_name).concat(r.custom_jobs || []).join(', ') : 'No job')}</small>
     <small>${r.loads.map(l => esc(l.type.name)).join(', ')}${r.destination ? ' · ' + esc(r.destination) : ''}</small>
     <small>${shStatusText(r.status)}</small></a>`;
 }

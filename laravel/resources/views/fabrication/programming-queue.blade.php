@@ -124,6 +124,8 @@ const API = (p, o = {}) => fetch('/api/v1' + p, {
 });
 
 let pqRows = [];
+let pqDrafts = [];
+const pqOpenJobs = new Set(); // job ids whose draft configurations are expanded (collapsed by default)
 let pqView = 'list';
 let pqUsers = [];
 
@@ -145,6 +147,7 @@ async function pqLoad(fromPoll) {
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     pqRows = d.rows || [];
+    pqDrafts = d.drafts || [];
     pqUsers = d.fab_users || [];
     pqFillAssignees();
     document.getElementById('pq-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -191,8 +194,53 @@ function pqRender() {
 
   document.getElementById('pq-manual').style.display = pqRows.some(r => r.programming_rank != null) ? '' : 'none';
   const rows = pqRows.filter(pqVisible);
-  document.getElementById('pq-body').innerHTML = rows.length ? rows.map(pqRowHtml).join('')
-    : '<tr><td colspan="9" class="text-center text-muted py-5">Nothing waiting for programming.</td></tr>';
+  // Draft configurations trail the queue; a search narrows them, the status/programmer/locked filters don't apply.
+  const q = document.getElementById('pq-search').value.trim().toLowerCase();
+  const drafts = pqDrafts.filter(d => !document.getElementById('pq-assignee').value && !document.getElementById('pq-status').value
+    && (!q || q.split(/\s+/).every(t => `${d.job_name || ''} ${d.job_number || ''} ${d.tags.join(' ')}`.toLowerCase().includes(t))));
+  // One collapsible group per job; a search that matches drafts opens their groups so hits aren't hidden.
+  const byJob = new Map();
+  drafts.forEach(d => { if (!byJob.has(d.business_job_id)) byJob.set(d.business_job_id, []); byJob.get(d.business_job_id).push(d); });
+  const draftHtml = drafts.length
+    ? `<tr><td colspan="9" class="bg-secondary-lt fw-medium small text-uppercase">Draft door &amp; frame configurations — active jobs, not yet reserved (${drafts.length} in ${byJob.size} jobs)</td></tr>`
+      + [...byJob].map(([jobId, list]) => {
+        const open = pqOpenJobs.has(jobId) || !!q;
+        return `<tr class="pq-draft-job" style="cursor:pointer" onclick="pqToggleDraftJob(${jobId})">
+          <td class="text-center"><i class="ti ti-chevron-${open ? 'down' : 'right'}"></i></td>
+          <td colspan="8"><span class="fw-medium">${esc(list[0].job_name || list[0].job_number || 'No job')}</span>
+            <span class="small text-muted ms-2">${esc(list[0].job_number)}</span>
+            <span class="badge bg-secondary-lt ms-2">${list.length} draft${list.length === 1 ? '' : 's'}</span></td>
+        </tr>` + (open ? pqDraftGroupHtml(list) : '');
+      }).join('')
+    : '';
+  document.getElementById('pq-body').innerHTML = (rows.length ? rows.map(pqRowHtml).join('')
+    : (drafts.length ? '' : '<tr><td colspan="9" class="text-center text-muted py-5">Nothing waiting for programming.</td></tr>')) + draftHtml;
+}
+
+function pqToggleDraftJob(id) {
+  pqOpenJobs.has(id) ? pqOpenJobs.delete(id) : pqOpenJobs.add(id);
+  pqRender();
+}
+
+// Within an expanded job: Doors then Frames. A door-and-frame configuration appears in both.
+function pqDraftGroupHtml(list) {
+  const doors = list.filter(d => d.job_scope !== 'frame_only');
+  const frames = list.filter(d => d.job_scope !== 'door_only');
+  const section = (title, items, kind) => items.length
+    ? `<tr class="pq-draft-kind"><td></td><td colspan="8" class="ps-4 small fw-medium text-uppercase text-muted">${title} (${items.length})</td></tr>` + items.map(d => pqDraftHtml(d, kind)).join('')
+    : '';
+  return section('Doors', doors, 'door') + section('Frames', frames, 'frame');
+}
+
+function pqDraftHtml(d, kind) {
+  const href = `/config?job=${d.business_job_id}&config=${d.configuration_id}`;
+  return `<tr class="pq-draft text-muted">
+    <td></td>
+    <td class="ps-5"><a href="${href}">${esc(d.tags.join(', ') || 'Config #' + d.configuration_id)}</a></td>
+    <td>${kind === 'door' ? 'Door' : 'Frame'}${d.quantity > 1 ? `<div class="small">qty ${esc(d.quantity)}</div>` : ''}</td>
+    <td colspan="5"><span class="badge bg-secondary-lt">Draft</span></td>
+    <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="${href}">Open</a></td>
+  </tr>`;
 }
 
 function pqRowHtml(r) {

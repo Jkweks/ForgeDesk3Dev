@@ -220,6 +220,33 @@ class DashboardWidgetDataTest extends TestCase
         $this->assertSame([['name' => 'Frame Fab', 'count' => 2], ['name' => 'Glazing Prep', 'count' => 1]], $data);
     }
 
+    public function test_programming_queue_widget_counts_figures_and_honours_settings(): void
+    {
+        $this->admin();
+        $wo = $this->workOrder();
+        $late = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'E1', 'date_requested' => today()->subDay(), 'joint_qty' => 30]);
+        $ok = FdWoElevation::create(['work_order_id' => $wo->id, 'elevation_tag' => 'E2', 'joint_qty' => 30]);
+        $mk = fn ($el, $name, $status, $extra = []) => FdWoStage::create(['work_order_id' => $wo->id, 'elevation_id' => $el->id,
+            'name' => $name, 'sort_order' => 1, 'status' => $status] + $extra);
+
+        $mk($late, 'CNC Programming', 'pending', ['minutes_per_joint' => 2]);      // 60 min, overdue
+        $mk($ok, 'Program', 'in_progress', ['minutes_per_joint' => 2]);            // 60 min
+        $mk($ok, 'Programmed', 'complete', ['completed_at' => now()]);             // finished this week
+        $mk($ok, 'Frame Fab', 'pending');                                          // not programming
+
+        $q = '?metrics[]=in_progress&metrics[]=waiting&metrics[]=overdue&metrics[]=done_week&metrics[]=hours';
+        $r = $this->getJson('/api/v1/dashboard/widgets/programming-queue'.$q)->assertOk();
+        $this->assertSame(['waiting', 'in_progress', 'overdue', 'done_week', 'hours'], array_column($r->json('figures'), 'key'));
+        $this->assertSame([1, 1, 1, 1, 2], array_column($r->json('figures'), 'total'));
+
+        $this->getJson('/api/v1/dashboard/widgets/programming-queue')->assertOk()
+            ->assertJsonPath('figures.0.key', 'waiting')->assertJsonPath('figures.1.key', 'in_progress');
+        $this->getJson('/api/v1/dashboard/widgets/programming-queue?metrics[]=ready&metrics[]=blocked')->assertOk()
+            ->assertJsonPath('figures.0.total', 1)->assertJsonPath('figures.1.total', 0);
+        $this->getJson('/api/v1/dashboard/widgets/programming-queue?metrics[]=waiting&scope=unassigned')->assertOk()
+            ->assertJsonPath('total', 1)->assertJsonPath('caption', 'Waiting (unassigned)');
+    }
+
     public function test_quality_counts_pending_and_verified(): void
     {
         $this->admin();
@@ -494,11 +521,71 @@ class DashboardWidgetDataTest extends TestCase
         ]);
     }
 
+    public function test_shipment_counts_and_lists(): void
+    {
+        $this->admin();
+        $mk = fn (string $status, $date, array $extra = []) => \App\Models\Shipment::create(array_merge([
+            'shipment_number' => \App\Models\Shipment::nextNumber(), 'status' => $status, 'ship_date' => $date,
+        ], $extra));
+        $mk('draft', today());                       // today, awaiting pre-check
+        $mk('pre_check_done', today()->subDays(2));  // overdue
+        $mk('shipped', today()->subDay());           // in transit (not overdue)
+        $mk('delivered', today()->subDays(3));       // closed
+        $mk('delivered_issues', today()->subDays(5), ['destination' => 'Site A']);
+        $mk('cancelled', today());
+
+        $this->getJson('/api/v1/dashboard/widgets/shipments')->assertOk()->assertJson([
+            'open' => 3, 'scheduled_today' => 1, 'awaiting_pre_check' => 1,
+            'in_transit' => 1, 'overdue' => 1, 'delivered_issues_30d' => 1,
+        ]);
+
+        $items = $this->getJson('/api/v1/dashboard/widgets/shipments/upcoming')->assertOk()->json('items');
+        $this->assertCount(3, $items);
+        $this->assertSame('2d overdue', $items[0]['meta']);
+        $this->assertSame('In transit', $items[1]['meta']);
+        $this->assertSame('Due today', $items[2]['meta']);
+
+        $issues = $this->getJson('/api/v1/dashboard/widgets/shipments/issues')->assertOk()->json('items');
+        $this->assertCount(1, $issues);
+        $this->assertStringContainsString('Site A', $issues[0]['sub']);
+    }
+
+    public function test_shipment_charts_bucket_by_week_and_month(): void
+    {
+        $this->admin();
+        $mk = fn (string $status, $date) => \App\Models\Shipment::create(['shipment_number' => \App\Models\Shipment::nextNumber(), 'status' => $status, 'ship_date' => $date]);
+        $mk('delivered', today());
+        $mk('shipped', today());
+        $mk('delivered_issues', today()->subWeek());
+        $mk('draft', today());   // never sent: ignored
+
+        $rows = $this->getJson('/api/v1/dashboard/widgets/shipments/weekly?weeks=8')->assertOk()->json('data');
+        $this->assertCount(8, $rows);
+        $this->assertSame(['shipped' => 2, 'with_issues' => 0], ['shipped' => $rows[7]['shipped'], 'with_issues' => $rows[7]['with_issues']]);
+        $this->assertSame(1, $rows[6]['with_issues']);
+
+        $shipment = \App\Models\Shipment::first();
+        $ins = fn (string $phase, string $result) => \App\Models\ShipmentInspection::create([
+            'shipment_id' => $shipment->id, 'phase' => $phase, 'result' => $result, 'performed_at' => now(), 'source' => 'web',
+        ]);
+        $ins('pre', 'pass'); $ins('post', 'fail'); $ins('post', 'needs_attention');
+
+        $all = $this->getJson('/api/v1/dashboard/widgets/shipments/inspections')->assertOk()->json('data');
+        $this->assertCount(6, $all);
+        $this->assertSame([1, 1, 1], [$all[5]['pass'], $all[5]['pass_with_issues'], $all[5]['fail']]);
+
+        $post = $this->getJson('/api/v1/dashboard/widgets/shipments/inspections?phase=post')->json('data');
+        $this->assertSame(0, $post[5]['pass']);
+
+        \App\Models\ShipmentInspection::query()->delete();
+        $this->assertSame([], $this->getJson('/api/v1/dashboard/widgets/shipments/inspections')->json('data'));
+    }
+
     public function test_widget_data_endpoints_are_permission_gated(): void
     {
         $this->noPermissions();
 
-        foreach (['work-orders', 'work-orders/due', 'work-orders/table', 'work-orders/stages', 'quality', 'maintenance/upcoming', 'maintenance/recent', 'cycle-counts', 'cycle-counts/sessions', 'purchase-orders', 'purchase-orders/due', 'jobs', 'jobs/due', 'reservations', 'transactions', 'transactions/recent', 'low-stock', 'fabrication-documents', 'fabrication-documents/recent', 'configurator', 'configurator/recent', 'storage', 'cutflow'] as $path) {
+        foreach (['work-orders', 'work-orders/due', 'work-orders/table', 'work-orders/stages', 'quality', 'maintenance/upcoming', 'maintenance/recent', 'cycle-counts', 'cycle-counts/sessions', 'purchase-orders', 'purchase-orders/due', 'jobs', 'jobs/due', 'reservations', 'transactions', 'transactions/recent', 'low-stock', 'fabrication-documents', 'fabrication-documents/recent', 'configurator', 'configurator/recent', 'storage', 'cutflow', 'shipments', 'shipments/upcoming', 'shipments/issues', 'shipments/weekly', 'shipments/inspections'] as $path) {
             $this->getJson("/api/v1/dashboard/widgets/{$path}")->assertForbidden();
         }
     }

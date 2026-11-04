@@ -197,6 +197,7 @@ async function render() {
     case 'post': return viewPost();
     case 'shipping': return viewShipping();
     case 'shipment': return viewShipment(arg);
+    case 'trip': return viewTrip(arg);
     case 'newshipment': return viewNewShipment();
     case 'scan': return viewScan();
     case 'queue': return viewQueue();
@@ -321,6 +322,55 @@ function openDeliveries() {
 function openPreChecks() {
   const done = sentFor('shipment_precheck');
   return state.shipments.filter((sh) => sh.status === 'draft' && !done.has(sh.shipment_number));
+}
+
+// ---- map links ----------------------------------------------------------------------------
+// One link per stop, shaped for the phone it's opened on: iPhones open Apple Maps, Android's geo: link brings up the
+// phone's own "open with" chooser (Google Maps, Waze, ...), and anything else gets Google Maps on the web.
+function mapLink(name, address, lat, lng) {
+  const hasPos = lat != null && lng != null;
+  const q = encodeURIComponent(address || name || '');
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return `https://maps.apple.com/?daddr=${hasPos ? `${lat},${lng}` : q}&q=${q}&dirflg=d`;
+  if (/Android/.test(ua)) return `geo:${hasPos ? `${lat},${lng}` : '0,0'}?q=${q}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${hasPos ? `${lat},${lng}` : q}`;
+}
+
+/** One line on the shipment page; the full address and directions live on the trip page. */
+function stopHtml(label, name, address) {
+  if (!name && !address) return '';
+  return `<div class="small" style="margin-top:6px"><strong>${label}:</strong> ${esc(name || '')}${address ? `<div class="muted">${esc(address)}</div>` : ''}</div>`;
+}
+
+function viewTrip(number) {
+  const sh = findShipment(number);
+  if (!sh) { toast('That shipment is no longer open.'); return go('#/shipping'); }
+  const stops = [
+    { key: 'pickup', label: 'Pickup', name: sh.pickup_name, address: sh.pickup_address, lat: sh.pickup_lat, lng: sh.pickup_lng },
+    { key: 'dropoff', label: 'Drop off', name: sh.dropoff_name, address: sh.dropoff_address, lat: sh.dropoff_lat, lng: sh.dropoff_lng },
+  ].filter((s) => s.name || s.address);
+  $app.innerHTML = `
+    ${topbar('Trip details', `#/shipment/${encodeURIComponent(sh.shipment_number)}`)}${statusBanner()}
+    <div class="card">
+      <div class="row"><div class="grow"><strong>${esc(sh.shipment_number)}</strong> ${esc(sh.job_label || 'No job')}
+        <div class="muted small">${esc([sh.ship_date ? prettyDate(sh.ship_date) : 'No date', sh.loads].filter(Boolean).join(' · '))}</div></div>${shipChip(sh.status)}</div>
+      ${sh.carrier ? `<p class="small" style="margin:8px 0 0">Carrier / driver: ${esc(sh.carrier)}</p>` : ''}
+    </div>
+    ${stops.length ? stops.map((s) => {
+      const target = s.address || (s.lat != null && s.lng != null);
+      return `<div class="card"><h2>${s.label}</h2>
+        <div><strong>${esc(s.name || '')}</strong></div>
+        ${s.address ? `<div class="addr" style="margin-top:4px">${esc(s.address)}</div>` : '<div class="muted small">No address on file.</div>'}
+        ${target ? `<div class="row" style="margin-top:10px;gap:8px">
+          <a class="btn primary small grow" href="${esc(mapLink(s.name, s.address, s.lat, s.lng))}" target="_blank" rel="noopener">Open in maps</a>
+          ${s.address ? `<button class="btn small" type="button" data-copy="${s.key}">Copy</button>` : ''}</div>` : ''}</div>`;
+    }).join('') : '<div class="card muted">No pickup or drop-off locations on this shipment.</div>'}`;
+
+  const byKey = Object.fromEntries(stops.map((s) => [s.key, s]));
+  document.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => {
+    const text = byKey[b.dataset.copy].address;
+    try { await navigator.clipboard.writeText(text); toast('Address copied.'); } catch { toast('Press and hold the address to copy it.'); }
+  }));
 }
 
 function shipRow(sh, href, chipHtml) {
@@ -654,6 +704,9 @@ function viewShipment(number) {
       <div class="row"><div class="grow"><strong>${esc(sh.job_label || 'No job')}</strong><div class="muted">${esc(sh.loads || '')}</div></div>${shipChip(sh.status)}</div>
       <p class="small" style="margin:10px 0 0">Ship date: <strong>${sh.ship_date ? esc(prettyDate(sh.ship_date)) : 'not scheduled'}</strong></p>
       ${sh.destination ? `<p class="small" style="margin:6px 0 0">Destination: ${esc(sh.destination)}</p>` : ''}
+      ${stopHtml('Pickup', sh.pickup_name, sh.pickup_address)}
+      ${stopHtml('Drop off', sh.dropoff_name, sh.dropoff_address)}
+      ${sh.pickup_name || sh.dropoff_name ? `<button class="btn small" style="margin-top:10px" data-go="#/trip/${enc}">Addresses &amp; directions</button>` : ''}
       ${sh.carrier ? `<p class="small" style="margin:6px 0 0">Carrier / driver: ${esc(sh.carrier)}</p>` : ''}
     </div>
     <div class="actions">

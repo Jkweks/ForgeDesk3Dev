@@ -79,57 +79,14 @@
       const rows = await authenticatedFetch('/shipments?' + p);
       document.getElementById('shRows').innerHTML = rows.length ? rows.map(r => `<tr style="cursor:pointer" onclick="location.href='/shipments/${r.id}'">
         <td class="text-nowrap fw-bold">${esc(r.shipment_number)}</td>
-        <td>${r.jobs.length ? r.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').join('<br>') : '—'}</td>
+        <td>${(r.jobs.length || (r.custom_jobs||[]).length) ? r.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').concat((r.custom_jobs||[]).map(n => esc(n) + ' <span class="text-muted">(custom)</span>')).join('<br>') : '—'}</td>
         <td>${r.loads.map(l => flBadge(l.type.name, 'azure')).join(' ')}</td>
         <td>${shStatus(r.status)}</td><td>${flDate(r.ship_date)}</td><td class="text-muted">${esc(r.destination || '')}</td></tr>`).join('')
         : '<tr><td colspan="6" class="text-center text-muted py-4">No shipments.</td></tr>';
     } catch (e) { console.error(e); }
   }
 
-  async function newShipment() {
-    shTypes = (await flApi('/shipment-types')).filter(t => t.is_active);
-    const picked = new Map();
-    const preJob = new URLSearchParams(location.search).get('job');
-    let jobs = await flApi('/shipments/job-options' + (preJob ? '?id=' + encodeURIComponent(preJob) : ''));
-    if (preJob) { const j = jobs.find(x => String(x.id) === preJob); if (j) picked.set(j.id, j); jobs = await flApi('/shipments/job-options'); }
-    const drawPicked = () => {
-      const el = document.getElementById('jobPicked'); if (!el) return;
-      el.innerHTML = picked.size ? [...picked.values()].map(j => `<span class="badge bg-blue-lt me-1 mb-1">${esc(j.job_number)} · ${esc(j.job_name)}
-        <a href="#" class="ms-1 text-reset" onclick="event.preventDefault(); jobToggle(${j.id}, false)">&times;</a></span>`).join('') : '<span class="text-muted small">No jobs selected.</span>';
-    };
-    const drawList = list => {
-      jobs = list; const el = document.getElementById('jobList'); if (!el) return;
-      el.innerHTML = list.map(j => `<label class="list-group-item py-1"><input type="checkbox" class="form-check-input me-2" ${picked.has(j.id) ? 'checked' : ''}
-        onchange="jobToggle(${j.id}, this.checked)">${esc(j.job_number)} · ${esc(j.job_name)}</label>`).join('') || '<div class="list-group-item text-muted">No matching jobs.</div>';
-    };
-    window.jobToggle = (id, on) => {
-      const j = jobs.find(x => x.id === id) || picked.get(id);
-      if (on && j) picked.set(id, j); else picked.delete(id);
-      drawPicked(); drawList(jobs);
-    };
-    let jt; window.jobSearch = v => { clearTimeout(jt); jt = setTimeout(async () => drawList(await flApi('/shipments/job-options?search=' + encodeURIComponent(v))), 250); };
-    setTimeout(() => { drawPicked(); drawList(jobs); }, 0);
-    const form = flModal('New Shipment',
-      `<div class="col-12"><label class="form-label">Jobs <span class="text-muted small">(select one or more)</span></label>
-        <div id="jobPicked" class="mb-1"></div>
-        <input type="text" class="form-control form-control-sm mb-1" placeholder="Search jobs…" oninput="jobSearch(this.value)" autocomplete="off">
-        <div id="jobList" class="list-group" style="max-height:11rem;overflow:auto"></div></div>` +
-      flField('ship_date', 'Ship date', '', 'date') + flField('carrier', 'Carrier / driver', '') +
-      flField('destination', 'Destination', '', 'text', '', 'col-12') +
-      `<div class="col-12"><label class="form-label">What is on this shipment?</label>` + shTypes.map(t => `<div class="row g-2 align-items-center mb-1">
-        <div class="col"><label class="form-check mb-0"><input type="checkbox" class="form-check-input load-cb" value="${t.id}"><span class="form-check-label">${esc(t.name)}</span></label></div>
-        <div class="col-4"><input type="number" min="0" class="form-control form-control-sm" placeholder="Pieces" data-pieces="${t.id}"></div></div>`).join('') + `</div>` +
-      flText('notes', 'Notes', '', 2),
-      async f => {
-        const d = flFormData(f);
-        d.loads = [...f.querySelectorAll('.load-cb:checked')].map(c => ({ shipment_type_id: +c.value, piece_count: f.querySelector(`[data-pieces="${c.value}"]`).value || null }));
-        if (!d.loads.length) { showNotification('Pick at least one load type.', 'warning'); throw new Error('no loads'); }
-        delete d.undefined;
-        d.job_ids = [...picked.keys()];
-        const s = await flApi('/shipments', 'POST', d);
-        location.href = '/shipments/' + s.id;
-      }, 'Create');
-  }
+  const newShipment = () => shipmentForm(null, new URLSearchParams(location.search).get('job'));
 
   // ---- types & checklists ----
   async function loadTypes() {

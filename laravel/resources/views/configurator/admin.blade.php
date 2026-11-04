@@ -2207,6 +2207,7 @@
     document.getElementById('hwlib-item-needsreview').checked = !!i?.needs_review;
     document.getElementById('hwlib-item-vosstandard').checked = !!i?.vos_standard;
     document.getElementById('hwlib-item-fieldinstall').checked = !!i?.field_install;
+    document.getElementById('hwlib-item-byothers').checked = !!i?.by_others;
     document.getElementById('hwlib-item-handed').checked = !!i?.handed;
 
     const itemOptions = (excludeId) => hwItems.filter(x => x.id != excludeId).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
@@ -2249,6 +2250,7 @@
       needs_review: document.getElementById('hwlib-item-needsreview').checked,
       vos_standard: document.getElementById('hwlib-item-vosstandard').checked,
       field_install: document.getElementById('hwlib-item-fieldinstall').checked,
+      by_others: document.getElementById('hwlib-item-byothers').checked,
       handed: document.getElementById('hwlib-item-handed').checked,
       default_strike_item_id: document.getElementById('hwlib-item-strike').value || null,
       default_cover_item_id: document.getElementById('hwlib-item-cover').value || null,

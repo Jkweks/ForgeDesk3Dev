@@ -39,7 +39,7 @@ class WidgetRegistry
         $stat = fn (string $key, string $title, string $description, string $icon, string $field, string $link, string $suffix = '', array $schema = []) => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
             'type' => 'stat', 'field' => $field, 'link' => $link, 'suffix' => $suffix, 'settings_schema' => $schema,
-            'default_size' => ['w' => 3, 'h' => 2], 'min_size' => ['w' => 2, 'h' => 2],
+            'default_size' => ['w' => 2, 'h' => 2], 'min_size' => ['w' => 2, 'h' => 2],
             'refresh_seconds' => 120,
         ];
         $chart = fn (string $key, string $title, string $description, string $icon, string $chart, array $schema = []) => [
@@ -61,7 +61,7 @@ class WidgetRegistry
         $list = fn (string $key, string $title, string $description, string $icon, int $rows = 8, array $more = []) => [
             'key' => $key, 'title' => $title, 'description' => $description, 'icon' => $icon,
             'type' => 'list', 'settings_schema' => array_merge([$limit($rows)], $more),
-            'default_size' => ['w' => 4, 'h' => 5], 'min_size' => ['w' => 3, 'h' => 3],
+            'default_size' => ['w' => 4, 'h' => 5], 'min_size' => ['w' => 2, 'h' => 2],
             'refresh_seconds' => 120,
         ];
 
@@ -101,6 +101,22 @@ class WidgetRegistry
             ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/work-orders/stages', [
                 $chart('wo_stage_wip', 'Work in Progress by Stage', 'Open pending and in-progress stages, grouped by stage name.', 'ti-chart-bar', 'stage_wip'),
             ]],
+            ['Work Orders', ['fabrication.work-orders.view'], '/dashboard/widgets/programming-queue', [
+                $stat('programming_queue', 'Programming Queue', 'CNC programming steps. Pick which figures to show; several appear side by side on one card.', 'ti-code', 'total', '/fabrication/programming-queue', '', [
+                    ['key' => 'metrics', 'label' => 'Figures to show', 'type' => 'multiselect', 'default' => ['waiting', 'in_progress'],
+                        'options' => [
+                            'waiting' => 'Waiting (not started)',
+                            'in_progress' => 'In progress',
+                            'ready' => 'Ready to program (not blocked)',
+                            'blocked' => 'Blocked / gated',
+                            'overdue' => 'Past requested date',
+                            'done_week' => 'Finished this week',
+                            'hours' => 'Estimated hours remaining',
+                        ]],
+                    ['key' => 'scope', 'label' => 'Count', 'type' => 'select', 'default' => 'all',
+                        'options' => ['all' => 'All programming steps', 'unassigned' => 'Only unassigned steps']],
+                ]),
+            ]],
             ['Maintenance', ['maintenance.view'], '/maintenance/dashboard', [
                 $stat('maintenance_overdue', 'Overdue Maintenance', 'Active maintenance tasks past their due date.', 'ti-alarm', 'overdue_task_count', '/maintenance#tab-tasks'),
                 $stat('maintenance_due_soon', 'Maintenance Due Soon', 'Active maintenance tasks coming due.', 'ti-calendar-time', 'due_soon_task_count', '/maintenance#tab-tasks'),
@@ -132,6 +148,34 @@ class WidgetRegistry
                 $stat('reservations_open', 'Open Reservations', 'Reservations not yet fulfilled or cancelled.', 'ti-lock', 'open', '/fulfillment/job-reservations'),
                 $stat('reservations_overdue', 'Overdue Reservations', 'Open reservations past their needed-by date.', 'ti-lock-exclamation', 'overdue', '/fulfillment/job-reservations'),
             ]],
+            ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments', [
+                $stat('shipments_open', 'Open Shipments', 'Draft, pre-checked and shipped (not yet delivered) shipments.', 'ti-truck-delivery', 'open', '/shipments'),
+                $stat('shipments_today', 'Shipping Today', 'Shipments scheduled for today that have not left yet.', 'ti-calendar-event', 'scheduled_today', '/shipments'),
+                $stat('shipments_needs_precheck', 'Awaiting Pre-Check', 'Draft shipments without a completed pre-delivery inspection.', 'ti-clipboard-check', 'awaiting_pre_check', '/shipments'),
+                $stat('shipments_in_transit', 'In Transit', 'Shipped shipments awaiting delivery / post-check.', 'ti-truck', 'in_transit', '/shipments'),
+                $stat('shipments_overdue', 'Overdue Shipments', 'Not-yet-shipped shipments past their ship date.', 'ti-truck-off', 'overdue', '/shipments'),
+                $stat('shipments_issues', 'Deliveries With Issues (30 d)', 'Shipments delivered with issues in the last 30 days.', 'ti-alert-triangle', 'delivered_issues_30d', '/shipments'),
+            ]],
+            ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments/upcoming', [
+                $list('shipments_upcoming', 'Upcoming Shipments', 'Open shipments by ship date, overdue first.', 'ti-truck-delivery'),
+            ]],
+            ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments/issues', [
+                $list('shipments_issues_list', 'Recent Delivery Issues', 'The latest shipments delivered with issues.', 'ti-alert-octagon', 5),
+            ]],
+            ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments/weekly', [
+                $chart('shipments_weekly', 'Shipments per Week', 'Shipments sent out each week (by ship date), with those delivered with issues highlighted.', 'ti-chart-bar', 'shipments_weekly', [
+                    ['key' => 'weeks', 'label' => 'Weeks shown', 'type' => 'select', 'default' => 12,
+                        'options' => [8 => '8 weeks', 12 => '12 weeks', 26 => '26 weeks', 52 => '52 weeks']],
+                ]),
+            ]],
+            ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments/inspections', [
+                $chart('shipments_inspections', 'Shipment Inspection Results', 'Pass, pass-with-issues and fail counts per month for shipment inspections.', 'ti-chart-histogram', 'shipments_inspections', [
+                    ['key' => 'phase', 'label' => 'Inspections', 'type' => 'select', 'default' => 'all',
+                        'options' => ['all' => 'Pre and post delivery', 'pre' => 'Pre-delivery only', 'post' => 'Post-delivery only']],
+                    ['key' => 'months', 'label' => 'Months shown', 'type' => 'select', 'default' => 6,
+                        'options' => [3 => '3 months', 6 => '6 months', 12 => '12 months']],
+                ]),
+            ]],
             ['Inventory', ['inventory.view'], '/dashboard/widgets/transactions', [
                 $stat('transactions_today', 'Transactions Today', 'Inventory transactions recorded today.', 'ti-arrows-exchange', 'today', '/transactions'),
             ]],
@@ -157,9 +201,9 @@ class WidgetRegistry
                 $stat('cutflow_cuts_week', 'Cuts This Week', 'Pieces logged by the cut station since Monday.', 'ti-scissors', 'cuts_this_week', '/fabrication/cut-lists'),
             ]],
             ['Fabrication', ['fabrication.work-orders.view'], '/dashboard/widgets/cutflow/cuts', [
-                $stat('cutflow_cuts_total', 'Total Cuts', 'Pieces cut at the cut station for the chosen period. Excludes drops, scrap and label reprints.', 'ti-scissors', 'total', '/fabrication/cut-lists', '', [
-                    ['key' => 'period', 'label' => 'Period', 'type' => 'select', 'default' => 'day',
-                        'options' => ['day' => 'Today', 'month' => 'This calendar month', 'year' => 'This calendar year']],
+                $stat('cutflow_cuts_total', 'Total Cuts', 'Pieces cut at the cut station. Pick any mix of day, week, month and year to show them side by side. Excludes drops, scrap and label reprints.', 'ti-scissors', 'total', '/fabrication/cut-lists', '', [
+                    ['key' => 'periods', 'label' => 'Periods to show', 'type' => 'multiselect', 'default' => ['day'],
+                        'options' => ['day' => 'Today', 'week' => 'This week (from Monday)', 'month' => 'This calendar month', 'year' => 'This calendar year']],
                 ]),
             ]],
             ['Configurator', ['configurator.view'], '/dashboard/widgets/configurator', [
@@ -173,6 +217,9 @@ class WidgetRegistry
             ['Inventory', ['inventory.view'], '/dashboard/widgets/storage', [
                 $stat('storage_locations', 'Storage Locations', 'Active storage locations.', 'ti-map-pin', 'locations', '/storage-locations'),
                 $stat('storage_unassigned', 'Products Without a Location', 'Active products with no storage location assigned.', 'ti-map-pin-off', 'products_without_location', '/inventory/products?noloc=1'),
+            ]],
+            ['Inventory', ['inventory.view'], '/dashboard/widgets/product-images', [
+                $stat('products_no_image', 'Parts Without an Image', 'Active products with no photo.', 'ti-photo-off', 'missing', '/reports/missingImages'),
             ]],
             ['Cycle Counting', ['cycle-count.view'], '/dashboard/widgets/cycle-counts', [
                 $stat('cycle_active', 'Active Cycle Counts', 'Planned and in-progress counting sessions.', 'ti-clipboard-check', 'active_sessions', '/cycle-counting'),
@@ -224,6 +271,11 @@ class WidgetRegistry
     {
         $settings = is_array($settings) ? $settings : [];
         $clean = [];
+
+        // Total Cuts used to take one `period`; saved layouts carry it forward as a one-item `periods`.
+        if ($key === 'cutflow_cuts_total' && ! array_key_exists('periods', $settings) && isset($settings['period'])) {
+            $settings['periods'] = [$settings['period']];
+        }
 
         foreach (static::schema($key) as $field) {
             $name = $field['key'];
@@ -303,8 +355,8 @@ class WidgetRegistry
      */
     private const DEFAULT_LAYOUT = [
         // At-a-glance numbers: shop floor, quality, stock, purchasing, maintenance.
-        ['wo_open', 3, 2], ['wo_overdue', 3, 2], ['wo_due_week', 3, 2], ['quality_pending', 3, 2],
-        ['inventory_low_stock', 3, 2], ['inventory_critical', 3, 2], ['po_overdue', 3, 2], ['maintenance_overdue', 3, 2],
+        ['wo_open', 2, 2], ['wo_overdue', 2, 2], ['wo_due_week', 2, 2], ['quality_pending', 2, 2], ['inventory_low_stock', 2, 2], ['inventory_critical', 2, 2],
+        ['po_overdue', 2, 2], ['maintenance_overdue', 2, 2],
         'break',
         ['wo_table', 8, 6], ['low_stock_list', 4, 6],
         'break',

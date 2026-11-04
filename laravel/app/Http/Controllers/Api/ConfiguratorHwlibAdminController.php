@@ -464,6 +464,7 @@ class ConfiguratorHwlibAdminController extends Controller
             'min_height' => 'nullable|numeric',
             'max_height' => 'nullable|numeric',
             'field_install' => 'boolean',
+            'by_others' => 'boolean',
             'handed' => 'boolean',
             'default_strike_item_id' => [
                 'nullable', 'integer', 'exists:configurator_hwlib_items,id',

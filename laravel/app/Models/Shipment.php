@@ -15,15 +15,33 @@ class Shipment extends Model
     public const OPEN_STATUSES = ['draft', 'pre_check_done', 'shipped'];
 
     protected $fillable = [
-        'shipment_number', 'status', 'ship_date', 'destination', 'carrier', 'notes',
-        'created_by', 'shipped_at',
+        'shipment_number', 'status', 'ship_date', 'destination', 'custom_jobs', 'carrier', 'notes',
+        'created_by', 'shipped_at', 'cancel_reason', 'cancelled_at', 'cancelled_by',
+        'pickup_location_id', 'pickup_address', 'pickup_lat', 'pickup_lng',
+        'dropoff_location_id', 'dropoff_address', 'dropoff_lat', 'dropoff_lng',
     ];
 
-    protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime'];
+    protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime', 'cancelled_at' => 'datetime',
+        'pickup_lat' => 'float', 'pickup_lng' => 'float', 'dropoff_lat' => 'float', 'dropoff_lng' => 'float', 'custom_jobs' => 'array'];
 
     public function jobs()
     {
         return $this->belongsToMany(BusinessJob::class, 'business_job_shipment')->withTimestamps()->orderBy('business_jobs.job_number');
+    }
+
+    public function pickupLocation()
+    {
+        return $this->belongsTo(ShipmentLocation::class, 'pickup_location_id');
+    }
+
+    public function dropoffLocation()
+    {
+        return $this->belongsTo(ShipmentLocation::class, 'dropoff_location_id');
+    }
+
+    public function canceller()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     public function loads()
@@ -60,6 +78,8 @@ class Shipment extends Model
     {
         $labels = $this->jobs->map(fn ($j) => trim(($j->job_name ?? '').' '.($j->job_number ? '('.$j->job_number.')' : '')))
             ->filter()->values();
+
+        $labels = $labels->concat($this->custom_jobs ?? [])->values();
 
         return $labels->isEmpty() ? null : $labels->implode(', ');
     }

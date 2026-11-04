@@ -25,6 +25,11 @@ class JobDocument extends Model
     protected $casts = [
         'archived' => 'boolean',
         'archived_at' => 'datetime',
+        'ez_total_net' => 'decimal:2',
+        'ez_freight' => 'decimal:2',
+        'ez_grand_total' => 'decimal:2',
+        'ez_list_price' => 'decimal:2',
+        'ez_summary_read_at' => 'datetime',
     ];
 
     public function businessJob(): BelongsTo

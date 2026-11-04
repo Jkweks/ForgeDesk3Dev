@@ -147,6 +147,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/job-reservations/search-product', [JobReservationController::class, 'searchProduct'])->middleware('permission:jobs.view');
         Route::get('/job-reservations/search-products', [JobReservationController::class, 'searchProducts'])->middleware('permission:jobs.view');
         Route::get('/job-reservations/status-labels', [JobReservationController::class, 'statusLabels'])->middleware('permission:jobs.view');
+        Route::get('/job-reservations/{id}/cost', [JobReservationController::class, 'cost'])->middleware(['permission:jobs.view', 'permission:reservations.cost.view']);
+        Route::get('/job-reservations/{id}/cost/export', [JobReservationController::class, 'exportCost'])->middleware(['permission:jobs.view', 'permission:reservations.cost.view']);
         Route::get('/job-reservations/{id}', [JobReservationController::class, 'show'])->middleware('permission:jobs.view');
         Route::put('/job-reservations/{id}', [JobReservationController::class, 'updateReservation'])->middleware('permission:jobs.manage-reservations');
         Route::post('/job-reservations/{id}/status', [JobReservationController::class, 'updateStatus'])->middleware('permission:jobs.manage-reservations');
@@ -254,6 +256,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/widgets/work-orders/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrdersDue']);
             Route::get('/dashboard/widgets/work-orders/table', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrdersTable']);
             Route::get('/dashboard/widgets/work-orders/schedule', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workQueueWeek']);
+            Route::get('/dashboard/widgets/programming-queue', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'programmingQueue']);
             Route::get('/dashboard/widgets/work-orders/stages', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'workOrderStages']);
         });
         Route::get('/dashboard/widgets/quality', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'quality'])->middleware('permission:quality.view');
@@ -269,12 +272,20 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/widgets/configurator', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'configurator']);
             Route::get('/dashboard/widgets/configurator/recent', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'configuratorRecent']);
         });
+        Route::get('/dashboard/widgets/product-images', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'productImages'])->middleware('permission:inventory.view');
         Route::get('/dashboard/widgets/storage', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'storage'])->middleware('permission:inventory.view');
         Route::get('/dashboard/widgets/cutflow', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cutflow'])->middleware('permission:fabrication.work-orders.view');
         Route::get('/dashboard/widgets/cutflow/cuts', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'cutflowCuts'])->middleware('permission:fabrication.work-orders.view');
         Route::middleware('permission:orders.view')->group(function () {
             Route::get('/dashboard/widgets/purchase-orders', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'purchaseOrders']);
             Route::get('/dashboard/widgets/purchase-orders/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'purchaseOrdersDue']);
+        });
+        Route::middleware('permission:shipments.view')->group(function () {
+            Route::get('/dashboard/widgets/shipments', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'shipments']);
+            Route::get('/dashboard/widgets/shipments/upcoming', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'shipmentsUpcoming']);
+            Route::get('/dashboard/widgets/shipments/weekly', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'shipmentsWeekly']);
+            Route::get('/dashboard/widgets/shipments/inspections', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'shipmentsInspections']);
+            Route::get('/dashboard/widgets/shipments/issues', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'shipmentsIssues']);
         });
         Route::middleware('permission:jobs.view')->group(function () {
             Route::get('/dashboard/widgets/jobs', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'jobs']);
@@ -549,6 +560,8 @@ Route::middleware('auth:sanctum')->group(function () {
         $st = \App\Http\Controllers\Api\ShipmentTypeController::class;
         Route::get('/shipments', [$sh, 'index'])->middleware('permission:shipments.view');
         Route::get('/shipments/queue', [$sh, 'queue'])->middleware('permission:shipments.view');
+        Route::get('/shipments/locations', [$sh, 'locations'])->middleware('permission:shipments.view');
+        Route::get('/shipments/address-search', [$sh, 'addressSearch'])->middleware(['permission:shipments.manage', 'throttle:30,1']);
         Route::get('/shipments/job-options', [$sh, 'jobOptions'])->middleware('permission:shipments.view');
         Route::post('/shipments', [$sh, 'store'])->middleware('permission:shipments.manage');
         Route::get('/shipments/{id}/report', [$sh, 'report'])->middleware('permission:shipments.view');
@@ -655,7 +668,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'updateHardwarePart'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyHardwarePart'])->middleware('permission:configurator.edit');
         Route::get('/door-frame-configurations/{id}/material-consumption', [DoorFrameConfigurationController::class, 'materialConsumption'])->middleware('permission:configurator.view');
-        Route::post('/door-frame-configurations/{id}/reserve', [DoorFrameConfigurationController::class, 'reserveConfiguration'])->middleware('permission:configurator.release');
+        Route::get('/door-frame-configurations/{id}/cost/export', [DoorFrameConfigurationController::class, 'exportCostPdf'])->middleware(['permission:configurator.view', 'permission:pricing.view']);
+        Route::get('/door-frame-configurations/{id}/cost', [DoorFrameConfigurationController::class, 'cost'])->middleware(['permission:configurator.view', 'permission:pricing.view']);
+        Route::post('/door-frame-configurations/{id}/reserve',[DoorFrameConfigurationController::class, 'reserveConfiguration'])->middleware('permission:configurator.release');
         Route::post('/door-frame-configurations/{id}/unreserve', [DoorFrameConfigurationController::class, 'unreserveConfiguration'])->middleware('permission:configurator.release');
         Route::get('/door-frame-configurations/{id}/release-preflight', [DoorFrameConfigurationController::class, 'releasePreflight'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations/{id}/release', [DoorFrameConfigurationController::class, 'release'])->middleware('permission:configurator.release');

@@ -115,3 +115,6 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px s
 .loadrow:last-child { border-bottom: 0; }
 .loadrow .chk { flex: 1; }
 .loadrow > input[type=number] { width: 96px; flex: none; }
+
+/* Addresses: a single tap selects the whole line so it can be copied. */
+.addr { user-select: all; -webkit-user-select: all; }

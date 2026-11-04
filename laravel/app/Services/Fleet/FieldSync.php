@@ -133,12 +133,20 @@ class FieldSync
     private function publishShipments(Connection $remote): int
     {
         $now = now()->toDateTimeString();
-        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name'])->whereIn('status', Shipment::OPEN_STATUSES)->get()
+        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name'])->whereIn('status', Shipment::OPEN_STATUSES)->get()
             ->map(fn (Shipment $s) => [
                 'shipment_number' => $s->shipment_number,
                 'job_label' => $s->jobLabel(),
                 'destination' => $s->destination,
                 'carrier' => $s->carrier,
+                'pickup_name' => $s->pickupLocation?->name,
+                'pickup_address' => $s->pickup_address,
+                'pickup_lat' => $s->pickup_lat,
+                'pickup_lng' => $s->pickup_lng,
+                'dropoff_name' => $s->dropoffLocation?->name,
+                'dropoff_address' => $s->dropoff_address,
+                'dropoff_lat' => $s->dropoff_lat,
+                'dropoff_lng' => $s->dropoff_lng,
                 'ship_date' => $s->ship_date?->format('Y-m-d'),
                 'status' => $s->status,
                 'loads' => $s->loads->map(fn ($l) => $l->type->name.($l->piece_count ? ' x'.$l->piece_count : ''))->implode(', '),
@@ -151,7 +159,7 @@ class FieldSync
         $remote->transaction(function () use ($remote, $rows) {
             foreach (array_chunk($rows, 200) as $chunk) {
                 $remote->table('fa_shipments')->upsert($chunk, ['shipment_number'],
-                    ['job_label', 'destination', 'carrier', 'ship_date', 'status', 'loads', 'pre_checklist', 'checklist', 'is_active', 'synced_at']);
+                    ['job_label', 'destination', 'carrier', 'pickup_name', 'pickup_address', 'pickup_lat', 'pickup_lng', 'dropoff_name', 'dropoff_address', 'dropoff_lat', 'dropoff_lng', 'ship_date', 'status', 'loads', 'pre_checklist', 'checklist', 'is_active', 'synced_at']);
             }
             $remote->table('fa_shipments')->whereNotIn('shipment_number', array_column($rows, 'shipment_number'))->update(['is_active' => false]);
         });

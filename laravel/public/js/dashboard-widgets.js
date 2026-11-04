@@ -25,6 +25,18 @@
   // data endpoint, and its runtime item (for per-widget state such as a chart).
   const renderers = {
     stat(body, def, data) {
+      // Several figures on one card (Total Cuts with more than one period picked).
+      const multi = data && (data.figures || data.periods);
+      if (multi && multi.length > 1) {
+        body.innerHTML = `
+          ${data.figures && data.caption ? `<div class="small text-secondary">${esc(data.caption)}</div>` : ''}
+          <div class="dash-multistat">${multi.map((p) => `
+            <div><div class="small text-secondary text-truncate" title="${esc(p.caption)}">${esc(p.label)}</div>
+            <div class="h2 mb-0">${p.total == null ? '-' : esc(Number(p.total).toLocaleString())}</div></div>`).join('')}
+          </div>
+          ${def.link ? `<a href="${esc(def.link)}" class="small text-secondary">View details</a>` : ''}`;
+        return;
+      }
       const raw = data ? data[def.field] : null;
       const value = typeof raw === 'number' ? raw.toLocaleString() : (raw ?? '-');
       const shown = typeof raw === 'number' ? value + (def.suffix || '') : value;
@@ -211,6 +223,39 @@
       };
     },
 
+    shipments_weekly(data) {
+      const rows = (data && data.data) || [];
+      if (!rows.length) return null;
+      return {
+        type: 'bar',
+        data: {
+          labels: rows.map((r) => r.week),
+          datasets: [
+            { label: 'Shipped', data: rows.map((r) => r.shipped), backgroundColor: BLUE, stack: 's' },
+            { label: 'Delivered with issues', data: rows.map((r) => r.with_issues), backgroundColor: RED, stack: 's' },
+          ],
+        },
+        options: { ...baseOptions, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } },
+      };
+    },
+
+    shipments_inspections(data) {
+      const rows = (data && data.data) || [];
+      if (!rows.length) return null;
+      return {
+        type: 'bar',
+        data: {
+          labels: rows.map((r) => r.month_label),
+          datasets: [
+            { label: 'Pass', data: rows.map((r) => r.pass), backgroundColor: GREEN, stack: 's' },
+            { label: 'Pass with issues', data: rows.map((r) => r.pass_with_issues), backgroundColor: '#f59f00', stack: 's' },
+            { label: 'Fail', data: rows.map((r) => r.fail), backgroundColor: RED, stack: 's' },
+          ],
+        },
+        options: { ...baseOptions, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } },
+      };
+    },
+
     stage_wip(data) {
       const rows = (data && data.data) || [];
       if (!rows.length) return null;
@@ -290,7 +335,7 @@
       <div class="card h-100 dash-widget">
         <div class="card-body d-flex flex-column">
           <div class="d-flex align-items-start mb-2">
-            <div class="subheader flex-fill text-truncate"><i class="ti ${esc(def.icon)} me-1"></i>${esc(def.title)}</div>
+            <div class="subheader flex-fill ${def.type === 'stat' ? 'dash-title-wrap' : 'text-truncate'}" title="${esc(def.title)}"><i class="ti ${esc(def.icon)} me-1"></i>${esc(def.title)}</div>
             ${(def.settings_schema || []).length ? '<button type="button" class="btn btn-sm btn-icon btn-ghost-secondary dash-settings me-1" aria-label="Widget settings" title="Widget settings"><i class="ti ti-settings"></i></button>' : ''}
             <button type="button" class="btn-close dash-remove" aria-label="Remove widget"></button>
           </div>

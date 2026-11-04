@@ -34,7 +34,10 @@
 </div>
 
 <table class="kv">
-    <tr><td>{{ $shipment->jobs->count() > 1 ? 'Jobs' : 'Job' }}</td><td>@forelse ($shipment->jobs as $j){{ $j->job_name }} ({{ $j->job_number }})@if (! $loop->last)<br>@endif @empty — @endforelse</td></tr>
+    @if ($shipment->status === 'cancelled')<tr><td>Cancelled</td><td>{{ $shipment->cancel_reason }}@if ($shipment->cancelled_at) <br>{{ $shipment->canceller?->name }} {{ $shipment->cancelled_at->format('Y-m-d') }}@endif</td></tr>@endif
+    <tr><td>Pickup</td><td>{{ $shipment->pickupLocation?->name ?? '—' }}@if ($shipment->pickup_address) · {{ $shipment->pickup_address }}@endif</td></tr>
+    <tr><td>Drop off</td><td>{{ $shipment->dropoffLocation?->name ?? '—' }}@if ($shipment->dropoff_address) · {{ $shipment->dropoff_address }}@endif</td></tr>
+    <tr><td>{{ $shipment->jobs->count() + count($shipment->custom_jobs ?? []) > 1 ? 'Jobs' : 'Job' }}</td><td>@forelse ($shipment->jobs as $j){{ $j->job_name }} ({{ $j->job_number }})@if (! $loop->last)<br>@endif @empty @if (empty($shipment->custom_jobs)) — @endif @endforelse@foreach ($shipment->custom_jobs ?? [] as $cj)@if ($shipment->jobs->isNotEmpty() || ! $loop->first)<br>@endif{{ $cj }}@endforeach</td></tr>
     <tr><td>Ship date</td><td>{{ $shipment->ship_date?->format('M j, Y') ?? '—' }}</td></tr>
     <tr><td>Carrier</td><td>{{ $shipment->carrier ?: '—' }}</td></tr>
     <tr><td>Destination</td><td>{{ $shipment->destination ?: '—' }}</td></tr>

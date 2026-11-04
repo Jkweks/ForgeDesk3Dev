@@ -108,6 +108,7 @@ Typing the asset number works everywhere.
 - **Photos** are shrunk on the phone (max 1600px JPEG) before upload. The server also checks the real
   image type from the bytes; ForgeDesk re-checks and re-encodes them (stripping EXIF/GPS).
 - **Identity** is taken from the login, never from the request body.
+- **Prebuilt images:** publishing a GitHub release builds `ghcr.io/jkweks/forgedesk-field-app` and `-field-db` (`.github/workflows/field-app-publish.yml`). On the server, only `docker-compose.prod.yml` and `.env` are needed: `docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d`. Pin with `FIELD_IMAGE_TAG`.
 - **Updates:** `git pull && docker compose up -d --build`. The service worker is network-first, so
   phones pick up a new version the next time they're online.
 

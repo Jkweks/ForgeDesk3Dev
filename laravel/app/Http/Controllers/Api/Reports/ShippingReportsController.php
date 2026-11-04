@@ -41,7 +41,7 @@ class ShippingReportsController extends Controller
             return [
                 'id' => $s->id, 'shipment_number' => $s->shipment_number, 'status' => $s->status,
                 'ship_date' => $s->ship_date?->format('Y-m-d'), 'destination' => $s->destination, 'carrier' => $s->carrier,
-                'jobs' => $s->jobs->map(fn ($j) => trim($j->job_number.' '.$j->job_name))->implode('; '),
+                'jobs' => $s->jobs->map(fn ($j) => trim($j->job_number.' '.$j->job_name))->concat($s->custom_jobs ?? [])->implode('; '),
                 'loads' => $s->loads->map(fn ($l) => $l->type->name.($l->piece_count ? ' ×'.$l->piece_count : ''))->implode(', '),
                 'pre_result' => $pre?->result, 'pre_by' => $pre ? ($pre->performer?->name ?? $pre->submitted_by_external) : null,
                 'post_result' => $post?->result, 'post_by' => $post ? ($post->performer?->name ?? $post->submitted_by_external) : null,

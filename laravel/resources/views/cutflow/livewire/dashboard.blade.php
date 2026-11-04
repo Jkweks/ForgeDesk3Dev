@@ -87,6 +87,13 @@
                 <span style="color:var(--faint);">&#9662;</span>
             </div>
 
+            @if ($selectedJobs->isNotEmpty())
+                <div wire:click="openProgressModal"
+                     style="cursor:pointer;padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:var(--panel);color:var(--muted-2);border:1.5px solid var(--border);">
+                    &#128202; Progress
+                </div>
+            @endif
+
             @if ($totalJobCount === 0)
                 <span style="font-size:12.5px;color:var(--muted);">— <a href="{{ route('cutflow.import.show') }}" style="color:var(--accent);">import a cut list</a> to create one.</span>
             @endif
@@ -583,6 +590,55 @@
         </div>
     @endif
 
+    {{-- Progress: parts cut per part number for the selected lists, with projected time left. --}}
+    @if ($modal === 'progress' && $progress)
+        <div class="modal-overlay" wire:keydown.window.escape="closeModal">
+            <div class="modal" style="width:640px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div class="display" style="font-size:18px;font-weight:700;">Cut Progress</div>
+                    <div wire:click="closeModal" style="cursor:pointer;width:40px;height:40px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;">&#10005;</div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    @foreach ([
+                        ['Cut', number_format($progress['summary']['done_cuts']).' / '.number_format($progress['summary']['total_cuts']).' ('.number_format($progress['summary']['percent'], 1).'%)'],
+                        ['Est. time left', \App\Services\CutFlow\CutListProgress::duration($progress['summary']['remaining_seconds'])],
+                    ] as [$label, $value])
+                        <div style="flex:1;min-width:150px;padding:10px 12px;border-radius:9px;background:var(--surface);">
+                            <div style="font-size:11px;color:var(--muted);font-weight:600;">{{ strtoupper($label) }}</div>
+                            <div class="display" style="font-size:18px;font-weight:700;">{{ $value }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <div style="font-size:11.5px;color:var(--muted);">
+                    @if ($progress['summary']['seconds_per_cut'])
+                        Pace {{ round($progress['summary']['seconds_per_cut']) }} s/cut, from {{ $progress['summary']['pace_source'] }} (breaks over 5 min ignored).
+                    @else
+                        No cutting history yet, so no time estimate.
+                    @endif
+                </div>
+
+                <div style="max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+                    @foreach ($progress['by_part'] as $row)
+                        <div>
+                            <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;">
+                                <span style="font-weight:600;">{{ $row['part_number'] }}@if ($row['finish']) <span style="color:var(--muted);">· {{ $row['finish'] }}</span>@endif</span>
+                                <span class="mono" style="color:var(--muted-2);">{{ $row['done_cuts'] }}/{{ $row['total_cuts'] }} · {{ number_format($row['percent'], 0) }}%@if ($row['remaining_cuts'] > 0) · {{ \App\Services\CutFlow\CutListProgress::duration($row['remaining_seconds']) }}@endif</span>
+                            </div>
+                            <div style="height:10px;border-radius:5px;background:var(--surface);overflow:hidden;">
+                                <div style="height:100%;width:{{ $row['percent'] }}%;background:{{ $row['remaining_cuts'] === 0 ? 'var(--success, #2f9e44)' : 'var(--accent)' }};"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;">
+                    <button class="btn btn-accent" wire:click="closeModal">Done</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Recut picker: large tap rows for every already-cut piece, including ones hidden from the cut list. --}}
     @if ($modal === 'recut')
         <div class="modal-overlay" wire:keydown.window.escape="closeModal">
@@ -619,7 +675,7 @@
     @endif
 
     {{-- Shared modal: operator login, manual override entry, or new stick length entry --}}
-    @if ($modal && ! in_array($modal, ['jobs', 'recut'], true))
+    @if ($modal && ! in_array($modal, ['jobs', 'recut', 'progress'], true))
         <div class="modal-overlay"
              wire:keydown.window.enter="confirmModal"
              wire:keydown.window.escape="closeModal"

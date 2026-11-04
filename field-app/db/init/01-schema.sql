@@ -36,6 +36,14 @@ CREATE TABLE fa_shipments (
   status          text NOT NULL DEFAULT 'shipped',     -- draft | pre_check_done | shipped
   loads           text,                                -- "Glass x4, Metal"
   pre_checklist   text NOT NULL DEFAULT '[]',          -- same JSON shape, pre-shipment items
+  pickup_name     text,                                -- contract v5: where the truck loads / unloads, for navigation
+  pickup_address  text,
+  pickup_lat      double precision,
+  pickup_lng      double precision,
+  dropoff_name    text,
+  dropoff_address text,
+  dropoff_lat     double precision,
+  dropoff_lng     double precision,
   is_active       boolean NOT NULL DEFAULT true,
   synced_at       timestamp
 );

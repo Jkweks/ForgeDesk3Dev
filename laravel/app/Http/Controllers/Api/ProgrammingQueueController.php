@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DoorFrameConfiguration;
 use App\Models\FdUser;
 use App\Models\FdWoStage;
 use App\Services\StageGateService;
@@ -17,6 +18,9 @@ use Illuminate\Support\Facades\DB;
  * first, then work-order priority, then the line's requested date. A programmer can drag lines into
  * their own order (programming_rank), which takes precedence until reset; it never touches the work
  * orders' own priority, which the Work Queue owns.
+ *
+ * After the ranked list come the draft door/frame configurations of active jobs (not yet reserved,
+ * so no work order or programming step exists) — a read-only heads-up of what is still coming.
  */
 class ProgrammingQueueController extends Controller
 {
@@ -129,8 +133,41 @@ class ProgrammingQueueController extends Controller
 
         return response()->json([
             'rows' => $rows,
+            'drafts' => $this->draftConfigurations($request),
             'fab_users' => FdUser::where('active', true)->orderBy('name')->get(['id', 'name', 'initials']),
         ]);
+    }
+
+    /**
+     * Draft (not yet reserved) door/frame configurations on active jobs, oldest job first.
+     * Honours the same job / work-order filters as the main list (a work-order filter has no drafts).
+     */
+    private function draftConfigurations(Request $request): array
+    {
+        if ($request->filled('work_order_id')) {
+            return [];
+        }
+
+        return DoorFrameConfiguration::query()
+            ->where('status', 'draft')
+            ->where('archived', false)
+            ->whereHas('businessJob', fn ($q) => $q->where('status', 'active'))
+            ->when($request->filled('job_id'), fn ($q) => $q->where('business_job_id', (int) $request->job_id))
+            ->with(['businessJob:id,job_number,job_name', 'doors:id,configuration_id,door_tag'])
+            ->orderBy('business_job_id')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (DoorFrameConfiguration $c) => [
+                'configuration_id' => $c->id,
+                'business_job_id' => $c->business_job_id,
+                'job_number' => $c->businessJob?->job_number,
+                'job_name' => $c->businessJob?->job_name,
+                'tags' => $c->doors->pluck('door_tag')->values(),
+                'job_scope' => $c->job_scope,
+                'quantity' => $c->quantity,
+            ])
+            ->values()
+            ->all();
     }
 
     /**

@@ -178,6 +178,7 @@
               <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-active" checked><span class="form-check-label">Active</span></label>
               <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-vosstandard"><span class="form-check-label">VOS Standard</span></label>
               <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-fieldinstall"><span class="form-check-label">Field Install</span></label>
+              <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-byothers"><span class="form-check-label">By Others <span class="text-muted">(listed, not reserved; backers still are)</span></span></label>
               <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-handed"><span class="form-check-label">Handed</span></label>
               <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-needsreview"><span class="form-check-label">Needs Review <span class="text-muted">(quick-added, not yet verified)</span></span></label>
             </div>

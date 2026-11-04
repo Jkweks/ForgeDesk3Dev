@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Reports;
 
 use App\Http\Controllers\Api\Reports\Concerns\GeneratesCsv;
 use App\Http\Controllers\Controller;
+use App\Models\CutFlow\CutJob;
+use App\Services\CutFlow\CutListProgress;
 use App\Services\CutFlow\CutStationStats as Stats;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -45,6 +47,22 @@ class CutStationReportsController extends Controller implements HasMiddleware
         return response()->json($this->waste($request));
     }
 
+    /** Parts cut per part number for the chosen cut lists (?job_ids[]=), plus the list of cut lists to choose from. */
+    public function cutListProgressReport(Request $request)
+    {
+        $jobs = CutJob::withDisplayLabels(CutJob::all());
+        $completed = CutJob::completedIds();
+        $ids = array_map('intval', (array) $request->query('job_ids', []));
+
+        return response()->json(CutListProgress::forJobs($ids) + [
+            'jobs' => $jobs->map(fn ($j) => [
+                'id' => $j->id,
+                'label' => trim($j->job_title.($j->release_label ? ' · '.$j->release_label : '')),
+                'completed' => in_array($j->id, $completed, true),
+            ])->values(),
+        ]);
+    }
+
     public function csvExport(string $type, Request $request)
     {
         switch ($type) {
@@ -77,6 +95,18 @@ class CutStationReportsController extends Controller implements HasMiddleware
                     ]),
                     'cut_station_waste',
                     ['Profile', 'Finish', 'Sticks', 'Stock Inches', 'Leftover Inches', 'Leftover %', 'Rack Drops', 'Rack Drop Inches', 'Scrap Pieces', 'Scrap Inches']
+                );
+            case 'cut_list_progress':
+                $ids = array_map('intval', (array) $request->query('job_ids', []));
+
+                return $this->generateCSV(
+                    CutListProgress::forJobs($ids)['by_part']->map(fn ($r) => [
+                        $r['part_number'], $r['finish'], $r['total_cuts'], $r['done_cuts'], $r['remaining_cuts'], $r['percent'],
+                        $r['seconds_per_cut'] === null ? '' : round($r['seconds_per_cut'], 1),
+                        $r['remaining_seconds'] === null ? '' : round($r['remaining_seconds'] / 60, 1),
+                    ]),
+                    'cut_list_progress',
+                    ['Part Number', 'Finish', 'Total Cuts', 'Cut', 'Remaining', 'Percent Cut', 'Sec / Cut', 'Est. Minutes Left']
                 );
             default:
                 return null;

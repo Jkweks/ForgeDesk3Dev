@@ -12,7 +12,7 @@ class ConfiguratorHwlibItem extends Model
     protected $fillable = [
         'category_id', 'subcategory_id', 'name', 'manufacturer', 'model_number', 'pn', 'notes',
         'active', 'needs_review', 'vos_standard', 'finishes', 'min_width', 'max_width',
-        'min_height', 'max_height', 'field_install', 'handed',
+        'min_height', 'max_height', 'field_install', 'by_others', 'handed',
         'default_strike_item_id', 'default_cover_item_id',
     ];
 
@@ -26,6 +26,7 @@ class ConfiguratorHwlibItem extends Model
         'min_height' => 'decimal:4',
         'max_height' => 'decimal:4',
         'field_install' => 'boolean',
+        'by_others' => 'boolean',
         'handed' => 'boolean',
     ];
 
