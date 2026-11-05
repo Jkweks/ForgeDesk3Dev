@@ -79,7 +79,7 @@ class NavigationConfigTest extends TestCase
     {
         $labels = array_column(config('navigation'), 'label');
         $this->assertNotContains('Operations', $labels);
-        $this->assertSame(['Dashboard', 'Inventory', 'Jobs', 'Fabrication', 'Quality', 'Configurator', 'Field & Fleet', 'Maintenance', 'Reports', 'Admin'], $labels);
+        $this->assertSame(['Dashboard', 'Inventory', 'Jobs', 'Fabrication', 'Quality', 'Configurator', 'Shipments', 'Field & Fleet', 'Maintenance', 'Reports', 'Admin', 'Development'], $labels);
 
         $html = $this->get('/')->assertOk()->getContent();
         foreach (['Catalog', 'Stock', 'Activity', 'Purchasing', 'Displays'] as $heading) {
@@ -106,7 +106,7 @@ class NavigationConfigTest extends TestCase
         $classic = config('navigation_classic');
 
         $this->assertSame(
-            ['Dashboard', 'Inventory', 'Operations', 'Fulfillment', 'Configurator', 'Reports', 'Field & Fleet', 'Maintenance', 'Fabrication', 'Admin'],
+            ['Dashboard', 'Inventory', 'Operations', 'Fulfillment', 'Configurator', 'Reports', 'Shipments', 'Field & Fleet', 'Maintenance', 'Fabrication', 'Admin', 'Development'],
             array_column($classic, 'label')
         );
         $byLabel = collect($classic)->keyBy('label');

@@ -22,6 +22,9 @@
       $hasItems = ! empty($section['items']);
       $slug = \Illuminate\Support\Str::slug($section['label']);
     @endphp
+    @if (! empty($section['admin_only']) && ! $isAdmin)
+      @continue
+    @endif
     {{-- `permission` may be a list (visible with ANY of them): applyNavigationPermissions() splits on spaces. --}}
     <li class="nav-item {{ $hasItems ? 'dropdown' : '' }} {{ $active ? 'active' : '' }}" data-nav-permission="{{ implode(' ', (array) $section['permission']) }}" @if (! empty($section['action_permission'])) data-permission="{{ $section['action_permission'] }}" @endif>
       @if ($hasItems)

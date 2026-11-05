@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(auth.csrfGuard);
 router.use(auth.loadUser);
 
-const SHIPMENT_PERMS = ['shipments.view', 'shipments.manage', 'shipments.inspect'];
+const SHIPMENT_PERMS = ['shipments.view', 'shipments.manage', 'shipments.inspect', 'dev.report'];
 /** Permissions are a UI hint only; ForgeDesk re-checks them when the submission is ingested. */
 const permsOf = (u) => { try { const p = JSON.parse(u.permissions || '[]'); return Array.isArray(p) ? p.filter((x) => SHIPMENT_PERMS.includes(x)) : []; } catch { return []; } };
 const publicUser = (u) => ({ id: u.id, username: u.username, display_name: u.display_name, permissions: permsOf(u) });
@@ -92,7 +92,7 @@ router.post('/submissions', auth.requireAuth, async (req, res, next) => {
     const kind = req.body?.kind;
     const num = String(req.body?.asset_number || '');
     let known;
-    if (kind === 'shipment_create') known = { rowCount: 1 };
+    if (kind === 'shipment_create' || kind === 'dev_report') known = { rowCount: 1 };
     else if (kind === 'shipment_inspection') known = await client.query(
       // Also accepted while a "mark shipped" from this app is still waiting for ForgeDesk to publish the new status.
       `SELECT 1 FROM fa_shipments sh WHERE sh.shipment_number = $1 AND sh.is_active AND (sh.status = 'shipped' OR
@@ -100,6 +100,7 @@ router.post('/submissions', auth.requireAuth, async (req, res, next) => {
     else if (kind === 'shipment_ship') known = await client.query("SELECT 1 FROM fa_shipments WHERE shipment_number = $1 AND is_active AND status = 'pre_check_done'", [num]);
     else if (kind === 'shipment_precheck' || kind === 'shipment_reschedule') known = await client.query("SELECT 1 FROM fa_shipments WHERE shipment_number = $1 AND is_active AND status IN ('draft','pre_check_done')", [num]);
     else known = await client.query('SELECT 1 FROM fa_assets WHERE asset_number = $1 AND is_active', [num]);
+    if (kind === 'dev_report' && !permsOf(req.user).includes('dev.report')) return res.status(403).json({ error: 'Only administrators can send development reports.' });
     if (kind === 'shipment_create' && !permsOf(req.user).includes('shipments.manage')) return res.status(403).json({ error: 'You do not have permission to create shipments.' });
     if ((kind === 'shipment_reschedule' || kind === 'shipment_ship') && !permsOf(req.user).includes('shipments.manage')) return res.status(403).json({ error: 'You do not have permission to reschedule shipments.' });
     if (kind === 'shipment_precheck' && !permsOf(req.user).includes('shipments.inspect')) return res.status(403).json({ error: 'You do not have permission to do pre-shipment checks.' });

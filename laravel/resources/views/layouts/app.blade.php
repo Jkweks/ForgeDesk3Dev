@@ -214,6 +214,9 @@
     <!-- Page Content (each view supplies its own .page-wrapper) -->
     @yield('content')
 
+    {{-- Admin-only "Report bug / request feature / add note" popup, reachable from every page --}}
+    @include('partials.dev-feedback')
+
     <!-- Theme Settings (Available on all pages) -->
     @include('partials.theme-settings')
   </div>

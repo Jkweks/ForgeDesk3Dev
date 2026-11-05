@@ -7,7 +7,7 @@
  */
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const KINDS = ['inspection', 'meter', 'defect', 'shipment_inspection', 'shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship'];
+const KINDS = ['inspection', 'meter', 'defect', 'shipment_inspection', 'shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship', 'dev_report'];
 const SHIPMENT_CHECKS = ['shipment_inspection', 'shipment_precheck'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const RESULTS = ['pass', 'fail', 'na'];
@@ -61,6 +61,17 @@ function validatePayload(kind, p) {
     const severity = SEVERITIES.includes(p.severity) ? p.severity : 'medium';
     const description = str(p.description, 5000);
     return { ok: true, value: { title, severity, ...(description && { description }) } };
+  }
+
+  if (kind === 'dev_report') {
+    // Admin bug / feature / note report for ForgeDesk's development tracker (contract v6).
+    const type = ['bug', 'feature', 'note'].includes(p.type) ? p.type : null;
+    const title = str(p.title, 255);
+    if (!type) return fail('Pick bug, feature or note.');
+    if (!title) return fail('Give the report a title.');
+    const out = { type, title, priority: ['low', 'normal', 'high', 'critical'].includes(p.priority) ? p.priority : 'normal' };
+    for (const [k, max] of [['description', 5000], ['console_output', 20000], ['page', 200]]) { const v = str(p[k], max); if (v) out[k] = v; }
+    return { ok: true, value: out };
   }
 
   if (kind === 'shipment_create') {

@@ -77,6 +77,12 @@ class ShipmentInspectionTest extends TestCase
             $t->string('status')->default('shipped');
             $t->string('loads')->nullable();
             $t->text('pre_checklist')->nullable();
+            foreach (['pickup', 'dropoff'] as $p) {
+                $t->string("{$p}_name")->nullable();
+                $t->string("{$p}_address")->nullable();
+                $t->double("{$p}_lat")->nullable();
+                $t->double("{$p}_lng")->nullable();
+            }
             $t->boolean('is_active')->default(true);
             $t->string('synced_at')->nullable();
         });
@@ -108,6 +114,12 @@ class ShipmentInspectionTest extends TestCase
         Sanctum::actingAs($u, ['*']);
 
         return $u;
+    }
+
+    /** Pickup / drop-off picks the create form requires (seeded company locations). */
+    private function places(): array
+    {
+        return ['pickup_location_id' => \App\Models\ShipmentLocation::where('name', 'Vos - GR')->value('id'), 'dropoff_location_id' => \App\Models\ShipmentLocation::where('name', 'Vos - Lansing')->value('id')];
     }
 
     private function shipment(string $status = 'draft', array $types = ['Metal', 'Glass']): Shipment
@@ -150,7 +162,7 @@ class ShipmentInspectionTest extends TestCase
         $this->postJson("/api/v1/shipment-types/{$type['id']}/items", ['phase' => 'post', 'label' => 'Finish', 'input_type' => 'choice'])->assertStatus(422); // choice needs options
         $this->postJson("/api/v1/shipment-types/{$type['id']}/items", ['phase' => 'post', 'label' => 'Finish', 'input_type' => 'choice', 'options' => ['Good', 'Scuffed']])->assertCreated();
 
-        $id = $this->postJson('/api/v1/shipments', ['loads' => [['shipment_type_id' => $type['id']]]])->assertCreated()
+        $id = $this->postJson('/api/v1/shipments', $this->places() + ['loads' => [['shipment_type_id' => $type['id']]]])->assertCreated()
             ->assertJsonPath('pre_checklist.0.type_name', 'Louvers')->assertJsonPath('pre_checklist.0.items.0.label', 'Blade count')
             ->assertJsonPath('post_checklist.0.items.0.options.1', 'Scuffed')->json('id');
         $this->assertNotNull($id);
@@ -181,7 +193,7 @@ class ShipmentInspectionTest extends TestCase
         $this->post("/api/v1/shipments/{$s->id}/pre-inspection", [
             'answers' => json_encode($answers), 'notes' => 'ok',
             'photos' => [UploadedFile::fake()->createWithContent('a.png', base64_decode(self::PNG)), UploadedFile::fake()->createWithContent('b.png', base64_decode(self::PNG))],
-        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'pre_check_done');
+        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'shipped');
 
         $insp = $s->inspections()->first();
         $this->assertSame('pass', $insp->result);
@@ -241,8 +253,10 @@ class ShipmentInspectionTest extends TestCase
         $s = $this->shipment();
         $this->postJson("/api/v1/shipments/{$s->id}/ship")->assertStatus(422);
 
-        $this->post("/api/v1/shipments/{$s->id}/pre-inspection", ['answers' => json_encode($this->passAll($s, 'pre'))], ['Accept' => 'application/json'])->assertCreated();
-        $this->postJson("/api/v1/shipments/{$s->id}/ship")->assertOk()->assertJsonPath('status', 'shipped');
+        // The manual ship step is gone for now: a completed pre-check ships the load by itself.
+        $this->post("/api/v1/shipments/{$s->id}/pre-inspection", ['answers' => json_encode($this->passAll($s, 'pre'))], ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('status', 'shipped');
+        $this->assertNotNull($s->fresh()->shipped_at);
 
         $this->artisan('fleet:sync-out')->assertSuccessful();
         $row = DB::connection('fieldsync')->table('fa_shipments')->where('shipment_number', $s->shipment_number)->first();
@@ -354,13 +368,14 @@ class ShipmentInspectionTest extends TestCase
         $items = collect(app(\App\Services\Shipping\ShipmentInspectionService::class)->items($s, 'pre'))
             ->map(fn ($i) => ['item_id' => $i->id, 'value' => $i->input_type === 'number' ? '4' : ($i->input_type === 'pass_fail' ? 'pass' : 'x')])->all();
 
-        $pre = $this->phoneSubmit('shipment_precheck', $s->shipment_number, ['items' => $items], $u->id);
         $move = $this->phoneSubmit('shipment_reschedule', $s->shipment_number, ['ship_date' => '2026-12-24'], $u->id);
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+        $pre = $this->phoneSubmit('shipment_precheck', $s->shipment_number, ['items' => $items], $u->id);
         $this->artisan('fleet:sync-in')->assertSuccessful();
         $this->assertSame('ingested', \App\Models\FieldSyncLog::where('submission_uuid', $pre)->value('status'));
         $this->assertSame('ingested', \App\Models\FieldSyncLog::where('submission_uuid', $move)->value('status'));
         $s->refresh();
-        $this->assertSame('pre_check_done', $s->status);
+        $this->assertSame('shipped', $s->status);   // a completed pre-check ships the load
         $this->assertSame('2026-12-24', $s->ship_date->toDateString());
         $this->assertSame('pre', $s->inspections()->first()->phase);
 
@@ -404,7 +419,7 @@ class ShipmentInspectionTest extends TestCase
         $this->artisan('fleet:sync-in')->assertSuccessful();
 
         $this->assertSame('ingested', FieldSyncLog::where('submission_uuid', $uuid)->value('status'));
-        $this->assertSame('delivered', $s->fresh()->status);
+        $this->assertSame('awaiting_verification', $s->fresh()->status);
         $insp = $s->inspections()->where('phase', 'post')->first();
         $this->assertSame('field_app', $insp->source);
         $this->assertSame('Crew Lead', $insp->submitted_by_external);
@@ -422,7 +437,7 @@ class ShipmentInspectionTest extends TestCase
         $this->post("/api/v1/shipments/{$s->id}/post-inspection", [
             'answers' => json_encode($answers), 'notes' => 'Received by foreman',
             'photos' => [UploadedFile::fake()->createWithContent('a.png', base64_decode(self::PNG))],
-        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'delivered');
+        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'awaiting_verification');
 
         $insp = $s->inspections()->where('phase', 'post')->first();
         $this->assertSame('office', $insp->source);
@@ -449,7 +464,7 @@ class ShipmentInspectionTest extends TestCase
         $this->post("/api/v1/shipments/{$s->id}/post-inspection", [
             'answers' => json_encode($answers),
             'photos' => [UploadedFile::fake()->createWithContent('d.png', base64_decode(self::PNG))],
-        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'delivered_issues');
+        ], ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('status', 'awaiting_verification');
         $this->assertDatabaseHas('system_notifications', ['type' => 'shipment_post_issues']);
     }
 
@@ -466,7 +481,7 @@ class ShipmentInspectionTest extends TestCase
         $this->fieldSubmit($s, $items);
         $this->artisan('fleet:sync-in')->assertSuccessful();
 
-        $this->assertSame('delivered_issues', $s->fresh()->status);
+        $this->assertSame('awaiting_verification', $s->fresh()->status);
         $this->assertSame('fail', $s->inspections()->first()->result);   // criticality came from ForgeDesk, not the client
         $this->assertDatabaseHas('system_notifications', ['type' => 'shipment_post_issues']);
     }
@@ -567,7 +582,7 @@ class ShipmentInspectionTest extends TestCase
         $type = ShipmentType::where('name', 'Metal')->value('id');
 
         $id = $this->postJson('/api/v1/shipments', [
-            'job_ids' => [$j1->id, $j2->id], 'loads' => [['shipment_type_id' => $type]],
+            'job_ids' => [$j1->id, $j2->id], 'loads' => [['shipment_type_id' => $type]] ] + $this->places() + [
         ])->assertCreated()->assertJsonCount(2, 'jobs')->json('id');
 
         $this->getJson("/api/v1/shipments?job_id={$j2->id}")->assertOk()->assertJsonCount(1)->assertJsonPath('0.id', $id);
@@ -671,5 +686,77 @@ class ShipmentInspectionTest extends TestCase
         $this->assertSame('shipped', $ready->fresh()->status);
         $this->assertNotNull($ready->fresh()->shipped_at);
         $this->assertSame('draft', $draft->fresh()->status);
+    }
+
+    public function test_a_received_delivery_waits_for_office_verification_and_verifying_closes_it(): void
+    {
+        $this->as('admin');
+        $s = $this->shipment('shipped');
+        $this->post("/api/v1/shipments/{$s->id}/post-inspection", ['answers' => json_encode($this->passAll($s, 'post'))], ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('status', 'awaiting_verification');
+        $this->assertDatabaseHas('system_notifications', ['type' => 'shipment_awaiting_verification', 'dismissed_at' => null]);
+
+        // Not closed out: can't be cancelled/deleted, and the field app no longer gets it.
+        $this->postJson("/api/v1/shipments/{$s->id}/cancel", ['reason' => 'nope'])->assertStatus(422);
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+        $row = DB::connection('fieldsync')->table('fa_shipments')->where('shipment_number', $s->shipment_number)->first();
+        $this->assertTrue(! $row || ! $row->is_active);
+
+        $this->postJson("/api/v1/shipments/{$s->id}/verify", ['notes' => 'Ticket matches'])
+            ->assertOk()->assertJsonPath('status', 'delivered')->assertJsonPath('verification_notes', 'Ticket matches');
+        $this->assertNotNull($s->fresh()->verified_at);
+        $this->assertDatabaseMissing('system_notifications', ['type' => 'shipment_awaiting_verification', 'dismissed_at' => null]);
+        $this->postJson("/api/v1/shipments/{$s->id}/verify")->assertStatus(422);   // only once
+    }
+
+    public function test_verifying_a_delivery_with_issues_closes_it_as_delivered_with_issues_and_needs_permission(): void
+    {
+        $s = $this->shipment('shipped', ['Glass']);
+        $answers = $this->passAll($s, 'post');
+        $damage = ShipmentCheckItem::where('label', 'No broken or chipped lites')->where('phase', 'post')->first();
+        $answers[$damage->id] = ['value' => 'fail', 'comment' => 'Cracked', 'photos' => [0]];
+        $this->as('admin');
+        $this->post("/api/v1/shipments/{$s->id}/post-inspection", [
+            'answers' => json_encode($answers), 'photos' => [UploadedFile::fake()->createWithContent('d.png', base64_decode(self::PNG))],
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $this->as('viewer');
+        $this->postJson("/api/v1/shipments/{$s->id}/verify")->assertForbidden();
+
+        $this->as('admin');
+        $this->postJson("/api/v1/shipments/{$s->id}/verify")->assertOk()->assertJsonPath('status', 'delivered_issues');
+    }
+
+    public function test_signed_tickets_can_be_uploaded_as_pdf_or_image_but_nothing_else(): void
+    {
+        $this->as('admin');
+        $draft = $this->shipment('draft');
+        $this->post("/api/v1/shipments/{$draft->id}/documents", ['files' => [UploadedFile::fake()->createWithContent('t.pdf', "%PDF-1.4\n%%EOF")]], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $s = $this->shipment('awaiting_verification');
+        $res = $this->post("/api/v1/shipments/{$s->id}/documents", ['files' => [
+            UploadedFile::fake()->createWithContent('ticket.pdf', "%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF"),
+            UploadedFile::fake()->createWithContent('photo.png', base64_decode(self::PNG)),
+        ]], ['Accept' => 'application/json'])->assertCreated();
+        $docs = $res->json('documents');
+        $this->assertCount(2, $docs);
+        $this->assertArrayNotHasKey('file_path', $docs[0]);
+        Storage::disk('local')->assertExists($s->documents()->first()->file_path);
+
+        // Served inline with a fixed type; a PDF that is really a script is refused, as is a bad extension.
+        $this->get("/api/v1/shipments/{$s->id}/documents/{$docs[0]['id']}")->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->post("/api/v1/shipments/{$s->id}/documents", ['files' => [UploadedFile::fake()->createWithContent('evil.pdf', '<script>alert(1)</script>')]], ['Accept' => 'application/json'])->assertStatus(422);
+        $this->post("/api/v1/shipments/{$s->id}/documents", ['files' => [UploadedFile::fake()->createWithContent('x.exe', 'MZ')]], ['Accept' => 'application/json'])->assertStatus(422);
+        $this->assertSame(2, $s->documents()->count());
+
+        $this->deleteJson("/api/v1/shipments/{$s->id}/documents/{$docs[1]['id']}")->assertOk();
+        $this->assertSame(1, $s->documents()->count());
+
+        // Verified: the paperwork is locked.
+        $this->postJson("/api/v1/shipments/{$s->id}/verify")->assertOk();
+        $this->deleteJson("/api/v1/shipments/{$s->id}/documents/{$docs[0]['id']}")->assertStatus(422);
+
+        $this->as('viewer');
+        $this->post("/api/v1/shipments/{$s->id}/documents", ['files' => [UploadedFile::fake()->createWithContent('t.pdf', "%PDF-1.4")]], ['Accept' => 'application/json'])->assertForbidden();
     }
 }

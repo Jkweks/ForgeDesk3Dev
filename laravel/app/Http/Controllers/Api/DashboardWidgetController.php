@@ -609,6 +609,7 @@ class DashboardWidgetController extends Controller
             'scheduled_today' => Shipment::whereIn('status', $notShipped)->whereDate('ship_date', $today)->count(),
             'awaiting_pre_check' => Shipment::where('status', 'draft')->count(),
             'in_transit' => Shipment::where('status', 'shipped')->count(),
+            'awaiting_verification' => Shipment::where('status', 'awaiting_verification')->count(),
             'overdue' => Shipment::whereIn('status', $notShipped)->whereNotNull('ship_date')->whereDate('ship_date', '<', $today)->count(),
             'delivered_issues_30d' => Shipment::where('status', 'delivered_issues')->where('updated_at', '>=', now()->subDays(30))->count(),
         ]);
@@ -673,7 +674,7 @@ class DashboardWidgetController extends Controller
         for ($i = 0; $i < $weeks; $i++) {
             $buckets[$start->copy()->addWeeks($i)->toDateString()] = ['shipped' => 0, 'with_issues' => 0];
         }
-        Shipment::whereIn('status', ['shipped', 'delivered', 'delivered_issues'])
+        Shipment::whereIn('status', ['shipped', 'awaiting_verification', 'delivered', 'delivered_issues'])
             ->whereDate('ship_date', '>=', $start->toDateString())->whereDate('ship_date', '<=', today()->endOfWeek()->toDateString())
             ->get(['status', 'ship_date'])
             ->each(function (Shipment $s) use (&$buckets) {

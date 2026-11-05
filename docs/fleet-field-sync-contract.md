@@ -205,3 +205,19 @@ Upgrade an existing field DB with `field-app/db/upgrades/004-shipping-queue.sql`
 Outcomes: a submitter without the permission (or with no `submitted_by_user_id`, or no longer allowed in) => `rejected`. `shipment_precheck` follows the web rules (records a `pre` inspection; passing moves `draft` to `pre_check_done`; a critical failure alerts). `shipment_create` makes a `draft` shipment numbered by ForgeDesk; job numbers that no longer match are noted on the shipment, not guessed; an unknown/inactive load type => `rejected`. `shipment_precheck` / `shipment_reschedule` on a shipment that is no longer `draft`/`pre_check_done` => `needs_review`. The field server also refuses these kinds for shipments not currently published in the right status.
 
 `shipment_ship` = the web "Mark shipped": only from `pre_check_done` (otherwise `needs_review`); sets `shipped`, stamps `shipped_at`, and defaults `ship_date` to today. The field server accepts it only for shipments currently published as `pre_check_done`, and accepts a `shipment_inspection` for a `pre_check_done` shipment while a `shipment_ship` for it is still in the inbox.
+
+## Dev reports (v6)
+
+Administrators can report bugs, request features and add notes from the phone into ForgeDesk's development
+tracker (Development page). Additive: no field-DB schema change, no new tables or roles.
+
+- `fa_users.permissions` may now contain the pseudo-permission `dev.report`. ForgeDesk publishes it **only for administrators**; the field app shows its bug button only when it is present.
+- New submission kind `dev_report`, `asset_number = 'DEV'`, payload (all strings length-capped, unknown keys ignored):
+  `{"type": "bug|feature|note", "title": "≤255", "priority": "low|normal|high|critical", "description": "≤5000", "console_output": "≤20000", "page": "≤200"}`
+- ForgeDesk ingest re-checks that `submitted_by_user_id` is an active, mobile-enabled **admin**; anyone else is `rejected` in `field_sync_log`. The field app also refuses non-admins with 403, but that is only a first line of defence.
+- Ingested reports become `dev_items` with `source = field_app`. No photos.
+
+## Shipment workflow change (no schema change)
+
+- A completed (non-failed) `shipment_precheck` now sets the shipment straight to `shipped` in ForgeDesk (no separate "mark shipped" step; `shipment_ship` is still accepted for shipments left in `pre_check_done`). The phone sees `shipped` on the next publish.
+- A `shipment_inspection` (delivery) no longer closes the shipment: ForgeDesk sets `awaiting_verification`, which is **not published** to `fa_shipments`, so it drops off the phone. The office verifies it in ForgeDesk (final status `delivered` / `delivered_issues`) and attaches signed tickets there; nothing about verification or tickets reaches the field DB.

@@ -9,19 +9,19 @@ class Shipment extends Model
 {
     use SoftDeletes;
 
-    public const STATUSES = ['draft', 'pre_check_done', 'shipped', 'delivered', 'delivered_issues', 'cancelled'];
+    public const STATUSES = ['draft', 'pre_check_done', 'shipped', 'awaiting_verification', 'delivered', 'delivered_issues', 'cancelled'];
 
     /** Not yet delivered or cancelled: what the field app is shown. */
     public const OPEN_STATUSES = ['draft', 'pre_check_done', 'shipped'];
 
     protected $fillable = [
         'shipment_number', 'status', 'ship_date', 'destination', 'custom_jobs', 'carrier', 'notes',
-        'created_by', 'shipped_at', 'cancel_reason', 'cancelled_at', 'cancelled_by',
+        'created_by', 'shipped_at', 'cancel_reason', 'cancelled_at', 'cancelled_by', 'verified_at', 'verified_by', 'verification_notes',
         'pickup_location_id', 'pickup_address', 'pickup_lat', 'pickup_lng',
         'dropoff_location_id', 'dropoff_address', 'dropoff_lat', 'dropoff_lng',
     ];
 
-    protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime', 'cancelled_at' => 'datetime',
+    protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime', 'cancelled_at' => 'datetime', 'verified_at' => 'datetime',
         'pickup_lat' => 'float', 'pickup_lng' => 'float', 'dropoff_lat' => 'float', 'dropoff_lng' => 'float', 'custom_jobs' => 'array'];
 
     public function jobs()
@@ -42,6 +42,16 @@ class Shipment extends Model
     public function canceller()
     {
         return $this->belongsTo(User::class, 'cancelled_by');
+    }
+
+    public function verifier()
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(ShipmentDocument::class)->orderBy('id');
     }
 
     public function loads()

@@ -234,6 +234,17 @@ Route::middleware('auth:sanctum')->group(function () {
         // System Status
         Route::get('/status', [StatusController::class, 'index']);
 
+        // Development tracker (bugs / feature requests / notes) — admin only.
+        // Static paths before the {devItem} wildcard.
+        Route::middleware('admin')->prefix('dev-items')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\DevItemController::class, 'index']);
+            Route::get('/export', [\App\Http\Controllers\Api\DevItemController::class, 'export']);
+            Route::post('/', [\App\Http\Controllers\Api\DevItemController::class, 'store']);
+            Route::get('/{devItem}', [\App\Http\Controllers\Api\DevItemController::class, 'show']);
+            Route::put('/{devItem}', [\App\Http\Controllers\Api\DevItemController::class, 'update']);
+            Route::delete('/{devItem}', [\App\Http\Controllers\Api\DevItemController::class, 'destroy']);
+        });
+
         // System Notifications (nav bar bell, admin-only — see NotificationController)
         Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
         Route::post('/notifications/{notification}/dismiss', [\App\Http\Controllers\Api\NotificationController::class, 'dismiss']);
@@ -571,6 +582,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/shipments/{id}/schedule', [$sh, 'schedule'])->middleware('permission:shipments.manage');
         Route::post('/shipments/{id}/cancel', [$sh, 'cancel'])->middleware('permission:shipments.manage');
         Route::post('/shipments/{id}/ship', [$sh, 'ship'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/verify', [$sh, 'verify'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/documents', [$sh, 'uploadDocuments'])->middleware(['permission:shipments.manage', 'throttle:60,1']);
+        Route::get('/shipments/{shipmentId}/documents/{docId}', [$sh, 'document'])->middleware('permission:shipments.view');
+        Route::delete('/shipments/{shipmentId}/documents/{docId}', [$sh, 'deleteDocument'])->middleware('permission:shipments.manage');
         Route::post('/shipments/{id}/pre-inspection', [$sh, 'preInspection'])->middleware('permission:shipments.inspect');
         Route::post('/shipments/{id}/post-inspection', [$sh, 'postInspection'])->middleware('permission:shipments.inspect');
         Route::get('/shipments/{shipmentId}/photos/{photoId}', [$sh, 'photo'])->middleware('permission:shipments.view');

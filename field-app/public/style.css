@@ -118,3 +118,8 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px s
 
 /* Addresses: a single tap selects the whole line so it can be copied. */
 .addr { user-select: all; -webkit-user-select: all; }
+
+/* Admin-only development tracker */
+#devFab { position: fixed; right: 14px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 40; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); font-size: 22px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+#devSheet { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); overflow-y: auto; padding: 12px; }
+#devSheet form { max-width: 560px; margin: 0 auto; }

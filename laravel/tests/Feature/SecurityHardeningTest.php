@@ -42,7 +42,7 @@ class SecurityHardeningTest extends TestCase
             if (! $methods || in_array($uri, self::ALLOWED_WITHOUT_PERMISSION, true) || str_starts_with($uri, 'api/v1/shop/')) {
                 continue;
             }
-            $hasGate = collect($route->gatherMiddleware())->contains(fn ($m) => is_string($m) && (str_contains($m, 'CheckPermission') || str_starts_with($m, 'permission:')));
+            $hasGate = collect($route->gatherMiddleware())->contains(fn ($m) => is_string($m) && (str_contains($m, 'CheckPermission') || str_starts_with($m, 'permission:') || $m === 'admin' || str_contains($m, 'EnsureAdmin')));
             if (! $hasGate) {
                 $missing[] = implode('|', $methods).' '.$uri;
             }

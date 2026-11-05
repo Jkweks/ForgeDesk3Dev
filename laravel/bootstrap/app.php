@@ -52,6 +52,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'admin' => \App\Http\Middleware\EnsureAdmin::class,
             'password.current' => \App\Http\Middleware\EnsurePasswordIsCurrent::class,
         ]);
     })

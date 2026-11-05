@@ -153,6 +153,7 @@ class WidgetRegistry
                 $stat('shipments_today', 'Shipping Today', 'Shipments scheduled for today that have not left yet.', 'ti-calendar-event', 'scheduled_today', '/shipments'),
                 $stat('shipments_needs_precheck', 'Awaiting Pre-Check', 'Draft shipments without a completed pre-delivery inspection.', 'ti-clipboard-check', 'awaiting_pre_check', '/shipments'),
                 $stat('shipments_in_transit', 'In Transit', 'Shipped shipments awaiting delivery / post-check.', 'ti-truck', 'in_transit', '/shipments'),
+                $stat('shipments_awaiting_verification', 'Awaiting Verification', 'Received deliveries the office still has to verify.', 'ti-checklist', 'awaiting_verification', '/shipments'),
                 $stat('shipments_overdue', 'Overdue Shipments', 'Not-yet-shipped shipments past their ship date.', 'ti-truck-off', 'overdue', '/shipments'),
                 $stat('shipments_issues', 'Deliveries With Issues (30 d)', 'Shipments delivered with issues in the last 30 days.', 'ti-alert-triangle', 'delivered_issues_30d', '/shipments'),
             ]],
@@ -163,10 +164,10 @@ class WidgetRegistry
                 $list('shipments_issues_list', 'Recent Delivery Issues', 'The latest shipments delivered with issues.', 'ti-alert-octagon', 5),
             ]],
             ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments/weekly', [
-                $chart('shipments_weekly', 'Shipments per Week', 'Shipments sent out each week (by ship date), with those delivered with issues highlighted.', 'ti-chart-bar', 'shipments_weekly', [
+                array_replace($chart('shipments_weekly', 'Shipments per Week', 'Shipments sent out each week (by ship date), with those delivered with issues highlighted.', 'ti-chart-bar', 'shipments_weekly', [
                     ['key' => 'weeks', 'label' => 'Weeks shown', 'type' => 'select', 'default' => 12,
                         'options' => [8 => '8 weeks', 12 => '12 weeks', 26 => '26 weeks', 52 => '52 weeks']],
-                ]),
+                ]), ['min_size' => ['w' => 2, 'h' => 3]]),
             ]],
             ['Shipping', ['shipments.view'], '/dashboard/widgets/shipments/inspections', [
                 $chart('shipments_inspections', 'Shipment Inspection Results', 'Pass, pass-with-issues and fail counts per month for shipment inspections.', 'ti-chart-histogram', 'shipments_inspections', [

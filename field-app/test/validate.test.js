@@ -114,3 +114,14 @@ test('shipment_reschedule takes a date or clears it; precheck reuses the deliver
   assert.equal(pre.value.photos.length, 1);
   assert.equal(validateSubmission(base({ kind: 'shipment_precheck', asset_number: 'SHP-1', payload: { items: [] } }), true).ok, false);
 });
+
+test('dev_report: needs a valid type and title, rebuilds payload, caps console output', () => {
+  const dev = (payload) => validateSubmission(base({ kind: 'dev_report', asset_number: 'DEV', payload }), true);
+  assert.equal(dev({ type: 'hack', title: 'x' }).ok, false);
+  assert.equal(dev({ type: 'bug', title: '  ' }).ok, false);
+  const r = dev({ type: 'bug', title: 'Crash', priority: 'bogus', console_output: 'x'.repeat(30000), evil: 1 });
+  assert.equal(r.ok, true);
+  assert.equal(r.value.payload.priority, 'normal');
+  assert.equal(r.value.payload.console_output.length, 20000);
+  assert.equal(r.value.payload.evil, undefined);
+});

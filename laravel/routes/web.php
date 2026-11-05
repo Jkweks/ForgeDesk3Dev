@@ -149,6 +149,11 @@ Route::get('/status', function () {
     return view('status');
 });
 
+// Development tracker (admin only; the API enforces it, the page just renders the shell)
+Route::get('/development', function () {
+    return view('development');
+});
+
 // Administration
 Route::get('/admin', function () {
     return view('admin');

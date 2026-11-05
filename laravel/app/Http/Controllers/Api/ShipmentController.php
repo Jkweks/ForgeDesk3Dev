@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\Shipment;
+use App\Models\ShipmentDocument;
 use App\Models\ShipmentInspectionPhoto;
 use App\Models\ShipmentLocation;
 use App\Services\ImageSanitizer;
@@ -266,7 +267,7 @@ class ShipmentController extends Controller
     public function destroy(int $id)
     {
         $shipment = Shipment::findOrFail($id);
-        if (in_array($shipment->status, ['shipped', 'delivered', 'delivered_issues'], true)) {
+        if (in_array($shipment->status, ['shipped', 'awaiting_verification', 'delivered', 'delivered_issues'], true)) {
             return response()->json(['message' => 'A shipped shipment cannot be deleted. Cancel it instead.'], 422);
         }
         $shipment->delete();
@@ -278,7 +279,7 @@ class ShipmentController extends Controller
     {
         $data = $request->validate(['reason' => 'required|string|min:3|max:1000']);
         $shipment = Shipment::findOrFail($id);
-        if (in_array($shipment->status, ['delivered', 'delivered_issues', 'cancelled'], true)) {
+        if (in_array($shipment->status, ['awaiting_verification', 'delivered', 'delivered_issues', 'cancelled'], true)) {
             return response()->json(['message' => 'This shipment can no longer be cancelled.'], 422);
         }
         $shipment->update([
@@ -350,11 +351,92 @@ class ShipmentController extends Controller
         return response()->json($this->detail($shipment->fresh()) + ['inspection_id' => $inspection->id], 201);
     }
 
+    /** Office sign-off on a received delivery: closes the shipment as delivered (or delivered with issues). */
+    public function verify(Request $request, int $id)
+    {
+        $shipment = Shipment::findOrFail($id);
+        if ($shipment->status !== 'awaiting_verification') {
+            return response()->json(['message' => 'Only a received delivery that is awaiting verification can be verified.'], 422);
+        }
+        $data = $request->validate(['notes' => 'nullable|string|max:2000']);
+        $this->inspections->verify($shipment, $request->user()->id, $data['notes'] ?? null);
+
+        return response()->json($this->detail($shipment->fresh()));
+    }
+
+    /** Signed shipping tickets: PDF or image, several at once. Images are re-encoded; PDFs must really be PDFs. */
+    public function uploadDocuments(Request $request, int $id)
+    {
+        $shipment = Shipment::findOrFail($id);
+        if (in_array($shipment->status, ['draft', 'pre_check_done', 'cancelled'], true)) {
+            return response()->json(['message' => 'Tickets can be attached once the shipment has shipped.'], 422);
+        }
+        $request->validate([
+            'files' => 'required|array|min:1|max:10',
+            'files.*' => 'file|max:15360|mimes:pdf,jpg,jpeg,png,webp',
+        ]);
+        if ($shipment->documents()->count() + count($request->file('files')) > 30) {
+            return response()->json(['message' => 'At most 30 documents per shipment.'], 422);
+        }
+
+        // Check everything before storing anything, so a bad file does not leave a half-saved batch.
+        $prepared = [];
+        foreach ($request->file('files') as $f) {
+            $bytes = (string) file_get_contents($f->getRealPath());
+            if (str_starts_with($bytes, '%PDF-')) {
+                $mime = 'application/pdf';
+                $ext = 'pdf';
+            } elseif ($img = ImageSanitizer::sniff($bytes)) {
+                $mime = $img;
+                $ext = ImageSanitizer::MIMES[$img];
+                $bytes = ImageSanitizer::reencode($bytes, $img);
+            } else {
+                throw ValidationException::withMessages(['files' => '"'.$f->getClientOriginalName().'" is not a real PDF or image.']);
+            }
+            $prepared[] = [$bytes, $mime, $ext, Str::limit(basename($f->getClientOriginalName()), 120, '') ?: "ticket.$ext"];
+        }
+        foreach ($prepared as [$bytes, $mime, $ext, $name]) {
+            $path = "shipments/{$shipment->id}/tickets/".Str::uuid().".$ext";
+            Storage::disk('local')->put($path, $bytes);
+            $shipment->documents()->create([
+                'kind' => 'signed_ticket', 'original_name' => $name, 'file_path' => $path, 'file_mime' => $mime,
+                'file_size' => strlen($bytes), 'uploaded_by' => $request->user()->id,
+            ]);
+        }
+
+        return response()->json($this->detail($shipment->fresh()), 201);
+    }
+
+    public function document(int $shipmentId, int $docId)
+    {
+        $doc = ShipmentDocument::where('shipment_id', $shipmentId)->findOrFail($docId);
+        if (! Storage::disk('local')->exists($doc->file_path)) {
+            return response()->json(['message' => 'File not found'], 404);
+        }
+
+        return Storage::disk('local')->response($doc->file_path, $doc->original_name, [
+            'Content-Type' => $doc->file_mime, 'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function deleteDocument(int $shipmentId, int $docId)
+    {
+        $shipment = Shipment::findOrFail($shipmentId);
+        if (in_array($shipment->status, ['delivered', 'delivered_issues'], true)) {
+            return response()->json(['message' => 'This delivery has been verified; its documents can no longer be removed.'], 422);
+        }
+        $doc = $shipment->documents()->findOrFail($docId);
+        Storage::disk('local')->delete($doc->file_path);
+        $doc->delete();
+
+        return response()->json($this->detail($shipment->fresh()));
+    }
+
     /** Per-shipment PDF: jobs, loads, every inspection with thumbnails linked to the full-size photos. */
     public function report(int $id)
     {
         $shipment = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'creator:id,name', 'canceller:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name',
-            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name'])->findOrFail($id);
+            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name', 'verifier:id,name'])->findOrFail($id);
 
         $thumbs = [];   // photo id => [data URI, signed full-size URL]
         foreach ($shipment->inspections as $n) {
@@ -411,7 +493,7 @@ class ShipmentController extends Controller
     private function detail(Shipment $shipment): array
     {
         $shipment->load(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'creator:id,name', 'canceller:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name',
-            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name']);
+            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name', 'documents.uploader:id,name', 'verifier:id,name']);
 
         return $shipment->toArray() + [
             'pre_checklist' => $this->inspections->checklist($shipment, 'pre'),

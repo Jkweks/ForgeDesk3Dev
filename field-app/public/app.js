@@ -103,6 +103,7 @@ const saveSnapshot = () => db.set('snapshot', {
 const can = (perm) => (state.user?.permissions || []).includes(perm);
 const canInspect = () => can('shipments.inspect');
 const canManage = () => can('shipments.manage');
+const canReportDev = () => can('dev.report');
 const canSeeQueue = () => can('shipments.view') || canManage() || canInspect();
 
 /** Pull fresh assets/checklists. Returns false when offline; throws ApiError(401) if signed out. */
@@ -183,6 +184,7 @@ let stopScan = null;
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
 async function render() {
+  syncDevFab();
   if (stopScan) { stopScan(); stopScan = null; }
   if (state.needLogin || !state.user) return viewLogin();
   const [, route, arg] = (location.hash || '#/').split('/').map((p) => decodeURIComponent(p));
@@ -684,7 +686,7 @@ function viewShipmentCheck(number, phase) {
     document.querySelectorAll('button[type=submit]').forEach((b) => { b.disabled = true; });
     await enqueue(pre ? 'shipment_precheck' : 'shipment_inspection', sh.shipment_number, { items: answers, ...(notes && { notes }) }, photos);
     await sleep(150);
-    toast(`${failed ? `${pre ? 'Pre-check' : 'Inspection'} saved with problems. The office will be notified.` : `${pre ? 'Pre-check' : 'Inspection'} saved.`}${state.online ? '' : ' It will send when you’re online.'}`);
+    toast(`${failed ? `${pre ? 'Pre-check' : 'Inspection'} saved with problems. The office will be notified.` : (pre ? 'Pre-check saved. The load will be marked as shipped.' : 'Delivery saved. The office will verify it.')}${state.online ? '' : ' It will send when you’re online.'}`);
     go(back);
   });
 }
@@ -896,7 +898,7 @@ function loadScript(src) {
 
 // ----- queue / history
 
-const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report', shipment_inspection: 'Delivery inspection', shipment_precheck: 'Pre-shipment check', shipment_create: 'New shipment', shipment_reschedule: 'Reschedule', shipment_ship: 'Marked shipped' };
+const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report', shipment_inspection: 'Delivery inspection', shipment_precheck: 'Pre-shipment check', shipment_create: 'New shipment', shipment_reschedule: 'Reschedule', shipment_ship: 'Marked shipped', dev_report: 'Dev report' };
 
 async function viewQueue() {
   state.outbox = await db.outbox();
@@ -951,3 +953,61 @@ document.addEventListener('visibilitychange', () => {
   render();
   if (state.user && !state.needLogin) flush();
 })();
+
+
+// ---------- development tracker (admins only) ---------------------------------------------
+// A floating button on every screen opens a form that queues a `dev_report` like any other
+// submission (works offline). ForgeDesk re-checks that the sender is an administrator.
+
+const devLog = [];
+(function captureConsole() {
+  const fmt = (a) => { try { return typeof a === 'string' ? a : (a instanceof Error ? (a.stack || a.message) : JSON.stringify(a)); } catch { return String(a); } };
+  const push = (lvl, text) => { devLog.push(`[${new Date().toLocaleTimeString()}] ${lvl}: ${text}`); if (devLog.length > 40) devLog.shift(); };
+  ['error', 'warn'].forEach((lvl) => { const orig = console[lvl].bind(console); console[lvl] = (...a) => { push(lvl, a.map(fmt).join(' ')); orig(...a); }; });
+  window.addEventListener('error', (e) => push('uncaught', `${e.message} (${e.filename || ''}:${e.lineno || ''})`));
+  window.addEventListener('unhandledrejection', (e) => push('unhandledrejection', fmt(e.reason)));
+})();
+
+function syncDevFab() {
+  let fab = document.getElementById('devFab');
+  if (!canReportDev()) { fab?.remove(); return; }
+  if (fab) return;
+  fab = document.createElement('button');
+  fab.id = 'devFab'; fab.type = 'button'; fab.textContent = '🐞'; fab.setAttribute('aria-label', 'Report a bug, request a feature or add a note');
+  fab.addEventListener('click', openDevReport);
+  document.body.appendChild(fab);
+}
+
+function openDevReport() {
+  if (document.getElementById('devSheet')) return;
+  const el = document.createElement('div');
+  el.id = 'devSheet';
+  el.innerHTML = `<form class="card">
+    <h2 style="margin-top:0">Development tracker</h2>
+    <label for="dvType">Type</label>
+    <select id="dvType"><option value="bug">Bug</option><option value="feature">Feature request</option><option value="note">Note</option></select>
+    <label for="dvPri">Priority</label>
+    <select id="dvPri"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option><option value="critical">Critical</option></select>
+    <label for="dvTitle">Title</label><input id="dvTitle" maxlength="255" required placeholder="Short summary">
+    <label for="dvDesc">Description</label><textarea id="dvDesc" maxlength="5000" placeholder="What happened / what you want"></textarea>
+    <label for="dvCons">Console output (optional)</label><textarea id="dvCons" maxlength="20000" style="font-family:monospace;font-size:12px">${esc(devLog.join('\n'))}</textarea>
+    <p class="small muted">Page: ${esc(location.hash || '#/')}</p>
+    <div style="display:flex;gap:8px"><button class="btn" type="button" id="dvCancel">Cancel</button><button class="btn primary" type="submit">Send</button></div>
+  </form>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  document.getElementById('dvCancel').addEventListener('click', close);
+  el.addEventListener('click', (e) => { if (e.target === el) close(); });
+  el.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    e.submitter && (e.submitter.disabled = true);
+    const v = (id) => document.getElementById(id).value.trim();
+    await enqueue('dev_report', 'DEV', {
+      type: v('dvType'), priority: v('dvPri'), title: v('dvTitle'),
+      ...(v('dvDesc') && { description: v('dvDesc') }), ...(v('dvCons') && { console_output: v('dvCons') }),
+      page: `field-app ${location.hash || '#/'}`,
+    }, []);
+    close();
+    toast(state.online ? 'Sent to the development tracker.' : 'Saved. It will send when you’re online.');
+  });
+}

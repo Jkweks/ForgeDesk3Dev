@@ -137,5 +137,8 @@ return [
     [
         'label' => 'Admin', 'icon' => 'settings', 'permission' => 'nav.admin',
         'href' => '/admin', 'active' => ['admin'], 'current' => ['admin'],
+    ],    [
+        'label' => 'Development', 'icon' => 'bug', 'permission' => 'nav.admin', 'admin_only' => true,
+        'href' => '/development', 'active' => ['development'],
     ],
 ];

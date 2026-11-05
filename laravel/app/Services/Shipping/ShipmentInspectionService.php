@@ -196,8 +196,9 @@ class ShipmentInspectionService
         $by = $inspection->performer?->name ?? $inspection->submitted_by_external ?? 'someone';
 
         if ($inspection->phase === 'pre') {
-            if ($inspection->result !== 'fail' && $shipment->status === 'draft') {
-                $shipment->update(['status' => 'pre_check_done']);
+            // A completed (non-failed) pre-check ships the load automatically; a failed one leaves it in draft.
+            if ($inspection->result !== 'fail' && in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
+                $shipment->update(['status' => 'shipped', 'shipped_at' => now(), 'ship_date' => $shipment->ship_date ?? now()->toDateString()]);
             }
             if ($inspection->result === 'fail') {
                 $this->notify('shipment_pre_fail', 'danger', "Pre-shipment check failed: {$shipment->shipment_number}",
@@ -207,12 +208,39 @@ class ShipmentInspectionService
             return;
         }
 
-        $shipment->update(['status' => $ok ? 'delivered' : 'delivered_issues']);
+        // A received delivery does not close the shipment: the office verifies it (see verify()).
+        $shipment->update(['status' => 'awaiting_verification']);
+        $label = $shipment->jobLabel() ? ' ('.$shipment->jobLabel().')' : '';
         if (! $ok) {
             $this->notify('shipment_post_issues', $inspection->result === 'fail' ? 'danger' : 'warning',
                 "Delivery issues: {$shipment->shipment_number}",
-                "{$by} reported problems on delivery of {$shipment->shipment_number}".($shipment->jobLabel() ? ' ('.$shipment->jobLabel().')' : '').'.', $shipment, $inspection);
+                "{$by} reported problems on delivery of {$shipment->shipment_number}{$label}. Review it and verify the delivery.", $shipment, $inspection);
+        } else {
+            $this->notify('shipment_awaiting_verification', 'info',
+                "Delivery received: {$shipment->shipment_number}",
+                "{$by} received {$shipment->shipment_number}{$label}. Please verify it and upload the signed shipping ticket.", $shipment, $inspection);
         }
+    }
+
+    /**
+     * Office sign-off on a received delivery. The final status follows the delivery inspection:
+     * clean = delivered, any failed item = delivered_issues.
+     */
+    public function verify(Shipment $shipment, ?int $userId, ?string $notes = null): Shipment
+    {
+        $post = $shipment->inspections()->where('phase', 'post')->first();   // newest first
+        $final = ($post && $post->result !== 'pass') ? 'delivered_issues' : 'delivered';
+
+        $shipment->update([
+            'status' => $final, 'verified_at' => now(), 'verified_by' => $userId,
+            'verification_notes' => $notes !== null ? (Str::limit(trim($notes), 2000, '') ?: null) : null,
+        ]);
+        // The "please verify" prompts are done with.
+        SystemNotification::active()->whereIn('type', ['shipment_awaiting_verification', 'shipment_post_issues'])->get()
+            ->filter(fn ($n) => ($n->data['shipment_id'] ?? null) === $shipment->id)
+            ->each(fn ($n) => $n->update(['dismissed_at' => now(), 'dismissed_by_user_id' => $userId]));
+
+        return $shipment;
     }
 
     private function notify(string $type, string $level, string $title, string $message, Shipment $shipment, ShipmentInspection $inspection): void

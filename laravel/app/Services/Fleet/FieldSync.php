@@ -3,6 +3,7 @@
 namespace App\Services\Fleet;
 
 use App\Models\BusinessJob;
+use App\Models\DevItem;
 use App\Models\FieldAsset;
 use App\Models\FieldAssetDocument;
 use App\Models\FieldAssetInspection;
@@ -223,7 +224,11 @@ class FieldSync
                 'display_name' => Str::limit($u->full_name ?: $u->name, 100, ''),
                 'password_hash' => $canSignIn ? $u->password : '',
                 // Only the shipment permissions are published, to hide buttons on the phone. ForgeDesk re-checks them on ingest.
-                'permissions' => json_encode($canSignIn ? array_values(array_filter(self::SHIPMENT_PERMISSIONS, fn ($p) => $u->hasPermission($p))) : []),
+                'permissions' => json_encode($canSignIn ? array_values(array_filter(
+                    // `dev.report` is a pseudo-permission: administrators only (shows the bug-report button on the phone).
+                    [...self::SHIPMENT_PERMISSIONS, 'dev.report'],
+                    fn ($p) => $p === 'dev.report' ? $u->isAdmin() : $u->hasPermission($p)
+                )) : []),
                 'is_active' => (bool) $canSignIn,
                 'synced_at' => $now,
             ];
@@ -301,7 +306,7 @@ class FieldSync
         if (! is_array($payload)) {
             return ['rejected', 'Payload is not valid JSON.', null];
         }
-        if (! in_array($row->kind, ['inspection', 'meter', 'defect', 'shipment_inspection', 'shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship'], true)) {
+        if (! in_array($row->kind, ['inspection', 'meter', 'defect', 'shipment_inspection', 'shipment_precheck', 'shipment_create', 'shipment_reschedule', 'shipment_ship', 'dev_report'], true)) {
             return ['rejected', 'Unknown submission kind.', null];
         }
         $by = Str::limit(trim((string) ($row->submitted_by ?? '')), 100, '') ?: 'field app';
@@ -309,6 +314,9 @@ class FieldSync
             return ['rejected', 'Invalid submission_uuid.', null];
         }
 
+        if ($row->kind === 'dev_report') {
+            return $this->ingestDevReport($row, $payload);
+        }
         if ($row->kind === 'shipment_inspection') {
             return $this->ingestShipmentInspection($row, $payload, $by, $this->deviceTime($row->submitted_at ?? null), $remote);
         }
@@ -394,6 +402,43 @@ class FieldSync
         }
 
         return ['ingested', null, ['shipment_inspection', $inspection->id]];
+    }
+
+    /** Bug / feature / note from an administrator on the phone, into the development tracker (contract v6). */
+    private function ingestDevReport(object $row, array $p): array
+    {
+        $id = (int) ($row->submitted_by_user_id ?? 0);
+        $user = $id ? User::find($id) : null;
+        if (! $user || ! $user->is_active || $user->is_disabled || ! $user->mobile_app_access || ! $user->isAdmin()) {
+            return ['rejected', 'Only administrators can send development reports.', null];
+        }
+
+        $v = Validator::make($p, [
+            'type' => 'required|in:bug,feature,note',
+            'title' => 'required|string|max:255',
+            'priority' => 'nullable|in:low,normal,high,critical',
+            'description' => 'nullable|string|max:5000',
+            'console_output' => 'nullable|string|max:20000',
+            'page' => 'nullable|string|max:200',
+        ]);
+        if ($v->fails()) {
+            return ['rejected', 'Invalid dev report: '.$v->errors()->first(), null];
+        }
+        $d = $v->validated();
+
+        $item = DevItem::create([
+            'type' => $d['type'],
+            'source' => 'field_app',
+            'title' => $d['title'],
+            'priority' => $d['priority'] ?? 'normal',
+            'description' => $d['description'] ?? null,
+            'console_output' => $d['console_output'] ?? null,
+            'page_url' => $d['page'] ?? null,
+            'user_agent' => 'Field app',
+            'created_by' => $user->id,
+        ]);
+
+        return ['ingested', null, ['dev_item', $item->id]];
     }
 
     /** The submitting person, only if they are still allowed in and hold `$permission` in ForgeDesk. */

@@ -1574,7 +1574,7 @@
         }
 
         const SHIP_STATUS = {
-            draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'],
+            draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'], awaiting_verification: ['Awaiting verification', 'orange'],
             delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], cancelled: ['Cancelled', 'secondary'],
         };
 

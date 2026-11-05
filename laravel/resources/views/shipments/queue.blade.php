@@ -17,6 +17,7 @@
 .sq-card.st-draft { border-left-color:var(--tblr-secondary); }
 .sq-card.st-pre_check_done { border-left-color:var(--tblr-blue); }
 .sq-card.st-shipped { border-left-color:var(--tblr-cyan); }
+.sq-card.st-awaiting_verification { border-left-color:var(--tblr-orange); }
 .sq-card.st-delivered { border-left-color:var(--tblr-success); }
 .sq-card.st-delivered_issues { border-left-color:var(--tblr-danger); }
 .sq-card.late { background:var(--tblr-danger-lt); }

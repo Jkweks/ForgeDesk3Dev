@@ -328,6 +328,39 @@ class FleetFieldSyncTest extends TestCase
         ], $attrs));
     }
 
+    public function test_dev_reports_are_ingested_only_from_administrators(): void
+    {
+        $admin = $this->mobileUser(['role' => 'admin', 'email' => 'boss@example.com']);
+        $crew = $this->mobileUser(['role' => 'manager', 'email' => 'crew@example.com']);
+        $payload = ['type' => 'bug', 'title' => 'Scan button dead', 'priority' => 'high', 'console_output' => 'TypeError: x', 'page' => 'field-app #/scan'];
+
+        $ok = $this->submit('dev_report', 'DEV', $payload);
+        $bad = $this->submit('dev_report', 'DEV', $payload + ['title' => 'From non-admin']);
+        DB::connection('fieldsync')->table('fa_submissions')->where('submission_uuid', $ok)->update(['submitted_by_user_id' => $admin->id]);
+        DB::connection('fieldsync')->table('fa_submissions')->where('submission_uuid', $bad)->update(['submitted_by_user_id' => $crew->id]);
+
+        $this->artisan('fleet:sync-in')->assertSuccessful();
+
+        $item = \App\Models\DevItem::sole();
+        $this->assertSame('Scan button dead', $item->title);
+        $this->assertSame('field_app', $item->source);
+        $this->assertSame('high', $item->priority);
+        $this->assertSame($admin->id, $item->created_by);
+        $this->assertSame('rejected', FieldSyncLog::where('submission_uuid', $bad)->value('status'));
+    }
+
+    public function test_only_administrators_are_given_the_dev_report_permission(): void
+    {
+        $admin = $this->mobileUser(['role' => 'admin', 'email' => 'boss@example.com']);
+        $crew = $this->mobileUser(['role' => 'manager', 'email' => 'crew@example.com']);
+
+        $this->artisan('fleet:sync-out')->assertSuccessful();
+
+        $remote = $this->remoteUsers();
+        $this->assertContains('dev.report', json_decode($remote[$admin->id]->permissions, true));
+        $this->assertNotContains('dev.report', json_decode($remote[$crew->id]->permissions, true));
+    }
+
     public function test_only_users_with_mobile_access_are_published_with_their_forgedesk_password_hash(): void
     {
         $crew = $this->mobileUser();

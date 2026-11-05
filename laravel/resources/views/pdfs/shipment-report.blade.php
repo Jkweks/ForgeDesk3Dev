@@ -34,6 +34,7 @@
 </div>
 
 <table class="kv">
+    @if ($shipment->verified_at)<tr><td>Verified</td><td>{{ $shipment->verifier?->name }} {{ $shipment->verified_at->format('Y-m-d') }}@if ($shipment->verification_notes) <br>{{ $shipment->verification_notes }}@endif</td></tr>@endif
     @if ($shipment->status === 'cancelled')<tr><td>Cancelled</td><td>{{ $shipment->cancel_reason }}@if ($shipment->cancelled_at) <br>{{ $shipment->canceller?->name }} {{ $shipment->cancelled_at->format('Y-m-d') }}@endif</td></tr>@endif
     <tr><td>Pickup</td><td>{{ $shipment->pickupLocation?->name ?? '—' }}@if ($shipment->pickup_address) · {{ $shipment->pickup_address }}@endif</td></tr>
     <tr><td>Drop off</td><td>{{ $shipment->dropoffLocation?->name ?? '—' }}@if ($shipment->dropoff_address) · {{ $shipment->dropoff_address }}@endif</td></tr>

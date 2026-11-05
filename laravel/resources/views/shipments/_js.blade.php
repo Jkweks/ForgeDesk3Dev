@@ -2,7 +2,7 @@
   // Shared helpers for the Shipments pages (builds on the fleet helpers: flModal, flApi, flField, ...).
   const SH = {
     STATUS: {
-      draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'],
+      draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'], awaiting_verification: ['Awaiting verification', 'orange'],
       delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], cancelled: ['Cancelled', 'secondary'],
     },
     RESULT: { pass: ['Pass', 'success'], pass_with_issues: ['Pass with issues', 'warning'], fail: ['Fail', 'danger'] },

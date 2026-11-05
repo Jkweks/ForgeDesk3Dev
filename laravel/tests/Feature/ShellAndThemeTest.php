@@ -25,8 +25,10 @@ class ShellAndThemeTest extends TestCase
             $this->assertCount(2, $blocks[0], "the {$set} menu renders in the top bar and the sidebar");
             $joined = implode("\n", $blocks[0]);
 
-            $sharing = array_count_values(array_map(fn ($s) => implode(' ', (array) $s['permission']), config($configKey)));
-            foreach (config($configKey) as $section) {
+            // Admin-only sections (Development) are not rendered for this non-admin user.
+            $visible = array_filter(config($configKey), fn ($s) => empty($s['admin_only']));
+            $sharing = array_count_values(array_map(fn ($s) => implode(' ', (array) $s['permission']), $visible));
+            foreach ($visible as $section) {
                 $attr = preg_quote(implode(' ', (array) $section['permission']), '/');
                 // Sections may share a permission (Quality keeps Fabrication's); each still renders twice.
                 $this->assertSame(
