@@ -60,6 +60,10 @@
     #loginPage.active { display: flex; }
     .loading { text-align: center; padding: 2rem; }
 
+    /* The icon webfont's .ti class sets no display, so icons are inline and browsers ignore
+       transform on them — chevrons that rotate on expand/collapse would never visibly turn. */
+    .ti { display: inline-block; }
+
     /* Required field asterisk - uses theme danger color */
     .modal-body .form-label.required:after {
       content: " *";
