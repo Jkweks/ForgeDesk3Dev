@@ -39,7 +39,10 @@
         'options' => ['default' => 'Default', 'fluid' => 'Full width', 'boxed' => 'Boxed']],
     ]],
   ];
+  // TABLER_DEFAULTS = value when the data-bs-* attribute is absent (Tabler's CSS default).
+  // APP_DEFAULTS = what a user who never customized sees (see $themeAppDefaults in the layout).
   $themeDefaults = collect($themeGroups)->flatMap(fn ($g) => $g['settings'])->mapWithKeys(fn ($s) => [$s['key'] => $s['default']])->all();
+  $themeAppDefaults = array_merge($themeDefaults, $themeAppDefaults ?? []);
 @endphp
 <form class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasTheme" role="dialog" aria-modal="true" aria-labelledby="offcanvasThemeLabel">
   <div class="offcanvas-header">
@@ -119,43 +122,51 @@
 
 <script>
 (function () {
-  var DEFAULTS = @json($themeDefaults);
+  var TABLER_DEFAULTS = @json($themeDefaults);
+  var APP_DEFAULTS = @json($themeAppDefaults);
+  var KEYS = Object.keys(TABLER_DEFAULTS);
   var html = document.documentElement;
   var form = document.getElementById('offcanvasTheme');
   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 
+  // localStorage holds ONLY explicit user choices (even when equal to a default), so "never
+  // customized" (null) stays distinguishable and falls back to APP_DEFAULTS.
   function stored(key) {
     try { return localStorage.getItem('tabler-' + key); } catch (e) { return null; }
   }
   function setStored(key, value) {
     try {
-      if (value === null || value === DEFAULTS[key]) localStorage.removeItem('tabler-' + key);
+      if (value === null) localStorage.removeItem('tabler-' + key);
       else localStorage.setItem('tabler-' + key, value);
     } catch (e) { /* private mode — the attribute below still applies for this page */ }
   }
   function current(key) {
     var v = stored(key);
-    return v !== null ? v : DEFAULTS[key];
+    return v !== null ? v : APP_DEFAULTS[key];
   }
 
-  // Mirror tabler-theme.js: default => attribute absent; "auto" resolves to light/dark.
-  function apply(key, value) {
-    setStored(key, value);
+  // Attribute is absent when the value equals Tabler's CSS default; "auto" resolves to light/dark.
+  function paint(key, value) {
     if (key === 'theme') {
       html.setAttribute('data-bs-theme', value === 'auto' ? (prefersDark.matches ? 'dark' : 'light') : value);
-    } else if (value === DEFAULTS[key]) {
+    } else if (value === TABLER_DEFAULTS[key]) {
       html.removeAttribute('data-bs-' + key);
     } else {
       html.setAttribute('data-bs-' + key, value);
     }
   }
+  // value === null clears the explicit choice and reverts to the app default.
+  function apply(key, value) {
+    setStored(key, value);
+    paint(key, value === null ? APP_DEFAULTS[key] : value);
+  }
 
   prefersDark.addEventListener('change', function () {
-    if (current('theme') === 'auto') apply('theme', 'auto');
+    if (current('theme') === 'auto') paint('theme', 'auto');
   });
 
   function syncForm() {
-    Object.keys(DEFAULTS).forEach(function (key) {
+    KEYS.forEach(function (key) {
       var input = form.querySelector('input[name="' + key + '"][value="' + current(key) + '"]');
       if (input) input.checked = true;
     });
@@ -165,34 +176,43 @@
     });
   }
 
-  // Non-default values only; the server stores exactly what is sent (full replace).
+  function explicitChoices() {
+    var payload = {};
+    KEYS.forEach(function (key) {
+      var v = stored(key);
+      if (v !== null) payload[key] = v;
+    });
+    return payload;
+  }
+
+  // Sends every explicit choice; the server stores exactly what is sent (full replace, empty = none).
   function persistToServer() {
     if (typeof apiCall !== 'function' || typeof currentUser === 'undefined' || !currentUser) return;
-    var payload = {};
-    Object.keys(DEFAULTS).forEach(function (key) {
-      var v = stored(key);
-      if (v !== null && v !== DEFAULTS[key]) payload[key] = v;
-    });
-    apiCall('/user/theme-preferences', { method: 'PUT', body: JSON.stringify(payload) })
+    apiCall('/user/theme-preferences', { method: 'PUT', body: JSON.stringify(explicitChoices()) })
       .catch(function () { /* best-effort — local state already applied */ });
   }
 
-  // Pull the signed-in user's saved preferences so the look follows them to a new device.
+  // On login/page load the account is the source of truth, so the look follows the user across
+  // devices. If the account has nothing saved yet but this browser has explicit choices, upload them.
   function syncFromServer() {
     if (typeof window.sessionReady === 'undefined') return;
     window.sessionReady.then(function () {
-      var prefs = typeof currentUser !== 'undefined' && currentUser ? currentUser.theme_preferences : null;
-      if (!prefs) return;
-      Object.keys(DEFAULTS).forEach(function (key) {
-        var value = prefs[key];
-        if (value && current(key) !== value) apply(key, value);
+      if (typeof currentUser === 'undefined' || !currentUser) return;
+      var prefs = currentUser.theme_preferences;
+      if (!prefs || !Object.keys(prefs).length) {
+        if (Object.keys(explicitChoices()).length) persistToServer();
+        return;
+      }
+      KEYS.forEach(function (key) {
+        var value = prefs[key] || null;
+        if (stored(key) !== value) apply(key, value);
       });
       syncForm();
     }).catch(function () { /* offline / not logged in — keep local theme */ });
   }
 
   form.addEventListener('change', function (e) {
-    if (e.target.type !== 'radio' || !(e.target.name in DEFAULTS)) return;
+    if (e.target.type !== 'radio' || !(e.target.name in TABLER_DEFAULTS)) return;
     apply(e.target.name, e.target.value);
     syncForm();
     persistToServer();
@@ -200,7 +220,7 @@
   });
 
   document.getElementById('resetThemeBtn').addEventListener('click', function () {
-    Object.keys(DEFAULTS).forEach(function (key) { apply(key, DEFAULTS[key]); });
+    KEYS.forEach(function (key) { apply(key, null); });
     syncForm();
     persistToServer();
   });

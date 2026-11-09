@@ -60,6 +60,66 @@ class CutListController extends Controller
         ]);
     }
 
+    /** Active work orders that don't have a cut list yet, for the "New cut list" picker. */
+    public function workOrderOptions()
+    {
+        $taken = CutJob::whereNotNull('work_order_id')->pluck('work_order_id')->all();
+
+        $orders = FdWorkOrder::active()->with('businessJob')
+            ->whereNotIn('id', $taken)
+            ->orderByDesc('id')->limit(500)->get();
+
+        return response()->json([
+            'work_orders' => $orders->map(fn (FdWorkOrder $wo) => [
+                'id' => $wo->id,
+                'label' => $wo->releaseLabel(),
+                'job_name' => $wo->businessJob?->job_name,
+                'name' => trim(($wo->businessJob?->job_name ?: 'Work order').' '.$wo->releaseLabel()),
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * Create an empty cut list, either for a work order (one list per work order — the
+     * configurator ingest keys on work_order_id) or standalone with just a name.
+     */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'work_order_id' => 'nullable|integer',
+            'name' => 'nullable|string|max:255',
+        ]);
+
+        $workOrder = null;
+        if (! empty($data['work_order_id'])) {
+            $workOrder = FdWorkOrder::with('businessJob')->find($data['work_order_id']);
+            if (! $workOrder) {
+                throw ValidationException::withMessages(['work_order_id' => 'Work order not found.']);
+            }
+            if ($existing = CutJob::where('work_order_id', $workOrder->id)->first()) {
+                return response()->json([
+                    'error' => 'That work order already has a cut list.',
+                    'existing_id' => $existing->id,
+                ], 422);
+            }
+        }
+
+        $name = trim($data['name'] ?? '');
+        if ($name === '' && $workOrder) {
+            $name = trim(($workOrder->businessJob?->job_name ?: 'Work order').' '.$workOrder->releaseLabel());
+        }
+        if ($name === '') {
+            throw ValidationException::withMessages(['name' => 'Enter a name or choose a work order.']);
+        }
+        if (CutJob::where('name', $name)->exists()) {
+            throw ValidationException::withMessages(['name' => 'Another cut list already has that name.']);
+        }
+
+        $job = CutJob::create(['name' => $name, 'work_order_id' => $workOrder?->id]);
+
+        return response()->json(['message' => 'Cut list created.', 'id' => $job->id], 201);
+    }
+
     public function show(int $id, SillQuarterPointService $sillReport)
     {
         $job = CutJob::findOrFail($id);
@@ -171,6 +231,89 @@ class CutListController extends Controller
         $this->markDiverged($job);
 
         return response()->json(['message' => 'Line added.', 'id' => $part->id], 201);
+    }
+
+    /** Part numbers + finish codes for the bulk-add grid's pickers. */
+    public function partOptions()
+    {
+        return response()->json([
+            'part_numbers' => \App\Models\Product::query()
+                ->whereNotNull('part_number')->where('part_number', '!=', '')
+                ->distinct()->orderBy('part_number')->pluck('part_number'),
+            'finishes' => \App\Models\Product::$finishCodes,
+        ]);
+    }
+
+    /**
+     * Bulk add: many part/finish groups, each with many qty + length rows, in one transaction.
+     * Rows repeating the same part+finish+length are summed; a line that already exists on the
+     * list (same identity as a hand-added line) has the quantity added to it.
+     */
+    public function bulkStoreParts(Request $request, int $id)
+    {
+        $job = CutJob::findOrFail($id);
+        $v = $request->validate([
+            'groups' => 'required|array|min:1|max:200',
+            'groups.*.name' => 'required|string|max:255',
+            'groups.*.finish' => 'nullable|string|max:255',
+            'groups.*.rows' => 'required|array|min:1|max:500',
+            'groups.*.rows.*.qty' => 'required|integer|min:1|max:100000',
+            'groups.*.rows.*.length' => 'required|string|max:50',
+        ]);
+
+        $lines = [];
+        foreach ($v['groups'] as $gi => $group) {
+            $name = trim($group['name']);
+            $finish = trim($group['finish'] ?? '') ?: null;
+            foreach ($group['rows'] as $ri => $row) {
+                $raw = str_replace(['"', '”', '″'], '', $row['length']);
+                $raw = preg_replace('/(\d)\s*-\s*(\d+\s*\/)/', '$1 $2', $raw);
+                $dim = round(Dimension::parse($raw), 3);
+                if ($dim <= 0) {
+                    throw ValidationException::withMessages([
+                        "groups.$gi.rows.$ri.length" => "{$name}: \"{$row['length']}\" is not a valid length (e.g. 96, 48.375 or 96 3/8).",
+                    ]);
+                }
+                $key = $name.'|'.$finish.'|'.$dim;
+                $lines[$key] = [
+                    'name' => $name, 'finish' => $finish, 'dimension_inches' => $dim,
+                    'qty' => ($lines[$key]['qty'] ?? 0) + (int) $row['qty'],
+                ];
+            }
+        }
+
+        $created = 0;
+        $merged = 0;
+        \Illuminate\Support\Facades\DB::connection('cutflow')->transaction(function () use ($job, $lines, &$created, &$merged) {
+            foreach ($lines as $l) {
+                $existing = Part::where('cut_job_id', $job->id)
+                    ->where('name', $l['name'])->where('finish', $l['finish'])
+                    ->where('dimension_inches', $l['dimension_inches'])
+                    ->whereNull('description')->whereNull('phase')->whereNull('row')->whereNull('column')
+                    ->first();
+
+                if ($existing) {
+                    $existing->update([
+                        'qty_original' => $existing->qty_original + $l['qty'],
+                        'qty_remaining' => $existing->qty_remaining + $l['qty'],
+                    ]);
+                    $merged++;
+                } else {
+                    $job->parts()->create([
+                        'name' => $l['name'], 'finish' => $l['finish'], 'dimension_inches' => $l['dimension_inches'],
+                        'qty_original' => $l['qty'], 'qty_remaining' => $l['qty'], 'source' => 'manual',
+                    ]);
+                    $created++;
+                }
+            }
+        });
+
+        $this->markDiverged($job);
+
+        return response()->json([
+            'message' => "Added {$created} new line(s)".($merged ? ", updated {$merged} existing" : '').'.',
+            'created' => $created, 'merged' => $merged,
+        ], 201);
     }
 
     public function updatePart(Request $request, int $id, int $partId)

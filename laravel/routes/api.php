@@ -853,11 +853,15 @@ Route::middleware('auth:sanctum')->group(function () {
             // Cut lists (CutFlow cut_jobs/parts) — edit while uncut, view once cut
             $cl = \App\Http\Controllers\Api\CutListController::class;
             Route::get('/cut-lists', [$cl, 'index']);
+            Route::get('/cut-lists/part-options', [$cl, 'partOptions']);
+            Route::get('/cut-lists/work-order-options', [$cl, 'workOrderOptions'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/cut-lists', [$cl, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::get('/cut-lists/{id}', [$cl, 'show']);
             Route::get('/cut-lists/{id}/log', [$cl, 'log']);
             Route::get('/cut-lists/{id}/sill-quarter-points', [$cl, 'sillQuarterPoints']);
             Route::put('/cut-lists/{id}', [$cl, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/cut-lists/{id}', [$cl, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+            Route::post('/cut-lists/{id}/parts/bulk', [$cl, 'bulkStoreParts'])->middleware('permission:fabrication.work-orders.edit');
             Route::post('/cut-lists/{id}/parts', [$cl, 'storePart'])->middleware('permission:fabrication.work-orders.edit');
             Route::put('/cut-lists/{id}/parts/{partId}', [$cl, 'updatePart'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/cut-lists/{id}/parts/{partId}', [$cl, 'destroyPart'])->middleware('permission:fabrication.work-orders.edit');

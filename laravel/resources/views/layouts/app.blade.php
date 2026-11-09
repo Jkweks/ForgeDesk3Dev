@@ -1,5 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+@php
+  // ForgeDesk's out-of-the-box look, used until a user picks something in the Customize panel.
+  // Anything not listed here keeps Tabler's standard default. Tabler's tabler-theme.js falls back
+  // to these <html> attributes whenever nothing is stored for a key, so there is no flash.
+  $themeAppDefaults = ['navbar-position' => 'vertical', 'layout' => 'fluid', 'theme-primary' => 'red'];
+@endphp
+<html lang="en" @foreach ($themeAppDefaults as $k => $v) data-bs-{{ $k }}="{{ $v }}" @endforeach>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

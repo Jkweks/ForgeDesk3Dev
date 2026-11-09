@@ -6,6 +6,8 @@
 .cl-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1060; align-items:center; justify-content:center; }
 .cl-overlay > .card { box-shadow:0 1rem 3rem rgba(0,0,0,.5); }
 .cl-row-locked { background:var(--tblr-bg-surface-secondary); }
+.cl-group { border:1px solid var(--tblr-border-color); border-radius:var(--tblr-border-radius); }
+.cl-group input.form-control, .cl-group select.form-select { border-radius:0; }
 .cl-toast { position:fixed; bottom:1rem; right:1rem; z-index:2000; max-width:360px; }
 @endsection
 
@@ -18,7 +20,10 @@
           <div class="page-pretitle">Fabrication</div>
           <h2 class="page-title">Cut Lists</h2>
         </div>
-        <div class="col-auto ms-auto">
+        <div class="col-auto ms-auto d-flex gap-2">
+          <button class="btn btn-primary" id="cl-new-btn" data-permission="fabrication.work-orders.edit" onclick="clOpenNew()">
+            <i class="ti ti-plus me-1"></i>New cut list
+          </button>
           <button class="btn btn-outline-secondary" onclick="clShowList()" id="cl-back" style="display:none">
             <i class="ti ti-arrow-left me-1"></i>All cut lists
           </button>
@@ -64,6 +69,7 @@
               <span data-permission="fabrication.work-orders.edit">
               <button class="btn btn-sm btn-outline-secondary" onclick="clRename()"><i class="ti ti-pencil me-1"></i>Rename</button>
               <button class="btn btn-sm btn-primary" onclick="clOpenPart()"><i class="ti ti-plus me-1"></i>Add line</button>
+              <button class="btn btn-sm btn-primary" onclick="clOpenBulk()"><i class="ti ti-table-plus me-1"></i>Bulk add</button>
               <button class="btn btn-sm btn-outline-danger" id="cl-delete-btn" onclick="clDeleteList()"><i class="ti ti-trash me-1"></i>Delete list</button>
               </span>
             </div>
@@ -116,6 +122,56 @@
     <div class="card-footer text-end">
       <button class="btn btn-link" onclick="clClosePart()">Cancel</button>
       <button class="btn btn-primary" id="cl-part-save" onclick="clSavePart()">Save</button>
+    </div>
+  </div>
+</div>
+<div id="cl-new-overlay" class="cl-overlay" style="display:none;">
+  <div class="card" style="width:min(520px, 94vw);">
+    <div class="card-header">
+      <h3 class="card-title">New cut list</h3>
+      <button type="button" class="btn-close ms-auto" onclick="clCloseNew()"></button>
+    </div>
+    <div class="card-body">
+      <div class="mb-3">
+        <label class="form-label">Job / work order</label>
+        <select id="cl-n-wo" class="form-select" onchange="clNewWoChanged()"></select>
+        <div class="form-hint">Only work orders without a cut list are shown. Choose "Standalone" for a list not tied to a work order.</div>
+      </div>
+      <div class="mb-0">
+        <label class="form-label">Name</label>
+        <input id="cl-n-name" class="form-control" placeholder="Defaults to job name + release">
+      </div>
+      <div id="cl-new-error" class="text-danger small mt-2"></div>
+    </div>
+    <div class="card-footer text-end">
+      <button class="btn btn-link" onclick="clCloseNew()">Cancel</button>
+      <button class="btn btn-primary" id="cl-new-save" onclick="clSaveNew()">Create &amp; open</button>
+    </div>
+  </div>
+</div>
+<div id="cl-bulk-overlay" class="cl-overlay" style="display:none;">
+  <div class="card" style="width:min(900px, 96vw); max-height:92vh; display:flex; flex-direction:column;">
+    <div class="card-header">
+      <h3 class="card-title">Bulk add lines</h3>
+      <button type="button" class="btn-close ms-auto" onclick="clCloseBulk()"></button>
+    </div>
+    <div class="card-body" style="overflow-y:auto;">
+      <div class="text-secondary small mb-3">
+        Pick a part number and finish, then type quantity and length underneath — a new row appears as you go.
+        Lengths can be decimal (48.375) or fractions (96 3/8). You can paste two columns (qty, length) straight
+        from a spreadsheet into any row. Tab / Enter moves to the next cell.
+      </div>
+      <datalist id="cl-pn-list"></datalist>
+      <div id="cl-bulk-groups" class="row g-3"></div>
+      <button class="btn btn-outline-primary btn-sm mt-3" onclick="clAddGroup(true)"><i class="ti ti-plus me-1"></i>Add another part</button>
+      <div id="cl-bulk-error" class="text-danger small mt-2"></div>
+    </div>
+    <div class="card-footer d-flex align-items-center">
+      <span class="text-muted small" id="cl-bulk-summary"></span>
+      <div class="ms-auto">
+        <button class="btn btn-link" onclick="clCloseBulk()">Cancel</button>
+        <button class="btn btn-primary" id="cl-bulk-save" onclick="clSaveBulk()">Add to cut list</button>
+      </div>
     </div>
   </div>
 </div>
@@ -311,6 +367,176 @@ async function clDeleteList() {
     clToast((await clJson(await API('/cut-lists/' + clCurrent.id, { method: 'DELETE' }))).message);
     clShowList();
   } catch (e) { clToast(e.message, false); }
+}
+
+// ── New cut list ────────────────────────────────────────────────────────
+let clWoOptions = [];
+
+async function clOpenNew() {
+  try {
+    clWoOptions = (await clJson(await API('/cut-lists/work-order-options'))).work_orders || [];
+  } catch (e) { clToast(e.message, false); return; }
+  document.getElementById('cl-n-wo').innerHTML = '<option value="">Standalone (no work order)</option>' +
+    clWoOptions.map(w => `<option value="${w.id}">${esc(w.label)} – ${esc(w.job_name || '')}</option>`).join('');
+  document.getElementById('cl-n-name').value = '';
+  document.getElementById('cl-new-error').textContent = '';
+  document.getElementById('cl-new-overlay').style.display = 'flex';
+}
+function clCloseNew() { document.getElementById('cl-new-overlay').style.display = 'none'; }
+
+function clNewWoChanged() {
+  const w = clWoOptions.find(x => String(x.id) === document.getElementById('cl-n-wo').value);
+  document.getElementById('cl-n-name').value = w ? w.name : '';
+}
+
+async function clSaveNew() {
+  const err = document.getElementById('cl-new-error');
+  err.textContent = '';
+  const woId = document.getElementById('cl-n-wo').value;
+  const btn = document.getElementById('cl-new-save');
+  btn.disabled = true;
+  try {
+    const body = await clJson(await API('/cut-lists', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ work_order_id: woId ? parseInt(woId, 10) : null, name: document.getElementById('cl-n-name').value.trim() }),
+    }));
+    clCloseNew();
+    clToast(body.message);
+    await clOpen(body.id);
+  } catch (e) { err.textContent = e.message; }
+  finally { btn.disabled = false; }
+}
+
+// ── Bulk add ────────────────────────────────────────────────────────────
+let clFinishes = null;
+let clPnLoaded = false;
+
+async function clOpenBulk() {
+  if (!clPnLoaded) {
+    try {
+      const o = await clJson(await API('/cut-lists/part-options'));
+      clFinishes = o.finishes || {};
+      document.getElementById('cl-pn-list').innerHTML = (o.part_numbers || []).map(n => `<option value="${esc(n)}">`).join('');
+      clPnLoaded = true;
+    } catch (e) { clToast(e.message, false); return; }
+  }
+  document.getElementById('cl-bulk-groups').innerHTML = '';
+  document.getElementById('cl-bulk-error').textContent = '';
+  clAddGroup(false);
+  document.getElementById('cl-bulk-overlay').style.display = 'flex';
+  clUpdateBulkSummary();
+}
+function clCloseBulk() { document.getElementById('cl-bulk-overlay').style.display = 'none'; }
+
+function clAddGroup(focus, prev) {
+  const finishOpts = Object.entries(clFinishes || {}).map(([c, l]) => `<option value="${esc(c)}">${esc(c)} – ${esc(l)}</option>`).join('');
+  const g = document.createElement('div');
+  g.className = 'col-md-6 cl-group-wrap';
+  g.innerHTML = `
+    <div class="cl-group">
+      <div class="d-flex border-bottom bg-surface-secondary">
+        <input class="form-control cl-g-name" list="cl-pn-list" placeholder="Part number" style="flex:2" oninput="clUpdateBulkSummary()">
+        <select class="form-select cl-g-finish" style="flex:2"><option value="">No finish</option>${finishOpts}</select>
+        <button class="btn btn-ghost-danger" title="Remove part" onclick="this.closest('.cl-group-wrap').remove(); clUpdateBulkSummary()"><i class="ti ti-x"></i></button>
+      </div>
+      <table class="table table-sm mb-0">
+        <thead><tr><th style="width:90px">Qty</th><th>Length (in)</th></tr></thead>
+        <tbody class="cl-g-rows"></tbody>
+      </table>
+    </div>`;
+  document.getElementById('cl-bulk-groups').appendChild(g);
+  if (prev) g.querySelector('.cl-g-finish').value = prev.finish;
+  clAddRow(g.querySelector('.cl-g-rows'));
+  if (focus) g.querySelector('.cl-g-name').focus();
+}
+
+function clAddRow(tbody, qty = '', len = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="p-0"><input type="text" inputmode="numeric" class="form-control form-control-sm border-0 cl-r-qty" value="${esc(qty)}"></td>
+    <td class="p-0"><input type="text" class="form-control form-control-sm border-0 cl-r-len" value="${esc(len)}" placeholder="96, 48.375 or 96 3/8"></td>`;
+  tbody.appendChild(tr);
+  const [q, l] = tr.querySelectorAll('input');
+  const ensureSpare = () => {
+    const last = tbody.lastElementChild;
+    if (last && [...last.querySelectorAll('input')].some(i => i.value.trim() !== '')) clAddRow(tbody);
+    clUpdateBulkSummary();
+  };
+  [q, l].forEach(inp => {
+    inp.addEventListener('input', ensureSpare);
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const rows = [...tbody.children], i = rows.indexOf(tr);
+        const next = rows[i + 1] || (clAddRow(tbody), tbody.lastElementChild);
+        next.querySelector(inp === q ? '.cl-r-qty' : '.cl-r-len').focus();
+      }
+    });
+    inp.addEventListener('paste', e => {
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      if (!/[\n\t]/.test(text.trim())) return;
+      e.preventDefault();
+      const rows = [...tbody.children];
+      let at = rows.indexOf(tr);
+      text.replace(/\r/g, '').split('\n').filter(r => r.trim() !== '').forEach(line => {
+        const cells = line.split('\t');
+        if (!tbody.children[at]) clAddRow(tbody);
+        const row = tbody.children[at++];
+        if (cells.length >= 2) {
+          row.querySelector('.cl-r-qty').value = cells[0].trim();
+          row.querySelector('.cl-r-len').value = cells[1].trim();
+        } else {
+          row.querySelector(inp === q ? '.cl-r-qty' : '.cl-r-len').value = cells[0].trim();
+        }
+      });
+      ensureSpare();
+    });
+  });
+}
+
+function clCollectBulk() {
+  const groups = [];
+  document.querySelectorAll('#cl-bulk-groups .cl-group').forEach(g => {
+    const name = g.querySelector('.cl-g-name').value.trim();
+    const finish = g.querySelector('.cl-g-finish').value;
+    const rows = [...g.querySelectorAll('.cl-g-rows tr')]
+      .map(tr => ({ qty: tr.querySelector('.cl-r-qty').value.trim(), length: tr.querySelector('.cl-r-len').value.trim() }))
+      .filter(r => r.qty !== '' || r.length !== '');
+    if (name || rows.length) groups.push({ name, finish, rows });
+  });
+  return groups;
+}
+
+function clUpdateBulkSummary() {
+  const g = clCollectBulk();
+  const lines = g.reduce((n, x) => n + x.rows.length, 0);
+  const pcs = g.reduce((n, x) => n + x.rows.reduce((m, r) => m + (parseInt(r.qty, 10) || 0), 0), 0);
+  document.getElementById('cl-bulk-summary').textContent = lines ? `${lines} line(s), ${pcs} piece(s)` : '';
+}
+
+async function clSaveBulk() {
+  const err = document.getElementById('cl-bulk-error');
+  err.textContent = '';
+  const groups = clCollectBulk();
+  for (const g of groups) {
+    if (!g.name) { err.textContent = 'Every group with rows needs a part number.'; return; }
+    for (const r of g.rows) {
+      if (!/^\d+$/.test(r.qty) || parseInt(r.qty, 10) < 1) { err.textContent = `${g.name}: quantity "${r.qty}" must be a whole number of 1 or more.`; return; }
+      if (r.length === '') { err.textContent = `${g.name}: a row has a quantity but no length.`; return; }
+    }
+    if (!g.rows.length) { err.textContent = `${g.name}: add at least one qty / length row.`; return; }
+  }
+  if (!groups.length) { err.textContent = 'Nothing to add yet.'; return; }
+  const btn = document.getElementById('cl-bulk-save');
+  btn.disabled = true;
+  try {
+    const body = await clJson(await API('/cut-lists/' + clCurrent.id + '/parts/bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groups }),
+    }));
+    clCloseBulk();
+    clToast(body.message);
+    await clReload();
+  } catch (e) { err.textContent = e.message; }
+  finally { btn.disabled = false; }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
