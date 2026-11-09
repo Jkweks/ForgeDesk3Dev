@@ -113,6 +113,7 @@ class CutListProgress
     private static function gaps($query): Collection
     {
         $entries = $query->where('type', '!=', 'drop')->where('is_reprint', false)->where('is_recut', false)
+            ->where('is_external', false) // other-saw cuts carry a nominal midday time, not a real one
             ->orderBy('created_at')->get(['created_at', 'operator_id', 'operator_name', 'part_name', 'finish']);
 
         $last = [];

@@ -68,6 +68,7 @@
               <a class="btn btn-sm btn-outline-primary" id="cl-sill-btn" style="display:none" target="_blank" rel="noopener"><i class="ti ti-file-type-pdf me-1"></i>Sill quarter points</a>
               <span data-permission="fabrication.work-orders.edit">
               <button class="btn btn-sm btn-outline-secondary" onclick="clRename()"><i class="ti ti-pencil me-1"></i>Rename</button>
+              <button class="btn btn-sm btn-success" id="cl-markcut-btn" onclick="clOpenMarkCut()"><i class="ti ti-check me-1"></i>Mark cut (other saw)</button>
               <button class="btn btn-sm btn-primary" onclick="clOpenPart()"><i class="ti ti-plus me-1"></i>Add line</button>
               <button class="btn btn-sm btn-primary" onclick="clOpenBulk()"><i class="ti ti-table-plus me-1"></i>Bulk add</button>
               <button class="btn btn-sm btn-outline-danger" id="cl-delete-btn" onclick="clDeleteList()"><i class="ti ti-trash me-1"></i>Delete list</button>
@@ -122,6 +123,36 @@
     <div class="card-footer text-end">
       <button class="btn btn-link" onclick="clClosePart()">Cancel</button>
       <button class="btn btn-primary" id="cl-part-save" onclick="clSavePart()">Save</button>
+    </div>
+  </div>
+</div>
+<div id="cl-mark-overlay" class="cl-overlay" style="display:none;">
+  <div class="card" style="width:min(680px, 96vw); max-height:92vh; display:flex; flex-direction:column;">
+    <div class="card-header">
+      <h3 class="card-title">Mark cut on another saw</h3>
+      <button type="button" class="btn-close ms-auto" onclick="clCloseMarkCut()"></button>
+    </div>
+    <div class="card-body" style="overflow-y:auto;">
+      <div class="row g-2 mb-3">
+        <div class="col-7"><label class="form-label">Cut by</label><select id="cl-m-user" class="form-select"></select></div>
+        <div class="col-5"><label class="form-label">Date cut</label><input id="cl-m-date" type="date" class="form-control"></div>
+      </div>
+      <div class="text-secondary small mb-2">
+        Set how many pieces of each line were cut (defaults to everything remaining). They're logged as cuts, count in the
+        cut totals, and draw stock from inventory exactly like a cut at the saw station.
+      </div>
+      <table class="table table-sm">
+        <thead><tr><th>Profile</th><th>Finish</th><th class="text-end">Length</th><th>Use</th><th class="text-end">Remaining</th><th style="width:90px">Cut</th></tr></thead>
+        <tbody id="cl-m-body"></tbody>
+      </table>
+      <div id="cl-mark-error" class="text-danger small mt-2"></div>
+    </div>
+    <div class="card-footer d-flex align-items-center">
+      <span class="text-muted small" id="cl-m-summary"></span>
+      <div class="ms-auto">
+        <button class="btn btn-link" onclick="clCloseMarkCut()">Cancel</button>
+        <button class="btn btn-success" id="cl-mark-save" onclick="clSaveMarkCut()">Mark as cut</button>
+      </div>
     </div>
   </div>
 </div>
@@ -261,6 +292,7 @@ function clRenderDetail(log) {
   sb.className = 'badge ms-2 ' + statusClass(c.status);
   sb.textContent = c.status;
   document.getElementById('cl-d-warning').style.display = c.work_order_id ? '' : 'none';
+  document.getElementById('cl-markcut-btn').style.display = c.parts.some(p => p.qty_remaining > 0) ? '' : 'none';
   document.getElementById('cl-delete-btn').style.display = c.can_delete ? '' : 'none';
   const sillBtn = document.getElementById('cl-sill-btn');
   sillBtn.style.display = c.has_sill_report ? '' : 'none';
@@ -292,7 +324,7 @@ function clRenderDetail(log) {
       <td class="text-end">${esc(e.dimension_inches.toFixed(3))}</td>
       <td>${esc(e.stick_length_label) || '—'}</td>
       <td>${esc(e.operator_name) || '—'}</td>
-      <td>${e.is_recut ? '<span class="badge bg-orange-lt">recut</span>' : ''}</td>
+      <td>${e.is_recut ? '<span class="badge bg-orange-lt">recut</span>' : ''}${e.is_external ? '<span class="badge bg-blue-lt">other saw</span>' : ''}</td>
     </tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted py-4">Nothing cut yet.</td></tr>';
 }
 
@@ -367,6 +399,65 @@ async function clDeleteList() {
     clToast((await clJson(await API('/cut-lists/' + clCurrent.id, { method: 'DELETE' }))).message);
     clShowList();
   } catch (e) { clToast(e.message, false); }
+}
+
+// ── Mark cut on another saw ─────────────────────────────────────────────
+let clCutters = null;
+
+async function clOpenMarkCut() {
+  if (!clCutters) {
+    try { clCutters = (await clJson(await API('/cut-lists-cutters'))).users || []; }
+    catch (e) { clToast(e.message, false); return; }
+  }
+  document.getElementById('cl-m-user').innerHTML = '<option value="">Choose…</option>' +
+    clCutters.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
+  const d = new Date();
+  document.getElementById('cl-m-date').value = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+  document.getElementById('cl-m-date').max = document.getElementById('cl-m-date').value;
+  document.getElementById('cl-m-body').innerHTML = clCurrent.parts.filter(p => p.qty_remaining > 0).map(p => `
+    <tr data-part="${p.id}" data-max="${p.qty_remaining}">
+      <td class="fw-medium">${esc(p.name)}</td><td>${esc(p.finish) || '—'}</td>
+      <td class="text-end">${esc(p.dimension_inches.toFixed(3))}</td><td>${esc(p.description) || '—'}</td>
+      <td class="text-end">${p.qty_remaining}</td>
+      <td><input type="number" min="0" max="${p.qty_remaining}" value="${p.qty_remaining}" class="form-control form-control-sm cl-m-qty" oninput="clMarkSummary()"></td>
+    </tr>`).join('');
+  document.getElementById('cl-mark-error').textContent = '';
+  clMarkSummary();
+  document.getElementById('cl-mark-overlay').style.display = 'flex';
+}
+function clCloseMarkCut() { document.getElementById('cl-mark-overlay').style.display = 'none'; }
+
+function clMarkRows() {
+  return [...document.querySelectorAll('#cl-m-body tr')]
+    .map(tr => ({ part_id: parseInt(tr.dataset.part, 10), qty: parseInt(tr.querySelector('.cl-m-qty').value, 10) || 0, max: parseInt(tr.dataset.max, 10) }))
+    .filter(r => r.qty > 0);
+}
+function clMarkSummary() {
+  const n = clMarkRows().reduce((a, r) => a + r.qty, 0);
+  document.getElementById('cl-m-summary').textContent = n ? n + ' piece(s)' : '';
+}
+
+async function clSaveMarkCut() {
+  const err = document.getElementById('cl-mark-error');
+  err.textContent = '';
+  const rows = clMarkRows();
+  const user = document.getElementById('cl-m-user').value, date = document.getElementById('cl-m-date').value;
+  if (!user) { err.textContent = 'Choose who cut these.'; return; }
+  if (!date) { err.textContent = 'Enter the date they were cut.'; return; }
+  if (!rows.length) { err.textContent = 'Enter a quantity for at least one line.'; return; }
+  if (rows.some(r => r.qty > r.max)) { err.textContent = 'A quantity is more than what remains on that line.'; return; }
+  const btn = document.getElementById('cl-mark-save');
+  btn.disabled = true;
+  try {
+    const body = await clJson(await API('/cut-lists/' + clCurrent.id + '/mark-cut', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operator_id: parseInt(user, 10), cut_date: date, parts: rows.map(r => ({ part_id: r.part_id, qty: r.qty })) }),
+    }));
+    clCloseMarkCut();
+    clToast(body.message);
+    await clReload();
+  } catch (e) { err.textContent = e.message; }
+  finally { btn.disabled = false; }
 }
 
 // ── New cut list ────────────────────────────────────────────────────────

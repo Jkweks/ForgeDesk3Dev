@@ -6,7 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CutFlow\CutJob;
 use App\Models\CutFlow\CutLogEntry;
 use App\Models\CutFlow\Part;
+use App\Models\FdUser;
 use App\Models\FdWorkOrder;
+use App\Services\CutFlow\CutConsumptionService;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use App\Services\CutFlow\SillQuarterPointService;
 use App\Support\Dimension;
 use Illuminate\Http\Request;
@@ -157,6 +161,97 @@ class CutListController extends Controller
         ]);
     }
 
+    /** Active shop users, for the "who cut it" picker. */
+    public function cutters()
+    {
+        return response()->json(['users' => FdUser::where('active', true)->orderBy('name')->get(['id', 'name'])]);
+    }
+
+    /**
+     * Tag pieces as cut on another saw: one cut-log entry per piece (operator + date given by the user,
+     * no stick or label), qty_remaining drawn down, and stock consumed exactly as a cut at the station
+     * (CutConsumptionService: SOF work orders deduct inventory, every job feeds the material usage report).
+     * Cut-station stats count these; times are not meaningful (stamped at midday of the chosen date).
+     * Body: operator_id, cut_date (Y-m-d, not future), parts: [{part_id, qty}] (omit parts = everything remaining).
+     */
+    public function markCut(Request $request, int $id, CutConsumptionService $consumption)
+    {
+        $data = $request->validate([
+            'operator_id' => 'required|integer',
+            'cut_date' => 'required|date_format:Y-m-d',
+            'parts' => 'nullable|array',
+            'parts.*.part_id' => 'required|integer',
+            'parts.*.qty' => 'required|integer|min:1',
+        ]);
+
+        $job = CutJob::findOrFail($id);
+        $operator = FdUser::find($data['operator_id']);
+        if (! $operator) {
+            throw ValidationException::withMessages(['operator_id' => 'Choose who cut these.']);
+        }
+
+        $cutAt = Carbon::createFromFormat('Y-m-d', $data['cut_date'], 'America/New_York')->setTime(12, 0);
+        if ($data['cut_date'] > now('America/New_York')->toDateString()) {
+            throw ValidationException::withMessages(['cut_date' => 'The cut date can\'t be in the future.']);
+        }
+        $cutAt->setTimezone('UTC');
+
+        $parts = $job->parts()->get()->keyBy('id');
+        $requested = isset($data['parts'])
+            ? collect($data['parts'])->groupBy('part_id')->map(fn ($rows) => (int) $rows->sum('qty'))
+            : $parts->filter(fn (Part $p) => $p->qty_remaining > 0)->map(fn (Part $p) => (int) $p->qty_remaining);
+
+        if ($requested->isEmpty()) {
+            throw ValidationException::withMessages(['parts' => 'Nothing left to mark as cut.']);
+        }
+        foreach ($requested as $partId => $qty) {
+            $part = $parts->get($partId);
+            if (! $part) {
+                throw ValidationException::withMessages(['parts' => 'A line doesn\'t belong to this cut list.']);
+            }
+            if ($qty > $part->qty_remaining) {
+                throw ValidationException::withMessages(['parts' => "{$part->name}: only {$part->qty_remaining} left to cut, can't mark {$qty}."]);
+            }
+        }
+
+        $count = 0;
+        foreach ($requested as $partId => $qty) {
+            $part = $parts->get($partId);
+            for ($i = 0; $i < $qty; $i++) {
+                $part->decrement('qty_remaining');
+                $entry = new CutLogEntry([
+                    'uuid' => (string) Str::uuid(),
+                    'part_id' => $part->id,
+                    'part_name' => $part->name,
+                    'finish' => $part->finish,
+                    'operator_id' => $operator->id,
+                    'operator_name' => $operator->name,
+                    'cut_job_id' => $job->id,
+                    'job_name' => $job->name,
+                    'work_order' => $part->work_order,
+                    'phase' => $part->phase,
+                    'description' => $part->description,
+                    'dimension_inches' => $part->dimension_inches,
+                    'stick_length_label' => 'Other saw',
+                    'type' => 'planned',
+                    'is_external' => true,
+                ]);
+                $entry->created_at = $cutAt;
+                $entry->updated_at = $cutAt;
+                $entry->save();
+
+                try {
+                    $consumption->recordCut($entry);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('Cut list: failed to record stock consumption for external cut', ['cut_log_entry_id' => $entry->id, 'message' => $e->getMessage()]);
+                }
+                $count++;
+            }
+        }
+
+        return response()->json(['message' => "{$count} piece(s) marked as cut by {$operator->name}.", 'count' => $count]);
+    }
+
     /** PDF of sill start/end/quarter points (and receptor check) built from the CSV stored at upload. */
     public function sillQuarterPoints(int $id, SillQuarterPointService $service)
     {
@@ -187,6 +282,7 @@ class CutListController extends Controller
                 'stick_length_label' => $e->stick_length_label,
                 'operator_name' => $e->operator_name,
                 'is_recut' => $e->is_recut,
+                'is_external' => $e->is_external,
                 'cut_at' => $e->cut_at_local?->format('Y-m-d H:i'),
             ]),
         ]);

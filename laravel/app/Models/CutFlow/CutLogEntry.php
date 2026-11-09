@@ -28,6 +28,7 @@ class CutLogEntry extends Model
         'is_recut',
         'is_reprint',
         'is_manual_cut',
+        'is_external',
     ];
 
     protected $casts = [
@@ -35,6 +36,7 @@ class CutLogEntry extends Model
         'is_recut' => 'boolean',
         'is_manual_cut' => 'boolean',
         'is_reprint' => 'boolean',
+        'is_external' => 'boolean',
     ];
 
     public function part()
