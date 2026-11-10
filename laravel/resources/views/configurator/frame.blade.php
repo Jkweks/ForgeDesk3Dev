@@ -2649,14 +2649,15 @@ function fbCutflowSentText(c) {
 }
 
 // "Send frame / door cut list to CutFlow" checkboxes; a part that isn't in this opening's scope is off and disabled.
-function fbCutflowCheckboxesHtml(c) {
+function fbCutflowCheckboxesHtml(c, allowNone = false) {
   const includesFrame = ['door_and_frame', 'frame_only'].includes(c.job_scope);
   const includesDoor = ['door_and_frame', 'door_only'].includes(c.job_scope);
   const box = (id, label, scoped, checked) => `<label class="form-check"><input class="form-check-input fb-cf-flag" type="checkbox" id="${id}" ${scoped && checked ? 'checked' : ''} ${scoped ? '' : 'disabled'}><span class="form-check-label">${label}</span></label>`;
   return `<div class="mb-3"><div class="form-label">Cut lists to send to CutFlow</div>
     ${box('fb-cf-frame', 'Frame', includesFrame, c.cutflow_include_frame)}
     ${box('fb-cf-door', 'Door', includesDoor, c.cutflow_include_door)}
-    <div class="form-text">Uncheck one if it is ordered precut. Withheld parts still stay in the BOM and reservation.</div></div>`;
+    <div class="form-text">Uncheck one if it is ordered precut.${allowNone ? ' Uncheck both to release without sending anything to CutFlow (e.g. precut doors that only need hardware).' : ''} Withheld parts still stay in the BOM and reservation.</div>
+    <div class="form-text text-warning fb-cf-none" style="display:none"><i class="ti ti-info-circle me-1"></i>Nothing will be sent to CutFlow for this opening.</div></div>`;
 }
 
 async function fbOpenRelease(mode = 'full') {
@@ -2686,7 +2687,7 @@ async function fbOpenRelease(mode = 'full') {
   const list = (items, cls) => items.length ? `<div class="alert alert-${cls}"><ul class="mb-0 ps-3">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>` : '';
   const intro = mode === 'cut'
     ? `<p>Sends this opening's cut list to CutFlow so cutting can start. The opening, frame and door <strong>lock</strong>; <strong>hardware stays editable</strong> until you do the full release.</p>${fbCutflowCheckboxesHtml(c)}`
-    : `<p>Releasing <strong>locks</strong> this opening, commits its parts to the job reservation and sends its extrusions to the cut list.</p>${c.status === 'cut_released' ? `<p class="text-muted">${esc(fbCutflowSentText(c))}</p>` : fbCutflowCheckboxesHtml(c)}`;
+    : `<p>Releasing <strong>locks</strong> this opening, commits its parts to the job reservation and sends its extrusions to the cut list.</p>${c.status === 'cut_released' ? `<p class="text-muted">${esc(fbCutflowSentText(c))}</p>` : fbCutflowCheckboxesHtml(c, true)}`;
   body.innerHTML =
     list(p.blockers, 'danger') +
     list(p.warnings, 'warning') +
@@ -2698,7 +2699,10 @@ async function fbOpenRelease(mode = 'full') {
 function fbReleaseCheck() {
   const boxes = [...document.querySelectorAll('.fb-rel-confirm')];
   const flags = [...document.querySelectorAll('.fb-cf-flag')];
-  const sendsSomething = !flags.length || flags.some(f => f.checked);
+  // A full release may send nothing (precut doors needing only hardware); CutFlow release must send something.
+  const sendsSomething = fbReleaseMode === 'full' || !flags.length || flags.some(f => f.checked);
+  const none = document.querySelector('.fb-cf-none');
+  if (none) none.style.display = (fbReleaseMode === 'full' && flags.length && !flags.some(f => f.checked)) ? '' : 'none';
   const boxesOk = fbReleaseMode === 'options' || (boxes.length && boxes.every(b => b.checked));
   document.getElementById('fb-release-confirm').disabled = !(fbPreflight && fbPreflight.ready && boxesOk && sendsSomething);
   document.querySelectorAll('.fb-cf-flag').forEach(f => { f.onchange = fbReleaseCheck; });
