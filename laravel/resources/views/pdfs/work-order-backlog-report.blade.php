@@ -55,6 +55,10 @@
                     <div class="stat-value" style="color: {{ $summary['overdue_count'] > 0 ? '#c0392b' : '#27ae60' }};">{{ $summary['overdue_count'] }}</div>
                 </td>
                 <td>
+                    <div class="stat-label">HOURS REMAINING / TOTAL</div>
+                    <div class="stat-value">{{ $summary['hours_remaining'] }} / {{ $summary['hours_total'] }}</div>
+                </td>
+                <td>
                     <div class="stat-label">DUE THIS WEEK</div>
                     <div class="stat-value">{{ $summary['due_this_week'] }}</div>
                 </td>
@@ -68,13 +72,14 @@
                 <th style="width: 4%;">Pri</th>
                 <th style="width: 10%;">Release</th>
                 <th style="width: 8%;">Job #</th>
-                <th style="width: 20%;">Job Name</th>
+                <th style="width: 16%;">Job Name</th>
                 <th style="width: 7%;">Status</th>
                 <th style="width: 8%;">Due Date</th>
                 <th style="width: 6%;" class="text-center">Days</th>
                 <th style="width: 15%;">Assigned To</th>
                 <th style="width: 8%;" class="text-center">Elevations</th>
                 <th style="width: 6%;" class="text-center">Open Steps</th>
+                <th style="width: 8%;" class="text-center">Hrs Left / Total</th>
             </tr>
         </thead>
         <tbody>
@@ -90,10 +95,11 @@
                     <td>{{ $wo['assigned_users']->implode(', ') ?: '—' }}</td>
                     <td class="text-center">{{ $wo['elevations_complete_count'] }}/{{ $wo['elevation_count'] }}</td>
                     <td class="text-center">{{ $wo['open_steps_count'] }}</td>
+                    <td class="text-center">{{ $wo['hours_remaining'] ?? '—' }} / {{ $wo['hours_total'] ?? '—' }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="10" class="text-center" style="color:#999; padding: 8px;">No open work orders found.</td>
+                    <td colspan="11" class="text-center" style="color:#999; padding: 8px;">No open work orders found.</td>
                 </tr>
             @endforelse
         </tbody>

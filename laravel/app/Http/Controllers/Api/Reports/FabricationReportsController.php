@@ -27,7 +27,7 @@ class FabricationReportsController extends Controller
 
         $workOrders = FdWorkOrder::where('archived', false)
             ->whereIn('status', FdWorkOrder::OPEN_STATUSES)
-            ->with(['businessJob', 'assignedUsers', 'elevations', 'steps'])
+            ->with(['businessJob', 'assignedUsers', 'elevations.stages', 'elevations.templateSet', 'steps'])
             ->orderBy('priority')
             ->get();
 
@@ -39,6 +39,7 @@ class FabricationReportsController extends Controller
             $elevations = $wo->elevations;
             $openSteps = $wo->steps->reject(fn ($s) => in_array($s->status, FdJobStep::TERMINAL, true));
             $remaining = $wo->estimateRemainingMinutes();
+            $total = $wo->estimateMinutes();
 
             return [
                 'id' => $wo->id,
@@ -60,8 +61,13 @@ class FabricationReportsController extends Controller
                 'elevations_complete_count' => $elevations->whereNotNull('date_completed')->count(),
                 'open_steps_count' => $openSteps->count(),
                 'estimated_minutes_remaining' => $remaining['effective'],
+                'estimated_minutes_total' => $total['effective'],
+                'hours_remaining' => $remaining['effective'] !== null ? round($remaining['effective'] / 60, 1) : null,
+                'hours_total' => $total['effective'] !== null ? round($total['effective'] / 60, 1) : null,
             ];
         })->values();
+
+        $kpi = $this->laborHoursKpis($workOrders, $today);
 
         return response()->json([
             'work_orders' => $rows,
@@ -71,9 +77,48 @@ class FabricationReportsController extends Controller
                 'active_count' => $rows->where('status', 'active')->count(),
                 'on_hold_count' => $rows->where('status', 'on_hold')->count(),
                 'overdue_count' => $rows->where('is_overdue', true)->count(),
+                'hours_remaining' => round($rows->sum('hours_remaining'), 1),
+                'hours_total' => round($rows->sum('hours_total'), 1),
+                'hours_complete_percent' => $rows->sum('hours_total') > 0
+                    ? round((1 - $rows->sum('hours_remaining') / $rows->sum('hours_total')) * 100)
+                    : null,
+                'hours_overdue' => $kpi['overdue'],
+                'hours_due_this_week' => $kpi['due_this_week'],
+                'hours_unscheduled' => $kpi['unscheduled'],
                 'due_this_week' => $rows->filter(fn ($r) => $r['days_until_due'] !== null && $r['days_until_due'] >= 0 && $r['days_until_due'] <= 7)->count(),
             ],
         ]);
+    }
+
+    /**
+     * Remaining labor hours bucketed by each elevation's end date: the
+     * elevation's requested date, falling back to the work order's due date,
+     * then planned completion date.
+     */
+    private function laborHoursKpis($workOrders, Carbon $today): array
+    {
+        $weekEnd = $today->copy()->addDays(7);
+        $kpis = ['overdue' => 0.0, 'due_this_week' => 0.0, 'later' => 0.0, 'unscheduled' => 0.0];
+
+        foreach ($workOrders as $wo) {
+            foreach ($wo->elevations as $elev) {
+                $minutes = $elev->remainingMinutes()['effective'];
+                if (! $minutes) {
+                    continue;
+                }
+                $hours = $minutes / 60;
+                $end = $elev->date_requested ?? $wo->due_date ?? $wo->planned_completion_date;
+                $bucket = match (true) {
+                    ! $end => 'unscheduled',
+                    $end->copy()->startOfDay()->lt($today) => 'overdue',
+                    $end->copy()->startOfDay()->lte($weekEnd) => 'due_this_week',
+                    default => 'later',
+                };
+                $kpis[$bucket] += $hours;
+            }
+        }
+
+        return array_map(fn ($h) => round($h, 1), $kpis);
     }
 
     public function jointsCompletedReport(Request $request)
@@ -156,12 +201,15 @@ class FabricationReportsController extends Controller
                 implode(', ', $item['assigned_users']),
                 $item['elevation_count'].'/'.$item['elevations_complete_count'],
                 $item['open_steps_count'],
+                $item['hours_remaining'] ?? '',
+                $item['hours_total'] ?? '',
             ];
         });
 
         return $this->generateCSV($csvData, 'work_order_backlog_report', [
             'Release', 'Job Number', 'Job Name', 'Status', 'Priority', 'Due Date',
             'Days Until Due', 'Assigned To', 'Elevations (Done/Total)', 'Open Steps',
+            'Hours Remaining', 'Hours Total',
         ]);
     }
 

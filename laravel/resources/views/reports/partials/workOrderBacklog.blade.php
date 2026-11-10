@@ -64,6 +64,57 @@
         </div>
       </div>
 
+      <div class="row mb-3">
+        <div class="col-6 col-md-2">
+          <div class="card card-sm">
+            <div class="card-body">
+              <div class="text-muted">Hours Remaining</div>
+              <div class="h2 mb-0 " id="woHrsRemaining">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="card card-sm">
+            <div class="card-body">
+              <div class="text-muted">Total Hours</div>
+              <div class="h2 mb-0 " id="woHrsTotal">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="card card-sm">
+            <div class="card-body">
+              <div class="text-muted">% Complete (Hours)</div>
+              <div class="h2 mb-0 " id="woHrsPercent">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="card card-sm">
+            <div class="card-body">
+              <div class="text-muted">Hours Overdue</div>
+              <div class="h2 mb-0 text-danger" id="woHrsOverdue">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="card card-sm">
+            <div class="card-body">
+              <div class="text-muted">Hours Due This Week</div>
+              <div class="h2 mb-0 text-info" id="woHrsDueWeek">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="card card-sm">
+            <div class="card-body">
+              <div class="text-muted">Hours Unscheduled</div>
+              <div class="h2 mb-0 text-muted" id="woHrsUnscheduled">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="woBacklogLoading" class="text-center py-4">
         <div class="spinner-border" role="status"></div>
         <div class="text-muted mt-2">Loading report...</div>
@@ -83,6 +134,7 @@
                 <th>Assigned To</th>
                 <th class="text-center">Elevations</th>
                 <th class="text-center">Open Steps</th>
+                <th class="text-center">Hrs Left / Total</th>
               </tr>
             </thead>
             <tbody id="woBacklogBody"></tbody>
@@ -110,11 +162,18 @@ async function loadWorkOrderBacklogReport() {
     document.getElementById('woBacklogOnHold').textContent = response.summary.on_hold_count;
     const overdueEl = document.getElementById('woBacklogOverdue');
     overdueEl.textContent = response.summary.overdue_count;
+    const sm = response.summary;
+    document.getElementById('woHrsRemaining').textContent = sm.hours_remaining;
+    document.getElementById('woHrsTotal').textContent = sm.hours_total;
+    document.getElementById('woHrsPercent').textContent = sm.hours_complete_percent === null ? '—' : sm.hours_complete_percent + '%';
+    document.getElementById('woHrsOverdue').textContent = sm.hours_overdue;
+    document.getElementById('woHrsDueWeek').textContent = sm.hours_due_this_week;
+    document.getElementById('woHrsUnscheduled').textContent = sm.hours_unscheduled;
     document.getElementById('woBacklogDueSoon').textContent = response.summary.due_this_week;
 
     const tbody = document.getElementById('woBacklogBody');
     if (response.work_orders.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No open work orders found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No open work orders found.</td></tr>';
     } else {
       tbody.innerHTML = response.work_orders.map(wo => `
         <tr>
@@ -127,6 +186,7 @@ async function loadWorkOrderBacklogReport() {
           <td>${escapeHtml(wo.assigned_users.join(', ') || '—')}</td>
           <td class="text-center">${wo.elevations_complete_count}/${wo.elevation_count}</td>
           <td class="text-center">${wo.open_steps_count}</td>
+          <td class="text-center">${wo.hours_remaining ?? '—'} / ${wo.hours_total ?? '—'}</td>
         </tr>`).join('');
     }
 
