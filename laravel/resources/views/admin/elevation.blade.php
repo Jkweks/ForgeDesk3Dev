@@ -92,6 +92,11 @@
                 <div class="form-text">Auto-fills a new elevation's joint count as quantity × this value. Leave blank if not applicable; always editable per elevation.</div>
               </div>
             </div>
+            <div class="mb-3">
+              <label class="form-label">Default shipping category</label>
+              <select class="form-select" id="elevTypeShipType"><option value="">None</option></select>
+              <div class="form-text">Added to a work order's shipment automatically when an elevation of this type is on it.</div>
+            </div>
             <div class="mb-1">
               <label class="form-label">Linked names</label>
               <textarea class="form-control" id="elevTypeAliases" rows="3"
@@ -284,6 +289,7 @@
         document.getElementById('elevTypeColorHex').value = '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = (elevationTypes.length + 1);
         document.getElementById('elevTypeJointCount').value = '';
+        fillShipTypes(null);
         document.getElementById('elevTypeAliases').value = '';
         // Use data-bs-dismiss or manual show
         const modal = document.getElementById('elevTypeModal');
@@ -301,10 +307,25 @@
         document.getElementById('elevTypeColorHex').value = t.color || '#3b82f6';
         document.getElementById('elevTypeSortOrder').value = t.sort_order;
         document.getElementById('elevTypeJointCount').value = t.standard_joint_count ?? '';
+        fillShipTypes(t.default_shipment_type_id);
         document.getElementById('elevTypeAliases').value = (t.aliases || []).join('\n');
         const modal = document.getElementById('elevTypeModal');
         if (window.bootstrap?.Modal) new window.bootstrap.Modal(modal).show();
         else modal.classList.add('show'), modal.style.display = 'block', document.body.classList.add('modal-open');
+      }
+
+      // Shipping categories for the "default shipping category" select (needs shipments.view; the select just stays empty without it).
+      async function fillShipTypes(selected) {
+        const sel = document.getElementById('elevTypeShipType');
+        sel.innerHTML = '<option value="">None</option>';
+        try {
+          const r = await fetch('/api/v1/shipment-types', { credentials: 'include', headers: { 'Accept': 'application/json' } });
+          if (!r.ok) throw new Error();
+          (await r.json()).filter(x => x.is_active || x.id === selected).forEach(x => {
+            const o = document.createElement('option'); o.value = x.id; o.textContent = x.name; sel.appendChild(o);
+          });
+          sel.value = selected ?? '';
+        } catch (e) { sel.disabled = true; }
       }
 
       async function saveElevType() {
@@ -318,6 +339,7 @@
           color: color,
           sort_order: parseInt(document.getElementById('elevTypeSortOrder').value) || 99,
           standard_joint_count: jointCountVal === '' ? null : Math.max(0, parseInt(jointCountVal) || 0),
+          default_shipment_type_id: document.getElementById('elevTypeShipType').value || null,
           aliases: aliases,
         };
         if (!body.name) { fabToast('Name is required.', 'info'); return; }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ShipmentCheckItem;
+use App\Models\ShipmentCriterion;
 use App\Models\ShipmentType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,8 +55,27 @@ class ShipmentTypeController extends Controller
     public function storeItem(Request $request, int $typeId)
     {
         $type = ShipmentType::findOrFail($typeId);
+
+        // Normal path: attach a standard criterion from the library to this category + phase.
+        if ($request->filled('criterion_id')) {
+            $data = $request->validate([
+                'criterion_id' => 'required|integer|exists:shipment_criteria,id', 'phase' => ['required', Rule::in(ShipmentCheckItem::PHASES)],
+                'required' => 'sometimes|boolean', 'photo_required' => 'sometimes|boolean', 'critical' => 'sometimes|boolean',
+            ]);
+            if ($type->items()->where('phase', $data['phase'])->where('criterion_id', $data['criterion_id'])->exists()) {
+                return response()->json(['message' => 'That criterion is already on this checklist.'], 422);
+            }
+            $criterion = ShipmentCriterion::findOrFail($data['criterion_id']);
+            $row = $criterion->itemDefaults() + ['sort_order' => ($type->items()->where('phase', $data['phase'])->max('sort_order') ?? 0) + 10];
+
+            return response()->json($type->items()->create(array_merge($row, $data)), 201);
+        }
+
+        // Inline path: define a new criterion on the spot (it joins the library too).
         $data = $this->itemRules($request, true);
         $data['sort_order'] ??= ($type->items()->where('phase', $data['phase'])->max('sort_order') ?? 0) + 10;
+        $criterion = ShipmentCriterion::create(collect($data)->only(['label', 'input_type', 'unit', 'options', 'required', 'photo_required', 'critical'])->all());
+        $data['criterion_id'] = $criterion->id;
 
         return response()->json($type->items()->create($data), 201);
     }
@@ -84,7 +104,12 @@ class ShipmentTypeController extends Controller
     public function updateItem(Request $request, int $id)
     {
         $item = ShipmentCheckItem::findOrFail($id);
-        $item->update($this->itemRules($request, false));
+        $data = $this->itemRules($request, false);
+        // Wording and answer type belong to the library criterion (edited there, so every category stays in step).
+        if ($item->criterion_id) {
+            $data = collect($data)->except(['label', 'input_type', 'unit', 'options'])->all();
+        }
+        $item->update($data);
 
         return response()->json($item->fresh());
     }

@@ -63,6 +63,7 @@ class ElevationTypeController extends Controller
             'aliases' => 'sometimes|array',
             'aliases.*' => 'nullable|string|max:100',
             'standard_joint_count' => 'sometimes|nullable|integer|min:0|max:65535',
+            'default_shipment_type_id' => 'sometimes|nullable|integer|exists:shipment_types,id',
         ]);
 
         $maxOrder = FdElevationType::max('sort_order') ?? 0;
@@ -72,6 +73,7 @@ class ElevationTypeController extends Controller
             'color' => $request->color ?? '#6b7280',
             'sort_order' => $request->sort_order ?? ($maxOrder + 1),
             'standard_joint_count' => $request->filled('standard_joint_count') ? (int) $request->standard_joint_count : null,
+            'default_shipment_type_id' => $request->filled('default_shipment_type_id') ? (int) $request->default_shipment_type_id : null,
             'active' => true,
         ]);
 
@@ -93,6 +95,7 @@ class ElevationTypeController extends Controller
             'aliases' => 'sometimes|array',
             'aliases.*' => 'nullable|string|max:100',
             'standard_joint_count' => 'sometimes|nullable|integer|min:0|max:65535',
+            'default_shipment_type_id' => 'sometimes|nullable|integer|exists:shipment_types,id',
         ]);
 
         $type = FdElevationType::findOrFail($id);
@@ -104,6 +107,10 @@ class ElevationTypeController extends Controller
 
         if ($request->has('standard_joint_count')) {
             $type->standard_joint_count = $request->filled('standard_joint_count') ? (int) $request->standard_joint_count : null;
+        }
+
+        if ($request->has('default_shipment_type_id')) {
+            $type->default_shipment_type_id = $request->filled('default_shipment_type_id') ? (int) $request->default_shipment_type_id : null;
         }
 
         $type->save();

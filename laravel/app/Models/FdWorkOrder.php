@@ -43,6 +43,13 @@ class FdWorkOrder extends Model
             // Pending until those steps are done (no steps at all means nothing to wait for).
             $wo->unsetRelation('steps');
             $wo->refreshPhase(log: false);
+
+            // Every work order gets a draft shipment (job numbers starting with 3 are exempt for now).
+            try {
+                app(\App\Services\Shipping\WorkOrderShipmentService::class)->createDraftFor($wo);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to create draft shipment for work order', ['work_order_id' => $wo->id, 'message' => $e->getMessage()]);
+            }
         });
     }
 
@@ -243,6 +250,11 @@ class FdWorkOrder extends Model
     public function elevations(): HasMany
     {
         return $this->hasMany(FdWoElevation::class, 'work_order_id')->orderBy('created_at')->orderBy('id');
+    }
+
+    public function shipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class, 'work_order_id');
     }
 
     public function drawings(): HasMany

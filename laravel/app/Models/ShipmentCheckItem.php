@@ -11,7 +11,7 @@ class ShipmentCheckItem extends Model
     public const INPUT_TYPES = ['pass_fail', 'number', 'text', 'choice', 'photo'];
 
     protected $fillable = [
-        'shipment_type_id', 'phase', 'label', 'input_type', 'unit', 'options',
+        'shipment_type_id', 'criterion_id', 'phase', 'label', 'input_type', 'unit', 'options',
         'required', 'photo_required', 'critical', 'sort_order', 'is_active',
     ];
 
@@ -19,6 +19,11 @@ class ShipmentCheckItem extends Model
         'options' => 'array', 'required' => 'boolean', 'photo_required' => 'boolean',
         'critical' => 'boolean', 'is_active' => 'boolean',
     ];
+
+    public function criterion()
+    {
+        return $this->belongsTo(ShipmentCriterion::class, 'criterion_id');
+    }
 
     public function type()
     {

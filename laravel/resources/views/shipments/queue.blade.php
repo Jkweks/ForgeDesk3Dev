@@ -40,7 +40,7 @@
         <div class="col-auto ms-auto d-flex gap-2 align-items-center">
           <span class="text-muted small" id="sq-updated"></span>
           <a class="btn btn-outline-secondary" href="/shipments"><i class="ti ti-list me-1"></i>All shipments</a>
-          <button class="btn btn-primary" data-permission="shipments.manage" onclick="location.href='/shipments'"><i class="ti ti-plus me-1"></i>New shipment</button>
+          <button class="btn btn-primary" data-permission="shipments.manage" onclick="shipmentForm(null)"><i class="ti ti-plus me-1"></i>New shipment</button>
         </div>
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
@@ -103,7 +103,7 @@ function sqCard(r, late) {
     r.post_result ? `<i class="ti ti-truck-delivery ${r.post_result === 'pass' ? 'text-success' : 'text-danger'}" title="Delivery check ${r.post_result}"></i>` : ''].join(' ');
   return `<a class="sq-card st-${r.status}${late ? ' late' : ''}" href="/shipments/${r.id}" ${r.movable && sqCanMove() ? `draggable="true" ondragstart="sqDragStart(event, ${r.id})" ondragend="sqDragEnd(event)"` : ''}
       title="${esc(r.jobs.map(j => j.job_name).concat(r.custom_jobs || []).join(', '))} — ${esc(r.destination || '')}">
-    <strong>${esc(r.shipment_number)} <span class="float-end">${checks}</span></strong>
+    <strong>${esc(r.shipment_number)}${r.trip ? ' · ' + esc(r.trip) : ''} <span class="float-end">${checks}</span></strong>
     <small>${esc((r.jobs.length || (r.custom_jobs||[]).length) ? r.jobs.map(j => j.job_name).concat(r.custom_jobs || []).join(', ') : 'No job')}</small>
     <small>${r.loads.map(l => esc(l.type.name)).join(', ')}${r.destination ? ' · ' + esc(r.destination) : ''}</small>
     <small>${shStatusText(r.status)}</small></a>`;

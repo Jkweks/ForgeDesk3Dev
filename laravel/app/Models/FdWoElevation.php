@@ -31,6 +31,12 @@ class FdWoElevation extends Model
         // block creating the elevation itself, which is the primary,
         // load-bearing action.
         static::created(function (FdWoElevation $elevation) {
+            try {
+                app(\App\Services\Shipping\WorkOrderShipmentService::class)->attachElevation($elevation);
+            } catch (\Throwable $e) {
+                Log::error('Failed to attach elevation to draft shipment', ['elevation_id' => $elevation->id, 'message' => $e->getMessage()]);
+            }
+
             if (! in_array($elevation->elevationType?->name, ['Door', 'Frame'], true)) {
                 return;
             }
@@ -50,6 +56,12 @@ class FdWoElevation extends Model
                 ]);
             }
         });
+    }
+
+    public function shipments(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Shipment::class, 'shipment_elevations', 'elevation_id', 'shipment_id')
+            ->withPivot(['partial', 'partial_note'])->withTimestamps();
     }
 
     /**

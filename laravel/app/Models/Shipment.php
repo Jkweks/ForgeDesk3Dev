@@ -16,7 +16,7 @@ class Shipment extends Model
 
     protected $fillable = [
         'shipment_number', 'status', 'ship_date', 'destination', 'custom_jobs', 'carrier', 'notes',
-        'created_by', 'shipped_at', 'cancel_reason', 'cancelled_at', 'cancelled_by', 'verified_at', 'verified_by', 'verification_notes',
+        'created_by', 'work_order_id', 'shipped_at', 'cancel_reason', 'cancelled_at', 'cancelled_by', 'verified_at', 'verified_by', 'verification_notes',
         'pickup_location_id', 'pickup_address', 'pickup_lat', 'pickup_lng',
         'dropoff_location_id', 'dropoff_address', 'dropoff_lat', 'dropoff_lng',
     ];
@@ -27,6 +27,18 @@ class Shipment extends Model
     public function jobs()
     {
         return $this->belongsToMany(BusinessJob::class, 'business_job_shipment')->withTimestamps()->orderBy('business_jobs.job_number');
+    }
+
+    public function workOrder()
+    {
+        return $this->belongsTo(FdWorkOrder::class, 'work_order_id');
+    }
+
+    /** Elevations on this shipment; pivot carries the partial-delivery tag and note. */
+    public function elevations()
+    {
+        return $this->belongsToMany(FdWoElevation::class, 'shipment_elevations', 'shipment_id', 'elevation_id')
+            ->withPivot(['partial', 'partial_note'])->withTimestamps()->orderBy('fd_wo_elevations.id');
     }
 
     public function pickupLocation()

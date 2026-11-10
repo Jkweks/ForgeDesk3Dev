@@ -33,7 +33,7 @@ class ShipmentController extends Controller
     public function index(Request $request)
     {
         $q = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name'])
-            ->withCount('inspections')->orderByDesc('id');
+            ->withCount(['inspections', 'elevations'])->orderByDesc('id');
         if ($request->filled('status')) {
             $q->whereIn('status', array_filter(explode(',', (string) $request->query('status'))));
         }
@@ -47,7 +47,10 @@ class ShipmentController extends Controller
                 ->orWhereHas('jobs', fn ($j) => $j->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s)));
         }
 
-        return response()->json($q->limit(500)->get());
+        $rows = $q->limit(500)->get();
+        $trips = app(\App\Services\Shipping\WorkOrderShipmentService::class)->tripLabels($rows);
+
+        return response()->json($rows->map(fn (Shipment $r) => $r->toArray() + ['trip' => $trips[$r->id] ?? null]));
     }
 
     /**
@@ -68,8 +71,10 @@ class ShipmentController extends Controller
                 ->orWhere(fn ($x) => $x->where('ship_date', '<', $from)->whereIn('status', $open)))
             ->orderBy('ship_date')->orderBy('shipment_number')->get();
 
+        $trips = app(\App\Services\Shipping\WorkOrderShipmentService::class)->tripLabels($rows);
+
         return response()->json(['from' => $from, 'to' => $to, 'shipments' => $rows->map(fn (Shipment $r) => [
-            'id' => $r->id, 'shipment_number' => $r->shipment_number, 'status' => $r->status,
+            'trip' => $trips[$r->id] ?? null, 'id' => $r->id, 'shipment_number' => $r->shipment_number, 'status' => $r->status,
             'ship_date' => $r->ship_date?->format('Y-m-d'), 'destination' => $r->destination, 'carrier' => $r->carrier,
             'jobs' => $r->jobs, 'custom_jobs' => $r->custom_jobs ?? [], 'loads' => $r->loads,
             'pre_result' => $r->inspections->firstWhere('phase', 'pre')?->result,
@@ -436,7 +441,7 @@ class ShipmentController extends Controller
     public function report(int $id)
     {
         $shipment = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'creator:id,name', 'canceller:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name',
-            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name', 'verifier:id,name'])->findOrFail($id);
+            'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name', 'verifier:id,name', 'elevations'])->findOrFail($id);
 
         $thumbs = [];   // photo id => [data URI, signed full-size URL]
         foreach ($shipment->inspections as $n) {
@@ -495,7 +500,13 @@ class ShipmentController extends Controller
         $shipment->load(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'creator:id,name', 'canceller:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name',
             'inspections.items.photos', 'inspections.photos', 'inspections.performer:id,name', 'documents.uploader:id,name', 'verifier:id,name']);
 
+        $svc = app(\App\Services\Shipping\WorkOrderShipmentService::class);
+        $elevs = $shipment->elevations()->with('elevationType:id,name')->get();
+
         return $shipment->toArray() + [
+            'trip' => $svc->tripLabels(collect([$shipment]))[$shipment->id] ?? null,
+            'elevations' => $elevs->map(fn ($e) => ['id' => $e->id, 'tag' => $e->elevation_tag, 'type' => $e->elevationType?->name, 'quantity' => $e->quantity,
+                'partial' => (bool) $e->pivot->partial, 'partial_note' => $e->pivot->partial_note])->values(),
             'pre_checklist' => $this->inspections->checklist($shipment, 'pre'),
             'post_checklist' => $this->inspections->checklist($shipment, 'post'),
         ];

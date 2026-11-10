@@ -9,7 +9,7 @@ class FdElevationType extends Model
 {
     protected $table = 'fd_elevation_types';
 
-    protected $fillable = ['name', 'color', 'sort_order', 'active', 'aliases', 'standard_joint_count'];
+    protected $fillable = ['name', 'color', 'sort_order', 'active', 'aliases', 'standard_joint_count', 'default_shipment_type_id'];
 
     protected $casts = ['active' => 'boolean', 'aliases' => 'array', 'standard_joint_count' => 'integer'];
 

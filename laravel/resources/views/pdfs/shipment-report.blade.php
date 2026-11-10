@@ -43,6 +43,9 @@
     <tr><td>Carrier</td><td>{{ $shipment->carrier ?: '—' }}</td></tr>
     <tr><td>Destination</td><td>{{ $shipment->destination ?: '—' }}</td></tr>
     <tr><td>Loads</td><td>@foreach ($shipment->loads as $l){{ $l->type->name }}@if ($l->piece_count) × {{ $l->piece_count }}@endif{{ $l->description ? ' ('.$l->description.')' : '' }}@if (! $loop->last), @endif @endforeach</td></tr>
+    @if ($shipment->elevations->isNotEmpty())
+    <tr><td>Elevations</td><td>@foreach ($shipment->elevations as $e){{ $e->elevation_tag ?: '#'.$e->id }}@if ($e->pivot->partial) (partial: {{ $e->pivot->partial_note }})@endif @if (! $loop->last), @endif @endforeach</td></tr>
+    @endif
     @if ($shipment->notes)<tr><td>Notes</td><td>{{ $shipment->notes }}</td></tr>@endif
 </table>
 

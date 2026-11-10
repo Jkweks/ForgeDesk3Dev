@@ -26,6 +26,7 @@
         <div class="col-lg-9">
           <div id="verifyBanner"></div>
           <div data-section="details"></div>
+          <div data-section="elevations" class="d-none"></div>
           <div data-section="pre" class="d-none"><div id="preCard"></div><div id="preResults"></div></div>
           <div data-section="pre-photos" class="d-none"></div>
           <div data-section="post" class="d-none"><div id="postCard"></div><div id="postResults"></div></div>
@@ -53,10 +54,11 @@
   }
 
   function render() {
-    document.getElementById('hdrNumber').textContent = S.shipment_number;
+    document.getElementById('hdrNumber').textContent = S.shipment_number + (S.trip ? ' · ' + S.trip : '');
     document.getElementById('hdrStatus').innerHTML = shStatus(S.status);
     document.getElementById('hdrJob').textContent = S.jobs.map(j => `${j.job_name} (${j.job_number})`).concat(S.custom_jobs || []).join(', ');
     renderDetails();
+    renderElevations();
     renderVerifyBanner();
     renderTickets();
 
@@ -291,7 +293,7 @@
     return esc(i.value) + (i.unit ? ' ' + esc(i.unit) : '');
   }
 
-  const SECTIONS = [['details', 'Details', 'ti-info-circle'], ['pre', 'Pre-shipment inspection', 'ti-clipboard-check'],
+  const SECTIONS = [['details', 'Details', 'ti-info-circle'], ['elevations', 'Elevations', 'ti-building'], ['pre', 'Pre-shipment inspection', 'ti-clipboard-check'],
     ['pre-photos', 'Pre-shipment photos', 'ti-camera'], ['post', 'Post-delivery inspection', 'ti-truck-delivery'],
     ['post-photos', 'Post-delivery photos', 'ti-photo'], ['tickets', 'Signed tickets', 'ti-file-certificate']];
 
@@ -304,6 +306,7 @@
       return n ? shResult(n.result) : flBadge(key === 'post' && S.status === 'shipped' ? 'Waiting' : 'None', 'secondary');
     }
     if (key.endsWith('-photos')) return flBadge(photoCount(key.replace('-photos', '')), 'secondary');
+    if (key === 'elevations') return flBadge((S.elevations || []).length, (S.elevations || []).length ? 'azure' : 'secondary');
     if (key === 'tickets') return flBadge((S.documents || []).length, (S.documents || []).length ? 'success' : 'secondary');
     return '';
   }
@@ -334,6 +337,66 @@
       <dt class="col-sm-3">Destination</dt><dd class="col-sm-9">${esc(S.destination || '—')}</dd>
       <dt class="col-sm-3">Loads</dt><dd class="col-sm-9">${S.loads.map(l => `${flBadge(l.type.name, 'azure')}${l.piece_count ? ' ×' + l.piece_count : ''}`).join(' &nbsp; ')}</dd>
       <dt class="col-sm-3">Notes</dt><dd class="col-sm-9">${esc(S.notes || '—')}</dd></dl></div></div>`;
+  }
+
+  // ---- elevations on this shipment: pick, split into another trip, tag partial delivery ----
+  const ELEV_STATE = { delivered: ['Delivered', 'success'], in_transit: ['On a truck', 'cyan'], scheduled: ['On a shipment', 'blue'], partial: ['Partly delivered', 'warning'], unscheduled: ['Not scheduled', 'secondary'] };
+  const canChangeElevs = () => ['draft', 'pre_check_done'].includes(S.status);
+  const canFlagElevs = () => !['cancelled', 'delivered', 'delivered_issues'].includes(S.status);
+
+  function renderElevations() {
+    const el = document.querySelector('[data-section="elevations"]');
+    const rows = S.elevations || [];
+    el.innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Elevations${S.trip ? ' <span class="text-muted fs-5">· ' + esc(S.trip) + '</span>' : ''}</h3>
+      <div class="card-actions btn-list" data-permission="shipments.manage">
+        ${canChangeElevs() ? `<button class="btn btn-sm btn-primary" onclick="pickElevations()"><i class="ti ti-list-check me-1"></i>Select elevations</button>
+        <button class="btn btn-sm" onclick="splitShipment()" ${rows.length ? '' : 'disabled'}><i class="ti ti-arrows-split me-1"></i>Split into another trip</button>` : ''}</div></div>
+      <div class="table-responsive"><table class="table card-table table-vcenter"><thead><tr><th>Elevation</th><th>Type</th><th>Qty</th><th>Delivery</th><th></th></tr></thead><tbody>
+      ${rows.map(e => `<tr><td class="fw-bold">${esc(e.tag || '#' + e.id)}</td><td>${esc(e.type || '—')}</td><td>${e.quantity ?? ''}</td>
+        <td>${e.partial ? flBadge('Partial', 'warning') + `<div class="small text-muted">${esc(e.partial_note || '')}</div>` : '<span class="text-muted">Complete</span>'}</td>
+        <td class="text-end">${canFlagElevs() ? `<button class="btn btn-sm" data-permission="shipments.manage" onclick="flagElevation(${e.id})">${e.partial ? 'Edit partial' : 'Mark partial'}</button>` : ''}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="text-center text-muted py-4">No elevations on this shipment yet.</td></tr>'}
+      </tbody></table></div>
+      <div class="card-footer small text-muted">A partially delivered elevation stays available to put on a later shipment.</div></div>`;
+  }
+
+  async function pickElevations() {
+    const data = await flApi(`/shipments/${SHIPMENT_ID}/elevations`);
+    const body = data.work_orders.map(wo => `<div class="col-12"><div class="fw-bold mb-1">${esc(wo.label)}</div>${wo.elevations.map(e => {
+      const st = ELEV_STATE[e.state] || [e.state, 'secondary'];
+      const shippedElsewhere = e.other_shipments.some(x => x.status === 'shipped');
+      const blocked = !e.on_this && (e.state === 'delivered' || shippedElsewhere);
+      const other = e.other_shipments.filter(x => ['draft', 'pre_check_done'].includes(x.status));
+      return `<label class="form-check d-flex align-items-center gap-2 ${blocked ? 'opacity-50' : ''}"><input type="checkbox" class="form-check-input mt-0" data-elev="${e.id}" ${e.on_this ? 'checked' : ''} ${blocked ? 'disabled' : ''}>
+        <span class="form-check-label">${esc(e.tag || '#' + e.id)} <span class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</span></span>
+        ${flBadge(st[0], st[1])}${e.partial_history ? flBadge('Short-delivered before', 'warning') : ''}${other.length && !e.on_this ? `<span class="small text-muted">moves from ${other.map(x => esc(x.number)).join(', ')}</span>` : ''}</label>`;
+    }).join('') || '<div class="text-muted small">No elevations on this work order yet.</div>'}</div>`).join('') || '<div class="col-12 text-muted">This shipment has no work order. Link a job (Edit) first.</div>';
+    flModal('Select elevations for ' + S.shipment_number, body, async f => {
+      const ids = [...f.querySelectorAll('[data-elev]:checked')].map(c => +c.dataset.elev);
+      await flApi(`/shipments/${SHIPMENT_ID}/elevations`, 'PUT', { elevation_ids: ids }); load();
+    }, 'Save', 'modal-lg');
+  }
+
+  function splitShipment() {
+    const body = `<div class="col-12 small text-muted">Creates a new draft for the same work order (same jobs, destination and categories). Tick the elevations that should go on the new trip.</div>` +
+      S.elevations.map(e => `<div class="col-12"><label class="form-check"><input type="checkbox" class="form-check-input" data-elev="${e.id}"><span class="form-check-label">${esc(e.tag || '#' + e.id)} <span class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</span></span></label></div>`).join('');
+    flModal('Split ' + S.shipment_number, body, async f => {
+      const ids = [...f.querySelectorAll('[data-elev]:checked')].map(c => +c.dataset.elev);
+      const r = await flApi(`/shipments/${SHIPMENT_ID}/split`, 'POST', { elevation_ids: ids });
+      showNotification('Created ' + r.shipment_number, 'success');
+      location.href = '/shipments/' + r.id;
+    }, 'Split');
+  }
+
+  function flagElevation(id) {
+    const e = S.elevations.find(x => x.id === id);
+    flModal((e.tag || '#' + id) + ': partial delivery',
+      `<div class="col-12"><label class="form-check"><input type="checkbox" class="form-check-input" name="partial" ${e.partial ? 'checked' : ''}><span class="form-check-label">Partially delivered</span></label></div>` +
+      flText('partial_note', 'What was delivered, and what is still outstanding', e.partial_note || '', 3),
+      async f => {
+        const d = flFormData(f);
+        await flApi(`/shipments/${SHIPMENT_ID}/elevations/${id}`, 'PATCH', { partial: !!d.partial, partial_note: d.partial_note }); load();
+      });
   }
 
   function renderPhotos(phase) {
