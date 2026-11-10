@@ -160,7 +160,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Elevation (optional — leave blank to auto-match after upload)</label>
-              <select class="form-select" id="qr-upload-elevation">
+              <select class="form-select" id="qr-upload-elevation" data-sort>
                 <option value="">Not sure yet</option>
               </select>
               <div class="form-text">If left blank, or if no confident match is found, the report is flagged Pre-Forge for manual job/elevation entry on review.</div>
@@ -257,7 +257,7 @@
                 <div class="row">
                   <div class="col-md-6 mb-3" id="qr-d-job-select-wrap">
                     <label class="form-label">Job</label>
-                    <select class="form-select" id="qr-d-job" onchange="qrOnJobChange()"></select>
+                    <select class="form-select" id="qr-d-job" onchange="qrOnJobChange()" data-sort></select>
                     <div class="form-text mt-1" id="qr-d-job-source"></div>
                   </div>
                   <div class="col-md-6 mb-3" id="qr-d-job-text-wrap" style="display:none;">
@@ -271,7 +271,7 @@
                   </div>
                   <div class="col-md-6 mb-3" id="qr-d-elevation-select-wrap">
                     <label class="form-label">Elevation</label>
-                    <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeFields()"></select>
+                    <select class="form-select" id="qr-d-elevation" onchange="qrToggleDetailPreForgeFields()" data-sort></select>
                   </div>
                   <div class="col-md-6 mb-3" id="qr-d-elevation-text-wrap" style="display:none;">
                     <label class="form-label">Elevation</label>

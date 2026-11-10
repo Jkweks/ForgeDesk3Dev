@@ -60,7 +60,7 @@
         <span class="text-danger">Locked</span> lines are waiting on an earlier step but can still be assigned.
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
-        <select id="pq-assignee" class="form-select form-select-sm" style="width:auto" onchange="pqRender()"></select>
+        <select id="pq-assignee" class="form-select form-select-sm" style="width:auto" onchange="pqRender()" data-sort></select>
         <select id="pq-status" class="form-select form-select-sm" style="width:auto" onchange="pqRender()">
           <option value="">All statuses</option>
           <option value="pending">Not started</option>

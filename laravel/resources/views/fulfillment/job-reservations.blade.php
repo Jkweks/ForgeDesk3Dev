@@ -270,7 +270,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By</label>
-                      <select class="form-select" id="editRequestedBy"></select>
+                      <select class="form-select" id="editRequestedBy" data-sort></select>
                     </div>
                   </div>
                 </div>
@@ -296,7 +296,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                   </label>
                   <div id="editNotifyUsersWrap" class="mt-2 d-none">
                     <label class="form-label">Who to notify</label>
-                    <select class="form-select" id="editNotifyUsers" multiple size="5"></select>
+                    <select class="form-select" id="editNotifyUsers" multiple size="5" data-sort></select>
                     <small class="form-text text-muted">Hold Ctrl/Cmd to pick several. They get an email (if they have an address on file) and an in-app notice once, when every special-order line is in stock.</small>
                     <div class="small text-success mt-1 d-none" id="editNotifySentNote"></div>
                   </div>
@@ -485,7 +485,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By <span class="text-danger">*</span></label>
-                      <select class="form-select" id="manualRequestedBy" required></select>
+                      <select class="form-select" id="manualRequestedBy" required data-sort></select>
                     </div>
                   </div>
                 </div>
@@ -496,7 +496,7 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
                   </label>
                   <div id="manualNotifyUsersWrap" class="mt-2 d-none">
                     <label class="form-label">Who to notify</label>
-                    <select class="form-select" id="manualNotifyUsers" multiple size="5"></select>
+                    <select class="form-select" id="manualNotifyUsers" multiple size="5" data-sort></select>
                     <small class="form-text text-muted">Hold Ctrl/Cmd to pick several. They get an email (if they have an address on file) and an in-app notice once, when every special-order line is in stock.</small>
                     <div class="small text-success mt-1 d-none" id="manualNotifySentNote"></div>
                   </div>

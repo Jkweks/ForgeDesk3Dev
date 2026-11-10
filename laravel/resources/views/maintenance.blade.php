@@ -127,7 +127,7 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Equipment Type</label>
-                      <select class="form-select" id="machineTypeFilter" onchange="loadMachinesTable(1)">
+                      <select class="form-select" id="machineTypeFilter" onchange="loadMachinesTable(1)" data-sort>
                         <option value="">All Types</option>
                       </select>
                     </div>
@@ -328,7 +328,7 @@
                   <div class="row mb-3">
                     <div class="col-md-3">
                       <label class="form-label">Machine</label>
-                      <select class="form-select" id="taskMachineFilter" onchange="loadTasksTable(1)">
+                      <select class="form-select" id="taskMachineFilter" onchange="loadTasksTable(1)" data-sort>
                         <option value="">All Machines</option>
                       </select>
                     </div>
@@ -399,13 +399,13 @@
                   <div class="row mb-3">
                     <div class="col-md-3">
                       <label class="form-label">Machine</label>
-                      <select class="form-select" id="recordMachineFilter" onchange="loadRecords(1)">
+                      <select class="form-select" id="recordMachineFilter" onchange="loadRecords(1)" data-sort>
                         <option value="">All Machines</option>
                       </select>
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Performed By</label>
-                      <select class="form-select" id="recordPerformedByFilter" onchange="loadRecords(1)">
+                      <select class="form-select" id="recordPerformedByFilter" onchange="loadRecords(1)" data-sort>
                         <option value="">Anyone</option>
                       </select>
                     </div>
@@ -570,7 +570,7 @@
             <input type="hidden" id="taskId">
             <div class="mb-3">
               <label class="form-label required">Machine</label>
-              <select class="form-select" id="taskMachineId" required></select>
+              <select class="form-select" id="taskMachineId" required data-sort></select>
             </div>
             <div class="mb-3">
               <label class="form-label required">Title</label>
@@ -587,7 +587,7 @@
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Assigned To</label>
-                <select class="form-select" id="taskAssignedTo">
+                <select class="form-select" id="taskAssignedTo" data-sort>
                   <option value="">Unassigned</option>
                 </select>
               </div>
@@ -655,11 +655,11 @@
             <div class="row">
               <div class="col-md-6 mb-3">
                 <label class="form-label required">Machine</label>
-                <select class="form-select" id="recordMachineId" required></select>
+                <select class="form-select" id="recordMachineId" required data-sort></select>
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Related Task</label>
-                <select class="form-select" id="recordTaskId">
+                <select class="form-select" id="recordTaskId" data-sort>
                   <option value="">Unplanned Maintenance</option>
                 </select>
               </div>
@@ -667,13 +667,13 @@
             <div class="row">
               <div class="col-md-6 mb-3">
                 <label class="form-label">Asset Used</label>
-                <select class="form-select" id="recordAssetId">
+                <select class="form-select" id="recordAssetId" data-sort>
                   <option value="">None</option>
                 </select>
               </div>
               <div class="col-md-6 mb-3">
                 <label class="form-label">Performed By</label>
-                <select class="form-select" id="recordPerformedBy">
+                <select class="form-select" id="recordPerformedBy" data-sort>
                   <option value="">Unspecified</option>
                 </select>
               </div>
@@ -751,7 +751,7 @@
               </div>
               <div class="col-md-4 mb-3">
                 <label class="form-label">Category</label>
-                <select class="form-select" id="newToolCategory">
+                <select class="form-select" id="newToolCategory" data-sort>
                   <option value="">Select Category</option>
                 </select>
               </div>
@@ -802,7 +802,7 @@
               </div>
               <div class="col-md-3 mb-3">
                 <label class="form-label required">Supplier</label>
-                <select class="form-select" id="newToolSupplier" required>
+                <select class="form-select" id="newToolSupplier" required data-sort>
                   <option value="">Select supplier…</option>
                 </select>
               </div>
@@ -926,7 +926,7 @@
               </div>
               <div class="col-md-4 mb-3">
                 <label class="form-label required">Supplier</label>
-                <select class="form-select" id="newConsumableSupplier" required>
+                <select class="form-select" id="newConsumableSupplier" required data-sort>
                   <option value="">Select supplier…</option>
                 </select>
               </div>
@@ -1005,13 +1005,13 @@
             <input type="hidden" id="installToolMachineId">
             <div class="mb-3">
               <label class="form-label required">Machine</label>
-              <select class="form-select" id="installToolMachine" required onchange="loadCompatibleTools()">
+              <select class="form-select" id="installToolMachine" required onchange="loadCompatibleTools()" data-sort>
                 <option value="">Select Machine</option>
               </select>
             </div>
             <div class="mb-3">
               <label class="form-label required">Tool</label>
-              <select class="form-select" id="installToolProduct" required>
+              <select class="form-select" id="installToolProduct" required data-sort>
                 <option value="">Select Tool</option>
               </select>
               <small class="form-text">Only compatible tools for the selected machine are shown</small>
@@ -1071,7 +1071,7 @@
 
             <div class="mb-3">
               <label class="form-label required">Replacement Tool</label>
-              <select class="form-select" id="replaceToolNewProduct" required>
+              <select class="form-select" id="replaceToolNewProduct" required data-sort>
                 <option value="">Select Replacement Tool</option>
               </select>
             </div>

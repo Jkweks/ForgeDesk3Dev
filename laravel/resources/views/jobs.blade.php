@@ -243,11 +243,11 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Project Manager</label>
-                      <select class="form-select" id="projectManager"></select>
+                      <select class="form-select" id="projectManager" data-sort></select>
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Superintendent</label>
-                      <select class="form-select" id="superintendent"></select>
+                      <select class="form-select" id="superintendent" data-sort></select>
                     </div>
                   </div>
 
@@ -451,7 +451,7 @@
               <div class="row mb-3">
                 <div class="col-md-6">
                   <label class="form-label required">Requested By</label>
-                  <select class="form-select" id="reservationRequestedBy" required></select>
+                  <select class="form-select" id="reservationRequestedBy" required data-sort></select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Needed By</label>
@@ -661,7 +661,7 @@
           <div class="modal-body">
             <div class="mb-3">
               <label class="form-label required">Requested By</label>
-              <select class="form-select" id="mcRequestedBy" required></select>
+              <select class="form-select" id="mcRequestedBy" required data-sort></select>
             </div>
             <div class="mb-3">
               <label class="form-label">Needed By</label>
@@ -795,7 +795,7 @@
                   <div class="col-md-6">
                     <div class="mb-3">
                       <label class="form-label">Requested By</label>
-                      <select class="form-select" id="editResRequestedBy"></select>
+                      <select class="form-select" id="editResRequestedBy" data-sort></select>
                     </div>
                   </div>
                   <div class="col-md-6">
@@ -1990,9 +1990,9 @@
             return `
                 <div class="border rounded p-2 mb-2 job-hwset-item-row" data-row-seq="${seq}">
                     <div class="row g-2 align-items-end">
-                        <div class="col-md-3"><label class="form-label form-label-sm mb-1">Category</label><select class="form-select form-select-sm job-hwsi-category" onchange="jobHwsiFilterItems(this.closest('.job-hwset-item-row'))"></select></div>
-                        <div class="col-md-2"><label class="form-label form-label-sm mb-1">Manufacturer</label><select class="form-select form-select-sm job-hwsi-manufacturer" onchange="jobHwsiOnManufacturerChange(this.closest('.job-hwset-item-row'))"></select></div>
-                        <div class="col-md-3"><label class="form-label form-label-sm mb-1">Part</label><select class="form-select form-select-sm job-hwsi-item" onchange="jobHwsiRenderFunctionPicker(this.closest('.job-hwset-item-row'))"></select></div>
+                        <div class="col-md-3"><label class="form-label form-label-sm mb-1">Category</label><select class="form-select form-select-sm job-hwsi-category" data-sort onchange="jobHwsiFilterItems(this.closest('.job-hwset-item-row'))"></select></div>
+                        <div class="col-md-2"><label class="form-label form-label-sm mb-1">Manufacturer</label><select class="form-select form-select-sm job-hwsi-manufacturer" data-sort onchange="jobHwsiOnManufacturerChange(this.closest('.job-hwset-item-row'))"></select></div>
+                        <div class="col-md-3"><label class="form-label form-label-sm mb-1">Part</label><select class="form-select form-select-sm job-hwsi-item" data-sort onchange="jobHwsiRenderFunctionPicker(this.closest('.job-hwset-item-row'))"></select></div>
                         <div class="col-md-1"><label class="form-label form-label-sm mb-1">Qty</label><input type="number" min="1" class="form-control form-control-sm job-hwsi-qty" value="1"></div>
                         <div class="col-md-1"><label class="form-label form-label-sm mb-1">Series</label><select class="form-select form-select-sm job-hwsi-series">
                             <option value="Standard" selected>Standard</option>

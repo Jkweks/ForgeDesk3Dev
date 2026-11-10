@@ -134,7 +134,7 @@
     </div>
     <div class="card-body" style="overflow-y:auto;">
       <div class="row g-2 mb-3">
-        <div class="col-7"><label class="form-label">Cut by</label><select id="cl-m-user" class="form-select"></select></div>
+        <div class="col-7"><label class="form-label">Cut by</label><select id="cl-m-user" class="form-select" data-sort></select></div>
         <div class="col-5"><label class="form-label">Date cut</label><input id="cl-m-date" type="date" class="form-control"></div>
       </div>
       <div class="text-secondary small mb-2">
@@ -165,7 +165,7 @@
     <div class="card-body">
       <div class="mb-3">
         <label class="form-label">Job / work order</label>
-        <select id="cl-n-wo" class="form-select" onchange="clNewWoChanged()"></select>
+        <select id="cl-n-wo" class="form-select" onchange="clNewWoChanged()" data-sort></select>
         <div class="form-hint">Only work orders without a cut list are shown. Choose "Standalone" for a list not tied to a work order.</div>
       </div>
       <div class="mb-0">
@@ -192,7 +192,7 @@
         Lengths can be decimal (48.375) or fractions (96 3/8). You can paste two columns (qty, length) straight
         from a spreadsheet into any row. Tab / Enter moves to the next cell.
       </div>
-      <datalist id="cl-pn-list"></datalist>
+      <datalist id="cl-pn-list" data-sort></datalist>
       <div id="cl-bulk-groups" class="row g-3"></div>
       <button class="btn btn-outline-primary btn-sm mt-3" onclick="clAddGroup(true)"><i class="ti ti-plus me-1"></i>Add another part</button>
       <div id="cl-bulk-error" class="text-danger small mt-2"></div>

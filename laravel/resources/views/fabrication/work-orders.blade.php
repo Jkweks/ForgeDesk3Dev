@@ -615,7 +615,7 @@
         <div class="row mb-3">
           <div class="col-md-6">
             <label class="form-label">Completed By</label>
-            <select class="form-select" id="elev-completed-by">
+            <select class="form-select" id="elev-completed-by" data-sort>
               <option value="">— None —</option>
             </select>
           </div>
@@ -846,11 +846,11 @@
           </div>
           <div class="col-md-6">
             <label class="form-label">Project Manager</label>
-            <select class="form-select" id="ej-pm"></select>
+            <select class="form-select" id="ej-pm" data-sort></select>
           </div>
           <div class="col-md-6">
             <label class="form-label">Superintendent</label>
-            <select class="form-select" id="ej-super"></select>
+            <select class="form-select" id="ej-super" data-sort></select>
           </div>
           <div class="col-md-4">
             <label class="form-label">Status</label>
@@ -4771,11 +4771,11 @@ async function saveQuickJob() {
           </div>
           <div class="col-md-4">
             <label class="form-label">Project Manager</label>
-            <select class="form-select" id="qj-pm"></select>
+            <select class="form-select" id="qj-pm" data-sort></select>
           </div>
           <div class="col-md-4">
             <label class="form-label">Superintendent</label>
-            <select class="form-select" id="qj-super"></select>
+            <select class="form-select" id="qj-super" data-sort></select>
           </div>
         </div>
         <div class="row mb-3">
@@ -4853,7 +4853,7 @@ async function saveQuickJob() {
       </div>
       <div class="mb-3" id="bcp-user-wrap" style="display:none">
         <label class="form-label form-label-sm mb-1">Completed by</label>
-        <select class="form-select form-select-sm" id="bcp-user">
+        <select class="form-select form-select-sm" id="bcp-user" data-sort>
           <option value="">— none —</option>
         </select>
       </div>

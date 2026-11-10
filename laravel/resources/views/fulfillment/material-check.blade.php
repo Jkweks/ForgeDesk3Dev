@@ -191,7 +191,7 @@
               <div class="row mb-3">
                 <div class="col-md-6">
                   <label class="form-label required">Requested By</label>
-                  <select class="form-select" id="requestedBy" required></select>
+                  <select class="form-select" id="requestedBy" required data-sort></select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Needed By</label>

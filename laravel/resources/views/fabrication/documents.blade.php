@@ -301,12 +301,12 @@ img.fab-viewer { object-fit: contain; height: auto; max-height: 420px; }
           <div class="col-6">
             <label class="form-label">Hardware type</label>
             <input type="text" class="form-control" id="fab-f-hwtype" placeholder="e.g. Closer, Hinge" list="fab-hw-dl">
-            <datalist id="fab-hw-dl"></datalist>
+            <datalist id="fab-hw-dl" data-sort></datalist>
           </div>
           <div class="col-6">
             <label class="form-label">Manufacturer</label>
             <input type="text" class="form-control" id="fab-f-mfr" placeholder="e.g. LCN, Hager" list="fab-mfr-dl">
-            <datalist id="fab-mfr-dl"></datalist>
+            <datalist id="fab-mfr-dl" data-sort></datalist>
           </div>
         </div>
         <div class="mb-3">

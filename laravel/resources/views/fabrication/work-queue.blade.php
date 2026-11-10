@@ -132,10 +132,10 @@
           <button type="button" class="btn" data-group="job" onclick="wqSetGroup('job')"><i class="ti ti-briefcase me-1"></i>By job</button>
           <button type="button" class="btn" data-group="step" onclick="wqSetGroup('step')"><i class="ti ti-list-details me-1"></i>By step</button>
         </div>
-        <select id="wq-job" class="form-select form-select-sm" style="width:auto" onchange="wqOnJobChange()">
+        <select id="wq-job" class="form-select form-select-sm" style="width:auto" onchange="wqOnJobChange()" data-sort>
           <option value="">All jobs</option>
         </select>
-        <select id="wq-wo" class="form-select form-select-sm" style="width:auto" onchange="loadBoard()">
+        <select id="wq-wo" class="form-select form-select-sm" style="width:auto" onchange="loadBoard()" data-sort>
           <option value="">All work orders</option>
         </select>
         <select id="wq-step" class="form-select form-select-sm" style="width:auto" onchange="renderBoard()">
@@ -219,7 +219,7 @@
     <div class="card-body" style="overflow-y:auto;">
       <div class="mb-3">
         <label class="form-label">Work order</label>
-        <select id="wq-bulk-wo" class="form-select" onchange="wqBulkRenderRows()"></select>
+        <select id="wq-bulk-wo" class="form-select" onchange="wqBulkRenderRows()" data-sort></select>
         <div class="form-text">
           Tick a step to change it. Every non-complete step with that name — across all elevations
           of this work order — is set to the operator(s) you pick. Select more than one to have
@@ -1278,7 +1278,7 @@ function wqScopeOpen(woId, label, opts = {}) {
           </label>`).join('')}
         <label class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" id="wq-scope-open" ${only ? 'checked' : ''}><span class="form-check-label small">Only steps nobody has yet</span></label>
         <div class="subheader mt-3 mb-1">Assign to</div>
-        <select class="form-select" id="wq-scope-user">${(wqData.fab_users || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
+        <select class="form-select" id="wq-scope-user" data-sort>${(wqData.fab_users || []).map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
         <div class="text-secondary small mt-2">Replaces whoever is on the chosen steps; the rest of the work order is left as is.</div>
       </div>
       <div class="card-footer d-flex justify-content-end gap-2">

@@ -175,7 +175,7 @@
                       <div class="row mb-3">
                         <div class="col-md-5">
                           <label class="form-label required">From Location</label>
-                          <select class="form-select" id="transferFrom" name="from_location_id" required>
+                          <select class="form-select" id="transferFrom" name="from_location_id" required data-sort>
                             <option value="">Select source...</option>
                           </select>
                           <small class="text-muted" id="transferFromAvailable"></small>
@@ -185,7 +185,7 @@
                         </div>
                         <div class="col-md-5">
                           <label class="form-label required">To Location</label>
-                          <select class="form-select" id="transferTo" name="to_location_id" required>
+                          <select class="form-select" id="transferTo" name="to_location_id" required data-sort>
                             <option value="">Select destination...</option>
                           </select>
                         </div>
@@ -243,7 +243,7 @@
                         <div class="col-md-6">
                           <label class="form-label required">Job Number</label>
                           <input type="text" class="form-control" id="reservationJobNumber" name="job_number" placeholder="e.g., JOB-2024-001" required list="existingJobs">
-                          <datalist id="existingJobs"></datalist>
+                          <datalist id="existingJobs" data-sort></datalist>
                         </div>
                         <div class="col-md-6">
                           <label class="form-label">Job Name</label>
@@ -476,7 +476,7 @@
                     <div class="row mb-3">
                       <div class="col-md-6">
                         <label class="form-label required">Part/Product</label>
-                        <select class="form-select" id="requiredProductId" required>
+                        <select class="form-select" id="requiredProductId" required data-sort>
                           <option value="">Search and select...</option>
                         </select>
                         <small class="form-text">Select the part needed</small>
@@ -502,7 +502,7 @@
                       </div>
                       <div class="col-md-4" id="specificFinishGroup" style="display: none;">
                         <label class="form-label">Specific Finish</label>
-                        <select class="form-select" id="requiredSpecificFinish">
+                        <select class="form-select" id="requiredSpecificFinish" data-sort>
                           <option value="">Select...</option>
                         </select>
                       </div>
@@ -1137,7 +1137,7 @@
                 </div>
                 <div class="col-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
-                  <select class="form-select form-select-sm" name="finish">
+                  <select class="form-select form-select-sm" name="finish" data-sort>
                     <option value="">None</option>
                     ${finishes.map(f => `<option value="${escapeHtml(f.code)}" ${product.finish === f.code ? 'selected' : ''}>${escapeHtml(f.code)} – ${escapeHtml(f.name)}</option>`).join('')}
                   </select>
@@ -1202,7 +1202,7 @@
                   <div class="row g-2">
                     <div class="col-5">
                       <label class="form-label small text-muted mb-1 required">Supplier</label>
-                      <select class="form-select form-select-sm" name="supplier_id" required>
+                      <select class="form-select form-select-sm" name="supplier_id" required data-sort>
                         ${sups.map(s => `<option value="${s.id}" ${product.supplier_id === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
                       </select>
                     </div>
@@ -1288,7 +1288,7 @@
                   <div class="row g-2">
                     <div class="col-6">
                       <label class="form-label small text-muted mb-1">Stock UOM</label>
-                      <select class="form-select form-select-sm" name="unit_of_measure">
+                      <select class="form-select form-select-sm" name="unit_of_measure" data-sort>
                         ${uoms.map(u => `<option value="${escapeHtml(u.code)}" ${product.unit_of_measure === u.code ? 'selected' : ''}>${escapeHtml(u.code)} – ${escapeHtml(u.name)}</option>`).join('')}
                       </select>
                     </div>

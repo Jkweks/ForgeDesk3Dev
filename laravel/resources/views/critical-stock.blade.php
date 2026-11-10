@@ -95,7 +95,7 @@
                       <option value="critical">Critical</option>
                       <option value="out_of_stock">Out of Stock</option>
                     </select>
-                    <select class="form-select form-select-sm" id="categoryFilter" style="width: auto;">
+                    <select class="form-select form-select-sm" id="categoryFilter" style="width: auto;" data-sort>
                       <option value="">All Categories</option>
                     </select>
                     <input type="text" class="form-control form-control-sm" placeholder="Search..." id="searchInput" style="min-width: 200px;">

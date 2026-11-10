@@ -16,7 +16,7 @@
 
                       <div class="row mb-3">
                         <div class="col-md-3">
-                          <select class="form-select" id="filterRole">
+                          <select class="form-select" id="filterRole" data-sort>
                             <option value="">All Roles</option>
                             <!-- Populated dynamically from roles -->
                           </select>
@@ -104,7 +104,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
-              <select class="form-select" id="addUserRole">
+              <select class="form-select" id="addUserRole" data-sort>
                 <option value="">Select role...</option>
                 <!-- Populated dynamically from roles -->
               </select>
@@ -168,7 +168,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label required">Role</label>
-              <select class="form-select" id="editUserRole">
+              <select class="form-select" id="editUserRole" data-sort>
                 <!-- Populated dynamically from roles -->
               </select>
             </div>

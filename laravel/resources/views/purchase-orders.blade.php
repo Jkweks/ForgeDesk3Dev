@@ -70,7 +70,7 @@
             <option value="received">Received</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <select class="form-select ms-auto" id="filterSupplier" onchange="loadPurchaseOrders()" style="width:auto;max-width:240px">
+          <select class="form-select ms-auto" id="filterSupplier" onchange="loadPurchaseOrders()" style="width:auto;max-width:240px" data-sort>
             <option value="">All suppliers</option>
           </select>
           <div class="input-icon" style="min-width:220px">
@@ -134,7 +134,7 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label required">Supplier</label>
-              <select class="form-select" id="poSupplier" required onchange="onSupplierChange()">
+              <select class="form-select" id="poSupplier" required onchange="onSupplierChange()" data-sort>
                 <option value="">Select supplier...</option>
               </select>
             </div>
@@ -151,7 +151,7 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label">Ship To Location</label>
-              <select class="form-select" id="poShipToLocation">
+              <select class="form-select" id="poShipToLocation" data-sort>
                 <option value="">Primary company location</option>
               </select>
               <small class="form-text">Company locations are managed in Admin &rarr; System Settings.</small>
@@ -253,7 +253,7 @@
           <div class="row g-2">
             <div class="col-md-6">
               <label class="form-label">Supplier</label>
-              <select class="form-select form-select-sm" id="editPOSupplier"></select>
+              <select class="form-select form-select-sm" id="editPOSupplier" data-sort></select>
             </div>
             <div class="col-md-3">
               <label class="form-label">Order Date</label>
@@ -265,13 +265,13 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Ship To Location</label>
-              <select class="form-select form-select-sm" id="editPOShipToLocation">
+              <select class="form-select form-select-sm" id="editPOShipToLocation" data-sort>
                 <option value="">Primary company location</option>
               </select>
             </div>
             <div class="col-md-6">
               <label class="form-label">Send To For Approval</label>
-              <select class="form-select form-select-sm" id="editPOApprover">
+              <select class="form-select form-select-sm" id="editPOApprover" data-sort>
                 <option value="">Not set</option>
               </select>
             </div>
@@ -1127,7 +1127,7 @@ function submitPO(poId) {
     body.innerHTML = `
       <div class="alert alert-warning">No approver is set on this purchase order — no one will be notified unless you pick one now.</div>
       <label class="form-label">Approver</label>
-      <select id="submitApprovalApproverSelect" class="form-select">
+      <select id="submitApprovalApproverSelect" class="form-select" data-sort>
         <option value="">No approver — submit anyway</option>
         ${options}
       </select>

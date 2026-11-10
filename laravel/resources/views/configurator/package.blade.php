@@ -65,11 +65,11 @@
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label">Job</label>
-              <select class="form-select" id="pk-job" onchange="pkJobChanged()"><option value="">Select a job…</option></select>
+              <select class="form-select" id="pk-job" onchange="pkJobChanged()" data-sort><option value="">Select a job…</option></select>
             </div>
             <div class="col-md-4">
               <label class="form-label">Work order</label>
-              <select class="form-select" id="pk-wo" onchange="pkLoad()"><option value="">All work orders</option></select>
+              <select class="form-select" id="pk-wo" onchange="pkLoad()" data-sort><option value="">All work orders</option></select>
             </div>
             <div class="col-md-4">
               <label class="form-label">Sections</label>

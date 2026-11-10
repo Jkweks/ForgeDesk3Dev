@@ -72,7 +72,7 @@
                 <div class="card-header">
                   <h3 class="card-title">Categories</h3>
                   <div class="ms-auto d-flex gap-2">
-                    <select class="form-select form-select-sm" id="filterSystem" style="width: auto;">
+                    <select class="form-select form-select-sm" id="filterSystem" style="width: auto;" data-sort>
                       <option value="">All Systems</option>
                     </select>
                     <input type="text" class="form-control form-control-sm" placeholder="Search..." id="searchInput" style="width: 200px;">
@@ -157,7 +157,7 @@
                 <div class="col-md-6">
                   <label class="form-label">System Classification</label>
                   <input type="text" class="form-control" id="categorySystem" name="system" list="systemsList">
-                  <datalist id="systemsList"></datalist>
+                  <datalist id="systemsList" data-sort></datalist>
                   <small class="form-text">Optional system grouping</small>
                 </div>
               </div>

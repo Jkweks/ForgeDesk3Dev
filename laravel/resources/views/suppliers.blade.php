@@ -72,7 +72,7 @@
                 <div class="card-header">
                   <h3 class="card-title">Suppliers</h3>
                   <div class="ms-auto d-flex gap-2">
-                    <select class="form-select form-select-sm" id="filterCountry" style="width: auto;">
+                    <select class="form-select form-select-sm" id="filterCountry" style="width: auto;" data-sort>
                       <option value="">All Countries</option>
                     </select>
                     <select class="form-select form-select-sm" id="filterStatus" style="width: auto;">
@@ -208,7 +208,7 @@
                 <div class="col-md-6">
                   <label class="form-label">Country</label>
                   <input type="text" class="form-control" id="supplierCountry" name="country" value="USA" list="countriesList">
-                  <datalist id="countriesList"></datalist>
+                  <datalist id="countriesList" data-sort></datalist>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Website</label>

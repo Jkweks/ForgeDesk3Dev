@@ -66,7 +66,7 @@
                   <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                   <input type="text" class="form-control" placeholder="Search SKU, part number, description, finish…" id="searchInput" autocomplete="off">
                 </div>
-                <select class="form-select" id="categoryFilter" style="width:auto;max-width:240px">
+                <select class="form-select" id="categoryFilter" style="width:auto;max-width:240px" data-sort>
                   <option value="">All categories</option>
                 </select>
                 <label class="btn mb-0" id="noLocationBtn" title="Only products with no storage location">
@@ -148,7 +148,7 @@
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small text-muted mb-1">Finish</label>
-                  <select class="form-select form-select-sm" name="finish" id="productFinish">
+                  <select class="form-select form-select-sm" name="finish" id="productFinish" data-sort>
                     <option value="">None</option>
                   </select>
                 </div>
@@ -229,7 +229,7 @@
                     <div class="row g-2">
                       <div class="col-12">
                         <label class="form-label small text-muted mb-1 required">Supplier</label>
-                        <select class="form-select form-select-sm" name="supplier_id" id="productSupplierId" required>
+                        <select class="form-select form-select-sm" name="supplier_id" id="productSupplierId" required data-sort>
                           <option value="">Select supplier…</option>
                         </select>
                       </div>
@@ -331,7 +331,7 @@
                     <div class="row g-2">
                       <div class="col-6">
                         <label class="form-label small text-muted mb-1">Stock UOM <span class="text-danger">*</span></label>
-                        <select class="form-select form-select-sm" name="unit_of_measure" id="productUOM" required>
+                        <select class="form-select form-select-sm" name="unit_of_measure" id="productUOM" required data-sort>
                           <option value="">Select…</option>
                         </select>
                       </div>

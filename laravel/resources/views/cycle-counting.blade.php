@@ -161,14 +161,14 @@
           <div class="row mb-3">
             <div class="col-md-6">
               <label class="form-label">Storage Locations (Optional)</label>
-              <select class="form-select" id="sessionStorageLocations" multiple size="8" style="font-family: monospace; font-size: 0.875rem;">
+              <select class="form-select" id="sessionStorageLocations" multiple size="8" style="font-family: monospace; font-size: 0.875rem;" data-sort>
                 <option value="">Loading...</option>
               </select>
               <small class="form-text">Hold Ctrl/Cmd to select multiple. Leave empty to count all locations</small>
             </div>
             <div class="col-md-6">
               <label class="form-label">Category (Optional)</label>
-              <select class="form-select" id="sessionCategory">
+              <select class="form-select" id="sessionCategory" data-sort>
                 <option value="">All Categories</option>
               </select>
               <small class="form-text">Filter products by category</small>
@@ -181,7 +181,7 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Assigned To</label>
-              <select class="form-select" id="sessionAssignedTo">
+              <select class="form-select" id="sessionAssignedTo" data-sort>
                 <option value="">Select user...</option>
               </select>
             </div>
@@ -195,7 +195,7 @@
           <div class="row mb-3">
             <div class="col-md-12">
               <label class="form-label">Product Selection (Optional)</label>
-              <select class="form-select" id="sessionProducts" multiple size="10">
+              <select class="form-select" id="sessionProducts" multiple size="10" data-sort>
               </select>
               <small class="form-text">Hold Ctrl/Cmd to select multiple products. Leave empty to count all products matching filters.</small>
             </div>

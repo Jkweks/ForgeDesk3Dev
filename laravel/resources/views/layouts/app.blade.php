@@ -235,6 +235,7 @@
   <script src="{{ asset('assets/tabler/js/tabler.min.js') }}"></script>
   <script>window.bootstrap = window.tabler;</script>
   <script src="{{ asset('js/fab-shared.js') }}"></script>
+  <script src="{{ asset('js/select-sort.js') }}"></script>
 
   @include('partials.auth-scripts')
 

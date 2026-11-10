@@ -91,7 +91,7 @@
             <input class="form-check-input" type="checkbox" id="hwlib-item-reviewfilter" onchange="hwItemRender()">
             <span class="form-check-label">Needs review only</span>
           </label>
-          <select class="form-select form-select-sm me-2" id="hwlib-item-catfilter" style="width:220px" onchange="hwItemRender()">
+          <select class="form-select form-select-sm me-2" id="hwlib-item-catfilter" style="width:220px" onchange="hwItemRender()" data-sort>
             <option value="">All Categories</option>
           </select>
           <button class="btn btn-sm btn-primary" onclick="hwItemOpenModal()" data-permission="configurator.catalog.manage"><i class="ti ti-plus me-1"></i>Add Item</button>

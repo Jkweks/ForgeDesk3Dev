@@ -372,7 +372,7 @@
           <input type="hidden" id="cfg-profile-id">
           <div class="row">
             <div class="col-md-6 mb-3"><label class="form-label">Role Label</label><input type="text" class="form-control" id="cfg-profile-label" placeholder="e.g. LH Jamb" required></div>
-            <div class="col-md-6 mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-profile-product" required></select></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-profile-product" required data-sort></select></div>
           </div>
           <div class="row">
             <div class="col-md-4 mb-3">
@@ -427,7 +427,7 @@
         <div class="modal-body">
           <input type="hidden" id="cfg-component-id">
           <div class="mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="cfg-component-label" required></div>
-          <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-component-product" required></select></div>
+          <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-component-product" required data-sort></select></div>
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Qty Type</label>
@@ -458,7 +458,7 @@
         <div class="modal-body">
           <input type="hidden" id="cfg-fastener-id">
           <div class="mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="cfg-fastener-label" required></div>
-          <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-fastener-product" required></select></div>
+          <div class="mb-3"><label class="form-label">Product</label><select class="form-select" id="cfg-fastener-product" required data-sort></select></div>
           <div class="mb-3"><label class="form-label">Qty per component</label><input type="number" step="0.001" class="form-control" id="cfg-fastener-qtyper" value="1" required></div>
         </div>
         <div class="modal-footer">
@@ -2606,17 +2606,17 @@
       <div class="border rounded p-2 mb-2 hwlib-set-item-row" data-row-uid="${rowUid}" data-set-item-id="${row?.id ?? ''}">
         <div class="row g-2 align-items-center mb-2">
           <div class="col-md-3">
-            <select class="form-select form-select-sm hwlib-si-category" onchange="hwSiOnCategoryChange(this)">
+            <select class="form-select form-select-sm hwlib-si-category" data-sort onchange="hwSiOnCategoryChange(this)">
               <option value="">— category —</option>${hwSiCategoryOptionsHtml(categoryId)}
             </select>
           </div>
           <div class="col-md-3">
-            <select class="form-select form-select-sm hwlib-si-manufacturer" onchange="hwSiOnManufacturerChange(this)">
+            <select class="form-select form-select-sm hwlib-si-manufacturer" data-sort onchange="hwSiOnManufacturerChange(this)">
               ${categoryId !== '' ? hwSiManufacturerOptionsHtml(categoryId, manufacturer) : ''}
             </select>
           </div>
           <div class="col-md-3">
-            <select class="form-select form-select-sm hwlib-si-part" onchange="hwSiOnPartChange(this)">
+            <select class="form-select form-select-sm hwlib-si-part" data-sort onchange="hwSiOnPartChange(this)">
               ${categoryId !== '' ? hwSiPartOptionsHtml(categoryId, manufacturer, row?.item_id) : '<option value="">— select part —</option>'}
             </select>
           </div>

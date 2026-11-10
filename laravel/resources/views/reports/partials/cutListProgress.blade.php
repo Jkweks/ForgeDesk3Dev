@@ -8,7 +8,7 @@
     <div class="card-header">
       <h3 class="card-title"><i class="ti ti-chart-bar me-2"></i>Cut List Progress</h3>
       <div class="ms-auto d-flex gap-2">
-        <select multiple class="form-select form-select-sm" id="clpJobs" size="1" style="min-width: 280px;"></select>
+        <select multiple class="form-select form-select-sm" id="clpJobs" size="1" style="min-width: 280px;" data-sort></select>
         <button class="btn btn-sm btn-outline-secondary" onclick="loadCutListProgressReport()">
           <i class="ti ti-refresh me-1"></i>Apply
         </button>

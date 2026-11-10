@@ -15,7 +15,7 @@
           <option value="delivered_issues">Delivered w/ issues</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <select class="form-select form-select-sm" id="shipRepJob" style="max-width: 220px;" onchange="loadShippingSummaryReport()"><option value="">All jobs</option></select>
+        <select class="form-select form-select-sm" id="shipRepJob" style="max-width: 220px;" onchange="loadShippingSummaryReport()" data-sort><option value="">All jobs</option></select>
         <button class="btn btn-sm btn-outline-primary" onclick="shipRepDownload('pdf')"><i class="ti ti-file-type-pdf me-1"></i>PDF</button>
         <button class="btn btn-sm btn-primary" onclick="shipRepDownload('csv')"><i class="ti ti-download me-1"></i>CSV</button>
       </div>

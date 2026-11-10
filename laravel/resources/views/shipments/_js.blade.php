@@ -25,7 +25,7 @@
     const placeHtml = (which, title) => {
       const opts = locs.filter(l => l.kind === 'both' || l.kind === which);
       return `<div class="col-md-6"><label class="form-label">${title}</label>
-        <select class="form-select" id="loc_${which}" onchange="placeChange('${which}', this.value)">
+        <select class="form-select" id="loc_${which}" onchange="placeChange('${which}', this.value)" data-sort>
           <option value="">Choose…</option>${opts.map(l => `<option value="${l.id}" ${String(l.id) === String(place[which].id) ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>
         <div id="locBody_${which}" class="mt-1"></div></div>`;
     };

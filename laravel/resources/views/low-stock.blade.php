@@ -73,7 +73,7 @@
                 <div class="card-header">
                   <h3 class="card-title">Low Stock Items</h3>
                   <div class="ms-auto d-flex gap-2">
-                    <select class="form-select form-select-sm" id="categoryFilter" style="width: auto;">
+                    <select class="form-select form-select-sm" id="categoryFilter" style="width: auto;" data-sort>
                       <option value="">All Categories</option>
                     </select>
                     <input type="text" class="form-control form-control-sm" placeholder="Search..." id="searchInput" style="min-width: 200px;">

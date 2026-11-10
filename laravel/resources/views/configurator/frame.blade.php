@@ -32,7 +32,7 @@
               <div class="row g-2 align-items-end">
                 <div class="col-12 col-md-4 col-xl-3">
                   <label class="form-label mb-1 small text-secondary" for="fb-list-job-filter">Job</label>
-                  <select class="form-select" id="fb-list-job-filter" onchange="fbOnJobChange()">
+                  <select class="form-select" id="fb-list-job-filter" onchange="fbOnJobChange()" data-sort>
                     <option value="">All Jobs</option>
                   </select>
                 </div>
@@ -40,7 +40,7 @@
                   <label class="form-label mb-1 small text-secondary" for="fb-entry-select">Entry / Door <span class="text-muted" id="fb-entry-count"></span></label>
                   <div class="input-group">
                     <button type="button" class="btn btn-icon" id="fb-entry-prev" onclick="fbStep(-1)" title="Previous entry" aria-label="Previous entry"><i class="ti ti-chevron-left"></i></button>
-                    <select class="form-select" id="fb-entry-select" onchange="fbOnEntryChange()">
+                    <select class="form-select" id="fb-entry-select" onchange="fbOnEntryChange()" data-sort>
                       <option value="">Select an entry&hellip;</option>
                     </select>
                     <button type="button" class="btn btn-icon" id="fb-entry-next" onclick="fbStep(1)" title="Next entry" aria-label="Next entry"><i class="ti ti-chevron-right"></i></button>
@@ -245,11 +245,11 @@
                     <div class="row g-3">
                       <div class="col-md-4">
                         <label class="form-label">Frame System</label>
-                        <select class="form-select" id="fb-frame-system" onchange="fbFilterSeries()"></select>
+                        <select class="form-select" id="fb-frame-system" onchange="fbFilterSeries()" data-sort></select>
                       </div>
                       <div class="col-md-4">
                         <label class="form-label">Frame Series</label>
-                        <select class="form-select" id="fb-frame-series" required></select>
+                        <select class="form-select" id="fb-frame-series" required data-sort></select>
                       </div>
                       <div class="col-md-3 form-check form-switch pt-4">
                         <input class="form-check-input" type="checkbox" id="fb-frame-threshold">
@@ -315,7 +315,7 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label">Stile Width</label>
-                      <select class="form-select" id="fb-door-stile" onchange="fbApplyStandardRails()" required></select>
+                      <select class="form-select" id="fb-door-stile" onchange="fbApplyStandardRails()" required data-sort></select>
                     </div>
                     <div class="col-md-4 text-muted small d-flex align-items-end pb-2">
                       Handing, hinging, glazing and bottom gap are set on the Opening tab.
@@ -376,7 +376,7 @@
                       <div class="d-flex flex-wrap gap-2 align-items-end">
                         <div class="flex-fill" style="min-width:220px">
                           <label class="form-label mb-1">Apply a hardware set</label>
-                          <select class="form-select" id="fb-hwset-select"><option value="">— choose a set —</option></select>
+                          <select class="form-select" id="fb-hwset-select" data-sort><option value="">— choose a set —</option></select>
                         </div>
                         <button type="button" class="btn btn-primary" id="fb-hwset-apply-btn" onclick="fbApplyHardwareSet()" data-permission="configurator.edit"><i class="ti ti-package-import me-1"></i>Apply set</button>
                       </div>
@@ -471,15 +471,15 @@
                   <form id="fb-hardware-add-form" class="row g-2 align-items-end mb-3">
                     <div class="col-md-3">
                       <label class="form-label">Category</label>
-                      <select class="form-select" id="fb-hw-category" onchange="fbFilterHwItems()" required></select>
+                      <select class="form-select" id="fb-hw-category" onchange="fbFilterHwItems()" required data-sort></select>
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">Manufacturer</label>
-                      <select class="form-select" id="fb-hw-manufacturer" onchange="fbOnHwManufacturerChange()"></select>
+                      <select class="form-select" id="fb-hw-manufacturer" onchange="fbOnHwManufacturerChange()" data-sort></select>
                     </div>
                     <div class="col-md-3">
                       <label class="form-label">Item</label>
-                      <select class="form-select" id="fb-hw-item" required onchange="fbRenderHwFunctionPicker()"></select>
+                      <select class="form-select" id="fb-hw-item" required onchange="fbRenderHwFunctionPicker()" data-sort></select>
                     </div>
                     <div class="col-md-2">
                       <label class="form-label">Series</label>
@@ -582,7 +582,7 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Job</label>
-            <select class="form-select" id="fb-new-job" required></select>
+            <select class="form-select" id="fb-new-job" required data-sort></select>
           </div>
           <div class="mb-3">
             <label class="form-label">Scope</label>
@@ -660,7 +660,7 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Job</label>
-            <select class="form-select" id="fb-edit-job"></select>
+            <select class="form-select" id="fb-edit-job" data-sort></select>
             <div class="form-text" id="fb-edit-job-hint"></div>
           </div>
           <div class="mb-3">
@@ -734,7 +734,7 @@
           </p>
           <div class="alert alert-info py-2" id="fb-merge-requirement"></div>
           <label class="form-label">Other leaf's configuration</label>
-          <select class="form-select" id="fb-merge-source" required></select>
+          <select class="form-select" id="fb-merge-source" required data-sort></select>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>

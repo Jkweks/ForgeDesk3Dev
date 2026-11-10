@@ -44,7 +44,7 @@
             <div class="col-md-4 mb-3"><label class="form-label">Code</label><input type="text" class="form-control text-uppercase" id="hwlib-var-code" placeholder="e.g. CYL_MORTISE" required></div>
             <div class="col-md-4 mb-3"><label class="form-label">Label</label><input type="text" class="form-control" id="hwlib-var-label" required></div>
             <div class="col-md-4 mb-3"><label class="form-label">Group</label><input type="text" class="form-control" id="hwlib-var-group" list="hwlib-var-group-list" required>
-              <datalist id="hwlib-var-group-list"></datalist>
+              <datalist id="hwlib-var-group-list" data-sort></datalist>
             </div>
           </div>
           <div class="row">
@@ -75,7 +75,7 @@
           <div class="row">
             <div class="col-md-6 mb-3"><label class="form-label">Default Value</label><input type="text" class="form-control" id="hwlib-var-default"></div>
             <div class="col-md-6 mb-3"><label class="form-label">Overrides Variable</label>
-              <select class="form-select" id="hwlib-var-overrides"><option value="">— none —</option></select>
+              <select class="form-select" id="hwlib-var-overrides" data-sort><option value="">— none —</option></select>
             </div>
           </div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="hwlib-var-notes" rows="2"></textarea></div>
@@ -116,7 +116,7 @@
           </div>
           <div class="mb-3"><label class="form-label">Group <span class="text-muted">(optional — functions sharing a group are mutually exclusive when selected, e.g. EO/NL/DT)</span></label>
             <input type="text" class="form-control" id="hwlib-func-group" list="hwlib-func-group-list" placeholder="e.g. Function">
-            <datalist id="hwlib-func-group-list"></datalist>
+            <datalist id="hwlib-func-group-list" data-sort></datalist>
           </div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="hwlib-func-notes" rows="2"></textarea></div>
           <div class="row">
@@ -145,11 +145,11 @@
           <input type="hidden" id="hwlib-item-id">
           <div class="row">
             <div class="col-md-3 mb-3"><label class="form-label">Category</label>
-              <select class="form-select" id="hwlib-item-category" onchange="hwItemOnCategoryChange()" required></select>
+              <select class="form-select" id="hwlib-item-category" onchange="hwItemOnCategoryChange()" required data-sort></select>
             </div>
             <div class="col-md-3 mb-3" id="hwlib-item-subcategory-wrap" style="display:none">
               <label class="form-label">Subcategory</label>
-              <select class="form-select" id="hwlib-item-subcategory"><option value="">— none —</option></select>
+              <select class="form-select" id="hwlib-item-subcategory" data-sort><option value="">— none —</option></select>
             </div>
             <div class="col-md-3 mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="hwlib-item-name" required></div>
             <div class="col-md-3 mb-3"><label class="form-label">PN</label><input type="text" class="form-control" id="hwlib-item-pn"></div>
@@ -292,7 +292,7 @@
           <input type="hidden" id="hwlib-set-id">
           <div class="row">
             <div class="col-md-5 mb-3"><label class="form-label">Job</label>
-              <select class="form-select" id="hwlib-set-job" required><option value="">— select —</option></select>
+              <select class="form-select" id="hwlib-set-job" required data-sort><option value="">— select —</option></select>
             </div>
             <div class="col-md-5 mb-3"><label class="form-label">Name</label><input type="text" class="form-control" id="hwlib-set-name" required></div>
             <div class="col-md-2 mb-3 d-flex align-items-end">

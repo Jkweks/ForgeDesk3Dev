@@ -77,7 +77,7 @@
                 <button class="btn btn-sm status-pill" data-status="__special_order__" onclick="setStatusPill(this)" title="Special-order parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-purple,#ae3ec9);color:#fff;border-color:var(--tblr-purple,#ae3ec9)">Special Order<span class="pill-cnt ms-1" data-pill-cnt="__special_order__"></span></button>
                 <button class="btn btn-sm status-pill" data-status="__boneyard__" onclick="setStatusPill(this)" title="Boneyard parts are hidden unless overcommitted, or shown here" style="background:var(--tblr-gray-600,#868e96);color:#fff;border-color:var(--tblr-gray-600,#868e96)">Boneyard<span class="pill-cnt ms-1" data-pill-cnt="__boneyard__"></span></button>
             </div>
-            <select class="form-select form-select-sm ms-auto" id="filterVendor" onchange="applyFilters()" style="width:auto;max-width:220px">
+            <select class="form-select form-select-sm ms-auto" id="filterVendor" onchange="applyFilters()" style="width:auto;max-width:220px" data-sort>
               <option value="">All vendors</option>
             </select>
             <div class="input-icon" style="min-width:200px">

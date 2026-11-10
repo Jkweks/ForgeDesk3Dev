@@ -59,7 +59,7 @@
             <div class="row g-3 mb-3">
               <div class="col-md-6">
                 <label class="form-label required">Role</label>
-                <select class="form-select" id="fabUserRole">
+                <select class="form-select" id="fabUserRole" data-sort>
                   <option value="worker">Worker</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
