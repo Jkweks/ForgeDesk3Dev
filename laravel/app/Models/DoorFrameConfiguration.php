@@ -31,6 +31,7 @@ class DoorFrameConfiguration extends Model
         'archived' => 'boolean',
         'cutflow_include_frame' => 'boolean',
         'cutflow_include_door' => 'boolean',
+        'inventory_reserved' => 'boolean',
         'archived_at' => 'datetime',
     ];
 

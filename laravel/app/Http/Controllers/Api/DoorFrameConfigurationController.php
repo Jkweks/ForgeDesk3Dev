@@ -1771,6 +1771,13 @@ class DoorFrameConfigurationController extends Controller
             }
         });
 
+        // Withheld sections reserve nothing of their own, so the job's reservation follows the flags.
+        try {
+            app(\App\Services\Configurator\ConfigurationReservationBridge::class)->syncJob($config->businessJob, auth()->user());
+        } catch (\Throwable $e) {
+            Log::warning('Failed to resync reservation after CutFlow options change', ['config_id' => $config->id, 'message' => $e->getMessage()]);
+        }
+
         return response()->json([
             'message' => 'CutFlow cut lists updated',
             'configuration' => [
@@ -1839,7 +1846,8 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $shortages = [];
-        if (! $blockers) {
+        // Only a reserved opening commits stock, so only then can it be short.
+        if (! $blockers && $config->inventory_reserved) {
             $shortages = app(\App\Services\Configurator\ConfigurationReservationBridge::class)->shortages($config, $warnings);
             foreach ($shortages as $s) {
                 $warnings[] = "Short on {$s['part_number']}: need {$s['needed']}, available {$s['available']}.";
@@ -1903,7 +1911,8 @@ class DoorFrameConfigurationController extends Controller
         }
 
         DB::transaction(function () use ($config, $reservationBridge, $cutFlow) {
-            $config->status = 'reserved';
+            // An opening that was never reserved goes back to plain draft, not "reserved".
+            $config->status = $config->inventory_reserved ? 'reserved' : 'draft';
             $config->save();
             $reservationBridge->syncJob($config->businessJob, auth()->user());
             if ($config->workOrder) {
@@ -1912,7 +1921,7 @@ class DoorFrameConfigurationController extends Controller
         });
 
         return response()->json([
-            'message' => 'Configuration is editable again (reserved).',
+            'message' => $config->status === 'reserved' ? 'Configuration is editable again (reserved).' : 'Configuration is editable again.',
             'configuration' => ['id' => $config->id, 'status' => $config->status, 'status_label' => $config->status_label],
         ]);
     }
@@ -2049,8 +2058,9 @@ class DoorFrameConfigurationController extends Controller
         // warnings for those.
         if ($config->status === 'draft') {
             $config->status = 'reserved';
-            $config->save();
         }
+        $config->inventory_reserved = true;
+        $config->save();
 
         $result = $reservationBridge->reserve($config, auth()->user());
         $config->refresh();
@@ -2089,6 +2099,7 @@ class DoorFrameConfigurationController extends Controller
         // Back to draft: this opening drops out of the job's reservation, which is recomputed from
         // the job's remaining reserved/released configurations (other openings stay committed).
         $config->status = 'draft';
+        $config->inventory_reserved = false;
         $config->job_reservation_id = null;
         $config->save();
 
@@ -2119,6 +2130,10 @@ class DoorFrameConfigurationController extends Controller
                 'message' => 'Only a released configuration can be committed against inventory.',
             ], 422);
         }
+
+        // Explicitly choosing to reserve this (already released) opening.
+        $config->inventory_reserved = true;
+        $config->save();
 
         $reservation = $reservationBridge->reserve($config, auth()->user())['reservation'];
 

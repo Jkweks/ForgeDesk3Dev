@@ -35,7 +35,7 @@ class ResyncConfiguratorReservations extends Command
 
             if (! $apply) {
                 $configs = \App\Models\DoorFrameConfiguration::with(['frameConfig.parts.product', 'doorConfigs.parts.product', 'hardwareParts.product'])
-                    ->where('business_job_id', $job->id)->whereIn('status', ConfigurationReservationBridge::COUNTED_STATUSES)->get();
+                    ->where('business_job_id', $job->id)->whereIn('status', ConfigurationReservationBridge::COUNTED_STATUSES)->where('inventory_reserved', true)->get();
                 $warnings = [];
                 $desired = $bridge->desiredQuantities($configs, $warnings);
                 $current = $reservation->items()->get()->keyBy('product_id');

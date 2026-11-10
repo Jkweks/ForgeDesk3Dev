@@ -28,6 +28,11 @@ use Illuminate\Support\Facades\DB;
  *    next 1/10.
  *  - Everything else is the summed quantity.
  *  - Special-order hardware (no product) commits nothing.
+ *  - A frame/door withheld from CutFlow (ordered precut) commits none of its own parts — only the
+ *    hardware, backers and fasteners (hardwareParts) still reserve.
+ *
+ * An opening only counts once Reserve was selected on it (inventory_reserved); releasing alone never
+ * commits inventory.
  *
  * Reserve-on-rough-sizes -> final measure -> release: the configuration stays editable ("reserved")
  * and every edit re-syncs the job; release locks it and leaves its lines committed until consumed.
@@ -78,7 +83,7 @@ class ConfigurationReservationBridge
     {
         $configs = DoorFrameConfiguration::with([
             'frameConfig.parts.product', 'doorConfigs.parts.product', 'hardwareParts.product',
-        ])->where('business_job_id', $job->id)->whereIn('status', self::COUNTED_STATUSES)->get();
+        ])->where('business_job_id', $job->id)->whereIn('status', self::COUNTED_STATUSES)->where('inventory_reserved', true)->get();
 
         $desired = $this->desiredQuantities($configs, $warnings);
 
@@ -134,7 +139,7 @@ class ConfigurationReservationBridge
     {
         $counted = DoorFrameConfiguration::with(['frameConfig.parts.product', 'doorConfigs.parts.product', 'hardwareParts.product'])
             ->where('business_job_id', $config->business_job_id)
-            ->where(fn ($q) => $q->whereIn('status', self::COUNTED_STATUSES)->orWhere('id', $config->id))
+            ->where(fn ($q) => $q->where(fn ($c) => $c->whereIn('status', self::COUNTED_STATUSES)->where('inventory_reserved', true))->orWhere('id', $config->id))
             ->get();
 
         $desired = $this->desiredQuantities($counted, $warnings);
@@ -164,9 +169,11 @@ class ConfigurationReservationBridge
         $units = [];  // product_id => quantity
 
         foreach ($configs as $config) {
+            // A section withheld from CutFlow (precut frame/door) is bought finished: reserve none of its
+            // own BOM, only the hardware, backers and fasteners applied to it (hardwareParts).
             $parts = collect()
-                ->merge($config->frameConfig?->parts ?? [])
-                ->merge($config->doorConfigs->flatMap(fn ($dc) => $dc->parts))
+                ->merge($config->cutflow_include_frame ? ($config->frameConfig?->parts ?? []) : [])
+                ->merge($config->cutflow_include_door ? $config->doorConfigs->flatMap(fn ($dc) => $dc->parts) : [])
                 ->merge($config->hardwareParts)
                 ->filter(fn ($p) => $p->product_id && $p->product); // special-order hardware has no product
 

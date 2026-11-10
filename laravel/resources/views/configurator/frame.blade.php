@@ -2687,7 +2687,7 @@ async function fbOpenRelease(mode = 'full') {
   const list = (items, cls) => items.length ? `<div class="alert alert-${cls}"><ul class="mb-0 ps-3">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>` : '';
   const intro = mode === 'cut'
     ? `<p>Sends this opening's cut list to CutFlow so cutting can start. The opening, frame and door <strong>lock</strong>; <strong>hardware stays editable</strong> until you do the full release.</p>${fbCutflowCheckboxesHtml(c)}`
-    : `<p>Releasing <strong>locks</strong> this opening, commits its parts to the job reservation and sends its extrusions to the cut list.</p>${c.status === 'cut_released' ? `<p class="text-muted">${esc(fbCutflowSentText(c))}</p>` : fbCutflowCheckboxesHtml(c, true)}`;
+    : `<p>Releasing <strong>locks</strong> this opening, sends its extrusions to the cut list. Inventory is only held if this opening was <strong>Reserved</strong> first — release does not reserve on its own.</p>${c.status === 'cut_released' ? `<p class="text-muted">${esc(fbCutflowSentText(c))}</p>` : fbCutflowCheckboxesHtml(c, true)}`;
   body.innerHTML =
     list(p.blockers, 'danger') +
     list(p.warnings, 'warning') +
