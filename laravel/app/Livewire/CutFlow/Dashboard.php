@@ -57,6 +57,12 @@ class Dashboard extends Component
     // checkboxes
     public string $jobSearch = '';
 
+    // The picker is two steps: 'jobs' (ForgeDesk jobs) then 'orders' (the work orders / cut lists
+    // under the chosen jobs). $pickJobKeys holds the step-1 checkmarks; see jobGroupKey().
+    public string $pickStep = 'jobs';
+
+    public array $pickJobKeys = [];
+
     // hides "Done" rows from the active profile's cut-list table — a
     // finished job's list is mostly completed pieces, which buries the
     // handful still pending under noise.
@@ -164,12 +170,12 @@ class Dashboard extends Component
         // drop any job ids that no longer exist
         $this->activeJobIds = $this->normalizedSelection(CutJob::whereIn('id', $this->activeJobIds)->pluck('id')->all());
 
-        if (empty($this->activeJobIds)) {
-            $first = CutJob::whereNotIn('id', CutJob::completedIds())->orderBy('id')->first();
-            $this->activeJobIds = $first ? [$first->id] : [];
-        }
-
         $this->persistJobSelection();
+
+        // Nothing selected (fresh sign-in): ask which jobs/work orders instead of loading a default page.
+        if ($this->signedIn() && empty($this->activeJobIds)) {
+            $this->openJobsModal();
+        }
 
         $active = StickSession::where('status', 'active')->whereNull('cancelled_at')->latest()->first();
         $this->activeStickId = $active?->id;
@@ -255,6 +261,89 @@ class Dashboard extends Component
         $this->modal = 'jobs';
         $this->jobSearch = '';
         $this->showCompletedJobs = false;
+        $this->pickStep = 'jobs';
+
+        // Pre-check the jobs that already have a selected work order.
+        $this->pickJobKeys = CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get())
+            ->map(fn ($job) => $this->jobGroupKey($job))->unique()->values()->all();
+    }
+
+    /** Step-1 identity of a cut list's parent job: the ForgeDesk job id, else its own name (CSV imports). */
+    protected function jobGroupKey(CutJob $job): string
+    {
+        return $job->getAttribute('group_key') ?? 'n:'.$job->name;
+    }
+
+    /** All cut lists with their step-1 group key and title attached. */
+    protected function groupedCutJobs()
+    {
+        $jobs = CutJob::withDisplayLabels(CutJob::all());
+        $wos = \App\Models\FdWorkOrder::whereIn('id', $jobs->pluck('work_order_id')->filter()->all())->pluck('business_job_id', 'id');
+
+        return $jobs->each(function (CutJob $job) use ($wos) {
+            $bj = $job->work_order_id ? $wos->get($job->work_order_id) : null;
+            $job->setAttribute('group_key', $bj ? 'b:'.$bj : 'n:'.$job->name);
+        });
+    }
+
+    /** Step 1 list: one row per job, with how many open work orders it has. */
+    protected function jobGroups()
+    {
+        $completed = CutJob::completedIds();
+        $needle = strtolower($this->jobSearch);
+
+        return $this->groupedCutJobs()->groupBy('group_key')->map(fn ($lists, $key) => (object) [
+            'key' => $key,
+            'title' => $lists->first()->job_title,
+            'open' => $lists->reject(fn ($j) => in_array($j->id, $completed, true))->count(),
+            'total' => $lists->count(),
+        ])->filter(fn ($g) => ($g->open > 0 || $this->showCompletedJobs)
+            && ($needle === '' || str_contains(strtolower($g->title), $needle)))
+            ->sortBy('title', SORT_NATURAL | SORT_FLAG_CASE)->values();
+    }
+
+    public function togglePickJob(string $key): void
+    {
+        $this->pickJobKeys = in_array($key, $this->pickJobKeys, true)
+            ? array_values(array_diff($this->pickJobKeys, [$key]))
+            : [...$this->pickJobKeys, $key];
+    }
+
+    public function continueToWorkOrders(): void
+    {
+        if (empty($this->pickJobKeys)) {
+            return;
+        }
+
+        $this->pickStep = 'orders';
+        $this->jobSearch = '';
+
+        // Drop previously selected work orders that belong to jobs no longer checked.
+        $keep = $this->groupedCutJobs()->filter(fn ($j) => in_array($j->group_key, $this->pickJobKeys, true))->pluck('id')->all();
+        $this->activeJobIds = array_values(array_intersect($this->activeJobIds, $keep));
+        $this->persistJobSelection();
+    }
+
+    public function backToJobs(): void
+    {
+        $this->pickStep = 'jobs';
+        $this->jobSearch = '';
+    }
+
+    /** Closes the picker and loads the first profile of the chosen work orders. */
+    public function finishPicking(CutPlanner $planner): void
+    {
+        if (empty($this->activeJobIds)) {
+            return;
+        }
+
+        $this->modal = null;
+
+        if (! StickSession::where('status', 'active')->whereNull('cancelled_at')->exists()) {
+            $first = $planner->activeProfiles($this->activeJobIds, $this->viewingCompleted())->first();
+            $this->activeProfileName = $first?->name;
+            $this->activeProfileFinish = $first?->finish;
+        }
     }
 
     /** Parts-cut breakdown for the selected cut lists, with a projected time to finish. */
@@ -278,11 +367,12 @@ class Dashboard extends Component
 
         // Completed lists are hidden unless asked for; a completed list that is already selected stays
         // visible so it can be deselected.
-        $jobs = CutJob::withDisplayLabels(
-            CutJob::all()->reject(fn ($job) => ! $this->showCompletedJobs
+        $jobs = $this->groupedCutJobs()
+            ->filter(fn ($job) => $this->pickJobKeys === [] || in_array($job->group_key, $this->pickJobKeys, true))
+            ->reject(fn ($job) => ! $this->showCompletedJobs
                 && in_array($job->id, $completed, true)
                 && ! in_array($job->id, $this->activeJobIds, true))
-        );
+            ->values();
         $jobs->each(fn ($job) => $job->setAttribute('is_completed', in_array($job->id, $completed, true)));
 
         if ($this->jobSearch === '') {
@@ -437,6 +527,11 @@ class Dashboard extends Component
 
         if ($this->activeCrewKey === $key) {
             $this->activeCrewKey = $this->crew[0]['key'] ?? null;
+        }
+
+        if (empty($this->crew)) {
+            $this->activeJobIds = [];
+            $this->persistJobSelection();
         }
 
         $this->persistCrew();
@@ -643,6 +738,7 @@ class Dashboard extends Component
                 return;
             }
 
+            $firstLogin = empty($this->crew);
             $existing = collect($this->crew)->firstWhere('operator_id', $user->id);
 
             if ($existing) {
@@ -657,6 +753,15 @@ class Dashboard extends Component
             $this->loginError = '';
             $this->modal = null;
             $this->keypadValue = '';
+
+            // First person on this tablet: start clean and ask what they're working on.
+            if ($firstLogin) {
+                $this->activeJobIds = [];
+                $this->activeProfileName = null;
+                $this->activeProfileFinish = null;
+                $this->persistJobSelection();
+                $this->openJobsModal();
+            }
 
             return;
         }
@@ -1612,7 +1717,8 @@ class Dashboard extends Component
             'signedIn' => $signedIn,
             'tigerPollIntervalMs' => $this->bridgePollIntervalMs(),
             'progress' => ($signedIn && $this->modal === 'progress') ? CutListProgress::forJobs($this->activeJobIds) : null,
-            'jobs' => $this->modal === 'jobs' ? $this->filteredJobs() : collect(),
+            'jobs' => ($this->modal === 'jobs' && $this->pickStep === 'orders') ? $this->filteredJobs() : collect(),
+            'jobGroups' => ($this->modal === 'jobs' && $this->pickStep === 'jobs') ? $this->jobGroups() : collect(),
             'selectedJobs' => $signedIn ? CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get()) : collect(),
             'totalJobCount' => CutJob::count(),
             'profiles' => $signedIn ? $planner->activeProfiles($this->activeJobIds, $viewingCompleted) : collect(),

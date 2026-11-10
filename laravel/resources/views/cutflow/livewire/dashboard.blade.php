@@ -247,6 +247,14 @@
                     </div>
                     <button class="btn btn-accent" wire:click="openLogin" style="margin-top:4px;">Sign In</button>
                 </div>
+            @elseif (empty($activeJobIds) && ! $stick)
+                <div class="empty-state">
+                    <div>
+                        <div class="title">Choose Your Work</div>
+                        <p>Pick the job(s) and work order(s) you're cutting today.</p>
+                    </div>
+                    <button class="btn btn-accent" wire:click="openJobsModal" style="margin-top:4px;">Select Jobs</button>
+                </div>
             @elseif (! $stick)
                 <div class="empty-state" @if ($activeProfileName) style="flex-direction:row;align-items:stretch;gap:24px;padding:24px;" @endif>
                     @if ($activeProfileName)
@@ -535,17 +543,19 @@
         <div class="modal-overlay" wire:keydown.window.escape="closeModal">
             <div class="modal" style="width:480px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div class="display" style="font-size:18px;font-weight:700;">Select Jobs</div>
+                    <div class="display" style="font-size:18px;font-weight:700;">{{ $pickStep === 'jobs' ? 'Which job(s) are you working on?' : 'Which work order(s)?' }}</div>
                     <div wire:click="closeModal" style="cursor:pointer;width:40px;height:40px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;">&#10005;</div>
                 </div>
 
                 <input type="text" wire:model.live.debounce.200ms="jobSearch" placeholder="Search jobs&hellip;" autofocus
                        style="padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:14px;">
 
-                <div style="display:flex;gap:10px;">
-                    <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="selectVisibleJobs">Select all open</button>
-                    <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="clearJobSelection">Clear selection</button>
-                </div>
+                @if ($pickStep === 'orders')
+                    <div style="display:flex;gap:10px;">
+                        <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="selectVisibleJobs">Select all open</button>
+                        <button class="btn btn-outline" style="flex:1;font-size:12.5px;padding:10px;" wire:click="clearJobSelection">Clear selection</button>
+                    </div>
+                @endif
 
                 <div wire:click="toggleShowCompletedJobs"
                      style="cursor:pointer;align-self:flex-start;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:11.5px;font-weight:600;
@@ -556,6 +566,26 @@
                 </div>
 
                 <div style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+                    @if ($pickStep === 'jobs')
+                        @forelse ($jobGroups as $g)
+                            @php $isPicked = in_array($g->key, $pickJobKeys, true); @endphp
+                            <div wire:click="togglePickJob('{{ $g->key }}')"
+                                 style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;
+                                        background: {{ $isPicked ? 'var(--accent-bg)' : 'var(--surface)' }};
+                                        border: 1.5px solid {{ $isPicked ? 'var(--accent-border)' : 'transparent' }};">
+                                <span style="width:20px;height:20px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+                                             background: {{ $isPicked ? 'var(--accent)' : 'var(--panel)' }};
+                                             border: 1.5px solid {{ $isPicked ? 'var(--accent)' : 'var(--border)' }};
+                                             color:#fff;font-size:12px;">{{ $isPicked ? '✓' : '' }}</span>
+                                <span style="font-size:13.5px;font-weight:600;flex-grow:1;">{{ $g->title }}</span>
+                                <span class="mono" style="font-size:11.5px;color:var(--muted-2);">{{ $g->open }} open WO{{ $g->open === 1 ? '' : 's' }}</span>
+                            </div>
+                        @empty
+                            <div style="font-size:12.5px;color:var(--muted);padding:10px 2px;">
+                                {{ $jobSearch !== '' ? "No jobs match \"{$jobSearch}\"." : 'No open jobs.' }}
+                            </div>
+                        @endforelse
+                    @else
                     @forelse ($jobs as $job)
                         @php $isSelected = in_array($job->id, $activeJobIds); @endphp
                         <div wire:click="toggleJob({{ $job->id }})"
@@ -580,11 +610,18 @@
                             @unless ($showCompletedJobs) Use &ldquo;Show completed lists&rdquo; to find a finished one. @endunless
                         </div>
                     @endforelse
+                    @endif
                 </div>
 
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span style="font-size:12px;color:var(--muted);">{{ count($activeJobIds) }} selected</span>
-                    <button class="btn btn-accent" wire:click="closeModal">Done</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    @if ($pickStep === 'jobs')
+                        <span style="font-size:12px;color:var(--muted);">{{ count($pickJobKeys) }} job(s) selected</span>
+                        <button class="btn btn-accent" wire:click="continueToWorkOrders" @disabled(empty($pickJobKeys))>Next &rarr;</button>
+                    @else
+                        <button class="btn btn-outline" wire:click="backToJobs">&larr; Jobs</button>
+                        <span style="flex-grow:1;font-size:12px;color:var(--muted);">{{ count($activeJobIds) }} work order(s) selected</span>
+                        <button class="btn btn-accent" wire:click="finishPicking" @disabled(empty($activeJobIds))>Done</button>
+                    @endif
                 </div>
             </div>
         </div>
