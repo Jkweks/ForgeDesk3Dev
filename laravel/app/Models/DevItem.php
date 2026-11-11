@@ -9,7 +9,7 @@ class DevItem extends Model
 {
     public const TYPES = ['bug', 'feature', 'note'];
 
-    public const PRIORITIES = ['low', 'normal', 'high', 'critical'];
+    public const PRIORITIES = ['future', 'low', 'normal', 'high', 'critical'];
 
     public const STATUSES = ['open', 'in_progress', 'resolved', 'wont_fix'];
 

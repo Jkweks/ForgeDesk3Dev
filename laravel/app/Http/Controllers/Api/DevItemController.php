@@ -108,7 +108,7 @@ class DevItemController extends Controller
     public function export(Request $request)
     {
         $request->mergeIfMissing(['status' => 'active']);
-        $items = $this->filtered($request)->orderByRaw("case priority when 'critical' then 0 when 'high' then 1 when 'normal' then 2 else 3 end")->orderBy('id')->get();
+        $items = $this->filtered($request)->orderByRaw("case priority when 'critical' then 0 when 'high' then 1 when 'normal' then 2 when 'low' then 3 else 4 end")->orderBy('id')->get();
 
         $md = "# ForgeDesk development items ({$items->count()})\n\n".$items->map->toMarkdown()->implode("\n---\n\n");
 

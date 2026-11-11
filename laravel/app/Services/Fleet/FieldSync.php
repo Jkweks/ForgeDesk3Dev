@@ -416,7 +416,7 @@ class FieldSync
         $v = Validator::make($p, [
             'type' => 'required|in:bug,feature,note',
             'title' => 'required|string|max:255',
-            'priority' => 'nullable|in:low,normal,high,critical',
+            'priority' => 'nullable|in:future,low,normal,high,critical',
             'description' => 'nullable|string|max:5000',
             'console_output' => 'nullable|string|max:20000',
             'page' => 'nullable|string|max:200',

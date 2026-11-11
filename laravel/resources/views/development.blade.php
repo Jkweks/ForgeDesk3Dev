@@ -46,7 +46,7 @@
               </select>
             </div>
             <div class="col-md-3">
-              <select class="form-select" id="fPriority"><option value="">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select>
+              <select class="form-select" id="fPriority"><option value="">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option><option value="future">Future</option></select>
             </div>
           </div>
         </div>
@@ -75,7 +75,7 @@
           <div class="col-md-4"><label class="form-label">Status</label>
             <select class="form-select" id="dStatus"><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="wont_fix">Won't fix</option></select></div>
           <div class="col-md-4"><label class="form-label">Priority</label>
-            <select class="form-select" id="dPriority"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div>
+            <select class="form-select" id="dPriority"><option value="future">Future</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div>
           <div class="col-md-4"><label class="form-label">Type</label>
             <select class="form-select" id="dType"><option value="bug">Bug</option><option value="feature">Feature</option><option value="note">Note</option></select></div>
           <div class="col-12"><label class="form-label">Title</label><input type="text" class="form-control" id="dTitleInput" maxlength="255"></div>
@@ -100,7 +100,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const TYPE = { bug: ['bg-red-lt', 'Bug'], feature: ['bg-azure-lt', 'Feature'], note: ['bg-secondary-lt', 'Note'] };
-  const PRIO = { critical: 'bg-red', high: 'bg-orange', normal: 'bg-secondary-lt', low: 'bg-secondary-lt' };
+  const PRIO = { critical: 'bg-red', high: 'bg-orange', normal: 'bg-secondary-lt', low: 'bg-secondary-lt', future: 'bg-purple-lt' };
   const STAT = { open: ['bg-yellow-lt', 'Open'], in_progress: ['bg-blue-lt', 'In progress'], resolved: ['bg-green-lt', 'Resolved'], wont_fix: ['bg-secondary-lt', "Won't fix"] };
   let items = [], current = null, detailModal = null, timer = null;
 
