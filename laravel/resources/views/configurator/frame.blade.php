@@ -3,6 +3,10 @@
 @section('title', 'Entry Builder')
 
 @section('content')
+@php
+  // Split layout (/config/split): job/entry tree on the left, builder on the right. Same page, same JS.
+  $split = $split ?? false;
+@endphp
 <div class="page-wrapper">
   <div class="page-header d-print-none">
     <div class="container-xl">
@@ -14,6 +18,7 @@
         </div>
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
+            <a href="{{ $split ? '/config' : '/config/split' }}" class="btn btn-outline-secondary" title="Switch layout"><i class="ti {{ $split ? 'ti-layout-rows' : 'ti-layout-sidebar' }} me-1"></i>{{ $split ? 'Classic Layout' : 'Split Layout' }}</a>
             <a href="/config/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
             <button class="btn btn-primary" onclick="fbOpenNewModal()" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>New Configuration</button>
           </div>
@@ -23,10 +28,10 @@
   </div>
 
   <main class="page-body">
-    <div class="container-xl">
+    <div class="{{ $split ? 'container-fluid' : 'container-xl' }}">
       <div class="row row-cards">
         {{-- Entry selection: one wide bar (job -> entry) so the working area below gets the full width. --}}
-        <div class="col-12">
+        <div class="col-12 {{ $split ? 'd-none' : '' }}">
           <div class="card" id="fb-entry-bar">
             <div class="card-body py-2">
               <div class="row g-2 align-items-end">
@@ -52,7 +57,37 @@
           </div>
         </div>
 
-        <div class="col-12" id="fb-empty">
+        @if($split)
+        <div class="col-lg-3 col-xl-2">
+          <div class="card fb-pane" id="fb-tree-card">
+            <div class="card-header flex-column align-items-stretch gap-2">
+              <div class="input-icon">
+                <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                <input type="text" class="form-control" placeholder="Search job, name or door tag..." id="fb-tree-search" autocomplete="off" oninput="fbRenderTree()">
+              </div>
+              <div class="d-flex gap-2 align-items-center">
+                <select class="form-select form-select-sm" id="fb-tree-status" onchange="fbRenderTree()">
+                  <option value="">All statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="reserved">Reserved</option>
+                  <option value="cut_released">Cut released</option>
+                  <option value="released">Released</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="completed">Completed</option>
+                </select>
+                <div class="btn-group">
+                  <button class="btn btn-sm btn-icon" title="Expand all" onclick="fbSetAllJobs(true)"><i class="ti ti-arrows-diagonal"></i></button>
+                  <button class="btn btn-sm btn-icon" title="Collapse all" onclick="fbSetAllJobs(false)"><i class="ti ti-arrows-diagonal-minimize-2"></i></button>
+                </div>
+              </div>
+            </div>
+            <div class="card-body p-2 fb-scroll"><div id="fb-tree"></div></div>
+            <div class="card-footer text-muted small" id="fb-tree-count"></div>
+          </div>
+        </div>
+        @endif
+
+        <div class="{{ $split ? 'col-lg-9 col-xl-10' : 'col-12' }}" id="fb-empty">
           <div class="card">
             <div class="empty">
               <div class="empty-icon"><i class="ti ti-door fs-1"></i></div>
@@ -62,7 +97,7 @@
           </div>
         </div>
 
-        <div class="col-12" id="fb-detail-col" style="display:none">
+        <div class="{{ $split ? 'col-lg-9 col-xl-10' : 'col-12' }}" id="fb-detail-col" style="display:none">
           <div class="card mb-3">
             <div class="card-header flex-wrap row-gap-2">
               <div>
@@ -828,7 +863,23 @@
   </div>
 </div>
 
+@if($split)
+<style>
+  .fb-pane { position: sticky; top: .5rem; height: calc(100vh - 150px); min-height: 420px; display: flex; flex-direction: column; overflow: hidden; }
+  .fb-scroll { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; }
+  .fb-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--tblr-border-radius); cursor: pointer; }
+  .fb-row:hover { background: var(--tblr-bg-surface-secondary); }
+  .fb-row.active { background: var(--tblr-primary-lt); }
+  .fb-job .fb-chev { transition: transform .15s; flex: none; color: var(--tblr-secondary-color); }
+  .fb-job.collapsed .fb-chev { transform: rotate(-90deg); }
+  .fb-job.collapsed .fb-entries { display: none; }
+  .fb-entries { margin-left: 14px; padding-left: 8px; border-left: 1px solid var(--tblr-border-color); }
+  .fb-entry-name { min-width: 0; flex: 1 1 auto; }
+  @media (max-width: 991.98px) { .fb-pane { position: static; height: 360px; } }
+</style>
+@endif
 <script>
+const FB_SPLIT = @json($split);
 let fbConfigs = [];
 let fbSelectedId = null;
 let fbSelectedDetail = null;
@@ -1668,7 +1719,8 @@ async function fbLoadJobFilterOptions() {
 }
 
 async function fbLoadList() {
-  const jobId = document.getElementById('fb-list-job-filter').value;
+  // Split layout always loads every job; the tree does the grouping.
+  const jobId = FB_SPLIT ? '' : document.getElementById('fb-list-job-filter').value;
   const qs = jobId ? `?business_job_id=${jobId}&archived=0` : '?archived=0';
   const data = await authenticatedFetch(`/door-frame-configurations${qs}`);
   fbConfigs = data.configurations || [];
@@ -1708,6 +1760,73 @@ function fbRenderList() {
     ? `<span class="badge ${fbStatusBadgeClass(current.status)}">${esc(current.status_label)}</span>` +
       (current.work_order_release_token ? `<span class="badge bg-blue-lt">WO ${esc(current.work_order_release_token)}</span>` : '')
     : '';
+  if (FB_SPLIT) fbRenderTree();
+}
+
+// ---- Split layout: collapsible job -> entry tree ----
+let fbOpenJobs = new Set();
+let fbRevealedId = null;
+
+function fbSetAllJobs(open) {
+  fbOpenJobs = open ? new Set(fbConfigs.map(c => String(c.business_job_id))) : new Set();
+  fbRenderTree();
+}
+
+function fbToggleJob(jobId) {
+  jobId = String(jobId);
+  if (fbOpenJobs.has(jobId)) fbOpenJobs.delete(jobId); else fbOpenJobs.add(jobId);
+  fbRenderTree();
+}
+
+function fbRenderTree() {
+  const host = document.getElementById('fb-tree');
+  if (!host) return;
+  const q = document.getElementById('fb-tree-search').value.trim().toLowerCase();
+  const status = document.getElementById('fb-tree-status').value;
+  const filtering = !!(q || status);
+
+  // Open the selected entry's job once per selection (not on every re-render, so it can still be collapsed).
+  const selected = fbConfigs.find(c => c.id == fbSelectedId);
+  if (selected && fbRevealedId !== fbSelectedId) {
+    fbOpenJobs.add(String(selected.business_job_id));
+    fbRevealedId = fbSelectedId;
+  }
+
+  const jobs = new Map();
+  fbConfigs.forEach(c => {
+    if (status && c.status !== status) return;
+    const jobText = `${c.job_number} ${c.job_name}`.toLowerCase();
+    const jobHit = !q || jobText.includes(q);
+    const entryHit = !q || jobHit || `${c.door_tags} ${c.scope_label} ${c.work_order_release_token || ''}`.toLowerCase().includes(q);
+    if (!entryHit) return;
+    if (!jobs.has(c.business_job_id)) jobs.set(c.business_job_id, { id: c.business_job_id, number: c.job_number, name: c.job_name, entries: [] });
+    jobs.get(c.business_job_id).entries.push(c);
+  });
+
+  const list = [...jobs.values()].sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+  host.innerHTML = list.map(j => {
+    const open = filtering || fbOpenJobs.has(String(j.id));
+    const hasActive = j.entries.some(e => e.id == fbSelectedId);
+    const entries = j.entries.map(e => {
+      const name = (e.door_tags && String(e.door_tags).trim()) || e.scope_label;
+      return `<div class="fb-row ${e.id == fbSelectedId ? 'active' : ''}" onclick="fbSelect(${e.id})">
+        <div class="fb-entry-name text-truncate" title="${esc(fbEntryLabel(e, false))}">${esc(name)}
+          <span class="text-muted small">${esc(e.scope_label)}</span></div>
+        <span class="badge ${fbStatusBadgeClass(e.status)}">${esc(e.status_label)}</span>
+      </div>`;
+    }).join('');
+    return `<div class="fb-job ${open ? '' : 'collapsed'}">
+      <div class="fb-row ${hasActive && !open ? 'active' : ''}" onclick="fbToggleJob('${j.id}')">
+        <i class="ti ti-chevron-down fb-chev"></i>
+        <div class="fb-entry-name text-truncate"><strong>${esc(j.number)}</strong> <span class="text-muted">${esc(j.name)}</span></div>
+        <span class="badge bg-secondary-lt">${j.entries.length}</span>
+      </div>
+      <div class="fb-entries">${entries}</div>
+    </div>`;
+  }).join('') || `<div class="text-center text-muted py-5">${fbConfigs.length ? 'No entries match your filters.' : 'No entries yet. Click "New Configuration" to create one.'}</div>`;
+
+  const shown = list.reduce((n, j) => n + j.entries.length, 0);
+  document.getElementById('fb-tree-count').textContent = `${list.length} job${list.length === 1 ? '' : 's'} · ${shown} entr${shown === 1 ? 'y' : 'ies'}`;
 }
 
 // Changing the job clears the current entry (it may belong to another job); a job with one entry opens it.

@@ -132,6 +132,10 @@ Route::get('/config', function () {
     return view('configurator.frame');
 });
 
+Route::get('/config/split', function () {
+    return view('configurator.frame', ['split' => true]);
+});
+
 Route::get('/config/package', function () {
     return view('configurator.package');
 });
