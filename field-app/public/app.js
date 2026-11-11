@@ -36,6 +36,100 @@ const STATUS = {
 };
 const statusChip = (s) => { const [t, c] = STATUS[s] || [s, '']; return `<span class="chip ${c}">${esc(t)}</span>`; };
 const METER_LABEL = { odometer_miles: 'Odometer (miles)', engine_hours: 'Engine hours' };
+const APP_VERSION = '2.0';
+
+// Inline icons (stroke, currentColor) so nothing depends on emoji fonts or external assets.
+const ICON_PATHS = {
+  truck: '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
+  clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 13l2 2 4-4"/>',
+  box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  scan: '<path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M4 12h16"/>',
+  refresh: '<path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  check: '<path d="M5 12l5 5 9-10"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  minus: '<path d="M6 12h12"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M21 16l-5-5-8 8"/>',
+  bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  alert: '<path d="M12 3l10 18H2zM12 10v5M12 18v.5"/>',
+  gauge: '<path d="M4 17a8 8 0 1116 0M12 17l4-5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  wrench: '<path d="M14 6a4 4 0 005 5l-9 9a2 2 0 01-3-3l9-9a4 4 0 01-2-2z"/>',
+};
+const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+
+/** "just now", "5 min ago", "3 h ago", or a date. */
+function ago(iso) {
+  if (!iso) return 'never';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+/** In-app replacement for confirm(): a bottom sheet. Resolves true when the user confirms. */
+function confirmSheet(title, message, okLabel = 'Confirm', danger = false) {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'overlay';
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `<div class="sheet"><h3>${esc(title)}</h3>${message ? `<p>${esc(message)}</p>` : ''}
+      <div class="btn-pair"><button class="btn" type="button" data-r="0">Cancel</button>
+      <button class="btn ${danger ? 'danger solid' : 'primary'}" type="button" data-r="1">${esc(okLabel)}</button></div></div>`;
+    const done = (v) => { el.remove(); resolve(v); };
+    el.addEventListener('click', (e) => { if (e.target === el) done(false); else if (e.target.dataset.r != null) done(e.target.dataset.r === '1'); });
+    document.body.appendChild(el);
+    el.querySelector('[data-r="1"]').focus();
+  });
+}
+
+// ---------- drafts ----------------------------------------------------------------------
+// Forms are autosaved (text, choices; not photos) so an OS kill, a phone call or a dropped signal
+// never costs the crew a half-finished inspection. Cleared on submit; ignored after 24 hours.
+const DRAFT_MS = 24 * 3600 * 1000;
+let draftTimer;
+const draftKey = () => `draft:${location.hash}`;
+
+function bindDraft(form) {
+  const key = draftKey();
+  const fields = () => [...form.elements].filter((el) => (el.name || el.id) && !['file', 'password', 'submit', 'button'].includes(el.type));
+  const snap = () => {
+    const o = {};
+    for (const el of fields()) {
+      const k = el.name || el.id;
+      if (el.type === 'radio') { if (el.checked) o[k] = el.value; }
+      else if (el.type === 'checkbox') { if (el.checked) o[k] = true; }
+      else if (el.value !== '') o[k] = el.value;
+    }
+    return o;
+  };
+  const save = () => {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => { const v = snap(); (Object.keys(v).length ? db.set(key, { v, t: Date.now() }) : db.del(key)).catch(() => {}); }, 400);
+  };
+  form.addEventListener('input', save);
+  form.addEventListener('change', save);
+  db.get(key).then((d) => {
+    if (!d || !form.isConnected || Date.now() - d.t > DRAFT_MS) return;
+    let any = false;
+    for (const el of fields()) {
+      const k = el.name || el.id;
+      if (!(k in d.v)) continue;
+      any = true;
+      if (el.type === 'radio') { if (el.value === d.v[k]) { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); } }
+      else if (el.type === 'checkbox') el.checked = !!d.v[k];
+      else { el.value = d.v[k]; el.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    if (any) toast('Restored your unsaved draft.');
+  }).catch(() => {});
+}
+
+async function clearDraft() { clearTimeout(draftTimer); await db.del(draftKey()).catch(() => {}); }
 
 // ---------- storage (IndexedDB) ---------------------------------------------------------
 
@@ -170,8 +264,33 @@ async function flush() {
   } finally {
     flushing = false;
     state.outbox = await db.outbox();
-    if (['#/queue', '#/pre', '#/post', '#/shipping'].some((h) => location.hash.startsWith(h)) || location.hash === '' || location.hash === '#/') render();
+    updateBanner();
+    softRender();
   }
+}
+
+/** Pull fresh data and repaint list screens. Never touches a form the user may be filling in. */
+async function refreshNow(manual = false) {
+  try {
+    const ok = await refresh();
+    if (ok) { flush(); softRender(); if (manual) toast('Up to date.'); }
+    else if (manual) toast('No connection. Showing saved data.');
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) render();
+    else if (manual) toast(e.message);
+  }
+  updateBanner();
+}
+
+/** Re-render only screens that have no inputs (lists, details), and only when nothing is focused. */
+const SOFT_ROUTES = new Set(['', 'pre', 'post', 'shipping', 'me', 'queue', 'asset']);
+function softRender() {
+  if (state.needLogin || !state.user) return;
+  const route = decodeURIComponent((location.hash || '#/').split('/')[1] ?? '');
+  if (!SOFT_ROUTES.has(route)) return;
+  if (document.getElementById('devSheet') || document.querySelector('.overlay')) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+  render();
 }
 
 const pendingCount = () => state.outbox.filter((r) => r.status !== 'failed').length;
@@ -186,6 +305,12 @@ function go(hash) { if (location.hash === hash) render(); else location.hash = h
 async function render() {
   syncDevFab();
   if (stopScan) { stopScan(); stopScan = null; }
+  await routeView();
+  // Screens without the bottom tab bar (forms, details) don't need room reserved for it.
+  $app.classList.toggle('notabs', !$app.querySelector('.tabs'));
+}
+
+function routeView() {
   if (state.needLogin || !state.user) return viewLogin();
   const [, route, arg] = (location.hash || '#/').split('/').map((p) => decodeURIComponent(p));
   switch (route) {
@@ -202,37 +327,42 @@ async function render() {
     case 'trip': return viewTrip(arg);
     case 'newshipment': return viewNewShipment();
     case 'scan': return viewScan();
-    case 'queue': return viewQueue();
+    case 'me':
+    case 'queue': return viewMe();
     default: return viewHome();
   }
 }
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
 
 const findAsset = (n) => state.assets.find((a) => a.asset_number === n);
 
-function topbar(title, back) {
-  return `<div class="topbar">${back ? `<button class="back" data-go="${back}" aria-label="Back">‹ Back</button>` : ''}<h1>${esc(title)}</h1></div>`;
+function topbar(title, back, actions = '', sub = '') {
+  return `<div class="topbar">${back ? `<button class="back" data-go="${back}" aria-label="Back">${icon('back')}Back</button>` : ''}<h1>${esc(title)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</h1>${actions}</div>`;
 }
 
 /** Bottom navigation on the top-level screens. Sections the signed-in user can't use are left out. */
 function tabs(active) {
-  const items = [['fleet', '#/', 'Fleet', '🚚', 0]];
-  if (canInspect()) items.push(['pre', '#/pre', 'Pre-check', '📋', openPreChecks().length]);
-  items.push(['post', '#/post', 'Deliveries', '📦', openDeliveries().length]);
-  if (canSeeQueue()) items.push(['shipping', '#/shipping', 'Queue', '🗓️', 0]);
-  return `<nav class="tabs" aria-label="Sections">${items.map(([k, h, label, icon, n]) => `
+  const items = [['fleet', '#/', 'Fleet', 'truck', 0]];
+  if (canInspect()) items.push(['pre', '#/pre', 'Pre-check', 'clipboard', openPreChecks().length]);
+  items.push(['post', '#/post', 'Deliveries', 'box', openDeliveries().length]);
+  if (canSeeQueue()) items.push(['shipping', '#/shipping', 'Shipping', 'calendar', 0]);
+  items.push(['me', '#/me', 'Me', 'user', pendingCount() + failedCount()]);
+  return `<nav class="tabs" aria-label="Sections">${items.map(([k, h, label, ico, n]) => `
     <a href="${h}" data-go="${h}" class="${k === active ? 'on' : ''}" ${k === active ? 'aria-current="page"' : ''}>
-      <span class="ico" aria-hidden="true">${icon}</span><span>${label}</span>${n ? `<b class="dot">${n}</b>` : ''}</a>`).join('')}</nav>`;
+      ${icon(ico)}<span>${label}</span>${n ? `<b class="dot">${n}</b>` : ''}</a>`).join('')}</nav>`;
 }
 
-function statusBanner() {
+function statusBannerInner() {
   const bits = [];
-  if (!state.online) bits.push('<div class="banner warn">You’re offline. You can keep working; everything will send when you’re back in range.</div>');
+  if (!state.online) bits.push(`<div class="banner warn">${icon('alert')}<div class="grow">You’re offline. Keep working; everything sends when you’re back in range.</div></div>`);
   const p = pendingCount(), f = failedCount();
-  if (p) bits.push(`<div class="banner warn">${p} waiting to send. <button data-go="#/queue">View</button></div>`);
-  if (f) bits.push(`<div class="banner bad">${f} couldn’t be sent. <button data-go="#/queue">Review</button></div>`);
+  if (p) bits.push(`<div class="banner warn"><div class="grow">${p} waiting to send.</div><button data-go="#/me">View</button></div>`);
+  if (f) bits.push(`<div class="banner bad"><div class="grow">${f} couldn’t be sent.</div><button data-go="#/me">Review</button></div>`);
   return bits.join('');
 }
+/** Wrapped so connection changes can update it in place without re-rendering (and wiping) the screen. */
+const statusBanner = () => `<div id="status">${statusBannerInner()}</div>`;
+function updateBanner() { const el = document.getElementById('status'); if (el) el.innerHTML = statusBannerInner(); }
 
 // Delegated navigation so templates stay free of inline handlers (CSP forbids them).
 document.addEventListener('click', (e) => {
@@ -244,19 +374,24 @@ document.addEventListener('click', (e) => {
 
 function viewLogin() {
   $app.innerHTML = `
-    <div class="topbar"><h1>ForgeDesk Field</h1></div>
+    <div class="login-brand"><img src="/icons/icon-192.png" alt=""><h1>ForgeDesk Field</h1><p>Inspections, shipments and fleet</p></div>
     <form id="login" class="card" autocomplete="on">
       ${state.needLogin && state.user ? '<div class="banner warn">Your session ended. Sign in to continue. Unsent work is safe.</div>' : ''}
-      <label for="u">Email</label>
+      <label for="u" style="margin-top:0">Email</label>
       <input id="u" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" autocorrect="off" required>
       <label for="p">Password</label>
-      <input id="p" name="password" type="password" autocomplete="current-password" required>
-      <p id="err" class="small" style="color:var(--bad);min-height:1.2em" role="alert"></p>
-      <button class="btn primary" type="submit">Sign in</button>
-    </form>`;
+      <div class="pw"><input id="p" name="password" type="password" autocomplete="current-password" required>
+        <button class="icon-btn" type="button" id="pwt" aria-label="Show password">${icon('eye')}</button></div>
+      <p id="err" class="err" role="alert"></p>
+      <button class="btn primary" type="submit" style="margin-top:12px">Sign in</button>
+    </form>
+    <p class="small muted" style="text-align:center">Use your ForgeDesk email and password.<br>Not working? Ask an administrator to enable mobile access.</p>`;
+  document.getElementById('pwt').addEventListener('click', () => {
+    const p = document.getElementById('p'); p.type = p.type === 'password' ? 'text' : 'password';
+  });
   document.getElementById('login').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = e.target.querySelector('button'); btn.disabled = true;
+    const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Signing in…';
     try {
       await api('/login', { method: 'POST', body: { username: e.target.elements.username.value.trim(), password: e.target.elements.password.value } });
       state.needLogin = false;
@@ -265,31 +400,51 @@ function viewLogin() {
       go('#/');
     } catch (err) {
       document.getElementById('err').textContent = err instanceof ApiError ? err.message : 'Can’t reach the server. Check your connection.';
-      btn.disabled = false;
+      btn.disabled = false; btn.textContent = 'Sign in';
     }
   });
 }
 
+const isAttn = (a) => a.status === 'out_of_service' || a.status === 'in_repair';
+const onJob = (a) => a.status === 'in_service_job' || !!a.current_job_label;
+
+function assetRow(a) {
+  const tone = a.status === 'out_of_service' ? 'bad' : a.status === 'in_repair' ? 'warn' : '';
+  return `<li><a href="#/asset/${encodeURIComponent(a.asset_number)}" data-go="#/asset/${encodeURIComponent(a.asset_number)}">
+    <span class="avatar ${tone}">${icon(tone === 'bad' ? 'alert' : tone === 'warn' ? 'wrench' : 'truck')}</span>
+    <div class="grow"><div><span class="num">${esc(a.asset_number)}</span> ${esc(a.name)}</div>
+    <div class="small muted">${esc(a.type_name)}${a.current_job_label ? ` · ${esc(a.current_job_label)}` : ''}</div></div>
+    ${statusChip(a.status)}</a></li>`;
+}
+
 function viewHome() {
-  const q = (sessionStorage.getItem('q') || '').toLowerCase();
-  const list = state.assets.filter((a) => !q || [a.asset_number, a.name, a.type_name, a.current_job_label].some((v) => String(v || '').toLowerCase().includes(q)));
+  const counts = { all: state.assets.length, attn: state.assets.filter(isAttn).length, job: state.assets.filter(onJob).length };
+  const FILTERS = [['all', 'All'], ['attn', 'Needs attention'], ['job', 'On a job']];
   $app.innerHTML = `
-    <div class="topbar"><h1>Fleet</h1>
-      <button class="btn small" data-go="#/queue">Sent${pendingCount() + failedCount() ? ` (${pendingCount() + failedCount()})` : ''}</button>
-      <button class="btn small" id="logout">Sign out</button></div>
+    ${topbar('Fleet', '', `<button class="icon-btn" id="refresh" aria-label="Refresh">${icon('refresh')}</button>`, state.syncedAt ? `Updated ${ago(state.syncedAt)}` : 'Not downloaded yet')}
     ${statusBanner()}
-    <button class="btn primary" data-go="#/scan">Scan asset QR code</button>
-    <label for="q" class="small muted">Or search by number, name or job</label>
-    <input id="q" type="search" placeholder="e.g. FA-0012 or Ford F-250" value="${esc(sessionStorage.getItem('q') || '')}" autocomplete="off">
-    <div class="card" style="margin-top:12px"><ul class="list">${list.map((a) => `
-      <li><a href="#/asset/${encodeURIComponent(a.asset_number)}">
-        <div class="grow"><div><span class="num">${esc(a.asset_number)}</span> ${esc(a.name)}</div>
-        <div class="small muted">${esc(a.type_name)}${a.current_job_label ? ` · ${esc(a.current_job_label)}` : ''}</div></div>
-        ${statusChip(a.status)}</a></li>`).join('') || `<li class="item muted">${state.assets.length ? 'No matches.' : 'No assets yet. Connect once to download them.'}</li>`}
-    </ul></div>
-    <p class="small muted" style="text-align:center">${state.syncedAt ? `Asset list updated ${new Date(state.syncedAt).toLocaleString()}` : ''} · ${esc(state.user.display_name)}</p>${tabs('fleet')}`;
-  document.getElementById('q').addEventListener('input', (e) => { sessionStorage.setItem('q', e.target.value); const pos = e.target.selectionStart; viewHome(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(pos, pos); });
-  document.getElementById('logout').addEventListener('click', logout);
+    <button class="btn primary lg" data-go="#/scan" style="margin-bottom:12px">${icon('scan')} Scan asset QR code</button>
+    <input id="q" type="search" placeholder="Search number, name, type or job" value="${esc(sessionStorage.getItem('q') || '')}" autocomplete="off" aria-label="Search assets">
+    <div class="filters" id="filters" style="margin-top:12px">${FILTERS.map(([k, l]) => `<button class="fchip" type="button" data-f="${k}">${l}<b>${counts[k]}</b></button>`).join('')}</div>
+    <div class="card flush"><ul class="list" id="list"></ul></div>${tabs('fleet')}`;
+
+  const paint = () => {
+    const q = (sessionStorage.getItem('q') || '').trim().toLowerCase();
+    const f = sessionStorage.getItem('f') || 'all';
+    document.querySelectorAll('#filters .fchip').forEach((b) => b.classList.toggle('on', b.dataset.f === f));
+    const list = state.assets.filter((a) => (f === 'all' || (f === 'attn' ? isAttn(a) : onJob(a)))
+      && (!q || [a.asset_number, a.name, a.type_name, a.current_job_label].some((v) => String(v || '').toLowerCase().includes(q))));
+    document.getElementById('list').innerHTML = list.map(assetRow).join('')
+      || `<li class="empty">${icon('truck')}${state.assets.length ? 'No matching assets.' : 'No assets yet. Connect once to download them.'}</li>`;
+  };
+  paint();
+  document.getElementById('q').addEventListener('input', (e) => { sessionStorage.setItem('q', e.target.value); paint(); });
+  document.getElementById('filters').addEventListener('click', (e) => { const f = e.target.closest('[data-f]')?.dataset.f; if (f) { sessionStorage.setItem('f', f); paint(); } });
+  document.getElementById('refresh').addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.classList.add('spin');
+    await refreshNow(true);
+    b.classList.remove('spin');
+  });
 }
 
 // ---------- shipping lists (queue, pre-checks, deliveries) --------------------------------
@@ -376,29 +531,34 @@ function viewTrip(number) {
 }
 
 function shipRow(sh, href, chipHtml) {
-  return `<li><a href="${href}" data-go="${href}"><div class="grow">
+  const late = sh.ship_date && sh.ship_date < todayStr() && sh.status !== 'shipped';
+  const tone = late ? 'bad' : sh.status === 'shipped' ? 'warn' : sh.status === 'pre_check_done' ? 'ok' : '';
+  return `<li><a href="${href}" data-go="${href}">
+    <span class="avatar ${tone}">${icon(sh.status === 'shipped' ? 'truck' : sh.status === 'pre_check_done' ? 'check' : 'box')}</span>
+    <div class="grow">
     <div><span class="num">${esc(sh.shipment_number)}</span> ${esc(sh.job_label || 'No job')}</div>
     <div class="small muted">${esc([sh.ship_date ? prettyDate(sh.ship_date) : 'No date', sh.destination, sh.loads].filter(Boolean).join(' · '))}</div></div>
     ${chipHtml ?? shipChip(sh.status)}</a></li>`;
 }
 
-const newShipmentButton = () => (canManage() ? '<button class="btn small primary" data-go="#/newshipment">+ New</button>' : '');
+const newShipmentButton = () => (canManage() ? `<button class="btn small primary" data-go="#/newshipment">${icon('plus')} New</button>` : '');
+const emptyState = (ico, text) => `<li class="empty">${icon(ico)}${esc(text)}</li>`;
 
 function viewPre() {
   if (!canInspect()) return go('#/');
   const list = openPreChecks();
   $app.innerHTML = `
-    <div class="topbar"><h1>Pre-shipment checks</h1>${newShipmentButton()}</div>${statusBanner()}
-    <div class="card"><ul class="list">${list.map((sh) => shipRow(sh, `#/precheck/${encodeURIComponent(sh.shipment_number)}`, '<span class="chip warn">Check</span>')).join('')
-      || '<li class="item muted">Nothing waiting for a pre-shipment check.</li>'}</ul></div>${tabs('pre')}`;
+    ${topbar('Pre-shipment checks', '', newShipmentButton(), list.length ? `${list.length} waiting` : '')}${statusBanner()}
+    <div class="card flush"><ul class="list">${list.map((sh) => shipRow(sh, `#/precheck/${encodeURIComponent(sh.shipment_number)}`, '<span class="chip warn">Check</span>')).join('')
+      || emptyState('clipboard', 'Nothing is waiting for a pre-shipment check.')}</ul></div>${tabs('pre')}`;
 }
 
 function viewPost() {
   const list = openDeliveries();
   $app.innerHTML = `
-    <div class="topbar"><h1>Deliveries to inspect</h1></div>${statusBanner()}
-    <div class="card"><ul class="list">${list.map((sh) => shipRow(sh, `#/delivery/${encodeURIComponent(sh.shipment_number)}`, '<span class="chip warn">Inspect</span>')).join('')
-      || '<li class="item muted">No deliveries waiting for inspection.</li>'}</ul></div>${tabs('post')}`;
+    ${topbar('Deliveries', '', '', list.length ? `${list.length} to inspect` : '')}${statusBanner()}
+    <div class="card flush"><ul class="list">${list.map((sh) => shipRow(sh, `#/delivery/${encodeURIComponent(sh.shipment_number)}`, '<span class="chip warn">Inspect</span>')).join('')
+      || emptyState('box', 'No deliveries are waiting for inspection.')}</ul></div>${tabs('post')}`;
 }
 
 function viewShipping() {
@@ -410,16 +570,22 @@ function viewShipping() {
     else if (sh.ship_date < today && sh.status !== 'shipped') late.push(sh);
     else { if (!byDate.has(sh.ship_date)) byDate.set(sh.ship_date, []); byDate.get(sh.ship_date).push(sh); }
   }
-  const section = (title, list, cls = '') => (list.length ? `<div class="card"><h2 class="${cls}">${esc(title)}</h2><ul class="list">${list.map((sh) => shipRow(sh, `#/shipment/${encodeURIComponent(sh.shipment_number)}`)).join('')}</ul></div>` : '');
+  const section = (title, list, cls = '') => (list.length ? `<div class="card flush"><h2 class="${cls}" style="padding-top:12px;margin:0">${esc(title)}</h2><ul class="list">${list.map((sh) => shipRow(sh, `#/shipment/${encodeURIComponent(sh.shipment_number)}`)).join('')}</ul></div>` : '');
   const unsent = state.outbox.filter((r) => r.kind === 'shipment_create');
+  const todayN = (byDate.get(today) || []).length;
+  const ready = state.shipments.filter((s) => s.status === 'pre_check_done').length;
   $app.innerHTML = `
-    <div class="topbar"><h1>Shipping queue</h1>${newShipmentButton()}</div>${statusBanner()}
+    ${topbar('Shipping', '', newShipmentButton(), `${state.shipments.length} open`)}${statusBanner()}
+    <div class="stats">
+      <div class="stat ${late.length ? 'bad' : ''}"><b>${late.length}</b><span>Late</span></div>
+      <div class="stat ${todayN ? 'warn' : ''}"><b>${todayN}</b><span>Today</span></div>
+      <div class="stat ${ready ? 'ok' : ''}"><b>${ready}</b><span>Ready to ship</span></div></div>
     ${unsent.length ? `<div class="card"><h2>Waiting to send</h2><ul class="list">${unsent.map((r) => `<li><div class="item"><div class="grow"><strong>New shipment</strong>
       <div class="small muted">${esc([r.payload.destination, r.payload.job_numbers?.join(', ')].filter(Boolean).join(' · ') || 'No details')}</div></div><span class="chip warn">Waiting</span></div></li>`).join('')}</ul></div>` : ''}
     ${section('Late', late, 'late')}
     ${[...byDate.keys()].sort().map((d) => section(d === today ? `Today · ${prettyDate(d)}` : prettyDate(d), byDate.get(d))).join('')}
     ${section('Not scheduled', unscheduled)}
-    ${state.shipments.length ? '' : '<div class="card"><p class="muted" style="margin:0">No open shipments.</p></div>'}
+    ${state.shipments.length ? '' : `<div class="card flush"><ul class="list">${emptyState('calendar', 'No open shipments.')}</ul></div>`}
     ${tabs('shipping')}`;
 }
 
@@ -427,19 +593,31 @@ function viewAsset(number) {
   const a = findAsset(number);
   if (!a) { toast('Asset not found'); return go('#/'); }
   const enc = encodeURIComponent(a.asset_number);
+  const hasMeter = a.meter_type && a.meter_type !== 'none';
+  const tone = a.status === 'out_of_service' ? 'bad' : a.status === 'in_repair' ? 'warn' : '';
+  // What this phone has sent for this asset lately (still queued first).
+  const activity = [...state.outbox.map((r) => ({ ...r, queued: true })), ...state.recent.map((r) => ({ ...r, queued: false }))]
+    .filter((r) => r.asset_number === a.asset_number && KIND[r.kind]).slice(0, 5);
   $app.innerHTML = `
     ${topbar(a.asset_number, '#/')}${statusBanner()}
     <div class="card">
-      <div class="row"><div class="grow"><strong>${esc(a.name)}</strong><div class="muted">${esc(a.type_name)}</div></div>${statusChip(a.status)}</div>
-      ${a.current_job_label ? `<p class="small" style="margin:10px 0 0">At: ${esc(a.current_job_label)}</p>` : ''}
-      ${a.meter_type && a.meter_type !== 'none' ? `<p class="small" style="margin:6px 0 0">${esc(METER_LABEL[a.meter_type] || 'Meter')}: <strong>${a.current_meter ?? '–'}</strong></p>` : ''}
+      <div class="asset-head"><span class="avatar ${tone}">${icon(tone === 'bad' ? 'alert' : 'truck')}</span>
+        <div class="grow"><strong style="font-size:1.1rem">${esc(a.name)}</strong><div class="muted">${esc(a.type_name)}</div>
+        ${a.current_job_label ? `<div class="small muted">At ${esc(a.current_job_label)}</div>` : ''}</div>${statusChip(a.status)}</div>
+      ${hasMeter ? `<div class="meter-box"><span class="muted small">${esc(METER_LABEL[a.meter_type] || 'Meter')}</span><b>${a.current_meter != null ? Number(a.current_meter).toLocaleString() : '–'}</b></div>` : ''}
     </div>
-    ${a.status === 'out_of_service' ? '<div class="banner bad">This asset is out of service. Do not use it until the office clears it.</div>' : ''}
+    ${a.status === 'out_of_service' ? `<div class="banner bad">${icon('alert')}<div class="grow">Out of service. Do not use it until the office clears it.</div></div>` : ''}
     <div class="actions">
-      <button class="btn primary" data-go="#/inspect/${enc}">Start inspection</button>
-      ${a.meter_type && a.meter_type !== 'none' ? `<button class="btn" data-go="#/meter/${enc}">Update ${a.meter_type === 'engine_hours' ? 'hours' : 'odometer'}</button>` : ''}
-      <button class="btn" data-go="#/defect/${enc}">Report a problem</button>
-    </div>`;
+      <button class="btn primary lg" data-go="#/inspect/${enc}">${icon('clipboard')} Start inspection</button>
+      <div class="btn-pair">
+        ${hasMeter ? `<button class="btn" data-go="#/meter/${enc}">${icon('gauge')} ${a.meter_type === 'engine_hours' ? 'Hours' : 'Odometer'}</button>` : ''}
+        <button class="btn" data-go="#/defect/${enc}" ${hasMeter ? '' : 'style="grid-column:1/-1"'}>${icon('alert')} Report problem</button>
+      </div>
+    </div>
+    ${activity.length ? `<div class="card"><h2>Your recent activity</h2><ul class="list">${activity.map((r) => `
+      <li><div class="item" style="min-height:48px"><div class="grow"><strong>${esc(KIND[r.kind])}</strong>
+        <div class="small muted">${new Date(r.submitted_at).toLocaleString()}</div></div>
+        <span class="chip ${r.queued ? 'warn' : r.processed ? 'ok' : ''}">${r.queued ? (r.status === 'failed' ? 'Failed' : 'Waiting') : r.processed ? 'Office has it' : 'Delivered'}</span></div></li>`).join('')}</ul></div>` : ''}`;
 }
 
 // ----- photos
@@ -464,21 +642,30 @@ function shrinkImage(file, maxSide = 1600, quality = 0.8) {
 
 function photoPicker(root, max = 10) {
   const photos = [];
+  let busy = 0;
   root.innerHTML = `
-    <label class="btn file-btn"><input type="file" accept="image/*" multiple>Add photos</label>
+    <div class="photo-btns">
+      <label class="btn file-btn">${icon('camera')} Take photo<input type="file" accept="image/*" capture="environment" data-src="cam"></label>
+      <label class="btn file-btn">${icon('image')} Choose<input type="file" accept="image/*" multiple data-src="lib"></label>
+    </div>
     <div class="thumbs"></div>`;
-  const input = root.querySelector('input'), thumbs = root.querySelector('.thumbs');
+  const thumbs = root.querySelector('.thumbs');
   const paint = () => {
-    thumbs.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.data_b64}" alt="Photo ${i + 1}"><button type="button" data-rm="${i}" aria-label="Remove photo ${i + 1}">×</button></div>`).join('');
+    thumbs.innerHTML = photos.map((p, i) => `<div class="thumb"><img src="${p.data_b64}" alt="Photo ${i + 1}"><button type="button" data-rm="${i}" aria-label="Remove photo ${i + 1}">×</button></div>`).join('')
+      + '<div class="thumb busy">Adding…</div>'.repeat(busy);
   };
-  input.addEventListener('change', async () => {
-    for (const f of input.files) {
-      if (photos.length >= max) { toast(`Up to ${max} photos`); break; }
-      try { photos.push({ filename: `photo-${photos.length + 1}.jpg`, data_b64: await shrinkImage(f) }); } catch (e) { toast(e.message); }
-    }
+  root.querySelectorAll('input[type=file]').forEach((input) => input.addEventListener('change', async () => {
+    const files = [...input.files];
     input.value = '';
+    busy += files.length; paint();
+    for (const f of files) {
+      busy -= 1;
+      if (photos.length >= max) { toast(`Up to ${max} photos`); continue; }
+      try { photos.push({ filename: `photo-${photos.length + 1}.jpg`, data_b64: await shrinkImage(f) }); } catch (e) { toast(e.message); }
+      paint();
+    }
     paint();
-  });
+  }));
   thumbs.addEventListener('click', (e) => { const i = e.target.dataset.rm; if (i != null) { photos.splice(+i, 1); paint(); } });
   return { get: () => photos.slice() };
 }
@@ -491,44 +678,78 @@ function checklistFor(asset) {
   return { template: c?.template_name || `${asset.type_name} inspection`, items: items.length ? items : ['General condition'] };
 }
 
+/** Pass / Fail / N/A buttons shared by every checklist. */
+const segHtml = (name, label) => `<div class="seg" role="radiogroup" aria-label="${esc(label)}">
+  <label><input type="radio" name="${name}" value="pass"><span class="pass">${icon('check')} Pass</span></label>
+  <label><input type="radio" name="${name}" value="fail"><span class="fail">${icon('x')} Fail</span></label>
+  <label><input type="radio" name="${name}" value="na"><span class="na">N/A</span></label></div>`;
+
 function viewInspect(number) {
   const a = findAsset(number);
   if (!a) return go('#/');
   const { template, items } = checklistFor(a);
   const hasMeter = a.meter_type && a.meter_type !== 'none';
   $app.innerHTML = `
-    ${topbar('Inspection', `#/asset/${encodeURIComponent(number)}`)}
-    <p class="muted" style="margin-top:0"><strong>${esc(a.asset_number)}</strong> · ${esc(a.name)}</p>
-    <form id="f">
+    ${topbar('Inspection', `#/asset/${encodeURIComponent(number)}`, '', `${a.asset_number} · ${a.name}`)}
+    <form id="f" novalidate>
+      <div class="progress" id="prog"><div class="meta"><span id="pc"></span><span id="pf"></span></div><div class="track"><div class="bar" id="pb"></div></div></div>
       ${hasMeter ? `<div class="card"><label for="m" style="margin-top:0">${esc(METER_LABEL[a.meter_type])} <span class="muted">(last: ${a.current_meter ?? '–'})</span></label>
         <input id="m" type="number" inputmode="decimal" step="any" min="0"></div>` : ''}
-      <div class="card"><div class="row"><h2 class="grow" style="margin:0">${esc(template)}</h2><button type="button" class="btn small" id="allpass">All pass</button></div>
+      <div class="card"><div class="row"><h2 class="grow" style="margin:0">${esc(template)}</h2><button type="button" class="btn small" id="allpass">Mark rest Pass</button></div>
         ${items.map((label, i) => `
           <div class="check-item" data-i="${i}">
             <div class="lbl">${esc(label)}</div>
-            <div class="seg" role="radiogroup" aria-label="${esc(label)}">
-              <label><input type="radio" name="r${i}" value="pass"><span class="pass">Pass</span></label>
-              <label><input type="radio" name="r${i}" value="fail"><span class="fail">Fail</span></label>
-              <label><input type="radio" name="r${i}" value="na"><span class="na">N/A</span></label>
-            </div>
+            ${segHtml(`r${i}`, label)}
             <textarea name="c${i}" placeholder="What’s wrong?" hidden maxlength="1000"></textarea>
           </div>`).join('')}
       </div>
       <div class="card"><label for="n" style="margin-top:0">Notes</label><textarea id="n" maxlength="5000"></textarea>
         <label>Photos</label><div id="ph"></div></div>
-      <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
+      <p id="err" class="err" role="alert"></p>
       <div class="sticky-submit"><button class="btn primary" type="submit">Submit inspection</button></div>
     </form>`;
   const form = document.getElementById('f');
   const pics = photoPicker(document.getElementById('ph'));
+  const answered = (i) => !!form.querySelector(`input[name=r${i}]:checked`);
+
+  const progress = () => {
+    const done = items.filter((_, i) => answered(i)).length;
+    const failed = items.filter((_, i) => form.querySelector(`input[name=r${i}]:checked`)?.value === 'fail').length;
+    document.getElementById('pc').textContent = `${done} of ${items.length} answered`;
+    document.getElementById('pf').textContent = failed ? `${failed} failed` : '';
+    document.getElementById('pf').style.color = 'var(--bad)';
+    document.getElementById('pb').style.width = `${items.length ? (done / items.length) * 100 : 100}%`;
+    document.getElementById('prog').classList.toggle('done', done === items.length);
+  };
+  progress();
 
   form.addEventListener('change', (e) => {
     const m = /^r(\d+)$/.exec(e.target.name || '');
-    if (m) form.elements[`c${m[1]}`].hidden = e.target.value !== 'fail';
+    if (!m) return;
+    const i = +m[1], box = form.querySelector(`[data-i="${i}"]`);
+    const wasDone = box.classList.contains('done');
+    box.classList.add('done');
+    const ta = form.elements[`c${i}`];
+    ta.hidden = e.target.value !== 'fail';
+    progress();
+    if (!e.isTrusted) return;                 // a restored draft: don't move the screen
+    if (e.target.value === 'fail') { ta.focus(); return; }
+    if (!wasDone) {                            // first answer on this line: bring up the next open one
+      const next = items.findIndex((_, j) => j > i && !answered(j));
+      if (next >= 0) form.querySelector(`[data-i="${next}"]`).scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
   });
   document.getElementById('allpass').addEventListener('click', () => {
-    items.forEach((_, i) => { const r = form.querySelector(`input[name=r${i}][value=pass]`); r.checked = true; form.elements[`c${i}`].hidden = true; });
+    items.forEach((_, i) => {
+      if (answered(i)) return;
+      form.querySelector(`input[name=r${i}][value=pass]`).checked = true;
+      form.querySelector(`[data-i="${i}"]`).classList.add('done');
+    });
+    progress();
+    form.dispatchEvent(new Event('change'));
   });
+  bindDraft(form);
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const err = document.getElementById('err');
@@ -536,17 +757,18 @@ function viewInspect(number) {
       const v = form.querySelector(`input[name=r${i}]:checked`)?.value;
       return { label, result: v, comment: (form.elements[`c${i}`].value || '').trim() };
     });
+    const flag = (i, msg) => { err.textContent = msg; const box = form.querySelector(`[data-i="${i}"]`); box.scrollIntoView({ block: 'center' }); box.classList.remove('flag'); void box.offsetWidth; box.classList.add('flag'); navigator.vibrate?.(40); };
     const missing = results.findIndex((r) => !r.result);
-    if (missing >= 0) { err.textContent = `Answer “${results[missing].label}”.`; form.querySelector(`[data-i="${missing}"]`).scrollIntoView({ block: 'center' }); return; }
+    if (missing >= 0) return flag(missing, `Answer “${results[missing].label}”.`);
     const noComment = results.findIndex((r) => r.result === 'fail' && !r.comment);
-    if (noComment >= 0) { err.textContent = `Say what’s wrong with “${results[noComment].label}”.`; return; }
+    if (noComment >= 0) { flag(noComment, `Say what’s wrong with “${results[noComment].label}”.`); form.elements[`c${noComment}`].focus(); return; }
     const payload = { template_name: template, items: results.map((r) => ({ label: r.label, result: r.result, ...(r.comment && { comment: r.comment }) })) };
     const notes = document.getElementById('n').value.trim();
     if (notes) payload.notes = notes;
     const mEl = document.getElementById('m');
     if (mEl && mEl.value !== '') {
       const meter = parseFloat(mEl.value);
-      if (a.current_meter != null && meter < a.current_meter && !confirm(`That’s lower than the last reading (${a.current_meter}). The office will be asked to review it. Send anyway?`)) return;
+      if (a.current_meter != null && meter < a.current_meter && !(await confirmSheet('Lower than last reading', `That’s lower than the last reading (${a.current_meter}). The office will be asked to review it.`, 'Send anyway'))) return;
       payload.meter = meter;
     }
     await finish('inspection', a, payload, pics.get(), results.some((r) => r.result === 'fail') ? 'Inspection saved with failed items. The office will be notified.' : 'Inspection saved.');
@@ -557,19 +779,20 @@ function viewMeter(number) {
   const a = findAsset(number);
   if (!a) return go('#/');
   $app.innerHTML = `
-    ${topbar('Update meter', `#/asset/${encodeURIComponent(number)}`)}
+    ${topbar('Update meter', `#/asset/${encodeURIComponent(number)}`, '', `${a.asset_number} · ${a.name}`)}
     <form id="f" class="card">
-      <p style="margin-top:0"><strong>${esc(a.asset_number)}</strong> · ${esc(a.name)}</p>
-      <label for="m">${esc(METER_LABEL[a.meter_type] || 'Reading')} <span class="muted">(last: ${a.current_meter ?? '–'})</span></label>
+      <div class="meter-box" style="margin-top:0"><span class="muted small">Last reading</span><b>${a.current_meter != null ? Number(a.current_meter).toLocaleString() : '–'}</b></div>
+      <label for="m">${esc(METER_LABEL[a.meter_type] || 'Reading')}</label>
       <input id="m" type="number" inputmode="decimal" step="any" min="0" required autofocus>
-      <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
-      <button class="btn primary" type="submit">Save reading</button>
+      <p id="err" class="err" role="alert"></p>
+      <button class="btn primary" type="submit" style="margin-top:12px">Save reading</button>
     </form>`;
+  bindDraft(document.getElementById('f'));
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const reading = parseFloat(document.getElementById('m').value);
     if (!Number.isFinite(reading) || reading < 0) { document.getElementById('err').textContent = 'Enter a valid number.'; return; }
-    if (a.current_meter != null && reading < a.current_meter && !confirm(`That’s lower than the last reading (${a.current_meter}). The office will be asked to review it. Send anyway?`)) return;
+    if (a.current_meter != null && reading < a.current_meter && !(await confirmSheet('Lower than last reading', `That’s lower than the last reading (${a.current_meter}). The office will be asked to review it.`, 'Send anyway'))) return;
     await finish('meter', a, { reading }, [], 'Reading saved.');
   });
 }
@@ -578,10 +801,9 @@ function viewDefect(number) {
   const a = findAsset(number);
   if (!a) return go('#/');
   $app.innerHTML = `
-    ${topbar('Report a problem', `#/asset/${encodeURIComponent(number)}`)}
+    ${topbar('Report a problem', `#/asset/${encodeURIComponent(number)}`, '', `${a.asset_number} · ${a.name}`)}
     <form id="f" class="card">
-      <p style="margin-top:0"><strong>${esc(a.asset_number)}</strong> · ${esc(a.name)}</p>
-      <label for="t">What’s wrong?</label><input id="t" maxlength="255" required placeholder="e.g. Hydraulic leak at left cylinder">
+      <label for="t" style="margin-top:0">What’s wrong?</label><input id="t" maxlength="255" required placeholder="e.g. Hydraulic leak at left cylinder">
       <label for="s">How bad is it?</label>
       <select id="s"><option value="low">Low: can wait</option><option value="medium" selected>Medium: fix soon</option><option value="high">High: needs attention</option><option value="critical">Critical: unsafe to use</option></select>
       <label for="d">Details</label><textarea id="d" maxlength="5000"></textarea>
@@ -589,6 +811,7 @@ function viewDefect(number) {
       <div class="sticky-submit"><button class="btn primary" type="submit">Send report</button></div>
     </form>`;
   const pics = photoPicker(document.getElementById('ph'));
+  bindDraft(document.getElementById('f'));
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const description = document.getElementById('d').value.trim();
@@ -602,10 +825,7 @@ function deliveryItemHtml(i) {
   const id = i.id;
   let input;
   if (i.input_type === 'pass_fail') {
-    input = `<div class="seg" role="radiogroup" aria-label="${esc(i.label)}">
-      <label><input type="radio" name="v${id}" value="pass"><span class="pass">Pass</span></label>
-      <label><input type="radio" name="v${id}" value="fail"><span class="fail">Fail</span></label>
-      <label><input type="radio" name="v${id}" value="na"><span class="na">N/A</span></label></div>`;
+    input = segHtml(`v${id}`, i.label);
   } else if (i.input_type === 'number') {
     input = `<input type="number" inputmode="decimal" step="any" name="v${id}" aria-label="${esc(i.label)}">${i.unit ? `<div class="small muted">${esc(i.unit)}</div>` : ''}`;
   } else if (i.input_type === 'choice') {
@@ -633,14 +853,14 @@ function viewShipmentCheck(number, phase) {
   const items = groups.flatMap((g) => g.items);
   if (!items.length) { toast('This shipment has no checklist for that step.'); return go(back); }
   $app.innerHTML = `
-    ${topbar(pre ? 'Pre-shipment check' : 'Delivery inspection', back)}${statusBanner()}
-    <p class="muted" style="margin-top:0"><strong>${esc(sh.shipment_number)}</strong> · ${esc(sh.job_label || '')}${sh.destination ? `<br>${esc(sh.destination)}` : ''}</p>
+    ${topbar(pre ? 'Pre-shipment check' : 'Delivery inspection', back, '', `${sh.shipment_number} · ${sh.job_label || ''}`)}${statusBanner()}
+    ${sh.destination ? `<p class="muted small" style="margin-top:0">${esc(sh.destination)}</p>` : ''}
     <form id="f" novalidate>
       ${groups.map((g) => `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${esc(g.type_name)}</h2></div>
         ${g.items.map(deliveryItemHtml).join('')}</div>`).join('')}
       <div class="card"><label for="n" style="margin-top:0">Notes</label><textarea id="n" maxlength="5000"></textarea>
         <label>${pre ? 'Photos of the load' : 'Photos of the delivery'}</label><div id="ph"></div></div>
-      <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
+      <p id="err" class="err" role="alert"></p>
       <div class="sticky-submit"><button class="btn primary" type="submit">${pre ? 'Submit pre-check' : 'Submit inspection'}</button></div>
     </form>`;
   const form = document.getElementById('f');
@@ -653,6 +873,7 @@ function viewShipmentCheck(number, phase) {
     const item = m && items.find((i) => i.id === +m[1]);
     if (item && item.input_type === 'pass_fail') form.elements[`c${item.id}`].hidden = e.target.value !== 'fail';
   });
+  bindDraft(form);
   const answer = (i) => i.input_type === 'photo' ? (pickers[i.id].get().length ? String(pickers[i.id].get().length) : '')
     : (i.input_type === 'pass_fail'
     ? form.querySelector(`input[name=v${i.id}]:checked`)?.value
@@ -667,7 +888,7 @@ function viewShipmentCheck(number, phase) {
       const problem = (i.required && !v) ? (i.input_type === 'photo' ? `Add a photo for “${i.label}”.` : `Answer “${i.label}”.`)
         : (needsPhoto && v && !pickers[i.id].get().length) ? `Add a photo for “${i.label}”.`
         : (i.input_type === 'pass_fail' && v === 'fail' && !(form.elements[`c${i.id}`].value || '').trim()) ? `Say what’s wrong with “${i.label}”.` : '';
-      if (problem) { err.textContent = problem; box.scrollIntoView({ block: 'center' }); return; }
+      if (problem) { err.textContent = problem; box.scrollIntoView({ block: 'center' }); navigator.vibrate?.(40); return; }
     }
     const photos = [];
     const answers = [];
@@ -685,6 +906,7 @@ function viewShipmentCheck(number, phase) {
     const failed = answers.some((a) => a.value === 'fail');
     document.querySelectorAll('button[type=submit]').forEach((b) => { b.disabled = true; });
     await enqueue(pre ? 'shipment_precheck' : 'shipment_inspection', sh.shipment_number, { items: answers, ...(notes && { notes }) }, photos);
+    await clearDraft();
     await sleep(150);
     toast(`${failed ? `${pre ? 'Pre-check' : 'Inspection'} saved with problems. The office will be notified.` : (pre ? 'Pre-check saved. The load will be marked as shipped.' : 'Delivery saved. The office will verify it.')}${state.online ? '' : ' It will send when you’re online.'}`);
     go(back);
@@ -701,14 +923,14 @@ function viewShipment(number) {
   const movable = ['draft', 'pre_check_done'].includes(sh.status);
   const shipSent = sentFor('shipment_ship').has(sh.shipment_number);
   $app.innerHTML = `
-    ${topbar(sh.shipment_number, '#/shipping')}${statusBanner()}
+    ${topbar(sh.shipment_number, '#/shipping', '', sh.job_label || '')}${statusBanner()}
     <div class="card">
       <div class="row"><div class="grow"><strong>${esc(sh.job_label || 'No job')}</strong><div class="muted">${esc(sh.loads || '')}</div></div>${shipChip(sh.status)}</div>
       <p class="small" style="margin:10px 0 0">Ship date: <strong>${sh.ship_date ? esc(prettyDate(sh.ship_date)) : 'not scheduled'}</strong></p>
       ${sh.destination ? `<p class="small" style="margin:6px 0 0">Destination: ${esc(sh.destination)}</p>` : ''}
       ${stopHtml('Pickup', sh.pickup_name, sh.pickup_address)}
       ${stopHtml('Drop off', sh.dropoff_name, sh.dropoff_address)}
-      ${sh.pickup_name || sh.dropoff_name ? `<button class="btn small" style="margin-top:10px" data-go="#/trip/${enc}">Addresses &amp; directions</button>` : ''}
+      ${sh.pickup_name || sh.dropoff_name ? `<button class="btn small" style="margin-top:12px" data-go="#/trip/${enc}">${icon('truck')} Addresses &amp; directions</button>` : ''}
       ${sh.carrier ? `<p class="small" style="margin:6px 0 0">Carrier / driver: ${esc(sh.carrier)}</p>` : ''}
     </div>
     <div class="actions">
@@ -723,7 +945,7 @@ function viewShipment(number) {
       <label for="d" style="margin-top:0">Ship date</label><input id="d" type="date" value="${esc(sh.ship_date || '')}">
       <button class="btn" style="margin-top:10px" type="submit">Save date</button></form>` : ''}`;
   document.getElementById('ship')?.addEventListener('click', async (e) => {
-    if (!confirm(`Mark ${sh.shipment_number} as shipped? It will then show up under Deliveries.`)) return;
+    if (!(await confirmSheet(`Mark ${sh.shipment_number} as shipped?`, 'It will then show up under Deliveries.', 'Mark shipped'))) return;
     e.target.disabled = true;
     await enqueue('shipment_ship', sh.shipment_number, {}, []);
     sh.status = 'shipped';               // show it right away; the next sync confirms it
@@ -766,7 +988,7 @@ function viewNewShipment() {
         ${types.map((t) => `<div class="loadrow"><label class="chk"><input type="checkbox" data-type="${t.type_id}"> ${esc(t.name)}</label>
           <input type="number" inputmode="numeric" min="0" placeholder="Pieces" data-pieces="${t.type_id}" aria-label="Pieces of ${esc(t.name)}"></div>`).join('')
           || '<p class="muted small" style="margin:0">No load types yet. Connect once to download them.</p>'}</div>
-      <p id="err" class="small" style="color:var(--bad)" role="alert"></p>
+      <p id="err" class="err" role="alert"></p>
       <div class="sticky-submit"><button class="btn primary" type="submit">Create shipment</button></div>
     </form>`;
   const form = document.getElementById('f');
@@ -819,6 +1041,7 @@ function viewNewShipment() {
 async function finish(kind, asset, payload, photos, message) {
   document.querySelectorAll('button[type=submit]').forEach((b) => { b.disabled = true; });
   await enqueue(kind, asset.asset_number, payload, photos);
+  await clearDraft();
   await sleep(150);
   toast(state.online ? message : `${message} It will send when you’re online.`);
   go(`#/asset/${encodeURIComponent(asset.asset_number)}`);
@@ -829,10 +1052,11 @@ async function finish(kind, asset, payload, photos, message) {
 function viewScan() {
   $app.innerHTML = `
     ${topbar('Scan QR code', '#/')}
-    <div class="scan-wrap"><video id="v" playsinline muted></video></div>
+    <div class="scan-wrap"><video id="v" playsinline muted></video><div class="frame"><i></i><i></i><i></i><i></i></div>
+      <button class="icon-btn torch" id="torch" type="button" aria-label="Toggle flashlight" hidden>${icon('bolt')}</button></div>
     <p id="msg" class="muted small" style="text-align:center">Point the camera at the asset’s QR label.</p>
     <form id="manual" class="card"><label for="num" style="margin-top:0">Or type the asset number</label>
-      <input id="num" autocapitalize="characters" autocomplete="off" placeholder="FA-0012"><button class="btn" style="margin-top:10px" type="submit">Open</button></form>`;
+      <div class="row"><input id="num" autocapitalize="characters" autocomplete="off" placeholder="FA-0012"><button class="btn small primary" type="submit">Open</button></div></form>`;
 
   const open = (raw) => {
     const code = String(raw).trim().split(/[/?#]/).filter(Boolean).pop() || '';
@@ -858,6 +1082,14 @@ function viewScan() {
     const video = document.getElementById('v');
     video.srcObject = stream;
     await video.play().catch(() => {});
+    const track = stream.getVideoTracks()[0];
+    if (track?.getCapabilities?.().torch) {
+      const tb = document.getElementById('torch'); let on = false; tb.hidden = false;
+      tb.addEventListener('click', async () => {
+        on = !on;
+        try { await track.applyConstraints({ advanced: [{ torch: on }] }); tb.classList.toggle('on', on); } catch { on = !on; }
+      });
+    }
 
     const native = 'BarcodeDetector' in window ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
     if (!native) await loadScript('/vendor/jsqr.js').catch(() => {});
@@ -882,7 +1114,7 @@ function viewScan() {
       } catch { /* keep scanning */ }
       if (!value) return;
       if (open(value)) { navigator.vibrate?.(60); return; }
-      if (value !== lastMiss) { lastMiss = value; msg.textContent = `“${value.slice(0, 40)}” isn’t an active asset here.`; }
+      if (value !== lastMiss) { lastMiss = value; navigator.vibrate?.([30, 40, 30]); msg.textContent = `“${value.slice(0, 40)}” isn’t an active asset here.`; }
     };
     raf = requestAnimationFrame(tick);
   })();
@@ -900,56 +1132,74 @@ function loadScript(src) {
 
 const KIND = { inspection: 'Inspection', meter: 'Meter reading', defect: 'Problem report', shipment_inspection: 'Delivery inspection', shipment_precheck: 'Pre-shipment check', shipment_create: 'New shipment', shipment_reschedule: 'Reschedule', shipment_ship: 'Marked shipped', dev_report: 'Dev report' };
 
-async function viewQueue() {
-  state.outbox = await db.outbox();
-  if (state.online) { try { state.recent = (await api('/submissions/mine')).items; } catch { /* keep cached */ } }
+function viewMe() {
   const q = state.outbox;
+  const pending = pendingCount();
+  const roles = [canInspect() && 'Inspector', canManage() && 'Shipping', canReportDev() && 'Admin'].filter(Boolean).join(' · ');
   $app.innerHTML = `
-    ${topbar('Sent', '#/')}${!state.online ? '<div class="banner warn">Offline. Showing what’s on this phone.</div>' : ''}
+    ${topbar('Me')}${statusBanner()}
+    <div class="card">
+      <div class="asset-head"><span class="avatar">${icon('user')}</span>
+        <div class="grow"><strong>${esc(state.user.display_name)}</strong><div class="small muted">${esc(state.user.username || '')}${roles ? ` · ${esc(roles)}` : ''}</div></div></div>
+      <dl class="kv">
+        <dt>Connection</dt><dd>${state.online ? 'Online' : 'Offline'}</dd>
+        <dt>Data updated</dt><dd>${state.syncedAt ? esc(ago(state.syncedAt)) : 'never'}</dd>
+        <dt>Version</dt><dd>${APP_VERSION}</dd></dl>
+      <button class="btn" id="refresh" style="margin-top:14px">${icon('refresh')} Refresh now</button>
+    </div>
     ${q.length ? `<div class="card"><h2>On this phone</h2><ul class="list">${q.map((r) => `
-      <li><div class="item"><div class="grow"><strong>${esc(KIND[r.kind])}</strong> · ${esc(r.asset_number)}
+      <li><div class="item"><div class="grow"><strong>${esc(KIND[r.kind] || r.kind)}</strong> · ${esc(r.asset_number)}
         <div class="small muted">${new Date(r.submitted_at).toLocaleString()}${r.photos.length ? ` · ${r.photos.length} photo${r.photos.length > 1 ? 's' : ''}` : ''}</div>
         ${r.status === 'failed' ? `<div class="small" style="color:var(--bad)">${esc(r.error)}</div>` : ''}</div>
         ${r.status === 'failed' ? `<button class="btn small danger" data-discard="${esc(r.submission_uuid)}">Discard</button>` : '<span class="chip warn">Waiting</span>'}</div></li>`).join('')}</ul>
-      ${pendingCount() ? '<button class="btn" id="retry" style="margin-top:8px">Send now</button>' : ''}</div>` : ''}
+      ${pending ? '<button class="btn primary" id="retry" style="margin-top:8px">Send now</button>' : ''}</div>` : ''}
     <div class="card"><h2>Recently sent</h2><ul class="list">${state.recent.map((r) => `
-      <li><div class="item"><div class="grow"><strong>${esc(KIND[r.kind] || r.kind)}</strong> · ${esc(r.asset_number)}
+      <li><div class="item" style="min-height:52px"><div class="grow"><strong>${esc(KIND[r.kind] || r.kind)}</strong> · ${esc(r.asset_number)}
         <div class="small muted">${new Date(r.submitted_at).toLocaleString()}</div></div>
-        <span class="chip ${r.processed ? 'ok' : ''}">${r.processed ? 'Office has it' : 'Delivered'}</span></div></li>`).join('') || '<li class="item muted">Nothing sent yet.</li>'}</ul></div>`;
-  document.getElementById('retry')?.addEventListener('click', async () => { await flush(); viewQueue(); });
+        <span class="chip ${r.processed ? 'ok' : ''}">${r.processed ? 'Office has it' : 'Delivered'}</span></div></li>`).join('') || emptyState('check', 'Nothing sent yet.')}</ul></div>
+    <button class="btn danger" id="logout">Sign out</button>${tabs('me')}`;
+  document.getElementById('refresh').addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    await refreshNow(true);
+    if (document.getElementById('refresh')) document.getElementById('refresh').disabled = false;
+  });
+  document.getElementById('logout').addEventListener('click', logout);
+  document.getElementById('retry')?.addEventListener('click', async () => { await flush(); toast(pendingCount() ? 'Still waiting for a connection.' : 'Everything sent.'); });
   $app.querySelectorAll('[data-discard]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('Discard this submission? It won’t be sent.')) return;
-    await db.remove(b.dataset.discard); viewQueue();
+    if (!(await confirmSheet('Discard this submission?', 'It won’t be sent.', 'Discard', true))) return;
+    await db.remove(b.dataset.discard); state.outbox = await db.outbox(); viewMe();
   }));
 }
 
 async function logout() {
-  if (pendingCount() && !confirm(`${pendingCount()} item(s) haven’t been sent yet. They stay on this phone and send after you sign in again. Sign out?`)) return;
+  const n = pendingCount();
+  if (!(await confirmSheet('Sign out?', n ? `${n} item(s) haven’t been sent yet. They stay on this phone and send after you sign in again.` : '', 'Sign out', true))) return;
   try { await api('/logout', { method: 'POST', body: {} }); } catch { /* offline: cookie expires on its own */ }
   state.user = null; state.needLogin = true;
   await db.del('snapshot');
-  state.assets = []; state.checklists = []; state.recent = [];
+  state.assets = []; state.checklists = []; state.shipments = []; state.jobs = []; state.types = []; state.recent = [];
   render();
 }
 
 // ---------- boot ------------------------------------------------------------------------
 
-window.addEventListener('online', () => { state.online = true; refresh().then(() => { flush(); render(); }).catch(render); });
-window.addEventListener('offline', () => { state.online = false; render(); });
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && state.user) refresh().then(() => { flush(); }).catch(() => {});
-});
+window.addEventListener('online', () => { state.online = true; updateBanner(); refreshNow(); });
+window.addEventListener('offline', () => { state.online = false; updateBanner(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.user && !state.needLogin) refreshNow(); });
+// Keep lists fresh while the app sits open (shipments change in the office all day).
+setInterval(() => { if (document.visibilityState === 'visible' && state.user && !state.needLogin && navigator.onLine) refreshNow(); }, 120000);
 
 (async function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   await loadCache();
-  try {
-    await refresh();
-  } catch (e) {
-    if (!(e instanceof ApiError)) console.error(e);
+  if (state.user) {
+    // Show the saved data straight away (works with no signal); update in the background.
+    render();
+    flush();
+    refreshNow();
+    return;
   }
-  // Signed out: drop the cached user but keep the outbox so queued work survives re-login.
-  if (state.needLogin) state.user = state.user || null;
+  try { await refresh(); } catch (e) { if (!(e instanceof ApiError)) console.error(e); }
   render();
   if (state.user && !state.needLogin) flush();
 })();
