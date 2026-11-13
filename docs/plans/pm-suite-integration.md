@@ -9,10 +9,10 @@ Source: `/mnt/homeNAS/Container/jv_vos` (git repo, build 573, GHCR image `ghcr.i
 - **Master data:** ForgeDesk is master for jobs, POs and vendors. PM Suite / F: drive data is *pulled into* ForgeDesk; no two-way sync needed.
 - **Files:** the F: share stays. ForgeDesk needs a first-class F: share integration (mount, path mapping, indexing) rather than moving files.
 - **Cut-over:** PM Suite is not in production use (newly developed), so no downtime/migration window constraints and no live-data preservation beyond test data. Phase 1 co-existence can be skipped or kept minimal.
-- **Work Orders:** PM Suite WO is unused — do **not** port it. Keep ForgeDesk `FdWorkOrder`; only revisit the Excel Rev 6 fill if still wanted.
+- **Work Orders:** PM Suite's own WO feature is unused and is **not ported**. Instead (updated after checklist review) work orders are **requested from the PM side and validated by the existing ForgeDesk setup** (`FdWorkOrder`, shipment/request flow), i.e. a PM-initiated request that Forge checks and accepts or rejects. The Excel Rev 6 fill is not required.
 - **Roles:** ForgeDesk roles grow to support PM roles. The existing office-staff role is the closest base; add `pm.*` permissions plus superintendent / company-dashboard capabilities as permissions or flags.
 
-Effect on phases: skip Phase 1 SSO/proxy work (replace with import-only tooling), drop PM-side Work Orders from Phase 4, make "F: share integration" a Phase 0/2 deliverable, and treat PM Suite data as a one-time/repeatable import into ForgeDesk tables.
+Effect on phases: skip Phase 1 SSO/proxy work (replace with import-only tooling), replace PM-side Work Orders in Phase 4 with a PM work-order *request* into `FdWorkOrder`, make "F: share integration" a Phase 0/2 deliverable, and treat PM Suite data as a one-time/repeatable import into ForgeDesk tables.
 
 ## Inventory model constraint (2026-11-13)
 
@@ -55,7 +55,7 @@ Consequences for the integration:
 | Work Orders (Excel WO form, hardware sets, door schedule) | `FdWorkOrder`, `FdWoElevation`, shipment flow, door/frame configurator | Overlap in intent; PM Suite WO is the *PM-side* form, FD WO is shop-floor |
 | Labor Schedule | `FdScheduleEntry`, `FdWoOperatorSchedule` | Possible consolidation later |
 | Material Forecast (estimated/ordered/received per cost code) | Job reservations (small orders only) | Complementary: forecast reads job POs; reservations (created from the SOF PO's EZ estimate) cover stock demand. Not merged |
-| EZ/BidEstimate parser | `EzEstimateController` | Two parsers of the same workbook — dedupe candidate |
+| BidEstimate parser (PM Suite) | `EzEstimateController` (EZ Estimate) | **Different sources, not duplicates**: BidEstimate is an in-house format we control and can change; EZ Estimate comes from an external system we don't control. Keep two importers (separate, each with its own cache), sharing downstream code where output shapes match |
 | Users / roles | `User`, `Role`, `Permission` | Already linked one-way; fold into ForgeDesk permissions (`pm.*`) |
 | Change History | (none general) | Keep as PM Suite feature or generalise |
 
@@ -97,7 +97,7 @@ worker service called from Laravel (like `tiger-bridge`), instead of being rewri
 **Phase 2 — Shared entities**
 - Vendors ↔ `Supplier`: one-time merge + two-way sync, then ForgeDesk as master.
 - Jobs ↔ `BusinessJob`: ForgeDesk master for header fields; PM Suite keeps submittal/closeout/sample state keyed by job number.
-- Dedupe the EZ-estimate parser (one implementation, one cache).
+- Port the BidEstimate importer as its own importer beside `EzEstimateController` (do not merge parsers); share cost-code mapping and downstream estimate → forecast code only.
 
 **Phase 3 — Purchasing**
 - Add a `type` (`stock` | `job` | `internal`) to `PurchaseOrder`; backfill existing rows as `stock`. Port the PM Suite PO builder as `job` POs (+ extra columns: job link, cost code, surcharge, issue stage, voided axis, ack discrepancy).
@@ -109,7 +109,7 @@ worker service called from Laravel (like `tiger-bridge`), instead of being rewri
 
 **Phase 4 — Submittals, closeout, WO**
 - Port Submittal Tracker/Builder/Closeout, Product Library (separate `pm_products`), Change History (generalise to a ForgeDesk audit log).
-- Work Orders: reconcile PM-side WO form with `FdWorkOrder`; keep Excel Rev 6 fill as a worker.
+- Work Orders: PM creates a **work order request** (job, elevations/openings, drawings from the drawing import) which Forge validates against its existing setup before creating/accepting an `FdWorkOrder`. Follows the existing `ShipmentRequest` request/approve pattern. No Excel Rev 6 fill.
 - Labor Schedule → `FdScheduleEntry`.
 
 **Phase 5 — Retire Python app**; keep only the OCR/parsing worker; archive repo.
@@ -138,41 +138,46 @@ worker service called from Laravel (like `tiger-bridge`), instead of being rewri
 
 ## 4b. Feature checklist (mark what to include + priority)
 
-Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). "Proposed" is my starting suggestion, not a decision.
+
+Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). Priority: High / Medium / Low; **Hold** = not now. "Proposed" is my starting suggestion, not a decision.
+
+**Build order from priorities:** High first (jobs, POs, vendors, BidEstimate import, material forecast, submittal tracker + builder, product library, roles), then Medium (receiving, change history, WO request flow, drawing import, to-do), then Low (dashboard widgets, labor schedule groundwork, OCR groundwork, glass visualizer, universal search). Hold items are not scheduled.
+
+**Rule applied:** blank or undecided rows = Hold; included (Y) with no priority = Low.
 
 | # | PM Suite feature | Proposed | Include (Y/N) | Priority | Notes |
 |---|---|---|---|---|---|
-| 1 | Jobs / job dashboard | Port (merge into BusinessJob) |  |  |  |
-| 2 | Purchase orders (builder, PDF, voided/closed axes) | Port (into PurchaseOrder; types stock / job / internal) |  |  |  |
-| 3 | Receiving | Port (job receipts only; no stock impact) |  |  |  |
-| 4 | Vendors / Contacts tab | Merge into Supplier |  |  |  |
-| 5 | Material Forecast | Port |  |  |  |
-| 6 | EZ / BidEstimate import | Merge with EzEstimateController |  |  |  |
-| 7 | Submittal Tracker | Port |  |  |  |
-| 8 | Submittal Builder (combined PDF) | Port or keep client-side pdf-lib |  |  |  |
-| 9 | Closeout checklist + closeout vendors | Port |  |  |  |
-| 10 | Product Library (spec / color PDFs) | Port as separate pm_products |  |  |  |
-| 11 | Change History / restore points | Generalise to ForgeDesk audit log |  |  |  |
-| 12 | Labor Schedule | Merge into FdScheduleEntry |  |  |  |
-| 13 | OCR import: PO / quote / acknowledgement / receiving | Python worker + review inbox |  |  |  |
-| 14 | Users / roles (admin, superintendent, company dashboard) | Map to ForgeDesk roles/permissions |  |  |  |
-| 15 | Work Orders (Excel Rev 6, door schedule, hardware sets) | Dropped (use FdWorkOrder) |  |  |  |
-| 16 | Dropbox file requests / opening-photo folders | Dropped with Work Orders (confirm) |  |  |  |
-| 17 | Procore submittal sync | Undecided |  |  |  |
-| 18 | Email Templates / Outlook compose | Undecided |  |  |  |
-| 19 | Glass Visualizer / glass shape designer | Undecided |  |  |  |
-| 20 | PDF markup (markup review status) | Undecided |  |  |  |
-| 21 | Drawing import (drawing_import.py) | Undecided (Python worker if kept) |  |  |  |
-| 22 | Hardware catalog importer | Undecided (overlaps configurator hwlib) |  |  |  |
-| 23 | Kawneer importer | Undecided |  |  |  |
-| 24 | Glazier Studio importer | Undecided |  |  |  |
-| 25 | Vendor catalog importer | Undecided |  |  |  |
-| 26 | Universal Search | Undecided (ForgeDesk search?) |  |  |  |
-| 27 | Activity Timeline | Undecided |  |  |  |
-| 28 | To-do list | Undecided |  |  |  |
-| 29 | Production chart | Undecided |  |  |  |
-| 30 | QR codes | Undecided |  |  |  |
-| 31 | Dashboard widgets | Fold into customizable dashboard |  |  |  |
+| 1 | Jobs / job dashboard | Port (merge into BusinessJob) | Y | High |  |
+| 2 | Purchase orders (builder, PDF, voided/closed axes) | Port (into PurchaseOrder; types stock / job / internal) | Y | High |  |
+| 3 | Receiving | Port (job receipts only; no stock impact) | Y | Medium |  |
+| 4 | Vendors / Contacts tab | Merge into Supplier | Y | High |  |
+| 5 | Material Forecast | Port | Y | High | Reads job POs, so job POs need cost code and estimate fields from the start |
+| 6 | BidEstimate import | Separate importer beside EzEstimateController | Y | High | BidEstimate importer stays separate (we control that format; EZ Estimate is external) |
+| 7 | Submittal Tracker | Port | Y | High | Base for the Submittal Builder (#8) |
+| 8 | Submittal Builder (combined PDF) | Port or keep client-side pdf-lib | Y | High |  |
+| 9 | Closeout checklist + closeout vendors | Port | Hold |  |  |
+| 10 | Product Library (spec / color PDFs) | Port as separate pm_products | Y | High |  |
+| 11 | Change History / restore points | Generalise to ForgeDesk audit log | Y | Medium |  |
+| 12 | Labor Schedule | Merge into FdScheduleEntry | Y | Low | Not a priority, but any groundwork that will help should be built as needed |
+| 13 | OCR import: PO / quote / acknowledgement / receiving | Python worker + review inbox | Y | Low | Lower priority, but groundwork should be there |
+| 14 | Users / roles (admin, superintendent, company dashboard) | Map to ForgeDesk roles/permissions | Y | High | Implement as planned |
+| 15 | Work Orders (Excel Rev 6, door schedule, hardware sets) | Replace: PM requests, Forge validates (`FdWorkOrder`) | Y (as request flow) | Medium | PM-initiated work order requests validated by the existing Forge setup; not a port of the PM Suite WO feature |
+| 16 | Dropbox file requests / opening-photo folders | Dropped with PM Suite WO (confirm) | Hold |  | Revisit once the WO request flow exists |
+| 17 | Procore submittal sync | Undecided | Hold |  |  |
+| 18 | Email Templates / Outlook compose | Undecided | Hold |  | need to look into methods for this (Outlook/mail integration approach TBD) |
+| 19 | Glass Visualizer / glass shape designer | Undecided | Y | Low |  |
+| 20 | PDF markup (markup review status) | Undecided | Hold |  |  |
+| 21 | Drawing import (drawing_import.py) | Undecided (Python worker if kept) | Y | Medium | will be helpfulf for work orders/ etc |
+| 22 | Hardware catalog importer | Undecided (overlaps configurator hwlib) | Hold |  |  |
+| 23 | Kawneer importer | Undecided | Hold |  |  |
+| 24 | Glazier Studio importer | Undecided | Hold |  |  |
+| 25 | Vendor catalog importer | Undecided | Hold |  |  |
+| 26 | Universal Search | Undecided (ForgeDesk search?) | Y | Low | a universal search that covers the entirety of forge may not be a bad idea |
+| 27 | Activity Timeline | Undecided | Hold |  |  |
+| 28 | To-do list | Undecided | Y | Medium | job/pm specific list |
+| 29 | Production chart | Undecided | Hold |  |  |
+| 30 | QR codes | Undecided | Hold |  |  |
+| 31 | Dashboard widgets | Fold into customizable dashboard | Y | Low |  |
 
 ## 5. Key risks / things to settle first
 
@@ -192,5 +197,5 @@ Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). "Proposed" 
 2. Which system is master for POs, vendors and jobs once merged? forge will be master, data will be pulled from fdrive or pm side into forge
 3. Is the F: share staying, or should files move into ForgeDesk storage / Dropbox? f share is staying, will need to integrate
 4. Who uses PM Suite (PM count) and can it be down during cut-over windows? currently not used in production environment, newly developed
-5. Is the existing Work Orders feature in PM Suite in active use vs. ForgeDesk's `FdWorkOrder`? pm suite no
+5. Is the existing Work Orders feature in PM Suite in active use vs. ForgeDesk's `FdWorkOrder`? pm suite no; goal is PM-requested work orders validated by Forge
 6. Should PM Suite's separate roles (admin/superintendent/company dashboard) map to ForgeDesk roles? forgedesk roles to develop to suppport pm roles (office staff is current forge role with simialr)
