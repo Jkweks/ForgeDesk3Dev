@@ -11,6 +11,7 @@
         <i class="ti ti-layout-sidebar-left-collapse icon"></i>
       </button>
     </div>
+    @include('partials.workspace-switcher', ['vertical' => true])
     <div class="navbar-footer">
       <ul class="navbar-nav">
         @include('partials.notifications', ['placement' => 'side'])

@@ -10,7 +10,10 @@
 @php
   $mode = $mode ?? 'top';
   $set = $set ?? 'new';
-  $navConfig = config($set === 'classic' ? 'navigation_classic' : 'navigation');
+  // Workspace follows the URL: everything under /pm is Project Management (front of house),
+  // the rest is Fabrication (back of house). The PM nav has a single set for both toggles.
+  $inPm = Request::is('pm', 'pm/*');
+  $navConfig = $inPm ? config('navigation_pm') : config($set === 'classic' ? 'navigation_classic' : 'navigation');
   $autoClose = $mode === 'side' ? 'false' : 'outside';
   $isAdmin = Auth::user() && Auth::user()->isAdmin();
 @endphp

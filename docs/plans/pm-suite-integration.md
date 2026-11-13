@@ -208,7 +208,7 @@ Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). Priority: H
 - **PO shape (PM Suite)** is nested: a PO holds `lines[]` that can be groups of sub-lines (flattened on read), each with its own cost code that overrides the PO-level cost code. Statuses are a different lifecycle from Forge's (draft, submittal-request, material-release, subcontract variants; plus separate `closed` and `voided` axes and numbered revisions with drafts). **Gap to close:** `PurchaseOrder` needs a status mapping or a separate "issue stage" column, revisions, and grouped line items.
 - **Next build step (High priority, no data dependency): vendor extension** (the gap above) with the Supplier page showing the extra contacts and aliases, then the job-PO columns (job link, issue stage, revisions, grouped lines).
 
-## 4d. Navigation: front of house vs back of house (proposal, 2026-11-13)
+## 4d. Navigation: front of house vs back of house (decided and built 2026-11-13)
 
 PM Suite is the **front-of-house** (project management, office) system; ForgeDesk is **back of house** (inventory, shop, fabrication). Keep that split visible while it is one app, one login and one dataset.
 
@@ -227,7 +227,14 @@ PM Suite is the **front-of-house** (project management, office) system; ForgeDes
 - Front-of-house page groups (from the feature checklist): Dashboard, Jobs, Submittals (tracker, builder), Purchasing (job POs, receiving, vendors, material forecast), Library (product library), To-do, Admin (users/roles, change history).
 - The PM to-do list, universal search and dashboard widgets (all in the checklist) sit in the front-of-house shell and can surface back-of-house data.
 
-**Open details:** final workspace names; whether Jobs gets one page with two tab sets or two pages; whether the switcher also appears in the field app.
+**Decisions (2026-11-13):**
+- Workspace switcher with the `/pm/*` prefix. Names: **Project Management** and **Fabrication**.
+- **Jobs are shared data with a lifecycle.** PMs bid and win jobs in Project Management (`bidding` -> `won` -> `lost`/`active`). Fabrication has no visibility until a job is **activated**; from then on it also sees the job's drawings, POs, work orders and so on. Implemented as a fail-closed global scope on `BusinessJob` (bidding/won/lost are hidden from every existing Fabrication query); only the PM endpoints opt out.
+- **The field app gets nothing from Project Management for now.** Any field-app development must hold back PM data and features until this is revisited.
+
+**Built:** `nav.pm`, `pm.jobs.view`, `pm.jobs.manage` permissions (admin, manager, office_staff); `config/navigation_pm.php`; workspace switcher (top navbar and sidebar, shown only to users with both workspaces); `/pm` dashboard, `/pm/jobs` (bids, stage moves, activate), `/pm/vendors`; PM-only users landing on `/` are redirected to `/pm`.
+
+**Still open:** whether Jobs gets one page with two tab sets or two pages once PM job detail exists (currently two: `/pm/jobs` and the Fabrication jobs pages).
 
 ## 5. Key risks / things to settle first
 

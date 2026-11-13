@@ -466,6 +466,11 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor('store', 'permission:orders.create')
             ->middlewareFor('update', 'permission:orders.edit')
             ->middlewareFor('destroy', 'permission:orders.delete');
+        // Project Management workspace: jobs across every stage (bidding -> won -> active)
+        Route::get('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'index'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'store'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{id}/stage', [\App\Http\Controllers\Api\PmJobController::class, 'setStage'])->middleware('permission:pm.jobs.manage');
+
         // Job-specific POs (PM Suite): never touch stock; receiving only records arrival
         Route::get('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'index'])->middleware('permission:orders.view');
         Route::post('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'store'])->middleware('permission:orders.create');

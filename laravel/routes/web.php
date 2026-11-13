@@ -14,8 +14,19 @@ Route::get('/password/reset', function () {
 })->name('password.reset');
 
 Route::get('/', function () {
+    // Office staff who only have the Project Management workspace land there.
+    $u = auth()->user();
+    if ($u && $u->hasPermission('nav.pm') && ! $u->hasAnyPermission(['nav.dashboard', 'nav.inventory', 'nav.fulfillment', 'nav.fabrication'])) {
+        return redirect('/pm');
+    }
+
     return view('dashboard');
 });
+
+// Project Management workspace (front of house)
+Route::get('/pm', fn () => view('pm.dashboard'));
+Route::get('/pm/jobs', fn () => view('pm.jobs'));
+Route::get('/pm/vendors', fn () => view('suppliers'));
 
 // Inventory Management
 Route::get('/inventory/products', function () {

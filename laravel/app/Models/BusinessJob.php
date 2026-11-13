@@ -10,6 +10,20 @@ class BusinessJob extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /** Project Management stages. Hidden from Fabrication until the job is activated. */
+    public const PM_ONLY_STATUSES = ['bidding', 'won', 'lost'];
+
+    public static $pmStatuses = [
+        'bidding' => 'Bidding',
+        'won' => 'Won',
+        'lost' => 'Lost',
+    ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new \App\Models\Scopes\FabricationVisibleScope);
+    }
+
     protected $fillable = [
         'job_number',
         'job_name',
@@ -114,7 +128,7 @@ class BusinessJob extends Model
      */
     public function getStatusLabelAttribute()
     {
-        return self::$statuses[$this->status] ?? $this->status;
+        return self::$statuses[$this->status] ?? self::$pmStatuses[$this->status] ?? $this->status;
     }
 
     /**
@@ -139,7 +153,7 @@ class BusinessJob extends Model
     public function syncAutoStatus(): void
     {
         // Don't override manually set terminal/hold statuses; permanent jobs never end
-        if (in_array($this->status, ['cancelled', 'on_hold', 'permanent'])) {
+        if (in_array($this->status, ['cancelled', 'on_hold', 'permanent', ...self::PM_ONLY_STATUSES])) {
             return;
         }
 
