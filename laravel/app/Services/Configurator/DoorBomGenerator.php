@@ -61,6 +61,8 @@ class DoorBomGenerator
                 }
             }
 
+            $rows = app(ConfiguratorRuleEngine::class)->apply('door', $config, $rows, $this->warnings);
+
             return ['rows' => $rows, 'warnings' => $this->warnings];
         }
 
@@ -68,7 +70,9 @@ class DoorBomGenerator
             throw new RuntimeException('Save both Door 1 and Door 2 before generating parts.');
         }
 
-        return ['rows' => $this->buildRows($config, $doorConfig, null), 'warnings' => $this->warnings];
+        $rows = app(ConfiguratorRuleEngine::class)->apply('door', $config, $this->buildRows($config, $doorConfig, null), $this->warnings);
+
+        return ['rows' => $rows, 'warnings' => $this->warnings];
     }
 
     /**

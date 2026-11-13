@@ -38,6 +38,11 @@
                     <i class="ti ti-tools me-2"></i>Hardware Library
                   </a>
                 </li>
+                <li class="nav-item" role="presentation">
+                  <a href="#tab-configurator-rules" class="nav-link" data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
+                    <i class="ti ti-git-branch me-2"></i>Rules
+                  </a>
+                </li>
               </ul>
             </div>
 
@@ -308,6 +313,10 @@
                 <div class="tab-pane" id="tab-hardware-library" role="tabpanel">
                   @include('configurator.partials.hwlib-admin')
                 </div><!-- /tab-hardware-library -->
+
+                <div class="tab-pane" id="tab-configurator-rules" role="tabpanel">
+                  @include('configurator.partials.rules-admin')
+                </div><!-- /tab-configurator-rules -->
 
               </div>
             </div>
@@ -1863,6 +1872,7 @@
     document.getElementById('hwlib-var-type').value = v?.var_type || 'number';
     document.getElementById('hwlib-var-unit').value = v?.unit || '';
     document.getElementById('hwlib-var-side').value = v?.side || '';
+    document.getElementById('hwlib-var-pushpull').value = v?.push_pull || '';
     document.getElementById('hwlib-var-sort').value = v?.sort_order ?? 0;
     document.getElementById('hwlib-var-options').value = (v?.options || []).join(', ');
     document.getElementById('hwlib-var-default').value = v?.default_value || '';
@@ -1895,6 +1905,7 @@
       var_type: document.getElementById('hwlib-var-type').value,
       unit: document.getElementById('hwlib-var-unit').value || null,
       side: document.getElementById('hwlib-var-side').value || null,
+      push_pull: document.getElementById('hwlib-var-pushpull').value || null,
       sort_order: parseInt(document.getElementById('hwlib-var-sort').value || 0, 10),
       options: optionsRaw ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
       default_value: document.getElementById('hwlib-var-default').value || null,
@@ -2061,10 +2072,22 @@
     hwItemRenderValueInputs();
   }
 
+  // A variable tagged push or pull only applies to an item on that side; an item with no side gets all.
+  function hwVarsForSide(categoryId, side) {
+    return (hwFindCategory(categoryId)?.variables || [])
+      .map(cv => ({ ...cv, push_pull: (hwFindVariable(cv.id) || cv).push_pull || null }))
+      .filter(v => !side || !v.push_pull || v.push_pull === side);
+  }
+  function hwCategoryHasSides(categoryId) {
+    return (hwFindCategory(categoryId)?.variables || []).some(cv => (hwFindVariable(cv.id) || cv).push_pull);
+  }
+
   function hwItemRenderValueInputs() {
     const categoryId = document.getElementById('hwlib-item-category').value;
-    const category = hwFindCategory(categoryId);
-    const variables = (category?.variables || []).slice().sort((a, b) => (a.pivot?.sort_order ?? 0) - (b.pivot?.sort_order ?? 0));
+    const hasSides = hwCategoryHasSides(categoryId);
+    document.getElementById('hwlib-item-pushpull-wrap').style.display = hasSides ? '' : 'none';
+    const side = hasSides ? document.getElementById('hwlib-item-pushpull').value : '';
+    const variables = hwVarsForSide(categoryId, side).sort((a, b) => (a.pivot?.sort_order ?? 0) - (b.pivot?.sort_order ?? 0));
     const itemId = document.getElementById('hwlib-item-id').value;
     const item = itemId ? hwFindItem(itemId) : null;
     const valueFor = (variableId) => item?.values?.find(v => v.variable_id == variableId)?.value_text;
@@ -2106,11 +2129,14 @@
   function hwItemCollectValues() {
     const categoryId = document.getElementById('hwlib-item-category').value;
     const category = hwFindCategory(categoryId);
+    const itemId = document.getElementById('hwlib-item-id').value;
+    const saved = new Map(((itemId ? hwFindItem(itemId) : null)?.values || []).map(v => [Number(v.variable_id), v.value_text]));
     return (category?.variables || [])
       .filter(v => !v.is_calculated)
       .map(v => {
         const el = document.getElementById(`hwlib-item-val-${v.id}`);
-        return { variable_id: v.id, value_text: el ? el.value : '' };
+        // A field hidden by the push / pull side keeps whatever was saved rather than being wiped.
+        return { variable_id: v.id, value_text: el ? el.value : (saved.get(Number(v.id)) ?? '') };
       });
   }
 
@@ -2209,6 +2235,7 @@
     document.getElementById('hwlib-item-fieldinstall').checked = !!i?.field_install;
     document.getElementById('hwlib-item-byothers').checked = !!i?.by_others;
     document.getElementById('hwlib-item-handed').checked = !!i?.handed;
+    document.getElementById('hwlib-item-pushpull').value = i?.push_pull || '';
 
     const itemOptions = (excludeId) => hwItems.filter(x => x.id != excludeId).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
     document.getElementById('hwlib-item-strike').innerHTML = '<option value="">— none —</option>' + itemOptions(id);
@@ -2252,6 +2279,7 @@
       field_install: document.getElementById('hwlib-item-fieldinstall').checked,
       by_others: document.getElementById('hwlib-item-byothers').checked,
       handed: document.getElementById('hwlib-item-handed').checked,
+      push_pull: hwCategoryHasSides(document.getElementById('hwlib-item-category').value) ? (document.getElementById('hwlib-item-pushpull').value || null) : null,
       default_strike_item_id: document.getElementById('hwlib-item-strike').value || null,
       default_cover_item_id: document.getElementById('hwlib-item-cover').value || null,
       finishes: [],
@@ -2328,6 +2356,7 @@
     document.getElementById('hwlib-backer-id').value = id || '';
     document.getElementById('hwlib-backer-pn').value = b?.pn || '';
     document.getElementById('hwlib-backer-description').value = b?.description || '';
+    document.getElementById('hwlib-backer-length').value = b?.length != null ? parseFloat(b.length) : '';
     document.getElementById('hwlib-backer-notes').value = b?.notes || '';
     document.getElementById('hwlib-backer-active').checked = b ? !!b.active : true;
 
@@ -2343,6 +2372,7 @@
     const payload = {
       pn: document.getElementById('hwlib-backer-pn').value,
       description: document.getElementById('hwlib-backer-description').value || null,
+      length: document.getElementById('hwlib-backer-length').value || null,
       notes: document.getElementById('hwlib-backer-notes').value || null,
       active: document.getElementById('hwlib-backer-active').checked,
     };
@@ -2505,7 +2535,7 @@
   function hwSiRenderValues(rowEl, itemId, rowValues) {
     const wrap = rowEl.querySelector('.hwlib-si-values');
     const item = itemId ? hwFindItem(itemId) : null;
-    const catVars = (item ? (hwFindCategory(item.category_id)?.variables || []) : [])
+    const catVars = (item ? hwVarsForSide(item.category_id, item.push_pull) : [])
       .map(cv => hwFindVariable(cv.id) || cv).filter(v => v && !v.is_calculated);
     if (!catVars.length) { wrap.innerHTML = ''; return; }
 
@@ -2787,4 +2817,5 @@
     });
   });
 </script>
+@include('configurator.partials.rules-admin-modal')
 @endsection

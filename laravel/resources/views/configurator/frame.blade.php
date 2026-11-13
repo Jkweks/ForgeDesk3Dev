@@ -159,6 +159,7 @@
               </ul>
             </div>
             <div class="card-body">
+              <div id="fb-rule-messages"></div>
               <div class="tab-content">
 
                 <div class="tab-pane active show" id="fb-tab-opening" role="tabpanel">
@@ -321,6 +322,10 @@
                   </form>
 
                   <hr>
+                  <div class="alert alert-warning py-2 d-none" id="fb-frame-rule-stale">
+                    <i class="ti ti-alert-triangle me-1"></i>Hardware or a configurator rule changed since these parts were generated, and a rule alters this BOM.
+                    <a href="#" class="alert-link" onclick="fbGenerateParts(); return false;" data-permission="configurator.edit">Generate / Recalculate</a> to apply it.
+                  </div>
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <h4 class="mb-0">Frame Parts BOM</h4>
                     <div class="btn-list">
@@ -389,6 +394,10 @@
                   </form>
 
                   <hr>
+                  <div class="alert alert-warning py-2 d-none" id="fb-door-rule-stale">
+                    <i class="ti ti-alert-triangle me-1"></i>Hardware or a configurator rule changed since these parts were generated, and a rule alters this BOM.
+                    <a href="#" class="alert-link" onclick="fbGenerateDoorParts(); return false;" data-permission="configurator.edit">Generate / Recalculate</a> to apply it.
+                  </div>
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <h4 class="mb-0">Door Parts BOM</h4>
                     <div class="btn-list">
@@ -467,7 +476,7 @@
                       </div>
                       <div class="tab-pane" id="fb-hws-bom" role="tabpanel">
                         <div class="alert alert-warning py-2 d-none" id="fb-hws-bom-stale">
-                          <i class="ti ti-alert-triangle me-1"></i>A prep value changed since the BOM was last generated. Recalculate to apply it.
+                          <i class="ti ti-alert-triangle me-1"></i>A prep value, the hardware or a configurator rule changed since the BOM was last generated. Recalculate to apply it.
                         </div>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                           <div class="text-muted small">Parts generated from the VOS Standard hardware on this opening. Generate / Recalculate rebuilds the whole hardware BOM, standard and custom.</div>
@@ -570,7 +579,7 @@
                       </div>
                       <div class="tab-pane" id="fb-hwc-bom" role="tabpanel">
                         <div class="alert alert-warning py-2 d-none" id="fb-hwc-bom-stale">
-                          <i class="ti ti-alert-triangle me-1"></i>A prep value changed since the BOM was last generated. Recalculate to apply it.
+                          <i class="ti ti-alert-triangle me-1"></i>A prep value, the hardware or a configurator rule changed since the BOM was last generated. Recalculate to apply it.
                         </div>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                           <div class="text-muted small">The whole hardware BOM for this opening: standard and custom hardware with their backers, covers and fasteners, plus any manually added parts. Generate / Recalculate rebuilds it.</div>
@@ -1584,6 +1593,7 @@ function fbPrepStatusHtml(linkId, v, canEdit) {
   if (v.overridden) {
     return `<span class="badge bg-yellow-lt">Override</span>${canEdit ? ` <button type="button" class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Reset to the catalog value" onclick="fbSavePrepValue(${linkId}, '${esc(v.code)}', '')"><i class="ti ti-restore"></i></button>` : ''}`;
   }
+  if (v.rule) return `<span class="badge bg-purple-lt" title="Set by the rule &quot;${esc(v.rule)}&quot;. Type a value to override it for this opening.">Rule</span>`;
   return v.is_calculated ? '<span class="badge bg-secondary-lt">Calculated</span>' : '<span class="text-muted small">Catalog</span>';
 }
 
@@ -1626,7 +1636,7 @@ async function fbSavePrepValue(linkId, code, value) {
       showNotification(`Set "${fbSetDefaultsUpdated.set_name}" updated${n > 1 ? ` — ${n} openings re-synced` : ''}.`, 'success');
       await fbLoadDetail(); // links were rebuilt from the set
     } else if (fbSetDecoupleConfirmed) await fbLoadDetail(); // a set was just detached
-    else await fbLoadHwResolvedValues();
+    else { await fbLoadHwResolvedValues(); fbLoadRuleStatus(); }
   } catch (err) {
     if (!err.cancelled) showNotification(err.message, 'danger');
     await fbLoadHwResolvedValues(); // put the field back to what is actually saved
@@ -1634,8 +1644,43 @@ async function fbSavePrepValue(linkId, code, value) {
 }
 
 function fbShowBomStale() {
-  ['hws', 'hwc'].forEach(prefix => document.getElementById(`fb-${prefix}-bom-stale`).classList.toggle('d-none', !fbPrepStale));
+  const stale = fbPrepStale || !!fbRuleStatus.stale?.hardware;
+  ['hws', 'hwc'].forEach(prefix => document.getElementById(`fb-${prefix}-bom-stale`).classList.toggle('d-none', !stale));
 }
+
+// Configurator rules (Configurator Admin > Rules): which apply to this opening, their warnings /
+// errors, and whether a BOM was generated before the hardware or rule it depends on last changed.
+let fbRuleStatus = { fired: [], messages: [], stale: {} };
+
+async function fbLoadRuleStatus() {
+  const id = fbSelectedId;
+  try {
+    const status = await authenticatedFetch(`/door-frame-configurations/${id}/rule-status`);
+    if (id !== fbSelectedId) return; // another opening was selected meanwhile
+    fbRuleStatus = status;
+  } catch (err) {
+    fbRuleStatus = { fired: [], messages: [], stale: {} }; // non-fatal: release preflight checks again
+  }
+  const editable = !!fbSelectedDetail?.can_edit;
+  ['frame', 'door'].forEach(scope => document.getElementById(`fb-${scope}-rule-stale`).classList.toggle('d-none', !(editable && fbRuleStatus.stale?.[scope])));
+  fbShowBomStale();
+  const applied = fbRuleStatus.fired.length
+    ? `<div class="text-muted small mb-2"><i class="ti ti-git-branch me-1"></i>Rules applied to this opening: ${fbRuleStatus.fired.map(f => `<span class="badge bg-purple-lt me-1">${esc(f.name)}</span>`).join('')}</div>`
+    : '';
+  document.getElementById('fb-rule-messages').innerHTML = fbRuleStatus.messages.map(m =>
+    `<div class="alert ${m.severity === 'error' ? 'alert-danger' : 'alert-warning'} py-2 mb-2"><i class="ti ti-alert-triangle me-1"></i><strong>${esc(m.rule)}:</strong> ${esc(m.text)}${m.severity === 'error' ? ' <span class="text-muted">(blocks release)</span>' : ''}</div>`
+  ).join('') + applied;
+}
+
+// A rule action that had to be skipped (a value it needs is missing) is said out loud, not just logged.
+// Returns the remaining, non-rule warnings.
+function fbShowRuleWarnings(res) {
+  const all = res?.warnings || [];
+  all.filter(w => w.startsWith('Rule "')).forEach(w => showNotification(w, 'warning'));
+  return all.filter(w => !w.startsWith('Rule "'));
+}
+
+const fbRuleBadge = p => p.rule ? ` <span class="badge bg-purple-lt ms-1" title="Added or changed by the rule &quot;${esc(p.rule)}&quot;">rule</span>` : '';
 
 // BOM parts follow the section of the link they were generated from, so a hardware item's backers,
 // covers (default accessories) and fasteners stay with it. Manual parts have no link and belong to
@@ -1645,7 +1690,7 @@ function fbRenderHwParts(parts) {
   const sourceBadge = { item: 'bg-blue-lt', backer: 'bg-azure-lt', fastener: 'bg-purple-lt', manual: 'bg-secondary-lt' };
   const rowHtml = (p, showStd = false) => `
     <tr>
-      <td>${esc(p.formatted_label)}${showStd && p.section === 'standard' ? ' <span class="badge bg-blue-lt ms-1">Standard</span>' : ''}</td>
+      <td>${esc(p.formatted_label)}${fbRuleBadge(p)}${showStd && p.section === 'standard' ? ' <span class="badge bg-blue-lt ms-1">Standard</span>' : ''}</td>
       <td>${p.product
         ? `${esc(p.product.part_number)}<div class="text-muted small">${esc(p.product.description || '')}</div>`
         : `<span class="badge bg-orange-lt">Special order</span><div class="text-muted small">${esc([p.manufacturer, p.model_number].filter(Boolean).join(' · '))}</div>`}</td>
@@ -1675,9 +1720,10 @@ async function fbGenerateHardwareParts() {
     fbPrepStale = false;
     fbShowBomStale();
     showNotification('Hardware parts generated', 'success');
-    if (res.warnings && res.warnings.length) {
-      showNotification(`${res.warnings.length} PN(s) could not be matched to a product — see console.`, 'warning');
-      console.warn('Hardware BOM warnings:', res.warnings);
+    const warnings = fbShowRuleWarnings(res);
+    if (warnings.length) {
+      showNotification(`${warnings.length} PN(s) could not be matched to a product — see console.`, 'warning');
+      console.warn('Hardware BOM warnings:', warnings);
     }
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }
@@ -1874,6 +1920,7 @@ async function fbLoadDetail() {
   const data = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}`);
   fbSelectedDetail = data.configuration;
   fbRenderDetail();
+  fbLoadRuleStatus();
 }
 
 function fbRenderDetail() {
@@ -2069,7 +2116,7 @@ function fbRenderParts(tbodyId, emptyId, parts, kind) {
   const sourceBadge = { profile: 'bg-blue-lt', component: 'bg-azure-lt', fastener: 'bg-purple-lt', extrusion: 'bg-blue-lt', manual: 'bg-secondary-lt' };
   tbody.innerHTML = parts.map(p => `
     <tr>
-      <td>${esc(p.formatted_label)}</td>
+      <td>${esc(p.formatted_label)}${fbRuleBadge(p)}</td>
       <td>${esc(p.product.part_number)}<div class="text-muted small">${esc(p.product.description || '')}</div></td>
       <td>${p.unit_type === 'length' ? (p.calculated_length ?? '—') + '"' : '—'}</td>
       <td>${p.unit_type === 'qty' ? p.quantity : '—'}</td>
@@ -2135,6 +2182,12 @@ function fbExistingAutoParts(kind) {
 // overwrite the saved BOM if the user confirms — a spec edit made through
 // another tab shouldn't silently rewrite parts someone hand-tweaked.
 async function fbGenerateWithDiffPrompt(kind) {
+  const res = await fbGenerateWithDiffPromptInner(kind);
+  if (res && !res.preview) fbShowRuleWarnings(res);
+  return res;
+}
+
+async function fbGenerateWithDiffPromptInner(kind) {
   const endpoint = FB_GENERATE_ENDPOINTS[kind];
   const existing = fbExistingAutoParts(kind);
 
@@ -2550,8 +2603,9 @@ document.getElementById('fb-door-form').addEventListener('submit', async (e) => 
 // ---- BOM ----
 async function fbGenerateParts() {
   try {
-    await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/frame-parts/generate`, { method: 'POST' });
+    const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/frame-parts/generate`, { method: 'POST' });
     showNotification('Parts generated', 'success');
+    fbShowRuleWarnings(res);
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }
 }
@@ -2560,9 +2614,10 @@ async function fbGenerateDoorParts() {
   try {
     const res = await authenticatedFetch(`/door-frame-configurations/${fbSelectedId}/door-parts/generate`, { method: 'POST' });
     showNotification('Door parts generated', 'success');
-    if (res.warnings && res.warnings.length) {
-      showNotification(`${res.warnings.length} PN(s) could not be matched to a product — see console.`, 'warning');
-      console.warn('Door BOM warnings:', res.warnings);
+    const warnings = fbShowRuleWarnings(res);
+    if (warnings.length) {
+      showNotification(`${warnings.length} PN(s) could not be matched to a product — see console.`, 'warning');
+      console.warn('Door BOM warnings:', warnings);
     }
     await fbLoadDetail();
   } catch (err) { showNotification(err.message, 'danger'); }

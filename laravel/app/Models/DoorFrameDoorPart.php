@@ -18,6 +18,7 @@ class DoorFrameDoorPart extends Model
         'unit_type',
         'source_type',
         'is_auto_generated',
+        'rule_id',
         'sort_order',
     ];
 

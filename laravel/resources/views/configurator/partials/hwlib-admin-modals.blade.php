@@ -67,6 +67,13 @@
               </select>
             </div>
             <div class="col-md-3 mb-3"><label class="form-label">Sort Order</label><input type="number" class="form-control" id="hwlib-var-sort" value="0"></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Push / pull <span class="text-muted">(only asked for hardware on that side)</span></label>
+              <select class="form-select" id="hwlib-var-pushpull">
+                <option value="">Both — always asked</option>
+                <option value="push">Push side only</option>
+                <option value="pull">Pull side only</option>
+              </select>
+            </div>
           </div>
           <div class="mb-3" id="hwlib-var-options-wrap" style="display:none">
             <label class="form-label">Options <span class="text-muted">(comma-separated, for Select type)</span></label>
@@ -173,6 +180,15 @@
               <select class="form-select" id="hwlib-item-cover"><option value="">— none —</option></select>
             </div>
           </div>
+          <div class="row" id="hwlib-item-pushpull-wrap" style="display:none">
+            <div class="col-md-6 mb-3"><label class="form-label">Push or pull? <span class="text-muted">(limits the prep values asked for)</span></label>
+              <select class="form-select" id="hwlib-item-pushpull" onchange="hwItemRenderValueInputs()">
+                <option value="">Not set — ask for both sides</option>
+                <option value="push">Push side</option>
+                <option value="pull">Pull side</option>
+              </select>
+            </div>
+          </div>
           <div class="row mb-3">
             <div class="col-12">
               <label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-item-active" checked><span class="form-check-label">Active</span></label>
@@ -238,8 +254,9 @@
         <div class="modal-body">
           <input type="hidden" id="hwlib-backer-id">
           <div class="row">
-            <div class="col-md-6 mb-3"><label class="form-label">PN</label><input type="text" class="form-control" id="hwlib-backer-pn" required></div>
-            <div class="col-md-6 mb-3"><label class="form-label">Description</label><input type="text" class="form-control" id="hwlib-backer-description"></div>
+            <div class="col-md-4 mb-3"><label class="form-label">PN</label><input type="text" class="form-control" id="hwlib-backer-pn" required></div>
+            <div class="col-md-5 mb-3"><label class="form-label">Description</label><input type="text" class="form-control" id="hwlib-backer-description"></div>
+            <div class="col-md-3 mb-3"><label class="form-label">Length / height (in)</label><input type="number" step="any" min="0" class="form-control" id="hwlib-backer-length" title="Used by configurator rules, e.g. P2451.length"></div>
           </div>
           <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="hwlib-backer-notes" rows="2"></textarea></div>
           <div class="mb-3"><label class="form-check"><input class="form-check-input" type="checkbox" id="hwlib-backer-active" checked><span class="form-check-label">Active</span></label></div>

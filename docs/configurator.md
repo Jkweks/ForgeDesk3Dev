@@ -192,10 +192,13 @@ while since the note was written.
   (`DoorFrameHardwarePart::hwlib_link_id` traces a generated BOM row back to
   its link — set in `HwlibBomGenerator::generate()`).
 
-### Hardware advanced rules controller — not started
+### Hardware advanced rules — engine built 2026-11-12
 
-Needs a full rule-set walkthrough with the user before design (flagged
-explicitly — the examples below are illustrative, not exhaustive):
+Rules are now editable under Configurator Admin → Rules (see
+`docs/plans/configurator-rules.md`). The first rule (P2454 strike → P2451
+backer + split lock jamb stop) is in. The cases below still need to be
+entered as rules; some need more than the engine does today (a "prep" that
+is not a physical part, moving a prep to the inactive leaf):
 
 - P1420 always requires push + pull hardware selection (cylinders, paddle
   latches, or lever handles for each).

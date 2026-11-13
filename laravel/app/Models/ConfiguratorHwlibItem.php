@@ -12,7 +12,7 @@ class ConfiguratorHwlibItem extends Model
     protected $fillable = [
         'category_id', 'subcategory_id', 'name', 'manufacturer', 'model_number', 'pn', 'notes',
         'active', 'needs_review', 'vos_standard', 'finishes', 'min_width', 'max_width',
-        'min_height', 'max_height', 'field_install', 'by_others', 'handed',
+        'min_height', 'max_height', 'field_install', 'by_others', 'handed', 'push_pull',
         'default_strike_item_id', 'default_cover_item_id',
     ];
 
@@ -38,6 +38,21 @@ class ConfiguratorHwlibItem extends Model
     public function subcategory()
     {
         return $this->belongsTo(ConfiguratorHwlibSubcategory::class, 'subcategory_id');
+    }
+
+    /**
+     * The category's prep variables that apply to this item. A variable tagged push or pull is left
+     * out for an item on the other side (a push bar is not asked for pull values); an item with no
+     * side keeps every variable.
+     */
+    public function applicableVariables()
+    {
+        $variables = $this->category?->variables ?? collect();
+        if (! $this->push_pull) {
+            return $variables;
+        }
+
+        return $variables->filter(fn ($v) => ! $v->push_pull || $v->push_pull === $this->push_pull)->values();
     }
 
     public function values()

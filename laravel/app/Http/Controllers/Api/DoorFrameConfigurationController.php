@@ -1110,6 +1110,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $config->frameConfig->load('parts.product');
+        $this->storeRuleSignature($config, 'frame');
         $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
@@ -1399,6 +1400,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $config->load('doorConfigs.parts.product');
+        $this->storeRuleSignature($config, 'door');
         $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([
@@ -1830,6 +1832,19 @@ class DoorFrameConfigurationController extends Controller
         }
         if ($config->hardwareLinks->isEmpty()) {
             $warnings[] = 'No hardware is linked to this opening.';
+        }
+
+        // Configurator rules: an error message blocks release; a BOM generated before the hardware
+        // (or the rule) it depends on changed has to be regenerated first.
+        $rules = $this->ruleStatusData($config);
+        foreach ($rules['messages'] as $m) {
+            $line = "{$m['rule']}: {$m['text']}";
+            $m['severity'] === 'error' ? $blockers[] = $line : $warnings[] = $line;
+        }
+        foreach (['frame' => $config->includesFrame(), 'door' => $config->includesDoor(), 'hardware' => ! $cutOnly] as $scope => $relevant) {
+            if ($relevant && $rules['stale'][$scope]) {
+                $blockers[] = ucfirst($scope).' parts were generated before the hardware or rules they depend on changed — Generate / Recalculate them.';
+            }
         }
 
         // Release ties the opening to its work order (matching it now if one has since been created).
@@ -2463,8 +2478,54 @@ class DoorFrameConfigurationController extends Controller
             'source_type' => $part->source_type,
             'is_auto_generated' => $part->is_auto_generated,
             'hwlib_link_id' => $part->hwlib_link_id ?? null,
+            'rule' => $part->rule_id ? ($this->ruleNames()[$part->rule_id] ?? 'Rule') : null,
             'sort_order' => $part->sort_order,
         ];
+    }
+
+    /** @return array<int, string> rule id => name, for labelling rule-made BOM rows */
+    private function ruleNames(): array
+    {
+        return $this->ruleNames ??= \App\Models\ConfiguratorRule::pluck('name', 'id')->all();
+    }
+
+    private ?array $ruleNames = null;
+
+    /** Remembers what the rules depended on when a BOM was generated (see ruleStatus). */
+    private function storeRuleSignature(DoorFrameConfiguration $config, string $scope): void
+    {
+        $signatures = $config->rule_signatures ?? [];
+        $signatures[$scope] = app(\App\Services\Configurator\ConfiguratorRuleEngine::class)->signature($config, $scope);
+        DoorFrameConfiguration::whereKey($config->id)->update(['rule_signatures' => json_encode($signatures)]);
+        $config->setAttribute('rule_signatures', $signatures);
+    }
+
+    /**
+     * Which configurator rules apply to this opening, their warnings / errors, and whether a BOM
+     * was generated before the hardware or rules it depends on last changed (`stale`).
+     */
+    public function ruleStatus($id)
+    {
+        $config = DoorFrameConfiguration::with(['openingSpecs', 'frameConfig', 'doorConfigs'])->findOrFail($id);
+
+        return response()->json($this->ruleStatusData($config));
+    }
+
+    private function ruleStatusData(DoorFrameConfiguration $config): array
+    {
+        $status = app(\App\Services\Configurator\ConfiguratorRuleEngine::class)->status($config);
+        $stored = $config->rule_signatures ?? [];
+        $hasAutoParts = [
+            'frame' => $config->frameConfig && DoorFrameFramePart::where('frame_config_id', $config->frameConfig->id)->where('is_auto_generated', true)->exists(),
+            'door' => DoorFrameDoorPart::whereIn('door_config_id', $config->doorConfigs->pluck('id'))->where('is_auto_generated', true)->exists(),
+            'hardware' => DoorFrameHardwarePart::where('configuration_id', $config->id)->where('is_auto_generated', true)->exists(),
+        ];
+        $stale = [];
+        foreach ($status['signatures'] as $scope => $signature) {
+            $stale[$scope] = $hasAutoParts[$scope] && ($stored[$scope] ?? null) !== $signature;
+        }
+
+        return ['fired' => $status['fired'], 'messages' => $status['messages'], 'stale' => $stale];
     }
 
     /**
@@ -2768,7 +2829,7 @@ class DoorFrameConfigurationController extends Controller
             return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
         }
 
-        $variables = $link->item->category->variables->keyBy('code');
+        $variables = $link->item->applicableVariables()->keyBy('code');
         $angle = (string) ($config->openingAngle($link->leaf));
         $operations = [];
 
@@ -2895,6 +2956,7 @@ class DoorFrameConfigurationController extends Controller
                     'is_calculated' => (bool) $variable->is_calculated,
                     'value' => $result['value'],
                     'overridden' => $result['overridden'],
+                    'rule' => $result['rule'] ?? null,
                     'unit' => $variable->unit,
                 ];
             }
@@ -2974,6 +3036,7 @@ class DoorFrameConfigurationController extends Controller
         }
 
         $config->load('hardwareParts.product');
+        $this->storeRuleSignature($config, 'hardware');
         $this->syncReservationIfReserved($config, $reservationBridge);
 
         return response()->json([

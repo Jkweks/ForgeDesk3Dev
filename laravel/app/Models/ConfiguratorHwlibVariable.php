@@ -12,7 +12,7 @@ class ConfiguratorHwlibVariable extends Model
     protected $fillable = [
         'code', 'label', 'group_name', 'var_type', 'unit', 'options',
         'is_calculated', 'formula', 'formula_def', 'default_value', 'notes', 'sort_order',
-        'overrides_variable_id', 'side', 'show_in_report', 'is_inspection',
+        'overrides_variable_id', 'side', 'push_pull', 'show_in_report', 'is_inspection',
     ];
 
     protected $casts = [

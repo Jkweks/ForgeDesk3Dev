@@ -33,70 +33,10 @@ class FrameBomGenerator
     {
         $this->warnings = [];
 
-        $frameConfig = $config->frameConfig;
-        $openingSpecs = $config->openingSpecs;
-
-        if (! $frameConfig || ! $frameConfig->frame_series_id) {
-            throw new RuntimeException('Frame configuration requires a selected frame series.');
-        }
-        if (! $openingSpecs) {
-            throw new RuntimeException('Opening specifications are required before generating parts.');
-        }
-
-        $finish = strtoupper($openingSpecs->finish ?? '');
-
-        $series = ConfiguratorFrameSeries::with('profiles.product', 'profiles.components.product', 'profiles.components.fasteners.product')
-            ->findOrFail($frameConfig->frame_series_id);
-
-        $width = (float) $openingSpecs->door_opening_width;
-        $height = (float) $openingSpecs->door_opening_height;
-        $openingType = $openingSpecs->opening_type;
-        $hasTransom = (bool) $frameConfig->has_transom;
-        $hasThreshold = (bool) $frameConfig->has_threshold;
-        $transomGlazing = $frameConfig->transom_glazing !== null ? (float) $frameConfig->transom_glazing : null;
-        // Quantity counts door tags, and a pair's two leaves are tagged separately (LH / RH) but hang
-        // in ONE frame — so a pair needs half as many frames as it has tags.
-        $openingQty = max(1, (int) $config->quantity);
-        if ($openingType === 'pair') {
-            $openingQty = max(1, (int) ceil($openingQty / 2));
-        }
-
-        // section_height is a fixed catalog dimension, known for every profile in
-        // the series regardless of which ones end up in this config's BOM — so
-        // TH/section/if_threshold terms can all resolve in a single pass.
-        //
-        // A series can hold several profiles sharing one role label that differ by glazing
-        // (e.g. two "Head Transom Gutter"s, 1.25" for 1" glass vs 1.0" for thin glass). A
-        // formula's `section:<role>` term must then use the one that applies to this
-        // configuration's glazing; profiles that don't apply only fill roles nothing else covers.
-        $sectionHeights = [];
-        $applicableRoles = [];
-        foreach ($series->profiles as $profile) {
-            $applies = $profile->appliesTo($openingType, $hasTransom, $hasThreshold, $transomGlazing);
-            $role = $profile->role_label;
-            if ($applies || ! isset($applicableRoles[$role])) {
-                $sectionHeights[$role] = (float) $profile->section_height;
-                $applicableRoles[$role] = $applicableRoles[$role] ?? $applies;
-                if ($applies) {
-                    $applicableRoles[$role] = true;
-                }
-            }
-        }
-
-        if ($honorSwaps) {
-            $sectionHeights = $this->swappedSectionHeights($frameConfig, $series, $sectionHeights);
-        }
-
-        $totalHeight = $this->evaluator->resolveTotalHeight(
-            $height, $hasTransom, $frameConfig->total_frame_height !== null ? (float) $frameConfig->total_frame_height : null, $sectionHeights
-        );
-
-        $context = [
-            'width' => $width,
-            'height' => $height,
-            'total_height' => $totalHeight,
-            'has_threshold' => $hasThreshold,
-        ];
+        $dims = $this->dimensions($config, $honorSwaps);
+        [$series, $sectionHeights, $context, $openingQty] = [$dims['series'], $dims['section_heights'], $dims['context'], $dims['opening_qty']];
+        [$openingType, $hasTransom, $hasThreshold, $transomGlazing] = [$dims['opening_type'], $dims['has_transom'], $dims['has_threshold'], $dims['transom_glazing']];
+        $finish = strtoupper($config->openingSpecs->finish ?? '');
 
         $applicable = $series->profiles->filter(
             fn ($profile) => $profile->appliesTo($openingType, $hasTransom, $hasThreshold, $transomGlazing)
@@ -186,8 +126,94 @@ class FrameBomGenerator
         }
 
         $rows = app(KitExpander::class)->expand($rows, $this->warnings);
+        $rows = app(ConfiguratorRuleEngine::class)->apply('frame', $config, $rows, $this->warnings, $dims);
 
         return ['rows' => $rows, 'warnings' => $this->warnings];
+    }
+
+    /**
+     * The frame's resolved dimensions: every role's section height, total frame height and the
+     * formula context. Shared with ConfiguratorRuleEngine, whose expressions use the same numbers.
+     *
+     * @return array{series: ConfiguratorFrameSeries, section_heights: array<string, float>, context: array, opening_qty: int, opening_type: ?string, has_transom: bool, has_threshold: bool, transom_glazing: ?float}
+     *
+     * @throws RuntimeException when the frame series or opening specs are missing
+     */
+    public function dimensions(DoorFrameConfiguration $config, bool $honorSwaps = false): array
+    {
+        $frameConfig = $config->frameConfig;
+        $openingSpecs = $config->openingSpecs;
+
+        if (! $frameConfig || ! $frameConfig->frame_series_id) {
+            throw new RuntimeException('Frame configuration requires a selected frame series.');
+        }
+        if (! $openingSpecs) {
+            throw new RuntimeException('Opening specifications are required before generating parts.');
+        }
+
+        $series = ConfiguratorFrameSeries::with('profiles.product', 'profiles.components.product', 'profiles.components.fasteners.product')
+            ->findOrFail($frameConfig->frame_series_id);
+
+        $width = (float) $openingSpecs->door_opening_width;
+        $height = (float) $openingSpecs->door_opening_height;
+        $openingType = $openingSpecs->opening_type;
+        $hasTransom = (bool) $frameConfig->has_transom;
+        $hasThreshold = (bool) $frameConfig->has_threshold;
+        $transomGlazing = $frameConfig->transom_glazing !== null ? (float) $frameConfig->transom_glazing : null;
+        // Quantity counts door tags, and a pair's two leaves are tagged separately (LH / RH) but hang
+        // in ONE frame — so a pair needs half as many frames as it has tags.
+        $openingQty = max(1, (int) $config->quantity);
+        if ($openingType === 'pair') {
+            $openingQty = max(1, (int) ceil($openingQty / 2));
+        }
+
+        // section_height is a fixed catalog dimension, known for every profile in
+        // the series regardless of which ones end up in this config's BOM — so
+        // TH/section/if_threshold terms can all resolve in a single pass.
+        //
+        // A series can hold several profiles sharing one role label that differ by glazing
+        // (e.g. two "Head Transom Gutter"s, 1.25" for 1" glass vs 1.0" for thin glass). A
+        // formula's `section:<role>` term must then use the one that applies to this
+        // configuration's glazing; profiles that don't apply only fill roles nothing else covers.
+        $sectionHeights = [];
+        $applicableRoles = [];
+        foreach ($series->profiles as $profile) {
+            $applies = $profile->appliesTo($openingType, $hasTransom, $hasThreshold, $transomGlazing);
+            $role = $profile->role_label;
+            if ($applies || ! isset($applicableRoles[$role])) {
+                $sectionHeights[$role] = (float) $profile->section_height;
+                $applicableRoles[$role] = $applicableRoles[$role] ?? $applies;
+                if ($applies) {
+                    $applicableRoles[$role] = true;
+                }
+            }
+        }
+
+        if ($honorSwaps) {
+            $sectionHeights = $this->swappedSectionHeights($frameConfig, $series, $sectionHeights);
+        }
+
+        $totalHeight = $this->evaluator->resolveTotalHeight(
+            $height, $hasTransom, $frameConfig->total_frame_height !== null ? (float) $frameConfig->total_frame_height : null, $sectionHeights
+        );
+
+        $context = [
+            'width' => $width,
+            'height' => $height,
+            'total_height' => $totalHeight,
+            'has_threshold' => $hasThreshold,
+        ];
+
+        return [
+            'series' => $series,
+            'section_heights' => $sectionHeights,
+            'context' => $context,
+            'opening_qty' => $openingQty,
+            'opening_type' => $openingType,
+            'has_transom' => $hasTransom,
+            'has_threshold' => $hasThreshold,
+            'transom_glazing' => $transomGlazing,
+        ];
     }
 
     /**

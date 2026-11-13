@@ -11,7 +11,7 @@ class DoorFrameHardwarePart extends Model
 
     protected $fillable = [
         'configuration_id', 'part_label', 'manufacturer', 'model_number', 'product_id', 'quantity',
-        'source_type', 'hwlib_link_id', 'is_auto_generated', 'sort_order',
+        'source_type', 'hwlib_link_id', 'is_auto_generated', 'sort_order', 'rule_id',
     ];
 
     protected $casts = [

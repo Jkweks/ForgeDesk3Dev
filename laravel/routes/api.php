@@ -702,6 +702,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/door-frame-configurations/{id}/hardware-links/{linkId}/values', [DoorFrameConfigurationController::class, 'updateHardwareLinkValues'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/hardware-links/{linkId}', [DoorFrameConfigurationController::class, 'destroyHardwareLink'])->middleware('permission:configurator.edit');
         Route::get('/door-frame-configurations/{id}/hardware-values', [DoorFrameConfigurationController::class, 'resolvedHardwareValues'])->middleware('permission:configurator.view');
+        Route::get('/door-frame-configurations/{id}/rule-status', [DoorFrameConfigurationController::class, 'ruleStatus'])->middleware('permission:configurator.view');
         Route::post('/door-frame-configurations/{id}/hardware-parts/generate', [DoorFrameConfigurationController::class, 'generateHardwareParts'])->middleware('permission:configurator.edit');
         Route::put('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'updateHardwarePart'])->middleware('permission:configurator.edit');
         Route::delete('/door-frame-configurations/{id}/hardware-parts/{partId}', [DoorFrameConfigurationController::class, 'destroyHardwarePart'])->middleware('permission:configurator.edit');
@@ -792,6 +793,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/config/hinge-spacing-standards/{id}', [ConfiguratorDoorCatalogController::class, 'destroyHingeSpacingStandard'])->middleware('permission:configurator.catalog.manage');
 
         // Hardware Library Catalog (read-only browse for the hardware step)
+        // Configurator rules (Configurator Admin > Rules). Static paths before the {rule} wildcard.
+        Route::get('/config/rules', [\App\Http\Controllers\Api\ConfiguratorRuleController::class, 'index'])->middleware('permission:configurator.view');
+        Route::post('/config/rules', [\App\Http\Controllers\Api\ConfiguratorRuleController::class, 'store'])->middleware('permission:configurator.catalog.manage');
+        Route::post('/config/rules/test', [\App\Http\Controllers\Api\ConfiguratorRuleController::class, 'test'])->middleware('permission:configurator.view');
+        Route::put('/config/rules/{rule}', [\App\Http\Controllers\Api\ConfiguratorRuleController::class, 'update'])->middleware('permission:configurator.catalog.manage');
+        Route::delete('/config/rules/{rule}', [\App\Http\Controllers\Api\ConfiguratorRuleController::class, 'destroy'])->middleware('permission:configurator.catalog.manage');
+
         Route::get('/config/hwlib-catalog', [ConfiguratorHwlibCatalogController::class, 'index'])->middleware('permission:configurator.view');
 
         // Hardware Library Admin (categories/variables/items/backers/fasteners/sets)

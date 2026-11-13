@@ -33,6 +33,7 @@ class DoorFrameConfiguration extends Model
         'cutflow_include_door' => 'boolean',
         'inventory_reserved' => 'boolean',
         'archived_at' => 'datetime',
+        'rule_signatures' => 'array',
     ];
 
     protected $appends = [

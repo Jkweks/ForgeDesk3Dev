@@ -195,6 +195,7 @@ class HwlibBomGenerator
         }
 
         $rows = app(KitExpander::class)->expand($rows, $this->warnings);
+        $rows = app(ConfiguratorRuleEngine::class)->apply('hardware', $config, $rows, $this->warnings);
 
         return ['rows' => $rows, 'warnings' => $this->warnings];
     }

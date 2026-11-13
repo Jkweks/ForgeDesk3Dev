@@ -16,6 +16,7 @@ use App\Models\DoorFrameConfiguration;
  * Priority chain per variable code, for one link:
  *   1. the link's own override value (degree_matrix: cell at the opening's
  *      angle; otherwise the raw override text)
+ *   1b. a value set by a configurator rule (ConfiguratorRuleEngine "set a prep value")
  *   2. the item's catalog value (same degree_matrix / raw split)
  *   3. the variable's formula, if calculated (formula_def: signed terms, optionally
  *      split into conditional branches — see HwlibFormulaConverter)
@@ -45,14 +46,25 @@ class HwlibResolver
 
     private ?float $lockStopZ = null;
 
+    /** @var array<string, array{value: string, rule: string}> code => value set by a configurator rule */
+    private array $ruleOverrides = [];
+
     /**
      * @param bool $enteredOnly Report mode: only values someone actually entered (link override or item
      *                          catalog value) count. Global/category defaults are ignored, and a calculated
      *                          value is dropped if any variable it uses has no entered value.
+     * @param array|null $ruleOverrides Values set by configurator rules (code => {value, rule}). Null works
+     *                          them out from the rules; the rule engine passes [] while it is evaluating.
      */
-    public function __construct(private DoorFrameConfiguration $config, private bool $enteredOnly = false)
+    public function __construct(private DoorFrameConfiguration $config, private bool $enteredOnly = false, ?array $ruleOverrides = null)
     {
         $this->build();
+        $this->ruleOverrides = $ruleOverrides ?? app(ConfiguratorRuleEngine::class)->variableOverrides($config);
+    }
+
+    public function setRuleOverrides(array $overrides): void
+    {
+        $this->ruleOverrides = $overrides;
     }
 
     private function build(): void
@@ -73,7 +85,7 @@ class HwlibResolver
             $linkValues = $link->values->keyBy('variable_id');
 
             $raw = [];
-            foreach ($link->item->category->variables as $variable) {
+            foreach ($link->item->applicableVariables() as $variable) {
                 $raw[] = (object) [
                     'code' => $variable->code,
                     'var_type' => $variable->var_type,
@@ -146,6 +158,12 @@ class HwlibResolver
         $seen[$seenKey] = true;
 
         $raw = collect($this->rawVarsByLink[$linkId] ?? [])->firstWhere('code', $code);
+
+        // A rule's value applies unless this link carries its own override for the variable.
+        $ownOverride = $raw && $raw->link_value_text !== null && $raw->link_value_text !== '';
+        if (! $ownOverride && isset($this->ruleOverrides[$code])) {
+            return ['value' => $this->ruleOverrides[$code]['value'], 'overridden' => false, 'rule' => $this->ruleOverrides[$code]['rule']];
+        }
 
         if ($raw) {
             if ($raw->var_type === 'degree_matrix') {

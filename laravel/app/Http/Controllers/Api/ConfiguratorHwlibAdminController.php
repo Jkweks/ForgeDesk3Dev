@@ -261,6 +261,7 @@ class ConfiguratorHwlibAdminController extends Controller
             'group_name' => 'required|string|max:255',
             'var_type' => 'required|in:number,text,boolean,select,degree_matrix',
             'unit' => 'nullable|string|max:50',
+            'push_pull' => 'nullable|in:push,pull',
             'options' => 'nullable|array',
             'is_calculated' => 'boolean',
             'formula' => 'nullable|string',
@@ -466,6 +467,7 @@ class ConfiguratorHwlibAdminController extends Controller
             'field_install' => 'boolean',
             'by_others' => 'boolean',
             'handed' => 'boolean',
+            'push_pull' => 'nullable|in:push,pull',
             'default_strike_item_id' => [
                 'nullable', 'integer', 'exists:configurator_hwlib_items,id',
                 function ($attribute, $value, $fail) use ($ignoreId) {
@@ -607,6 +609,7 @@ class ConfiguratorHwlibAdminController extends Controller
         return [
             'pn' => 'required|string|max:255|unique:configurator_hwlib_backers,pn,'.($ignoreId ?? 'NULL'),
             'description' => 'nullable|string|max:255',
+            'length' => 'nullable|numeric|min:0|max:999',
             'notes' => 'nullable|string',
             'active' => 'boolean',
             'sort_order' => 'nullable|integer',

@@ -9,9 +9,9 @@ class ConfiguratorHwlibBacker extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['pn', 'description', 'notes', 'active', 'sort_order'];
+    protected $fillable = ['pn', 'description', 'length', 'notes', 'active', 'sort_order'];
 
-    protected $casts = ['active' => 'boolean', 'sort_order' => 'integer'];
+    protected $casts = ['active' => 'boolean', 'sort_order' => 'integer', 'length' => 'decimal:4'];
 
     public function fasteners()
     {
