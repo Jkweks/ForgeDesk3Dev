@@ -14,6 +14,7 @@ class PurchaseOrder extends Model
         'po_number',
         'supplier_id',
         'status',
+        'type',
         'order_date',
         'expected_date',
         'received_date',
@@ -39,6 +40,48 @@ class PurchaseOrder extends Model
         'total_amount' => 'decimal:2',
         'approved_at' => 'datetime',
     ];
+
+    public const TYPE_STOCK = 'stock';
+
+    /** Demand document to an internal vendor (e.g. small-order fulfillment); never received, never touches stock. */
+    public const TYPE_INTERNAL = 'internal';
+
+    /** Job-specific material ordered outside stock; receipts are records only. */
+    public const TYPE_JOB = 'job';
+
+    protected static function booted(): void
+    {
+        // The type follows the vendor: a PO to an internal vendor is always `internal`.
+        static::saving(function (PurchaseOrder $po) {
+            $supplier = $po->supplier_id ? Supplier::withTrashed()->find($po->supplier_id) : null;
+            if ($supplier && $supplier->is_internal) {
+                $po->type = self::TYPE_INTERNAL;
+            } elseif ($po->type === self::TYPE_INTERNAL || ! $po->type) {
+                $po->type = self::TYPE_STOCK;
+            }
+        });
+    }
+
+    public function isInternal(): bool
+    {
+        return $this->type === self::TYPE_INTERNAL;
+    }
+
+    /** Only stock POs move on_order_qty / receive into inventory locations. */
+    public function affectsStock(): bool
+    {
+        return ($this->type ?: self::TYPE_STOCK) === self::TYPE_STOCK;
+    }
+
+    public function scopeStock($query)
+    {
+        return $query->where('purchase_orders.type', self::TYPE_STOCK);
+    }
+
+    public function scopeInternal($query)
+    {
+        return $query->where('purchase_orders.type', self::TYPE_INTERNAL);
+    }
 
     // Relationships
     public function supplier()

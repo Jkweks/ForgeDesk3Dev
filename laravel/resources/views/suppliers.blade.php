@@ -251,6 +251,11 @@
                     <input class="form-check-input" type="checkbox" id="supplierIsActive" name="is_active" checked>
                     <label class="form-check-label" for="supplierIsActive">Active</label>
                   </div>
+                  <div class="form-check form-switch mt-2">
+                    <input class="form-check-input" type="checkbox" id="supplierIsInternal" name="is_internal">
+                    <label class="form-check-label" for="supplierIsInternal">Internal vendor</label>
+                    <div class="form-hint">Purchase orders to an internal vendor are demand documents (e.g. small-order fulfillment): they are never received and never change stock. Cannot be changed once the vendor has purchase orders.</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -466,6 +471,7 @@
         const statusBadge = supplier.is_active
           ? '<span class="badge text-bg-success">Active</span>'
           : '<span class="badge text-bg-secondary">Inactive</span>';
+        const internalBadge = supplier.is_internal ? ' <span class="badge text-bg-info">Internal</span>' : '';
 
         const location = [supplier.city, supplier.state, supplier.country]
           .filter(Boolean)
@@ -487,7 +493,7 @@
             <td>
               <span class="badge text-bg-azure">${supplier.products_count || 0}</span>
             </td>
-            <td>${statusBadge}</td>
+            <td>${statusBadge}${internalBadge}</td>
             <td>
               <div class="btn-group">
                 <button class="btn btn-sm btn-ghost-primary" onclick="viewSupplier(${supplier.id})">
@@ -550,6 +556,7 @@
       document.getElementById('supplierModalTitle').textContent = 'Add Supplier';
       document.getElementById('supplierForm').reset();
       document.getElementById('supplierIsActive').checked = true;
+      document.getElementById('supplierIsInternal').checked = false;
       document.getElementById('supplierCountry').value = 'USA';
 
       safeShowModal('supplierModal');
@@ -578,6 +585,7 @@
         document.getElementById('supplierMinOrderAmount').value = supplier.supplier.minimum_order_amount || '';
         document.getElementById('supplierNotes').value = supplier.supplier.notes || '';
         document.getElementById('supplierIsActive').checked = supplier.supplier.is_active;
+        document.getElementById('supplierIsInternal').checked = !!supplier.supplier.is_internal;
 
         safeShowModal('supplierModal');
       } catch (error) {
@@ -607,7 +615,7 @@
               <table class="table table-sm">
                 <tr><th>Name:</th><td>${escapeHtml(supplier.name)}</td></tr>
                 <tr><th>Code:</th><td>${supplier.code ? escapeHtml(supplier.code) : '-'}</td></tr>
-                <tr><th>Status:</th><td>${supplier.is_active ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}</td></tr>
+                <tr><th>Status:</th><td>${supplier.is_active ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-secondary">Inactive</span>'}${supplier.is_internal ? ' <span class="badge text-bg-info">Internal</span>' : ''}</td></tr>
               </table>
             </div>
             <div class="col-md-6">
@@ -738,6 +746,7 @@
         minimum_order_amount: document.getElementById('supplierMinOrderAmount').value ? parseFloat(document.getElementById('supplierMinOrderAmount').value) : null,
         notes: document.getElementById('supplierNotes').value || null,
         is_active: document.getElementById('supplierIsActive').checked,
+        is_internal: document.getElementById('supplierIsInternal').checked,
       };
 
       try {

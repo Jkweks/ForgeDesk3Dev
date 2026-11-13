@@ -165,10 +165,12 @@ class PurchaseOrderController extends Controller
 
                 $totalAmount += $item->total_cost;
 
-                // Update product on_order_qty
-                $product = Product::find($itemData['product_id']);
-                $product->on_order_qty = ($product->on_order_qty ?? 0) + $itemData['quantity'];
-                $product->save();
+                // Update product on_order_qty (stock POs only; internal POs are demand documents)
+                if ($po->affectsStock()) {
+                    $product = Product::find($itemData['product_id']);
+                    $product->on_order_qty = ($product->on_order_qty ?? 0) + $itemData['quantity'];
+                    $product->save();
+                }
             }
 
             // Update PO total
@@ -330,6 +332,12 @@ class PurchaseOrderController extends Controller
      */
     public function receive(Request $request, PurchaseOrder $purchaseOrder)
     {
+        if ($purchaseOrder->isInternal()) {
+            return response()->json([
+                'message' => 'Internal purchase orders are demand documents and cannot be received',
+            ], 422);
+        }
+
         if (! in_array($purchaseOrder->status, ['approved', 'partially_received'])) {
             return response()->json([
                 'message' => 'Order must be approved before receiving',
@@ -526,7 +534,7 @@ class PurchaseOrderController extends Controller
         DB::beginTransaction();
         try {
             // Release on_order quantities
-            foreach ($purchaseOrder->items as $item) {
+            foreach ($purchaseOrder->affectsStock() ? $purchaseOrder->items : [] as $item) {
                 $unreceived = $item->quantity_ordered - $item->quantity_received;
                 if ($unreceived > 0) {
                     $product = $item->product;
@@ -568,7 +576,7 @@ class PurchaseOrderController extends Controller
         DB::beginTransaction();
         try {
             // Release on_order quantities
-            foreach ($purchaseOrder->items as $item) {
+            foreach ($purchaseOrder->affectsStock() ? $purchaseOrder->items : [] as $item) {
                 $product = $item->product;
                 $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) - $item->quantity_ordered);
                 $product->save();
@@ -599,6 +607,7 @@ class PurchaseOrderController extends Controller
     {
         $orders = PurchaseOrder::with(['supplier', 'items.product'])
             ->open()
+            ->stock()
             ->orderBy('order_date', 'asc')
             ->get();
 
@@ -611,16 +620,16 @@ class PurchaseOrderController extends Controller
     public function statistics()
     {
         $stats = [
-            'total_orders' => PurchaseOrder::count(),
-            'draft' => PurchaseOrder::where('status', 'draft')->count(),
-            'submitted' => PurchaseOrder::where('status', 'submitted')->count(),
-            'approved' => PurchaseOrder::where('status', 'approved')->count(),
-            'partially_received' => PurchaseOrder::where('status', 'partially_received')->count(),
-            'received' => PurchaseOrder::where('status', 'received')->count(),
-            'cancelled' => PurchaseOrder::where('status', 'cancelled')->count(),
-            'total_value' => PurchaseOrder::whereIn('status', ['approved', 'partially_received', 'received'])
+            'total_orders' => PurchaseOrder::stock()->count(),
+            'draft' => PurchaseOrder::stock()->where('status', 'draft')->count(),
+            'submitted' => PurchaseOrder::stock()->where('status', 'submitted')->count(),
+            'approved' => PurchaseOrder::stock()->where('status', 'approved')->count(),
+            'partially_received' => PurchaseOrder::stock()->where('status', 'partially_received')->count(),
+            'received' => PurchaseOrder::stock()->where('status', 'received')->count(),
+            'cancelled' => PurchaseOrder::stock()->where('status', 'cancelled')->count(),
+            'total_value' => PurchaseOrder::stock()->whereIn('status', ['approved', 'partially_received', 'received'])
                 ->sum('total_amount'),
-            'pending_value' => PurchaseOrder::whereIn('status', ['approved', 'partially_received'])
+            'pending_value' => PurchaseOrder::stock()->whereIn('status', ['approved', 'partially_received'])
                 ->sum('total_amount'),
         ];
 
@@ -662,9 +671,11 @@ class PurchaseOrderController extends Controller
                 'cost_code' => $request->cost_code,
             ]);
 
-            $product = Product::find($request->product_id);
-            $product->on_order_qty = ($product->on_order_qty ?? 0) + $request->quantity;
-            $product->save();
+            if ($purchaseOrder->affectsStock()) {
+                $product = Product::find($request->product_id);
+                $product->on_order_qty = ($product->on_order_qty ?? 0) + $request->quantity;
+                $product->save();
+            }
 
             $purchaseOrder->total_amount = $purchaseOrder->items()->sum('total_cost');
             $purchaseOrder->save();
@@ -730,7 +741,7 @@ class PurchaseOrderController extends Controller
             ]);
             $item->save(); // model boot() recomputes total_cost
 
-            if ($delta !== 0) {
+            if ($delta !== 0 && $purchaseOrder->affectsStock()) {
                 $product = Product::find($item->product_id);
                 if ($product) {
                     $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) + $delta);
@@ -1172,7 +1183,7 @@ class PurchaseOrderController extends Controller
 
         DB::beginTransaction();
         try {
-            $product = Product::find($item->product_id);
+            $product = $purchaseOrder->affectsStock() ? Product::find($item->product_id) : null;
             if ($product) {
                 $product->on_order_qty = max(0, ($product->on_order_qty ?? 0) - $item->quantity_ordered);
                 $product->save();

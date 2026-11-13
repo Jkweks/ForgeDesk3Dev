@@ -564,17 +564,17 @@ class DashboardWidgetController extends Controller
         $today = today()->toDateString();
 
         return response()->json([
-            'open' => PurchaseOrder::open()->count(),
-            'awaiting_approval' => PurchaseOrder::where('status', 'submitted')->count(),
-            'overdue' => PurchaseOrder::open()->whereNotNull('expected_date')->where('expected_date', '<', $today)->count(),
-            'drafts' => PurchaseOrder::where('status', 'draft')->count(),
+            'open' => PurchaseOrder::stock()->open()->count(),
+            'awaiting_approval' => PurchaseOrder::stock()->where('status', 'submitted')->count(),
+            'overdue' => PurchaseOrder::stock()->open()->whereNotNull('expected_date')->where('expected_date', '<', $today)->count(),
+            'drafts' => PurchaseOrder::stock()->where('status', 'draft')->count(),
         ]);
     }
 
     /** Open purchase orders, earliest expected date first (undated last). */
     public function purchaseOrdersDue(Request $request)
     {
-        $items = PurchaseOrder::open()
+        $items = PurchaseOrder::stock()->open()
             ->with('supplier:id,name')
             ->orderByRaw('expected_date IS NULL, expected_date ASC')
             ->limit($this->limitFor($request, 'po_due_list'))

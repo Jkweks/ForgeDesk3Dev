@@ -240,8 +240,8 @@ class StatusController extends Controller
 
         return [
             'purchase_orders' => [
-                'total' => $safe(fn () => PurchaseOrder::count(), 0),
-                'open' => $safe(fn () => PurchaseOrder::whereIn('status', ['draft', 'submitted', 'approved'])->count(), 0),
+                'total' => $safe(fn () => PurchaseOrder::stock()->count(), 0),
+                'open' => $safe(fn () => PurchaseOrder::stock()->whereIn('status', ['draft', 'submitted', 'approved'])->count(), 0),
             ],
             'job_reservations' => [
                 'total' => $safe(fn () => JobReservation::count(), 0),

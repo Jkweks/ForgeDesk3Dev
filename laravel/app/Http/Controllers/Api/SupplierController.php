@@ -83,6 +83,7 @@ class SupplierController extends Controller
             'default_lead_time_days' => 'nullable|integer|min:0',
             'minimum_order_amount' => 'nullable|numeric|min:0',
             'is_active' => 'boolean',
+            'is_internal' => 'boolean',
         ]);
 
         if ($validator->fails()) {
@@ -149,12 +150,22 @@ class SupplierController extends Controller
             'default_lead_time_days' => 'nullable|integer|min:0',
             'minimum_order_amount' => 'nullable|numeric|min:0',
             'is_active' => 'boolean',
+            'is_internal' => 'boolean',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
                 'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        if ($request->has('is_internal')
+            && (bool) $request->is_internal !== (bool) $supplier->is_internal
+            && $supplier->purchaseOrders()->exists()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['is_internal' => ['The internal setting cannot be changed once the vendor has purchase orders.']],
             ], 422);
         }
 

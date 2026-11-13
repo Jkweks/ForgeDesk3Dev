@@ -27,10 +27,12 @@ class Supplier extends Model
         'default_lead_time_days',
         'minimum_order_amount',
         'is_active',
+        'is_internal',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_internal' => 'boolean',
         'minimum_order_amount' => 'decimal:2',
     ];
 
