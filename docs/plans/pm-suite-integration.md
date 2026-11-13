@@ -201,6 +201,13 @@ Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). Priority: H
 | 30 | QR codes | Undecided | Hold |  |  |
 | 31 | Dashboard widgets | Fold into customizable dashboard | Y | Low |  |
 
+## 4c. Phase 0 findings (2026-11-13)
+
+- **No data to migrate.** The live PM Suite database (`jv_vos-db-1`) holds no business data: `pm.shared_data`, `pm.documents` and `pm.meta` are empty and only `pm.auth_users` has rows (24 mirrored ForgeDesk accounts). The `backups/` dumps are ~12 KB, so they are empty too. `/mnt/f` is not mounted on this host. So there is nothing to import yet, and no data-migration or cut-over work is needed now. Importers can be built from the code's data shapes and tested with fixtures.
+- **Vendor shape (PM Suite)** is richer than `Supplier`: company name, primary contact, preferred sales rep, additional contacts, multiple labelled phones and emails, website, address, products/services, notes, document attachments, and a **BidEstimate code plus learned aliases** (used to match the estimate's Supplier column to a vendor). `Supplier` has one contact (name/email/phone) and no aliases. **Gap to close:** `supplier_contacts` (many, with role and a preferred-rep flag), `supplier_phones`/`emails` (or a JSON column), `products_services`, `bidestimate_code`, `supplier_aliases`, attachments.
+- **PO shape (PM Suite)** is nested: a PO holds `lines[]` that can be groups of sub-lines (flattened on read), each with its own cost code that overrides the PO-level cost code. Statuses are a different lifecycle from Forge's (draft, submittal-request, material-release, subcontract variants; plus separate `closed` and `voided` axes and numbered revisions with drafts). **Gap to close:** `PurchaseOrder` needs a status mapping or a separate "issue stage" column, revisions, and grouped line items.
+- **Next build step (High priority, no data dependency): vendor extension** (the gap above) with the Supplier page showing the extra contacts and aliases, then the job-PO columns (job link, issue stage, revisions, grouped lines).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).
