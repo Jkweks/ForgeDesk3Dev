@@ -44,6 +44,27 @@ class PmWorkspaceTest extends TestCase
         $this->assertSame(1, BusinessJob::where('job_number', '9001')->count());
     }
 
+    public function test_fabrication_keeps_creating_jobs_and_pm_sees_them(): void
+    {
+        $this->admin();
+
+        // Existing Fabrication flow is unchanged: a job created there is active and marked as such
+        $id = $this->postJson('/api/v1/business-jobs', ['job_number' => '9100', 'job_name' => 'Shop Job'])->assertCreated()->json('job.id')
+            ?? BusinessJob::where('job_number', '9100')->value('id');
+        $job = BusinessJob::findOrFail($id);
+        $this->assertSame('active', $job->status);
+        $this->assertSame('fabrication', $job->origin);
+
+        // ...and shows up in Project Management alongside PM bids
+        $pmId = $this->postJson('/api/v1/pm/jobs', ['job_number' => '9101', 'job_name' => 'Bid'])->assertCreated()->assertJsonPath('origin', 'pm')->json('id');
+        $rows = collect($this->getJson('/api/v1/pm/jobs')->assertOk()->json())->keyBy('id');
+        $this->assertSame('fabrication', $rows[$id]['origin']);
+        $this->assertSame('pm', $rows[$pmId]['origin']);
+
+        // A PM bid reserves its job number against Fabrication creating a duplicate
+        $this->postJson('/api/v1/business-jobs', ['job_number' => '9101', 'job_name' => 'Dup'])->assertStatus(422);
+    }
+
     public function test_invalid_stage_moves_are_rejected(): void
     {
         $this->admin();

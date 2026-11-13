@@ -34,8 +34,8 @@
         </div>
         <div class="table-responsive">
           <table class="table table-vcenter card-table">
-            <thead><tr><th>Job #</th><th>Name</th><th>Customer</th><th>Stage</th><th class="w-1"></th></tr></thead>
-            <tbody id="pmJobsBody"><tr><td colspan="5" class="text-muted">Loading...</td></tr></tbody>
+            <thead><tr><th>Job #</th><th>Name</th><th>Customer</th><th>Stage</th><th>Source</th><th class="w-1"></th></tr></thead>
+            <tbody id="pmJobsBody"><tr><td colspan="6" class="text-muted">Loading...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -71,10 +71,11 @@
 
   function render() {
     const body = document.getElementById('pmJobsBody');
-    if (!pmJobs.length) { body.innerHTML = '<tr><td colspan="5" class="text-muted">No jobs.</td></tr>'; return; }
+    if (!pmJobs.length) { body.innerHTML = '<tr><td colspan="6" class="text-muted">No jobs.</td></tr>'; return; }
     body.innerHTML = pmJobs.map(j => `<tr>
       <td>${escapeHtml(j.job_number)}</td><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.customer_name || '')}</td>
       <td><span class="badge ${BADGE[j.status] || 'bg-secondary-lt'}">${escapeHtml(j.status_label || j.status)}</span></td>
+      <td class="text-muted">${j.origin === 'pm' ? 'PM bid' : 'Fabrication'}</td>
       <td class="text-nowrap" data-permission="pm.jobs.manage">${(NEXT[j.status] || []).map(([s, l]) =>
         `<button class="btn btn-sm me-1" onclick="moveJob(${j.id}, '${s}')">${l}</button>`).join('')}</td></tr>`).join('');
   }

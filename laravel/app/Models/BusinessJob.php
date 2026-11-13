@@ -37,6 +37,7 @@ class BusinessJob extends Model
         'contact_phone',
         'contact_email',
         'status',
+        'origin',
         'start_date',
         'target_completion_date',
         'actual_completion_date',

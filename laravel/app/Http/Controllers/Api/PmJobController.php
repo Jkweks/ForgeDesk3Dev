@@ -55,7 +55,7 @@ class PmJobController extends Controller
             'target_completion_date' => 'nullable|date',
         ]);
 
-        $job = BusinessJob::create($data + ['status' => 'bidding', 'created_by_id' => auth()->id()]);
+        $job = BusinessJob::create($data + ['status' => 'bidding', 'origin' => 'pm', 'created_by_id' => auth()->id()]);
 
         return response()->json($job->fresh()->toArray() + ['status_label' => $job->status_label], 201);
     }

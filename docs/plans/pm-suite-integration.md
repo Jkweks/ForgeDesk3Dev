@@ -234,7 +234,10 @@ PM Suite is the **front-of-house** (project management, office) system; ForgeDes
 
 **Built:** `nav.pm`, `pm.jobs.view`, `pm.jobs.manage` permissions (admin, manager, office_staff); `config/navigation_pm.php`; workspace switcher (top navbar and sidebar, shown only to users with both workspaces); `/pm` dashboard, `/pm/jobs` (bids, stage moves, activate), `/pm/vendors`; PM-only users landing on `/` are redirected to `/pm`.
 
-**Still open:** whether Jobs gets one page with two tab sets or two pages once PM job detail exists (currently two: `/pm/jobs` and the Fabrication jobs pages).
+**Two job pages (decided):** Project Management's `/pm/jobs` drives Fabrication's job pages; they stay separate pages. **Until PM is fully adopted, Fabrication keeps creating and editing jobs exactly as it does today**: the goal is to build onto the existing ForgeDesk flow, not interrupt it. Concretely:
+- Jobs created in Fabrication are active from the start (`origin = fabrication`, the default for all existing jobs) and appear in the PM job list with no bid history.
+- Jobs created as PM bids (`origin = pm`) reserve their job number against Fabrication but are otherwise invisible to it until activated.
+- Both workspaces edit the same record. No field ownership rules yet; once PM is the standard entry point, tighten which fields Fabrication can edit using `origin` as the migration marker.
 
 ## 5. Key risks / things to settle first
 
