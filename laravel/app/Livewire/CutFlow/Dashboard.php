@@ -43,6 +43,9 @@ class Dashboard extends Component
     // true right after a profile's last piece is cut, so the idle panel can say so
     public bool $profileComplete = false;
 
+    // "Rail · C2" of the profile that just finished, for the "<part> complete" note
+    public ?string $completedProfileLabel = null;
+
     // which part_id+finish list the sidebar/stick-entry flow is scoped to
     public ?string $activeProfileName = null;
 
@@ -429,6 +432,7 @@ class Dashboard extends Component
         $this->activeProfileName = $name;
         $this->activeProfileFinish = $finish;
         $this->profileComplete = false;
+        $this->completedProfileLabel = null;
     }
 
     // --- operator crew (multiple signed-in operators) ----------------------
@@ -756,6 +760,7 @@ class Dashboard extends Component
 
             // First person on this tablet: start clean and ask what they're working on.
             if ($firstLogin) {
+                $this->endActiveSticks();
                 $this->activeJobIds = [];
                 $this->activeProfileName = null;
                 $this->activeProfileFinish = null;
@@ -783,6 +788,10 @@ class Dashboard extends Component
                 return;
             }
 
+            $result = $bridge->move($inches);
+            $this->lastError = $result['ok'] ? '' : ($result['error'] ?? 'Move failed');
+            $this->markBridgeActivity();
+
             $entry = CutLogEntry::create([
                 'uuid' => (string) Str::uuid(),
                 'part_id' => null,
@@ -790,13 +799,11 @@ class Dashboard extends Component
                 'operator_id' => $this->activeOperatorId(),
                 'operator_name' => $this->activeOperatorName(),
                 'dimension_inches' => $inches,
+                'saw_position_inches' => $result['ok'] ? ($result['data']['ampTarget'] ?? null) : null,
                 'stick_length_label' => null,
                 'type' => 'manual',
             ]);
 
-            $result = $bridge->move($inches);
-            $this->lastError = $result['ok'] ? '' : ($result['error'] ?? 'Move failed');
-            $this->markBridgeActivity();
 
             $qrUrl = route('cutflow.cuts.show', $entry->uuid);
 
@@ -1146,6 +1153,7 @@ class Dashboard extends Component
                 'operator_name' => $this->activeOperatorName(),
                 'description' => 'Drop cut',
                 'dimension_inches' => $item->dimension_inches,
+                'saw_position_inches' => $this->confirmedSawPosition($item, $manual),
                 'stick_length_label' => $stickSession->length_label,
                 'stick_session_id' => $item->stick_session_id,
                 'type' => 'drop',
@@ -1190,6 +1198,9 @@ class Dashboard extends Component
 
         // Nothing left to cut in this profile: don't ask for another stick of it. Clear the profile; the
         // main panel then offers the remaining profiles (with photos) to pick from.
+        $this->completedProfileLabel = $this->activeProfileFinish
+            ? "{$this->activeProfileName} · {$this->activeProfileFinish}"
+            : $this->activeProfileName;
         $this->activeProfileName = null;
         $this->activeProfileFinish = null;
         $this->profileComplete = true;
@@ -1205,6 +1216,7 @@ class Dashboard extends Component
         $this->activeProfileName = $name;
         $this->activeProfileFinish = $finish ?: null;
         $this->profileComplete = false;
+        $this->completedProfileLabel = null;
     }
 
     /** Opens the recut picker: every already-cut piece on the selected lists, however far down or hidden. */
@@ -1216,6 +1228,31 @@ class Dashboard extends Component
 
         $this->modal = 'recut';
         $this->keypadValue = '';
+    }
+
+    /**
+     * The target the amp itself echoed for the move that positioned this piece, or null when it can't be
+     * vouched for (hand cut, or no confirmed position yet). It's where the saw actually sat, so it may legitimately
+     * differ from the piece when the operator confirms without positioning. Stored beside
+     * dimension_inches so a gap between what was asked and where the saw was is queryable later.
+     */
+    protected function confirmedSawPosition(StickItem $item, bool $manual): ?float
+    {
+        if ($manual || $this->tigerPosition === null) {
+            return null;
+        }
+
+        $position = round($this->tigerPosition, 3);
+
+        if (abs($position - (float) $item->dimension_inches) >= 0.0005) {
+            \Illuminate\Support\Facades\Log::warning('[cutflow] saw position differs from cut dimension', [
+                'stick_item_id' => $item->id,
+                'dimension_inches' => (float) $item->dimension_inches,
+                'saw_position_inches' => $position,
+            ]);
+        }
+
+        return $position;
     }
 
     protected function recordPieceCut(StickItem $item, StickSession $stickSession, bool $manual = false): void
@@ -1238,6 +1275,7 @@ class Dashboard extends Component
             'phase' => $part->phase,
             'description' => $part->description,
             'dimension_inches' => $item->dimension_inches,
+            'saw_position_inches' => $this->confirmedSawPosition($item, $manual),
             'stick_length_label' => $stickSession->length_label,
             'stick_session_id' => $item->stick_session_id,
             'type' => 'planned',
@@ -1366,6 +1404,26 @@ class Dashboard extends Component
         if (($status['data']['status'] ?? null) === 'complete') {
             $this->finalizeCutAndAdvance($bridge);
         }
+    }
+
+    /**
+     * A fresh sign-in never inherits a stick: whatever was left active (a previous operator walked away, or
+     * the page was loaded before anyone signed in) is ended the way stopStick() does it — its pending pieces
+     * go back to the pool, cuts already made stay in the log.
+     */
+    protected function endActiveSticks(): void
+    {
+        StickSession::where('status', 'active')->whereNull('cancelled_at')->get()->each(function (StickSession $session) {
+            $session->items()->where('status', 'pending')->delete();
+            $session->update(['status' => 'complete', 'cancelled_at' => now()]);
+        });
+
+        $this->activeStickId = null;
+        $this->activeProfileName = null;
+        $this->activeProfileFinish = null;
+        $this->profileComplete = false;
+        $this->completedProfileLabel = null;
+        $this->tigerStatus = 'idle';
     }
 
     /**
@@ -1722,7 +1780,11 @@ class Dashboard extends Component
             'jobGroups' => ($this->modal === 'jobs' && $this->pickStep === 'jobs') ? $this->jobGroups() : collect(),
             'selectedJobs' => $signedIn ? CutJob::withDisplayLabels(CutJob::whereIn('id', $this->activeJobIds)->get()) : collect(),
             'totalJobCount' => CutJob::count(),
-            'profiles' => $signedIn ? $planner->activeProfiles($this->activeJobIds, $viewingCompleted) : collect(),
+            // "Showing completed" also keeps profiles with nothing left to cut in the panel (listed after the open ones).
+            'profiles' => $signedIn
+                ? $planner->activeProfiles($this->activeJobIds, $viewingCompleted || $this->showCompleted)
+                    ->sortBy(fn ($p) => $p->qty_remaining_total > 0 ? 0 : 1)->values()
+                : collect(),
             'viewingCompleted' => $viewingCompleted,
             'parts' => $parts,
             'completedCount' => $completedCount,

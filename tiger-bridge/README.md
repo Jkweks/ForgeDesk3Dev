@@ -128,7 +128,7 @@ this, same as before.
   ForgeDesk compares it to `TigerBridgeClient::MIN_BRIDGE_VERSION` and warns
   on the cut station when the bridge is older. Bump it on every change here
   (and raise the minimum in ForgeDesk when Laravel starts relying on it).
-  Changelog: 0.3.0 — job label prints job name, then `WO# <workOrder>` on
+  Changelog: 0.6.0 — `/move` reads the stop's position (`P`) first and skips `MG` when it is already at the target (`skipped: true`), and reads `P` again after a move, failing with "do not cut" if the stop isn't there; `lastPosition` is that measured position (`position`). If `P` can't be read the echo check alone applies. 0.5.0 — a move is only reported good when the amp echoed the requested target (a missing or wrong echo is retried once, then fails with "do not cut"); `/move` now returns the amp-confirmed `ampTarget`; every serial command/reply is logged to `logs\serial.log`. 0.3.0 — job label prints job name, then `WO# <workOrder>` on
   the next line (new optional `workOrder` field on `/print`). 0.2.0 — read travel limits (D10/D11) on connect, reject
   out-of-range `/move`, report `version`/`limitMin`/`limitMax` in `/status`.
   0.1.0 — initial.

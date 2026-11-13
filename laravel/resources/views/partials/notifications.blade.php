@@ -6,7 +6,7 @@
   @param string $placement  'top' (default) or 'side'
 --}}
 @php $placement = $placement ?? 'top'; @endphp
-@if(Auth::user() && Auth::user()->isAdmin())
+@if(Auth::user() && (Auth::user()->isAdmin() || Auth::user()->hasPermission('shipments.approve')))
 @if ($placement === 'side')
 <li class="nav-item dropup">
   <a href="#" class="nav-link" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-label="Show notifications">
@@ -102,6 +102,7 @@
     // Where a notification's context lives, when it carries enough data to say
     function notificationLink(n) {
       const d = n.data || {};
+      if (d.shipment_request_id) return { href: '/shipments/queue', label: 'Open shipping queue' };
       if (d.job_reservation_id) return { href: '/fulfillment/job-reservations', label: 'Open job reservations' };
       return null;
     }

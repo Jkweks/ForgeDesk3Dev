@@ -32,7 +32,7 @@ class ShipmentController extends Controller
 
     public function index(Request $request)
     {
-        $q = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name'])
+        $q = Shipment::with(['jobs:id,job_number,job_name,site_address', 'loads.type:id,name', 'elevations.workOrder.businessJob:id,job_number'])
             ->withCount(['inspections', 'elevations'])->orderByDesc('id');
         if ($request->filled('status')) {
             $q->whereIn('status', array_filter(explode(',', (string) $request->query('status'))));
@@ -50,7 +50,24 @@ class ShipmentController extends Controller
         $rows = $q->limit(500)->get();
         $trips = app(\App\Services\Shipping\WorkOrderShipmentService::class)->tripLabels($rows);
 
-        return response()->json($rows->map(fn (Shipment $r) => $r->toArray() + ['trip' => $trips[$r->id] ?? null]));
+        return response()->json($rows->map(function (Shipment $r) use ($trips) {
+            // One chip per work order on the load: its release label, the elevations of it on this shipment, and their tags.
+            $workOrders = $r->elevations->groupBy('work_order_id')->map(function ($els) {
+                $wo = $els->first()->workOrder;
+
+                return [
+                    'id' => (int) $els->first()->work_order_id,
+                    'label' => $wo ? $wo->releaseLabel() : 'WO #'.$els->first()->work_order_id,
+                    'elevations' => $els->count(),
+                    'tags' => $els->map(fn ($e) => $e->elevation_tag ?: '#'.$e->id)->values()->all(),
+                    'partial' => $els->contains(fn ($e) => (bool) $e->pivot->partial),
+                ];
+            })->values()->all();
+            $arr = $r->toArray();
+            unset($arr['elevations']);
+
+            return $arr + ['trip' => $trips[$r->id] ?? null, 'work_orders' => $workOrders];
+        }));
     }
 
     /**

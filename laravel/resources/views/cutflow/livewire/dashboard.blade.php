@@ -278,8 +278,13 @@
                     @elseif ($nextProfiles->isNotEmpty())
                         <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:12px;">
                             <div>
-                                <div class="title">{{ $profileComplete ? 'Profile Complete' : 'Select a Profile' }}</div>
-                                <p>Tap the next profile to cut.</p>
+                                @if ($profileComplete && $completedProfileLabel)
+                                    <div class="title">{{ $completedProfileLabel }} complete</div>
+                                    <p>Select another part.</p>
+                                @else
+                                    <div class="title">{{ $profileComplete ? 'Profile Complete' : 'Select a Profile' }}</div>
+                                    <p>Tap the next profile to cut.</p>
+                                @endif
                             </div>
                             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-height:340px;overflow-y:auto;">
                                 @foreach ($nextProfiles as $p)
@@ -301,8 +306,13 @@
                     @else
                         <span style="width:52px;height:52px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:24px;">&#128207;</span>
                         <div>
-                            <div class="title">No Profile Selected</div>
-                            <p>Select at least one job above and pick a profile from the left to start entering sticks.</p>
+                            @if ($profileComplete && $completedProfileLabel)
+                                <div class="title">{{ $completedProfileLabel }} complete</div>
+                                <p>Nothing else is left to cut in the selected job(s).</p>
+                            @else
+                                <div class="title">No Profile Selected</div>
+                                <p>Select at least one job above and pick a profile from the left to start entering sticks.</p>
+                            @endif
                         </div>
                         <button class="btn btn-accent" disabled style="margin-top:4px;opacity:.45;cursor:not-allowed;">Enter Stick Length</button>
                     @endif

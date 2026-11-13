@@ -37,8 +37,11 @@
           </div>
           <div class="table-responsive">
             <table class="table card-table table-vcenter table-hover">
-              <thead><tr><th>#</th><th>Job</th><th>Categories</th><th>Elev.</th><th>Status</th><th>Ship date</th><th>Destination</th></tr></thead>
-              <tbody id="shRows"><tr><td colspan="7" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+              <thead><tr>
+                <th class="sortable" data-sort="shipment_number">#</th><th class="sortable" data-sort="job">Job</th><th class="sortable" data-sort="work_orders">Work orders</th>
+                <th class="sortable" data-sort="categories">Categories</th><th class="sortable" data-sort="elevations_count">Elev.</th><th class="sortable" data-sort="status">Status</th>
+                <th class="sortable" data-sort="ship_date">Ship date</th><th class="sortable" data-sort="destination">Destination</th></tr></thead>
+              <tbody id="shRows"><tr><td colspan="8" class="text-center text-muted py-4">Loading…</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -78,20 +81,51 @@
   }
 
   // ---- shipments ----
+  let shRowsData = [], shSort = { key: 'shipment_number', dir: -1 };
+  const jobText = r => [...r.jobs.map(j => j.job_number || ''), ...(r.custom_jobs || [])].join(' ');
+  const SORT_VAL = {
+    job: jobText,
+    work_orders: r => (r.work_orders || []).map(w => w.label).join(' '),
+    categories: r => r.loads.map(l => l.type.name).join(' '),
+    elevations_count: r => +r.elevations_count || 0,
+    ship_date: r => r.ship_date || '',
+  };
+  function sortBy(key) {
+    shSort = { key, dir: shSort.key === key ? -shSort.dir : 1 };
+    renderShipments();
+  }
+  function renderShipments() {
+    const get = SORT_VAL[shSort.key] || (r => r[shSort.key] ?? '');
+    const rows = [...shRowsData].sort((a, b) => {
+      const x = get(a), y = get(b);
+      // Blanks always last, whichever direction.
+      if ((x === '' || x == null) !== (y === '' || y == null)) return (x === '' || x == null) ? 1 : -1;
+      const c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' });
+      return c * shSort.dir || (b.id - a.id);
+    });
+    document.querySelectorAll('th.sortable').forEach(th => {
+      const on = th.dataset.sort === shSort.key;
+      th.style.cursor = 'pointer'; th.classList.add('user-select-none');
+      th.dataset.arrow = on ? (shSort.dir > 0 ? ' ▲' : ' ▼') : '';
+      th.textContent = th.textContent.replace(/ [▲▼]$/, '') + th.dataset.arrow;
+    });
+    document.getElementById('shRows').innerHTML = rows.length ? rows.map(r => `<tr style="cursor:pointer" onclick="location.href='/shipments/${r.id}'">
+        <td class="text-nowrap fw-bold">${esc(r.shipment_number)}${r.trip ? '<div class="small fw-normal text-muted">' + esc(r.trip) + '</div>' : ''}</td>
+        <td>${(r.jobs.length || (r.custom_jobs||[]).length) ? r.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').concat((r.custom_jobs||[]).map(n => esc(n) + ' <span class="text-muted">(custom)</span>')).join('<br>') : '—'}</td>
+        <td>${(r.work_orders || []).map(w => `<span class="badge bg-blue-lt me-1 mb-1" title="${esc(w.tags.join(', '))}${w.partial ? ' (partial)' : ''}">${esc(w.label)} · ${w.elevations} elev${w.partial ? ' (partial)' : ''}</span>`).join('') || '<span class="text-muted">—</span>'}</td>
+        <td>${r.loads.map(l => flBadge(l.type.name, 'azure')).join(' ')}</td>
+        <td>${r.elevations_count || '<span class="text-muted">0</span>'}</td>
+        <td>${shStatus(r.status)}</td><td>${flDate(r.ship_date)}</td><td class="text-muted">${esc(r.destination || '')}</td></tr>`).join('')
+      : '<tr><td colspan="8" class="text-center text-muted py-4">No shipments.</td></tr>';
+  }
   async function loadShipments() {
     const p = new URLSearchParams();
     const s = document.getElementById('shSearch').value, st = document.getElementById('shStatus').value;
     if (s) p.set('search', s);
     if (st) p.set('status', st);
     try {
-      const rows = await authenticatedFetch('/shipments?' + p);
-      document.getElementById('shRows').innerHTML = rows.length ? rows.map(r => `<tr style="cursor:pointer" onclick="location.href='/shipments/${r.id}'">
-        <td class="text-nowrap fw-bold">${esc(r.shipment_number)}${r.trip ? '<div class="small fw-normal text-muted">' + esc(r.trip) + '</div>' : ''}</td>
-        <td>${(r.jobs.length || (r.custom_jobs||[]).length) ? r.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').concat((r.custom_jobs||[]).map(n => esc(n) + ' <span class="text-muted">(custom)</span>')).join('<br>') : '—'}</td>
-        <td>${r.loads.map(l => flBadge(l.type.name, 'azure')).join(' ')}</td>
-        <td>${r.elevations_count || '<span class="text-muted">0</span>'}</td>
-        <td>${shStatus(r.status)}</td><td>${flDate(r.ship_date)}</td><td class="text-muted">${esc(r.destination || '')}</td></tr>`).join('')
-        : '<tr><td colspan="7" class="text-center text-muted py-4">No shipments.</td></tr>';
+      shRowsData = await authenticatedFetch('/shipments?' + p);
+      renderShipments();
     } catch (e) { console.error(e); }
   }
 
@@ -243,6 +277,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => sortBy(th.dataset.sort)));
     document.getElementById('shStatus').innerHTML = '<option value="">All statuses</option>' + Object.entries(SH.STATUS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('');
     document.getElementById('shStatus').addEventListener('change', loadShipments);
     let t; document.getElementById('shSearch').addEventListener('input', () => { clearTimeout(t); t = setTimeout(loadShipments, 250); });

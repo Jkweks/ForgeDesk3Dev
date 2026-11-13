@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const net = require('net');
 const { SerialPort } = require('serialport');
@@ -176,6 +178,28 @@ function enqueueSerial(task) {
   return run;
 }
 
+// Own timestamped record of every serial exchange (commands sent, lines
+// received), written next to server.js regardless of how the bridge was
+// launched — the scheduled task's bridge.log only exists for that launch path.
+// Needed to tell a corrupted command (e.g. a dropped digit) from a mechanical
+// problem after the fact. Rotates once past 5 MB, keeping one previous file.
+const SERIAL_LOG_DIR = path.join(__dirname, 'logs');
+const SERIAL_LOG = path.join(SERIAL_LOG_DIR, 'serial.log');
+const SERIAL_LOG_MAX = 5 * 1024 * 1024;
+
+function serialLog(direction, text) {
+  if (process.env.NODE_ENV === 'test') return;
+  try {
+    fs.mkdirSync(SERIAL_LOG_DIR, { recursive: true });
+    if (fs.existsSync(SERIAL_LOG) && fs.statSync(SERIAL_LOG).size > SERIAL_LOG_MAX) {
+      fs.renameSync(SERIAL_LOG, `${SERIAL_LOG}.1`);
+    }
+    fs.appendFileSync(SERIAL_LOG, `${new Date().toISOString()} ${direction} ${JSON.stringify(text)}\n`);
+  } catch (e) {
+    // logging must never get in the way of a move
+  }
+}
+
 // --- TigerStop serial connection ------------------------------------------
 // Protocol: plain ASCII, \r terminated. "MG<inches>\r" moves the stop.
 // The amp replies "MGS ..." (move started) then "MGF" (move finished).
@@ -205,6 +229,7 @@ function connectSerial() {
   });
 
   parser = port.pipe(new ReadlineParser({ delimiter: '\r' }));
+  parser.on('data', (line) => serialLog('RX', line));
 
   port.on('close', () => {
     portReady = false;
@@ -254,6 +279,7 @@ function queryData(index) {
 
     parser.on('data', onLine);
 
+    serialLog('TX', `D${index}\r`);
     port.write(`D${index}\r`, (err) => {
       if (err) {
         cleanup();
@@ -294,8 +320,124 @@ function rangeError(inches) {
 // Max allowed difference (inches) between requested and amp-acked target.
 const TARGET_TOLERANCE = 0.002;
 
+// Max allowed difference (inches) between the stop's measured position (P) and
+// the requested one — for deciding a move isn't needed, and for confirming one
+// landed. Looser than TARGET_TOLERANCE (a command-text check) since this is a
+// physical reading.
+const POSITION_TOLERANCE = envNumber(process.env.POSITION_TOLERANCE) ?? 0.005;
+const POSITION_TIMEOUT_MS = envNumber(process.env.POSITION_TIMEOUT_MS) ?? 2000;
+
+// Last position the mock "stop" was sent to (null until the first mock move).
+let mockPosition = null;
+
+// "P\r" returns the stop's current position ("29.500"); the amp echoes the
+// command first, which the numeric match skips. Must run inside the serial
+// queue (it shares the line stream with moves).
+function readPositionNow() {
+  return new Promise((resolve, reject) => {
+    if (!portReady) {
+      return reject(new Error('serial port not connected'));
+    }
+
+    if (MOCK_SERIAL) {
+      return mockPosition === null ? reject(new Error('mock position unknown')) : resolve(mockPosition);
+    }
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('timed out waiting for TigerStop reply to P'));
+    }, POSITION_TIMEOUT_MS);
+
+    function onLine(line) {
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith('X ')) {
+        cleanup();
+        reject(new Error(`TigerStop reported an error: ${trimmed}`));
+      } else if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+        cleanup();
+        resolve(parseFloat(trimmed));
+      }
+    }
+
+    function cleanup() {
+      clearTimeout(timeout);
+      parser.off('data', onLine);
+    }
+
+    parser.on('data', onLine);
+
+    serialLog('TX', 'P\r');
+    port.write('P\r', (err) => {
+      if (err) {
+        cleanup();
+        reject(err);
+      }
+    });
+  });
+}
+
+// Query first, move only if needed:
+//  1. Read where the stop actually is (P). Already at the target (e.g. the
+//     next piece is the same length) -> no MG is sent at all, so there is no
+//     command to corrupt and no wait.
+//  2. Otherwise MG, checked against the amp's "MGS <target>" echo. A wrong or
+//     missing echo means the amp may not have received the command intact (it
+//     acks whatever it parsed, so a dropped character shows up there); one retry
+//     re-sends the full command inside the same queue slot.
+//  3. After MGF, read P again and require the stop to be at the target — the
+//     echo only proves the amp understood us, this proves it got there.
+// Failing any of these fails the move and the operator is told not to cut. If P
+// itself can't be read, the move falls back to the echo check alone.
+// Resolves { skipped, ampTarget, position } — position is the measured P (null
+// when it couldn't be read) and is what /status reports as lastPosition.
 function sendMove(inches) {
-  return enqueueSerial(() => sendMoveNow(inches));
+  return enqueueSerial(async () => {
+    const target = Number(inches);
+
+    let before = null;
+    try {
+      before = await readPositionNow();
+    } catch (e) {
+      console.warn(`[tiger-bridge] could not read position before move: ${e.message}`);
+    }
+
+    if (before !== null && Math.abs(before - target) <= POSITION_TOLERANCE) {
+      console.log(`[tiger-bridge] already at ${before}" (wanted ${target.toFixed(3)}") - move skipped`);
+      serialLog('SKIP', `already at ${before}, wanted ${target.toFixed(3)}`);
+      return { started: false, finished: true, skipped: true, raw: 'P', ampTarget: before, position: before };
+    }
+
+    let result;
+    try {
+      result = await sendMoveNow(inches);
+    } catch (e) {
+      if (!e.retryable) throw e;
+      console.warn(`[tiger-bridge] ${e.message} — retrying once`);
+      serialLog('RETRY', e.message);
+      result = await sendMoveNow(inches);
+    }
+
+    let position = null;
+    try {
+      position = await readPositionNow();
+    } catch (e) {
+      console.warn(`[tiger-bridge] could not read position after move: ${e.message}`);
+    }
+
+    if (position !== null && Math.abs(position - target) > POSITION_TOLERANCE) {
+      console.error(`[tiger-bridge] position mismatch after move: wanted ${target.toFixed(3)}, stop reads ${position}`);
+      throw new Error(`TigerStop reads ${position}" instead of ${target.toFixed(3)}" after the move - do not cut`);
+    }
+
+    return { ...result, skipped: false, position };
+  });
+}
+
+function unverifiedError(message) {
+  const err = new Error(message);
+  err.retryable = true;
+  return err;
 }
 
 function sendMoveNow(inches) {
@@ -313,7 +455,8 @@ function sendMoveNow(inches) {
       // roughly realistic timing rather than an immediate ack.
       setTimeout(() => {
         console.log(`[tiger-bridge] MOCK_SERIAL: move complete, stop at ${Number(inches).toFixed(3)}"`);
-        resolve({ started: true, finished: true, raw: 'MGF (mocked)' });
+        mockPosition = Number(Number(inches).toFixed(3));
+        resolve({ started: true, finished: true, raw: 'MGF (mocked)', ampTarget: Number(Number(inches).toFixed(3)) });
       }, 1000);
       return;
     }
@@ -336,12 +479,13 @@ function sendMoveNow(inches) {
         if (Number.isFinite(t)) ampTarget = t;
       } else if (trimmed.startsWith('MGF')) {
         cleanup();
-        if (ampTarget !== null && Math.abs(ampTarget - Number(inches)) > TARGET_TOLERANCE) {
-          console.error(`[tiger-bridge] target mismatch: sent ${Number(inches).toFixed(3)}, amp acked ${ampTarget}`);
-          return reject(new Error(`TigerStop moved to ${ampTarget}" instead of ${Number(inches).toFixed(3)}" - do not cut`));
-        }
         if (ampTarget === null) {
-          console.warn('[tiger-bridge] no MGS target echo seen for this move; position unverified');
+          console.error(`[tiger-bridge] no MGS target echo seen for move to ${Number(inches).toFixed(3)}`);
+          return reject(unverifiedError(`TigerStop did not confirm its target for ${Number(inches).toFixed(3)}" - do not cut`));
+        }
+        if (Math.abs(ampTarget - Number(inches)) > TARGET_TOLERANCE) {
+          console.error(`[tiger-bridge] target mismatch: sent ${Number(inches).toFixed(3)}, amp acked ${ampTarget}`);
+          return reject(unverifiedError(`TigerStop moved to ${ampTarget}" instead of ${Number(inches).toFixed(3)}" - do not cut`));
         }
         resolve({ started: true, finished: true, raw: trimmed, ampTarget });
       } else if (trimmed.startsWith('X ')) {
@@ -358,6 +502,7 @@ function sendMoveNow(inches) {
 
     parser.on('data', onLine);
 
+    serialLog('TX', cmd);
     port.write(cmd, (err) => {
       if (err) {
         cleanup();
@@ -384,7 +529,7 @@ app.post('/move', async (req, res) => {
     // a fresh move means whatever the sensor reported for the previous cut
     // no longer applies — back to idle until this new cut completes.
     sensorState = 'idle';
-    lastPosition = result.ampTarget ?? inches;
+    lastPosition = result.position ?? result.ampTarget;
     lastPositionAt = new Date().toISOString();
     res.json({ ok: true, lastPosition, lastPositionAt, ...result });
   } catch (e) {
@@ -701,6 +846,8 @@ module.exports = {
   buildZpl,
   qrLayout,
   VERSION,
+  // test hook: swap in a fake serial port + line parser (see test/move-verification.test.js)
+  _setSerial: (fakePort, fakeParser) => { port = fakePort; parser = fakeParser; portReady = true; mockPosition = null; },
   // test hook: pretend the amp reported these limits
   _setLimits: (min, max) => { limitMin = min; limitMax = max; },
 };

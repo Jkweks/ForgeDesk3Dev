@@ -581,6 +581,12 @@ Route::middleware('auth:sanctum')->group(function () {
         // Shipments + pre/post-delivery inspections. Specific routes before {id}.
         $sh = \App\Http\Controllers\Api\ShipmentController::class;
         $st = \App\Http\Controllers\Api\ShipmentTypeController::class;
+        $sr = \App\Http\Controllers\Api\ShipmentRequestController::class;
+        Route::get('/shipment-requests', [$sr, 'index'])->middleware('permission:shipments.view');
+        Route::post('/shipment-requests', [$sr, 'store'])->middleware('permission:shipments.request');
+        Route::post('/shipment-requests/{id}/approve', [$sr, 'approve'])->middleware('permission:shipments.approve');
+        Route::post('/shipment-requests/{id}/reject', [$sr, 'reject'])->middleware('permission:shipments.approve');
+        Route::post('/shipment-requests/{id}/withdraw', [$sr, 'withdraw'])->middleware('permission:shipments.request');
         Route::get('/shipments', [$sh, 'index'])->middleware('permission:shipments.view');
         Route::get('/shipments/queue', [$sh, 'queue'])->middleware('permission:shipments.view');
         Route::get('/shipments/locations', [$sh, 'locations'])->middleware('permission:shipments.view');

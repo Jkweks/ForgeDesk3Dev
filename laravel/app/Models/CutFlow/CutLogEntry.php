@@ -22,6 +22,7 @@ class CutLogEntry extends Model
         'phase',
         'description',
         'dimension_inches',
+        'saw_position_inches',
         'stick_length_label',
         'stick_session_id',
         'type',
@@ -33,6 +34,7 @@ class CutLogEntry extends Model
 
     protected $casts = [
         'dimension_inches' => 'decimal:3',
+        'saw_position_inches' => 'decimal:3',
         'is_recut' => 'boolean',
         'is_manual_cut' => 'boolean',
         'is_reprint' => 'boolean',

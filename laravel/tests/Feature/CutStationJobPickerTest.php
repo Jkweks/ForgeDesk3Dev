@@ -165,4 +165,82 @@ class CutStationJobPickerTest extends TestCase
 
         $this->assertSame(0, CutLogEntry::count());
     }
+
+    public function test_show_completed_keeps_fully_cut_profiles_in_an_open_list(): void
+    {
+        $job = CutJob::create(['name' => 'Mixed Job']);
+        Part::create(['cut_job_id' => $job->id, 'name' => 'Sill', 'finish' => 'C2', 'dimension_inches' => 30, 'qty_original' => 2, 'qty_remaining' => 0]);
+        Part::create(['cut_job_id' => $job->id, 'name' => 'Head', 'finish' => 'C2', 'dimension_inches' => 41, 'qty_original' => 2, 'qty_remaining' => 2]);
+
+        $page = $this->station([$job->id]);
+        $names = fn () => $page->viewData('profiles')->pluck('name')->all();
+
+        // On by default: the finished profile is listed, after the open one.
+        $this->assertSame(['Head', 'Sill'], $names());
+
+        // Hidden: only what still has work left.
+        $page->call('toggleShowCompleted');
+        $this->assertSame(['Head'], $names());
+
+        // And back.
+        $page->call('toggleShowCompleted');
+        $this->assertSame(['Head', 'Sill'], $names());
+
+        // The finished profile's pieces can be opened while the list is still open.
+        $page->call('switchProfile', 'Sill', 'C2');
+        $this->assertSame(['Done'], $page->viewData('parts')->pluck('status_label')->all());
+    }
+
+    public function test_first_sign_in_ends_any_leftover_active_stick(): void
+    {
+        \App\Models\FdUser::create(['name' => 'Ann', 'role' => 'worker', 'active' => true, 'fab_pin' => \Illuminate\Support\Facades\Hash::make('2468')]);
+
+        $part = Part::where('cut_job_id', $this->pending->id)->first();
+        $stick = \App\Models\CutFlow\StickSession::create(['length_label' => '20ft', 'part_name' => 'Rail', 'length_inches' => 240, 'status' => 'active']);
+        $done = \App\Models\CutFlow\StickItem::create(['stick_session_id' => $stick->id, 'part_id' => $part->id, 'kind' => 'part', 'dimension_inches' => 48, 'sequence' => 1, 'status' => 'done']);
+        $left = \App\Models\CutFlow\StickItem::create(['stick_session_id' => $stick->id, 'part_id' => $part->id, 'kind' => 'part', 'dimension_inches' => 48, 'sequence' => 2, 'status' => 'pending']);
+
+        // Nobody signed in yet: the page loads the leftover stick.
+        session()->forget(['cutflow_crew', 'cutflow_active_crew_key']);
+        $page = Livewire::test(Dashboard::class);
+        $this->assertSame($stick->id, $page->get('activeStickId'));
+
+        $page->call('openLogin')->set('keypadValue', '2468')->call('confirmModal');
+
+        $this->assertNull($page->get('activeStickId'));
+        $this->assertNull($page->get('activeProfileName'));
+        $stick->refresh();
+        $this->assertNotNull($stick->cancelled_at);
+        $this->assertSame('complete', $stick->status);
+        $this->assertTrue(\App\Models\CutFlow\StickItem::whereKey($done->id)->exists());
+        $this->assertFalse(\App\Models\CutFlow\StickItem::whereKey($left->id)->exists());
+    }
+
+    public function test_a_second_person_joining_does_not_end_the_running_stick(): void
+    {
+        \App\Models\FdUser::create(['name' => 'Bo', 'role' => 'worker', 'active' => true, 'fab_pin' => \Illuminate\Support\Facades\Hash::make('1357')]);
+        $stick = \App\Models\CutFlow\StickSession::create(['length_label' => '20ft', 'part_name' => 'Rail', 'length_inches' => 240, 'status' => 'active']);
+
+        // Ann (from station()) is already signed in; Bo joins mid-run.
+        $page = $this->station([$this->pending->id]);
+        $page->call('openLogin')->set('keypadValue', '1357')->call('confirmModal');
+
+        $this->assertSame($stick->id, $page->get('activeStickId'));
+        $this->assertNull($stick->fresh()->cancelled_at);
+    }
+
+    public function test_finishing_a_profile_says_which_part_is_complete_and_to_pick_another(): void
+    {
+        // Another open profile so the "pick the next one" panel is offered.
+        Part::create(['cut_job_id' => $this->pending->id, 'name' => 'Head', 'dimension_inches' => 30, 'qty_original' => 2, 'qty_remaining' => 2]);
+
+        $page = $this->station([$this->pending->id])
+            ->set('activeProfileName', null)->set('activeProfileFinish', null)
+            ->set('profileComplete', true)->set('completedProfileLabel', 'Sill · C2');
+
+        $page->assertSee('Sill · C2 complete')->assertSee('Select another part.');
+
+        // Picking the next profile clears the note.
+        $page->call('pickProfile', 'Head', null)->assertDontSee('Sill · C2 complete');
+    }
 }
