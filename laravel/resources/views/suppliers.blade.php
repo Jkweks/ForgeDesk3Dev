@@ -236,6 +236,41 @@
                 </div>
               </div>
 
+              <h5 class="mb-3 mt-4"><i class="ti ti-users me-2"></i>Additional Contacts</h5>
+              <div id="supplierContactsList" class="mb-2"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="addContactRow()"><i class="ti ti-plus me-1"></i>Add Contact</button>
+
+              <div class="row mb-3">
+                <div class="col-md-6">
+                  <label class="form-label">Extra Phone Numbers</label>
+                  <textarea class="form-control" id="supplierExtraPhones" rows="2" placeholder="Label: number (one per line)"></textarea>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Extra Email Addresses</label>
+                  <textarea class="form-control" id="supplierExtraEmails" rows="2" placeholder="Label: address (one per line)"></textarea>
+                </div>
+              </div>
+
+              <div class="row mb-3">
+                <div class="col-md-12">
+                  <label class="form-label">Products / Services Provided</label>
+                  <textarea class="form-control" id="supplierProductsServices" rows="2"></textarea>
+                </div>
+              </div>
+
+              <div class="row mb-3">
+                <div class="col-md-6">
+                  <label class="form-label">BidEstimate Code</label>
+                  <input type="text" class="form-control" id="supplierBidCode" placeholder="e.g., Perrybrg $">
+                  <small class="form-text">Abbreviated name used in estimates' Supplier column</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Other Estimate Names (aliases)</label>
+                  <input type="text" class="form-control" id="supplierAliases" placeholder="Comma separated">
+                  <small class="form-text">Each alias can belong to only one vendor</small>
+                </div>
+              </div>
+
               <div class="row mb-3">
                 <div class="col-md-12">
                   <label class="form-label">Notes</label>
@@ -558,6 +593,7 @@
       document.getElementById('supplierIsActive').checked = true;
       document.getElementById('supplierIsInternal').checked = false;
       document.getElementById('supplierCountry').value = 'USA';
+      renderContactRows([]);
 
       safeShowModal('supplierModal');
     }
@@ -586,6 +622,12 @@
         document.getElementById('supplierNotes').value = supplier.supplier.notes || '';
         document.getElementById('supplierIsActive').checked = supplier.supplier.is_active;
         document.getElementById('supplierIsInternal').checked = !!supplier.supplier.is_internal;
+        renderContactRows(supplier.supplier.contacts || []);
+        document.getElementById('supplierExtraPhones').value = (supplier.supplier.extra_phones || []).map(p => (p.label ? p.label + ': ' : '') + p.number).join('\n');
+        document.getElementById('supplierExtraEmails').value = (supplier.supplier.extra_emails || []).map(e => (e.label ? e.label + ': ' : '') + e.address).join('\n');
+        document.getElementById('supplierProductsServices').value = supplier.supplier.products_services || '';
+        document.getElementById('supplierBidCode').value = supplier.supplier.bidestimate_code || '';
+        document.getElementById('supplierAliases').value = (supplier.supplier.aliases || []).filter(a => a.source === 'manual').map(a => a.alias).join(', ');
 
         safeShowModal('supplierModal');
       } catch (error) {
@@ -652,6 +694,8 @@
               </table>
             </div>
           </div>
+          ${(supplier.contacts || []).length ? `<div class="row"><div class="col-12"><h6 class="text-muted mb-2">Contacts</h6><table class="table table-sm"><tbody>${supplier.contacts.map(c => `<tr><td>${escapeHtml(c.name)}${c.is_preferred_rep ? ' <span class="badge text-bg-primary">Preferred rep</span>' : ''}</td><td>${c.title ? escapeHtml(c.title) : ''}</td><td>${c.email ? `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` : ''}</td><td>${c.phone ? escapeHtml(c.phone) : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+          ${supplier.bidestimate_code ? `<div class="row"><div class="col-12"><h6 class="text-muted mb-2">BidEstimate</h6><p>${escapeHtml(supplier.bidestimate_code)}${(supplier.aliases || []).length ? ' <small class="text-muted">also: ' + supplier.aliases.map(a => escapeHtml(a.alias)).join(', ') + '</small>' : ''}</p></div></div>` : ''}
           ${supplier.notes ? `<div class="row"><div class="col-12"><h6 class="text-muted mb-2">Notes</h6><p>${escapeHtml(supplier.notes)}</p></div></div>` : ''}
         `;
 
@@ -726,6 +770,45 @@
       return badges[status] || badges['in_stock'];
     }
 
+    function parseLabelLines(text, key) {
+      return text.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+        const i = line.indexOf(':');
+        return i > 0 ? { label: line.slice(0, i).trim(), [key]: line.slice(i + 1).trim() } : { label: '', [key]: line };
+      });
+    }
+
+    function contactRowHtml(c) {
+      const e = (x) => escapeHtml(x || '');
+      return `<div class="row g-2 mb-2 contact-row">
+        <div class="col-md-3"><input class="form-control form-control-sm c-name" placeholder="Name" value="${e(c.name)}"></div>
+        <div class="col-md-2"><input class="form-control form-control-sm c-title" placeholder="Title" value="${e(c.title)}"></div>
+        <div class="col-md-3"><input type="email" class="form-control form-control-sm c-email" placeholder="Email" value="${e(c.email)}"></div>
+        <div class="col-md-2"><input class="form-control form-control-sm c-phone" placeholder="Phone" value="${e(c.phone)}"></div>
+        <div class="col-md-2 d-flex align-items-center gap-2">
+          <label class="form-check mb-0 small"><input type="checkbox" class="form-check-input c-rep" ${c.is_preferred_rep ? 'checked' : ''}> Preferred rep</label>
+          <button type="button" class="btn btn-sm btn-ghost-danger" onclick="this.closest('.contact-row').remove()">&times;</button>
+        </div>
+      </div>`;
+    }
+
+    function renderContactRows(contacts) {
+      document.getElementById('supplierContactsList').innerHTML = contacts.map(contactRowHtml).join('');
+    }
+
+    function addContactRow() {
+      document.getElementById('supplierContactsList').insertAdjacentHTML('beforeend', contactRowHtml({}));
+    }
+
+    function readContactRows() {
+      return Array.from(document.querySelectorAll('#supplierContactsList .contact-row')).map(r => ({
+        name: r.querySelector('.c-name').value.trim(),
+        title: r.querySelector('.c-title').value.trim() || null,
+        email: r.querySelector('.c-email').value.trim() || null,
+        phone: r.querySelector('.c-phone').value.trim() || null,
+        is_preferred_rep: r.querySelector('.c-rep').checked,
+      })).filter(c => c.name);
+    }
+
     async function handleSupplierSubmit(e) {
       e.preventDefault();
 
@@ -747,6 +830,12 @@
         notes: document.getElementById('supplierNotes').value || null,
         is_active: document.getElementById('supplierIsActive').checked,
         is_internal: document.getElementById('supplierIsInternal').checked,
+        products_services: document.getElementById('supplierProductsServices').value || null,
+        bidestimate_code: document.getElementById('supplierBidCode').value || null,
+        extra_phones: parseLabelLines(document.getElementById('supplierExtraPhones').value, 'number'),
+        extra_emails: parseLabelLines(document.getElementById('supplierExtraEmails').value, 'address'),
+        aliases: document.getElementById('supplierAliases').value.split(',').map(a => a.trim()).filter(Boolean),
+        contacts: readContactRows(),
       };
 
       try {

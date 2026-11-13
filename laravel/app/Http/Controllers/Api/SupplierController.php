@@ -84,6 +84,22 @@ class SupplierController extends Controller
             'minimum_order_amount' => 'nullable|numeric|min:0',
             'is_active' => 'boolean',
             'is_internal' => 'boolean',
+            'products_services' => 'nullable|string',
+            'bidestimate_code' => 'nullable|string|max:255',
+            'extra_phones' => 'nullable|array',
+            'extra_phones.*.label' => 'nullable|string|max:100',
+            'extra_phones.*.number' => 'required|string|max:50',
+            'extra_emails' => 'nullable|array',
+            'extra_emails.*.label' => 'nullable|string|max:100',
+            'extra_emails.*.address' => 'required|email|max:255',
+            'contacts' => 'nullable|array',
+            'contacts.*.name' => 'required|string|max:255',
+            'contacts.*.title' => 'nullable|string|max:255',
+            'contacts.*.email' => 'nullable|email|max:255',
+            'contacts.*.phone' => 'nullable|string|max:50',
+            'contacts.*.is_preferred_rep' => 'boolean',
+            'aliases' => 'nullable|array',
+            'aliases.*' => 'string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -93,9 +109,14 @@ class SupplierController extends Controller
             ], 422);
         }
 
-        $supplier = Supplier::create($request->all());
+        if ($conflict = $this->aliasConflict($request)) {
+            return $conflict;
+        }
 
-        $supplier->loadCount('products');
+        $supplier = Supplier::create($request->except(['contacts', 'aliases']));
+        $this->syncRelations($supplier, $request);
+
+        $supplier->load(['contacts', 'aliases'])->loadCount('products');
 
         return response()->json([
             'message' => 'Supplier created successfully',
@@ -108,7 +129,7 @@ class SupplierController extends Controller
      */
     public function show(Supplier $supplier)
     {
-        $supplier->load('products');
+        $supplier->load(['products', 'contacts', 'aliases']);
         $supplier->loadCount('products');
 
         // Calculate supplier statistics
@@ -151,6 +172,22 @@ class SupplierController extends Controller
             'minimum_order_amount' => 'nullable|numeric|min:0',
             'is_active' => 'boolean',
             'is_internal' => 'boolean',
+            'products_services' => 'nullable|string',
+            'bidestimate_code' => 'nullable|string|max:255',
+            'extra_phones' => 'nullable|array',
+            'extra_phones.*.label' => 'nullable|string|max:100',
+            'extra_phones.*.number' => 'required|string|max:50',
+            'extra_emails' => 'nullable|array',
+            'extra_emails.*.label' => 'nullable|string|max:100',
+            'extra_emails.*.address' => 'required|email|max:255',
+            'contacts' => 'nullable|array',
+            'contacts.*.name' => 'required|string|max:255',
+            'contacts.*.title' => 'nullable|string|max:255',
+            'contacts.*.email' => 'nullable|email|max:255',
+            'contacts.*.phone' => 'nullable|string|max:50',
+            'contacts.*.is_preferred_rep' => 'boolean',
+            'aliases' => 'nullable|array',
+            'aliases.*' => 'string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -169,8 +206,13 @@ class SupplierController extends Controller
             ], 422);
         }
 
-        $supplier->update($request->all());
-        $supplier->loadCount('products');
+        if ($conflict = $this->aliasConflict($request, $supplier)) {
+            return $conflict;
+        }
+
+        $supplier->update($request->except(['contacts', 'aliases']));
+        $this->syncRelations($supplier, $request);
+        $supplier->load(['contacts', 'aliases'])->loadCount('products');
 
         return response()->json([
             'message' => 'Supplier updated successfully',
@@ -316,9 +358,42 @@ class SupplierController extends Controller
      * Get supplier contact information
      * This endpoint is used for auto-populating contact info in product forms
      */
+    /** Aliases must resolve to exactly one vendor. Returns a 422 response on conflict. */
+    private function aliasConflict(Request $request, ?Supplier $supplier = null)
+    {
+        foreach ((array) $request->input('aliases', []) as $alias) {
+            $key = \App\Models\SupplierAlias::normalize((string) $alias);
+            if ($key === '') {
+                continue;
+            }
+            $owner = \App\Models\SupplierAlias::where('alias_normalized', $key)
+                ->when($supplier, fn ($q) => $q->where('supplier_id', '!=', $supplier->id))
+                ->first();
+            if ($owner) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => ['aliases' => ["Alias \"{$alias}\" is already used by {$owner->supplier->name}."]],
+                ], 422);
+            }
+        }
+
+        return null;
+    }
+
+    private function syncRelations(Supplier $supplier, Request $request): void
+    {
+        if ($request->has('contacts')) {
+            $supplier->syncContacts($request->input('contacts') ?? []);
+        }
+        if ($request->has('aliases')) {
+            $supplier->syncAliases($request->input('aliases') ?? []);
+        }
+    }
+
     public function contacts(Supplier $supplier)
     {
         return response()->json([
+            'contacts' => $supplier->contacts,
             'contact_name' => $supplier->contact_name,
             'contact_email' => $supplier->contact_email,
             'contact_phone' => $supplier->contact_phone,
