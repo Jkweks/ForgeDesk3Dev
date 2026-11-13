@@ -208,6 +208,27 @@ Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). Priority: H
 - **PO shape (PM Suite)** is nested: a PO holds `lines[]` that can be groups of sub-lines (flattened on read), each with its own cost code that overrides the PO-level cost code. Statuses are a different lifecycle from Forge's (draft, submittal-request, material-release, subcontract variants; plus separate `closed` and `voided` axes and numbered revisions with drafts). **Gap to close:** `PurchaseOrder` needs a status mapping or a separate "issue stage" column, revisions, and grouped line items.
 - **Next build step (High priority, no data dependency): vendor extension** (the gap above) with the Supplier page showing the extra contacts and aliases, then the job-PO columns (job link, issue stage, revisions, grouped lines).
 
+## 4d. Navigation: front of house vs back of house (proposal, 2026-11-13)
+
+PM Suite is the **front-of-house** (project management, office) system; ForgeDesk is **back of house** (inventory, shop, fabrication). Keep that split visible while it is one app, one login and one dataset.
+
+**Today:** navigation is config-driven (`config/navigation.php`, plus the `navigation_classic.php` set), rendered by `partials/nav-menu.blade.php`, and gated by `nav.*` permissions. CutFlow already has its own layout (`components/cutflow/layout`).
+
+**Options**
+1. *New sections in the existing nav* (Projects, Purchasing, Submittals gated by `nav.pm`). Cheapest, but the menu is already ~9 sections and the two audiences would still see each other's clutter.
+2. *Workspace switcher* in the header: **Front of House** / **Back of House** (working names: "Projects" and "Shop & Inventory"). Each workspace has its own nav config; the switcher is only shown to users who can see both.
+3. *Separate shell like CutFlow*: own layout, own `/pm/*` URL prefix and own dashboard, cross-links only. Strongest separation, most chrome work.
+
+**Recommendation: 2 built on 3's URL/layout conventions.**
+- New `config/navigation_pm.php` (and the same for the classic set). Existing `navigation.php` stays the back-of-house nav, unchanged.
+- All PM pages live under `/pm/*` and use the same layout with the PM nav loaded; a header switcher toggles workspace and remembers the choice per user.
+- `nav.pm` permission gates the front of house; the office-staff role gets it by default. Users with only shop roles never see the switcher. Default landing follows role (office staff land in Projects, shop staff in Shop).
+- **Shared entities are shown in both, with a different emphasis**, cross-linked on the job number: Jobs (PM: submittals, POs, forecast, to-do; shop: reservations, work orders, shipments), Vendors/Suppliers (PM: contacts and POs; shop: products and low stock) and Purchase Orders (PM: job and internal POs; shop: stock POs). The existing stock/job/internal PO type decides which workspace a PO is primarily shown in.
+- Front-of-house page groups (from the feature checklist): Dashboard, Jobs, Submittals (tracker, builder), Purchasing (job POs, receiving, vendors, material forecast), Library (product library), To-do, Admin (users/roles, change history).
+- The PM to-do list, universal search and dashboard widgets (all in the checklist) sit in the front-of-house shell and can surface back-of-house data.
+
+**Open details:** final workspace names; whether Jobs gets one page with two tab sets or two pages; whether the switcher also appears in the field app.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).
