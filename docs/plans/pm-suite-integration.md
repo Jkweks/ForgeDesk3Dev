@@ -116,13 +116,35 @@ worker service called from Laravel (like `tiger-bridge`), instead of being rewri
 
 ## 4a. Document ingestion from the F: share
 
-**Mount:** F: is mounted into the ForgeDesk containers as `/mnt/f` over SMB/CIFS (read-only for ingestion; ForgeDesk writes only where a feature requires it). Because it's SMB, inotify inside the container will not see changes made from other machines, so ingestion does not rely on it.
+**Mount:** F: is mounted into the ForgeDesk containers as `/mnt/f` over SMB/CIFS **read-only for now** (decision below); ForgeDesk never writes to it in this phase. Because it's SMB, inotify inside the container will not see changes made from other machines, so ingestion does not rely on it.
 
 **Trigger (Option 3 — Windows-side watcher):**
 - A small service on the Windows file server (`FileSystemWatcher`, or a scheduled task wrapping it) watches the configured roots (e.g. `Engineering\...` job folders, estimates, PO PDFs) for created/changed/renamed files.
 - It debounces (wait until the file size is stable for a few seconds, since large PDFs copy slowly), then POSTs `{path, size, mtime, event}` to a ForgeDesk ingest endpoint, e.g. `POST /api/v1/ingest/fdrive`, authenticated with a dedicated service token (not a user session) and an IP allow-list.
 - The endpoint does no parsing: it records the file in a `pm_files` table (path, size, mtime, sha256 when available, status) and dispatches a queued import job. It returns immediately.
 - Follows the `tiger-bridge` pattern (small standalone Windows service, README, tests); a sibling folder `fdrive-watcher/` in this repo.
+
+### F: access decision: read-only now, read/write after full adoption
+
+**Decision: mount `/mnt/f` read-only (SMB `ro`, and a read-only share account) for now.** Ingestion, file indexing, PDF viewing and OCR only need to read. Read-only keeps a bug or bad import from damaging the existing folder tree while PM Suite and Forge are still being adopted and the structure is unsettled. Revisit **read/write after full adoption**, when Forge can own and standardize the folder structure (job folders, submittal/PO naming).
+
+To keep that switch cheap, all F: access goes through one `FDriveStorage` service with a `FDRIVE_WRITE_ENABLED` setting (default `false`). While false, Forge-generated files (PO PDFs, submittal packages, closeout docs) are stored in Forge storage and offered as a download; users can save or copy them onto F: themselves. Flipping the setting and remounting `rw` later turns on direct saves to the standardized path without code changes.
+
+### Recognising Forge-generated files (no wasted re-imports)
+
+Whether a file reaches F: through a direct save later or a user dropping a download there today, ingestion must recognise it and tell new versions from unchanged ones, so it doesn't re-OCR or re-import work Forge already has.
+
+- **Identity marker on every generated file.** PDFs get embedded custom metadata (XMP/Info): `forge_doc_id`, `doc_type`, `revision`, `content_sha256`, `generated_at`. Xlsx files get the same in custom document properties. The filename also carries a short suffix as a fallback, e.g. `..._FD-<doc_id>-r<rev>.pdf`, because metadata can be stripped by print-to-PDF or email tools.
+- **Registry.** Every generated file is recorded in `pm_files` at creation (doc_id, type, revision, sha256, size, job, path once known).
+- **Cheap detection order on each event or scan** (stop at the first conclusive step):
+  1. Path + size + mtime unchanged since the last seen row, so skip. No hashing, no read.
+  2. New or changed: read the marker (first few KB of the file) or filename suffix.
+  3. Marker found and `sha256` matches the registered revision, so it is a Forge file we already hold. Record the path and **skip import**.
+  4. Marker found, same `doc_id`, different hash or higher revision, so it was edited or re-saved outside Forge. Record it as a **new version** and route it to the review inbox (never silently overwrite).
+  5. No marker: external document. Hash it and treat it as new if the hash is unseen; otherwise it is a duplicate/move, so just update the path.
+- **Moves and renames** are detected by hash and don't trigger re-import.
+- **Version history:** `pm_files` keeps every seen revision with its hash, so the UI can show "v3 saved from Forge, v4 edited on F:" and a person can choose which is current.
+- **Open details:** exact metadata fields; confirm Word/Excel/Outlook "Save as PDF" paths keep the markers; which document types are generated in the first release.
 
 **Safety net (reconciliation scan):** the watcher can miss events (service down, server reboot, network blip). A Laravel scheduled command runs nightly, plus on demand from an admin button, and walks only the watched roots over `/mnt/f` comparing path/size/mtime to `pm_files`. Anything new or changed is queued exactly like a watcher event. The watcher also sends a periodic heartbeat so ForgeDesk can show "watcher offline" in the UI.
 
@@ -195,7 +217,7 @@ Fill in **Include** (Y/N) and **Priority** (1 = first, 2, 3, Later). Priority: H
 
 1. Target: full absorption (B/C) or just tight co-existence (A)? full absorption, one software for all
 2. Which system is master for POs, vendors and jobs once merged? forge will be master, data will be pulled from fdrive or pm side into forge
-3. Is the F: share staying, or should files move into ForgeDesk storage / Dropbox? f share is staying, will need to integrate
+3. Is the F: share staying, or should files move into ForgeDesk storage / Dropbox? f share is staying, will need to integrate. **Access: read-only for now** (see 4a); revisit read/write after full adoption to standardize file structures.
 4. Who uses PM Suite (PM count) and can it be down during cut-over windows? currently not used in production environment, newly developed
 5. Is the existing Work Orders feature in PM Suite in active use vs. ForgeDesk's `FdWorkOrder`? pm suite no; goal is PM-requested work orders validated by Forge
 6. Should PM Suite's separate roles (admin/superintendent/company dashboard) map to ForgeDesk roles? forgedesk roles to develop to suppport pm roles (office staff is current forge role with simialr)
