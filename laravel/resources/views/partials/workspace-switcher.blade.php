@@ -1,5 +1,6 @@
-{{-- Workspace switcher: Project Management (front of house, /pm/*) vs Fabrication (back of house).
-     Shown only to users who can see both. See docs/plans/pm-suite-integration.md section 4d. --}}
+{{-- Workspace switch: a binary slide. Off = Fabrication (back of house), on = Project Management
+     (front of house, /pm/*). Shown only to users who can see both. Sits on the same line as the
+     Customize button (sidebar footer; top navbar utility bar). docs/plans/pm-suite-integration.md 4d. --}}
 @php
   $wsUser = Auth::user();
   $wsInPm = Request::is('pm', 'pm/*');
@@ -7,12 +8,14 @@
   $wsHasFab = $wsUser && ($wsUser->isAdmin() || $wsUser->hasAnyPermission(['nav.dashboard', 'nav.inventory', 'nav.fulfillment', 'nav.fabrication']));
 @endphp
 @if ($wsHasPm && $wsHasFab)
-  <div class="btn-group btn-group-sm workspace-switcher {{ ! empty($vertical) ? 'w-100 my-2 px-2' : 'mx-md-2' }}" role="group" aria-label="Workspace">
-    <a href="/pm" class="btn {{ $wsInPm ? 'btn-primary' : 'btn-outline-secondary' }}" @if ($wsInPm) aria-current="page" @endif>
-      <i class="ti ti-briefcase me-1"></i>Project Management
-    </a>
-    <a href="/" class="btn {{ $wsInPm ? 'btn-outline-secondary' : 'btn-primary' }}" @unless ($wsInPm) aria-current="page" @endunless>
-      <i class="ti ti-hammer me-1"></i>Fabrication
-    </a>
+  <style>.navbar-vertical .workspace-switcher .ws-label{display:none}.navbar-vertical.navbar-folded .workspace-switcher{flex-direction:column}</style>
+  <div class="workspace-switcher d-flex align-items-center gap-2" role="group" aria-label="Workspace">
+    <span class="small {{ $wsInPm ? 'text-muted' : 'fw-bold' }}" title="Fabrication"><i class="ti ti-hammer"></i><span class="ws-label ms-1">Fab</span></span>
+    <label class="form-check form-switch m-0 p-0 d-flex align-items-center" title="Switch workspace: Fabrication / Project Management">
+      <input class="form-check-input m-0" type="checkbox" role="switch" style="margin-left:0"
+             aria-label="Project Management workspace" @checked($wsInPm)
+             onchange="window.location.href = this.checked ? '/pm' : '/'">
+    </label>
+    <span class="small {{ $wsInPm ? 'fw-bold' : 'text-muted' }}" title="Project Management"><i class="ti ti-briefcase"></i><span class="ws-label ms-1">PM</span></span>
   </div>
 @endif

@@ -11,7 +11,6 @@
         <i class="ti ti-layout-sidebar-left-collapse icon"></i>
       </button>
     </div>
-    @include('partials.workspace-switcher', ['vertical' => true])
     <div class="navbar-footer">
       <ul class="navbar-nav">
         @include('partials.notifications', ['placement' => 'side'])
@@ -23,11 +22,12 @@
               @include('partials.nav-menu', ['mode' => 'side', 'set' => 'classic'])
       <div class="navbar-side">
         <ul class="navbar-nav">
-          <li class="nav-item">
+          <li class="nav-item d-flex align-items-center justify-content-between pe-3">
             <a class="nav-link" href="#" data-bs-toggle="offcanvas" data-bs-target="#offcanvasTheme" aria-controls="offcanvasTheme">
               <span class="nav-link-icon"><i class="ti ti-palette icon"></i></span>
               <span class="nav-link-title">Customize</span>
             </a>
+            @include('partials.workspace-switcher')
           </li>
         </ul>
       </div>

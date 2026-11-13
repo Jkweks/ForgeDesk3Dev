@@ -9,10 +9,11 @@
     <div class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
       <a href="{{ Request::is('pm', 'pm/*') ? '/pm' : '/' }}" aria-label="ForgeDesk home">@include('partials.brand')</a>
     </div>
-    @include('partials.workspace-switcher')
     <div class="navbar-nav flex-row order-md-last">
       @include('partials.notifications', ['placement' => 'top'])
-      <div class="nav-item d-none d-md-flex me-3">
+      <div class="nav-item d-none d-md-flex align-items-center me-3">
+        @include('partials.workspace-switcher')
+        <span class="mx-2 text-muted">|</span>
         <a href="#" class="nav-link px-0" title="Customize" aria-label="Customize" data-bs-toggle="offcanvas" data-bs-target="#offcanvasTheme" aria-controls="offcanvasTheme">
           <i class="ti ti-palette icon"></i>
         </a>
