@@ -466,6 +466,17 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middlewareFor('store', 'permission:orders.create')
             ->middlewareFor('update', 'permission:orders.edit')
             ->middlewareFor('destroy', 'permission:orders.delete');
+        // Job-specific POs (PM Suite): never touch stock; receiving only records arrival
+        Route::get('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'index'])->middleware('permission:orders.view');
+        Route::post('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'store'])->middleware('permission:orders.create');
+        Route::get('/job-purchase-orders/{jobPurchaseOrder}', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'show'])->middleware('permission:orders.view');
+        Route::put('/job-purchase-orders/{jobPurchaseOrder}', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'update'])->middleware('permission:orders.edit');
+        Route::post('/job-purchase-orders/{jobPurchaseOrder}/stage', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'setStage'])->middleware('permission:orders.edit');
+        Route::post('/job-purchase-orders/{jobPurchaseOrder}/revise', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'revise'])->middleware('permission:orders.edit');
+        Route::post('/job-purchase-orders/{jobPurchaseOrder}/receive', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'receive'])->middleware('permission:orders.receive');
+        Route::post('/job-purchase-orders/{jobPurchaseOrder}/close', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'close'])->middleware('permission:orders.edit');
+        Route::post('/job-purchase-orders/{jobPurchaseOrder}/reopen', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'reopen'])->middleware('permission:orders.edit');
+        Route::post('/job-purchase-orders/{jobPurchaseOrder}/void', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'void'])->middleware('permission:orders.edit');
         Route::post('/purchase-orders/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit'])->middleware('permission:orders.submit');
         Route::post('/purchase-orders/{purchaseOrder}/approve', [PurchaseOrderController::class, 'approve'])->middleware('permission:orders.approve');
         Route::post('/purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->middleware('permission:orders.receive');

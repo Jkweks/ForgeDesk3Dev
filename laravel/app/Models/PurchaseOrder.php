@@ -15,6 +15,14 @@ class PurchaseOrder extends Model
         'supplier_id',
         'status',
         'type',
+        'business_job_id',
+        'issue_stage',
+        'revision_number',
+        'closed_at',
+        'closed_by',
+        'voided_at',
+        'voided_by',
+        'void_reason',
         'order_date',
         'expected_date',
         'received_date',
@@ -39,6 +47,8 @@ class PurchaseOrder extends Model
         'received_date' => 'date',
         'total_amount' => 'decimal:2',
         'approved_at' => 'datetime',
+        'closed_at' => 'datetime',
+        'voided_at' => 'datetime',
     ];
 
     public const TYPE_STOCK = 'stock';
@@ -60,6 +70,44 @@ class PurchaseOrder extends Model
                 $po->type = self::TYPE_STOCK;
             }
         });
+    }
+
+    public const ISSUE_STAGES = [
+        'draft',
+        'submittal-request',
+        'material-release',
+        'subcontract-submittal-request',
+        'subcontract-material-release',
+    ];
+
+    public function isJob(): bool
+    {
+        return $this->type === self::TYPE_JOB;
+    }
+
+    public function job()
+    {
+        return $this->belongsTo(BusinessJob::class, 'business_job_id');
+    }
+
+    public function receipts()
+    {
+        return $this->hasMany(PurchaseOrderReceipt::class);
+    }
+
+    public function revisions()
+    {
+        return $this->hasMany(PurchaseOrderRevision::class);
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->voided_at !== null;
+    }
+
+    public function scopeJobType($query)
+    {
+        return $query->where('purchase_orders.type', self::TYPE_JOB);
     }
 
     public function isInternal(): bool

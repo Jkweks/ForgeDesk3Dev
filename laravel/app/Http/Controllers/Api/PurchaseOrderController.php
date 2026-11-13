@@ -30,6 +30,9 @@ class PurchaseOrderController extends Controller
     {
         $query = PurchaseOrder::with(['supplier', 'items', 'creator']);
 
+        // Job POs have their own endpoints; this list is stock + internal POs only unless asked.
+        $query->where('purchase_orders.type', '!=', PurchaseOrder::TYPE_JOB);
+
         // Filter by status
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -332,9 +335,11 @@ class PurchaseOrderController extends Controller
      */
     public function receive(Request $request, PurchaseOrder $purchaseOrder)
     {
-        if ($purchaseOrder->isInternal()) {
+        if (! $purchaseOrder->affectsStock()) {
             return response()->json([
-                'message' => 'Internal purchase orders are demand documents and cannot be received',
+                'message' => $purchaseOrder->isJob()
+                    ? 'Job purchase orders are received through /job-purchase-orders'
+                    : 'Internal purchase orders are demand documents and cannot be received',
             ], 422);
         }
 
@@ -641,6 +646,10 @@ class PurchaseOrderController extends Controller
      */
     public function addItem(Request $request, PurchaseOrder $purchaseOrder)
     {
+        if ($purchaseOrder->isJob()) {
+            return response()->json(['message' => 'Use /job-purchase-orders for job purchase orders'], 422);
+        }
+
         if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json(['message' => 'Line items can only be added to draft or submitted purchase orders'], 422);
         }
@@ -700,6 +709,10 @@ class PurchaseOrderController extends Controller
      */
     public function updateItem(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
     {
+        if ($purchaseOrder->isJob()) {
+            return response()->json(['message' => 'Use /job-purchase-orders for job purchase orders'], 422);
+        }
+
         if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json(['message' => 'Line items can only be edited on draft or submitted purchase orders'], 422);
         }
@@ -1173,6 +1186,10 @@ class PurchaseOrderController extends Controller
      */
     public function removeItem(PurchaseOrder $purchaseOrder, PurchaseOrderItem $item)
     {
+        if ($purchaseOrder->isJob()) {
+            return response()->json(['message' => 'Use /job-purchase-orders for job purchase orders'], 422);
+        }
+
         if (! in_array($purchaseOrder->status, self::EDITABLE_STATUSES)) {
             return response()->json(['message' => 'Line items can only be removed from draft or submitted purchase orders'], 422);
         }

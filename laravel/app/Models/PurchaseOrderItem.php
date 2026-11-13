@@ -12,6 +12,10 @@ class PurchaseOrderItem extends Model
     protected $fillable = [
         'purchase_order_id',
         'product_id',
+        'description',
+        'kind',
+        'parent_item_id',
+        'sort_order',
         'quantity_ordered',
         'quantity_received',
         'unit_cost',
@@ -37,6 +41,16 @@ class PurchaseOrderItem extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(self::class, 'parent_item_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(self::class, 'parent_item_id')->orderBy('sort_order')->orderBy('id');
     }
 
     // Computed properties
