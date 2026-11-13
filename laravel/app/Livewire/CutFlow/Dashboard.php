@@ -1222,7 +1222,8 @@ class Dashboard extends Component
     {
         $item->part()->decrement('qty_remaining');
 
-        $part = $item->part;
+        $part = $item->part()->first();
+        \App\Services\CutFlow\CutStepSync::afterPartCut($part);
 
         $entry = CutLogEntry::create([
             'uuid' => $item->pending_uuid ?? (string) Str::uuid(),

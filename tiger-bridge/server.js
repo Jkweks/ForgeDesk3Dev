@@ -291,6 +291,9 @@ function rangeError(inches) {
   return null;
 }
 
+// Max allowed difference (inches) between requested and amp-acked target.
+const TARGET_TOLERANCE = 0.002;
+
 function sendMove(inches) {
   return enqueueSerial(() => sendMoveNow(inches));
 }
@@ -320,12 +323,27 @@ function sendMoveNow(inches) {
       reject(new Error('timed out waiting for TigerStop ack (MGF)'));
     }, 15000);
 
+    // Target the amp echoed in its "MGS xx.xxx" start ack. MGF alone says
+    // "a move finished", not where it went, so we check the echo against what
+    // we asked for before calling the move good.
+    let ampTarget = null;
+
     function onLine(line) {
       const trimmed = line.trim();
 
-      if (trimmed.startsWith('MGF')) {
+      if (trimmed.startsWith('MGS')) {
+        const t = parseFloat(trimmed.slice(3));
+        if (Number.isFinite(t)) ampTarget = t;
+      } else if (trimmed.startsWith('MGF')) {
         cleanup();
-        resolve({ started: true, finished: true, raw: trimmed });
+        if (ampTarget !== null && Math.abs(ampTarget - Number(inches)) > TARGET_TOLERANCE) {
+          console.error(`[tiger-bridge] target mismatch: sent ${Number(inches).toFixed(3)}, amp acked ${ampTarget}`);
+          return reject(new Error(`TigerStop moved to ${ampTarget}" instead of ${Number(inches).toFixed(3)}" - do not cut`));
+        }
+        if (ampTarget === null) {
+          console.warn('[tiger-bridge] no MGS target echo seen for this move; position unverified');
+        }
+        resolve({ started: true, finished: true, raw: trimmed, ampTarget });
       } else if (trimmed.startsWith('X ')) {
         cleanup();
         reject(new Error(`TigerStop reported an error: ${trimmed}`));
@@ -366,7 +384,7 @@ app.post('/move', async (req, res) => {
     // a fresh move means whatever the sensor reported for the previous cut
     // no longer applies — back to idle until this new cut completes.
     sensorState = 'idle';
-    lastPosition = inches;
+    lastPosition = result.ampTarget ?? inches;
     lastPositionAt = new Date().toISOString();
     res.json({ ok: true, lastPosition, lastPositionAt, ...result });
   } catch (e) {

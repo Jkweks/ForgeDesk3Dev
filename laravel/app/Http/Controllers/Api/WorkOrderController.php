@@ -90,6 +90,7 @@ class WorkOrderController extends Controller
                 'elevations.completedBy',
                 'elevations.templateSet',
                 'elevations.stages.assignedTo',
+                'elevations.stages.assignees',
                 'elevations.stages.completedBy',
             ])->findOrFail($id);
 
@@ -207,7 +208,13 @@ class WorkOrderController extends Controller
             if ($request->has('priority') && ! $request->has('priority_locked')) {
                 $wo->priority_locked = true;
             }
+            // Planned dates set directly on the work order apply to everyone on it: the
+            // per-operator windows from the Work Queue schedule would otherwise keep overriding them.
+            $plannedChanged = $wo->isDirty(['planned_start_date', 'planned_completion_date', 'planned_start_quarter', 'planned_completion_quarter']);
             $wo->save();
+            if ($plannedChanged) {
+                $wo->operatorSchedules()->delete();
+            }
 
             // Re-derive the ranking for everything else (due-date move, pin/unpin).
             if ($request->hasAny(['due_date', 'priority', 'priority_locked'])) {
@@ -803,6 +810,9 @@ class WorkOrderController extends Controller
                 'blocks_next' => (bool) $s->blocks_next,
                 'minutes_per_joint' => $s->minutes_per_joint !== null ? (float) $s->minutes_per_joint : null,
                 'assigned_name' => $s->assignedTo?->name,
+                'assignee_names' => $s->relationLoaded('assignees') && $s->assignees->isNotEmpty()
+                    ? $s->assignees->pluck('name')->values()
+                    : collect([$s->assignedTo?->name])->filter()->values(),
                 'completed_by_id' => $s->completed_by_id,
                 'completed_by_name' => $s->completedBy?->name,
                 'started_at' => $s->started_at?->toIso8601String(),

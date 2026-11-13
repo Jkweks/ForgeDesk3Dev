@@ -14,6 +14,18 @@ return [
     'flag_tolerance' => 0.0625,     // receptor differences beyond this are flagged
     'knee_wall_tolerance' => 0.01,  // vertical-height difference that counts as a knee wall
 
+    // Cut-list "use" descriptions (tags stripped, upper-cased) that mark each kind of row.
+    'roles' => [
+        'sill' => 'SILL',
+        'female_vertical' => 'FEMALE VERTICAL',
+        'left_jamb' => 'LEFT JAMB',
+        'right_jamb' => 'RIGHT JAMB',
+        'threshold' => 'THRESHOLD',
+        'receptor' => 'SILL RECEPTORS CHANNEL',
+    ],
+    // Description tags that mark a jamb belonging to a door, so it isn't counted as an elevation jamb.
+    'door_tags' => ['{SIDELITE JAMB}', '{TERMINATING JAMB}'],
+
     // Fallback widths by part number, used when the product has no dimension_width set.
     // Product data (Inventory > Configurator tab > Face Width) always wins.
     'part_widths' => [

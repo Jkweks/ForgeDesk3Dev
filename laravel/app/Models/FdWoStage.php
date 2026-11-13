@@ -130,6 +130,11 @@ class FdWoStage extends Model
             $this->assigned_to_id = $primary;
             $this->save();
         }
+
+        // An operator taken off their last open stage of a work order loses their schedule window on it.
+        if ($woId = $this->work_order_id ?? $this->elevation()->value('work_order_id')) {
+            FdWoOperatorSchedule::pruneFor((int) $woId);
+        }
     }
 
     public function completedBy(): BelongsTo

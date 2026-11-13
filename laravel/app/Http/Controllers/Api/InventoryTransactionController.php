@@ -135,13 +135,12 @@ class InventoryTransactionController extends Controller
 
         // Get this month's transactions
         $thisMonth = (clone $query)
-            ->whereYear('transaction_date', now()->year)
-            ->whereMonth('transaction_date', now()->month)
+            ->where('transaction_date', '>=', InventoryTransaction::shopPeriodStart('month'))
             ->count();
 
         // Get today's transactions
         $today = (clone $query)
-            ->whereDate('transaction_date', now()->toDateString())
+            ->where('transaction_date', '>=', InventoryTransaction::shopPeriodStart('day'))
             ->count();
 
         // Get most active type

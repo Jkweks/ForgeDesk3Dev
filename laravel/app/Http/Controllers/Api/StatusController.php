@@ -223,8 +223,8 @@ class StatusController extends Controller
             'categories' => Category::count(),
             'suppliers' => Supplier::count(),
             'storage_locations' => StorageLocation::count(),
-            'transactions_today' => InventoryTransaction::whereDate('created_at', today())->count(),
-            'transactions_this_week' => InventoryTransaction::where('created_at', '>=', now()->startOfWeek())->count(),
+            'transactions_today' => InventoryTransaction::where('created_at', '>=', InventoryTransaction::shopPeriodStart('day'))->count(),
+            'transactions_this_week' => InventoryTransaction::where('created_at', '>=', InventoryTransaction::shopPeriodStart('week'))->count(),
         ];
     }
 

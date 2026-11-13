@@ -252,6 +252,12 @@ class FdWorkOrder extends Model
         return $this->hasMany(FdWoElevation::class, 'work_order_id')->orderBy('created_at')->orderBy('id');
     }
 
+    /** Per-operator planning windows (Work Queue schedule). */
+    public function operatorSchedules(): HasMany
+    {
+        return $this->hasMany(FdWoOperatorSchedule::class, 'work_order_id');
+    }
+
     public function shipments(): HasMany
     {
         return $this->hasMany(Shipment::class, 'work_order_id');

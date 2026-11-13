@@ -51,4 +51,20 @@ class InventoryTransaction extends Model
     {
         return $this->belongsTo(\App\Models\BusinessJob::class, 'business_job_id');
     }
+
+    /**
+     * Start of the shop-local day/week/month as a UTC instant, for "today / this week / this month"
+     * KPIs. The app and DB run in UTC, so a plain today() rolls over at 7 PM Eastern.
+     */
+    public static function shopPeriodStart(string $unit = 'day'): \Illuminate\Support\Carbon
+    {
+        $local = now()->setTimezone(\App\Services\CutFlow\CutStationStats::SHOP_TIMEZONE);
+        $start = match ($unit) {
+            'week' => $local->startOfWeek(),
+            'month' => $local->startOfMonth(),
+            default => $local->startOfDay(),
+        };
+
+        return $start->setTimezone('UTC');
+    }
 }

@@ -234,6 +234,18 @@ Route::middleware('auth:sanctum')->group(function () {
         // System Status
         Route::get('/status', [StatusController::class, 'index']);
 
+        // Cut-list integrity rules + sill quarter-point settings (Development page) — admin only.
+        // Static paths before the {rule} wildcard.
+        Route::middleware('admin')->prefix('cutlist-rules')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\CutlistRuleController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\CutlistRuleController::class, 'store']);
+            Route::post('/test', [\App\Http\Controllers\Api\CutlistRuleController::class, 'test']);
+            Route::put('/settings', [\App\Http\Controllers\Api\CutlistRuleController::class, 'updateSettings']);
+            Route::delete('/settings', [\App\Http\Controllers\Api\CutlistRuleController::class, 'resetSettings']);
+            Route::put('/{rule}', [\App\Http\Controllers\Api\CutlistRuleController::class, 'update']);
+            Route::delete('/{rule}', [\App\Http\Controllers\Api\CutlistRuleController::class, 'destroy']);
+        });
+
         // Development tracker (bugs / feature requests / notes) — admin only.
         // Static paths before the {devItem} wildcard.
         Route::middleware('admin')->prefix('dev-items')->group(function () {
@@ -840,6 +852,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::middleware('permission:fabrication.work-orders.view')->group(function () {
             Route::get('/work-orders', [\App\Http\Controllers\Api\WorkOrderController::class, 'index']);
             Route::get('/work-queue', [\App\Http\Controllers\Api\WorkQueueController::class, 'index']);
+            Route::post('/work-queue/reassign', [\App\Http\Controllers\Api\WorkQueueController::class, 'reassign'])->middleware('permission:fabrication.work-orders.edit');
+            Route::put('/work-queue/work-orders/{id}/operators/{userId}/schedule', [\App\Http\Controllers\Api\WorkQueueController::class, 'setOperatorSchedule'])->middleware('permission:fabrication.work-orders.edit');
             Route::get('/programming-queue', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'index']);
             Route::post('/programming-queue/reorder', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'reorder'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/programming-queue/order', [\App\Http\Controllers\Api\ProgrammingQueueController::class, 'resetOrder'])->middleware('permission:fabrication.work-orders.edit');

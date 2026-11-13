@@ -129,11 +129,16 @@ Route::get('/fabrication/quality', function () {
 
 // Configurator
 Route::get('/config', function () {
-    return view('configurator.frame');
+    return view('configurator.frame', ['split' => true]);
 });
 
-Route::get('/config/split', function () {
-    return view('configurator.frame', ['split' => true]);
+Route::get('/config/classic', function () {
+    return view('configurator.frame', ['split' => false]);
+});
+
+// Split is the default layout now; keep the old URL working.
+Route::get('/config/split', function (\Illuminate\Http\Request $request) {
+    return redirect('/config' . ($request->getQueryString() ? '?' . $request->getQueryString() : ''));
 });
 
 Route::get('/config/package', function () {

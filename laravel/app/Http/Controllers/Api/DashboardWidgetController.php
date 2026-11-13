@@ -782,8 +782,8 @@ class DashboardWidgetController extends Controller
     public function transactions()
     {
         return response()->json([
-            'today' => InventoryTransaction::where('transaction_date', '>=', today())->count(),
-            'this_week' => InventoryTransaction::where('transaction_date', '>=', now()->startOfWeek())->count(),
+            'today' => InventoryTransaction::where('transaction_date', '>=', InventoryTransaction::shopPeriodStart('day'))->count(),
+            'this_week' => InventoryTransaction::where('transaction_date', '>=', InventoryTransaction::shopPeriodStart('week'))->count(),
         ]);
     }
 

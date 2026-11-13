@@ -64,8 +64,6 @@ return [
             ['divider' => true],
             ['label' => 'Material Check', 'href' => '/fulfillment/material-check'],
             ['label' => 'Reservations Dashboard', 'href' => '/fulfillment/job-reservations', 'permission' => 'reservations.dashboard.view'],
-            ['divider' => true],
-            ['label' => 'Door Configurator', 'href' => 'http://fab.vosglassintra.net/configurator', 'target' => '_blank', 'badge' => ['Old', 'bg-secondary-lt text-secondary']],
         ],
     ],
     [

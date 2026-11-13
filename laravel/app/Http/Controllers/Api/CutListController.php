@@ -219,6 +219,7 @@ class CutListController extends Controller
             $part = $parts->get($partId);
             for ($i = 0; $i < $qty; $i++) {
                 $part->decrement('qty_remaining');
+                \App\Services\CutFlow\CutStepSync::afterPartCut($part);
                 $entry = new CutLogEntry([
                     'uuid' => (string) Str::uuid(),
                     'part_id' => $part->id,

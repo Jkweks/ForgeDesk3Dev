@@ -86,7 +86,7 @@ return [
         'href' => '/fabrication/quality', 'active' => ['fabrication/quality'],
     ],
     [
-        // The external Door Configurator used to sit under Fulfillment (nav.fulfillment), so it keeps that permission.
+        // nav.fulfillment is kept so users who could see the old external Door Configurator link still see this section.
         'label' => 'Configurator', 'icon' => 'adjustments-horizontal', 'permission' => ['nav.configurator', 'nav.fulfillment'],
         'active' => ['config*'],
         'items' => [
@@ -95,8 +95,6 @@ return [
             ['label' => 'Door Labels', 'href' => '/config/labels', 'permission' => 'configurator.view', 'active' => ['config/labels'], 'nav' => 'nav.configurator'],
             ['divider' => true],
             ['label' => 'Configurator Admin', 'href' => '/config/admin', 'permission' => 'configurator.catalog.manage', 'active' => ['config/admin'], 'nav' => 'nav.configurator'],
-            ['divider' => true],
-            ['label' => 'Door Configurator', 'href' => 'http://fab.vosglassintra.net/configurator', 'target' => '_blank', 'external' => true, 'badge' => ['Old', 'bg-secondary-lt text-secondary'], 'nav' => 'nav.fulfillment'],
         ],
     ],
     [

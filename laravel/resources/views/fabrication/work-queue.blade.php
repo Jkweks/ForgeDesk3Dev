@@ -27,6 +27,18 @@
 .wq-inline:focus { outline:1px solid var(--tblr-primary); border-radius:var(--tblr-border-radius-sm); }
 .wq-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1060; align-items:center; justify-content:center; }
 .wq-overlay > .card { box-shadow:0 1rem 3rem rgba(0,0,0,.5); }
+.wq-card .wq-more { opacity:.45; }
+.wq-card:hover .wq-more { opacity:1; }
+.wq-ctx .dropdown-item { display:flex; align-items:center; gap:.5rem; }
+.wq-ctx .dropdown-item i { width:1rem; text-align:center; color:var(--tblr-secondary-color); }
+.wq-facts { display:grid; grid-template-columns:repeat(auto-fill, minmax(11rem, 1fr)); gap:.6rem 1rem; }
+.wq-facts .k { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--tblr-secondary-color); }
+.wq-matrix th, .wq-matrix td { text-align:center; vertical-align:middle; white-space:nowrap; }
+.wq-matrix th:first-child, .wq-matrix td:first-child { text-align:left; position:sticky; left:0; background:var(--tblr-bg-surface); z-index:1; }
+.wq-matrix thead th { cursor:pointer; position:sticky; top:0; background:var(--tblr-bg-surface); z-index:2; }
+.wq-matrix thead th:first-child { z-index:3; cursor:default; }
+.wq-matrix td input { width:1.15rem; height:1.15rem; cursor:pointer; }
+.wq-stage-pill { display:inline-block; margin:0 .2rem .2rem 0; }
 @media print {
   /* Only while the calendar is open: drop everything else from the layout (not just hide it,
      or it still occupies pages) so the calendar starts at the top of page 1 */
@@ -119,8 +131,9 @@
         </div>
       </div>
       <div class="text-secondary small mt-1">
-        Every stage grouped by operator. Drag a card to reassign it — <span class="text-danger">locked</span> stages
-        (waiting on an earlier step) can be moved too, so work can be planned ahead.
+        Drag a card or bar to hand it to another operator — hold <kbd>Ctrl</kbd> while dropping to share it instead.
+        Everyone else on a shared step stays put, and each operator has their own dates on the schedule.
+        <strong>Right-click</strong> anything for work order details, dates and operators.
       </div>
       <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
         <div class="btn-group btn-group-sm" id="wq-view" title="Board or two-week schedule">
@@ -156,8 +169,8 @@
         <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="wqOpenCalendar()">
           <i class="ti ti-printer me-1"></i>Print calendar
         </button>
-        <button class="btn btn-sm btn-outline-primary" onclick="wqOpenBulk()">
-          <i class="ti ti-users-group me-1"></i>Bulk assign steps
+        <button class="btn btn-sm btn-outline-primary" onclick="wqAssignOpen()" data-permission="fabrication.work-orders.edit">
+          <i class="ti ti-users-group me-1"></i>Assign operators
         </button>
         <span class="text-muted small" id="wq-updated"></span>
       </div>
@@ -189,7 +202,7 @@
           <button class="btn btn-sm btn-outline-secondary" onclick="wqSchedShift(7)" title="Forward a week"><i class="ti ti-chevron-right"></i></button>
           <button class="btn btn-sm btn-outline-secondary" onclick="wqSchedShift(0)">This week</button>
           <label class="form-check form-switch mb-0 ms-2"><input class="form-check-input" type="checkbox" id="wq-sched-weekends" onchange="renderBoard()"><span class="form-check-label small">Include weekends</span></label>
-          <span class="text-secondary small ms-auto">Drag a bar to move it (snaps to 2h quarter-days), drag its right edge to extend it, or drag an unassigned work order onto an operator's day.</span>
+          <span class="text-secondary small ms-auto">Drag a bar to move it (snaps to 2h quarter-days) or its edges to resize; each operator's bar moves on its own. Ctrl-drop on another row shares the work order.</span>
         </div>
         <div id="wq-sched-body" class="wq-sched-wrap"></div>
       </div>
@@ -207,34 +220,6 @@
       <button type="button" class="btn-close" onclick="wqCloseCalendar()"></button>
     </div>
     <div class="card-body" style="overflow:auto;" id="wq-cal-body"></div>
-  </div>
-</div>
-
-<div id="wq-bulk-overlay" class="wq-overlay" style="display:none;">
-  <div class="card" style="width:min(640px, 92vw); max-height:85vh; display:flex; flex-direction:column;">
-    <div class="card-header">
-      <h3 class="card-title">Bulk assign steps</h3>
-      <button type="button" class="btn-close ms-auto" onclick="wqCloseBulk()"></button>
-    </div>
-    <div class="card-body" style="overflow-y:auto;">
-      <div class="mb-3">
-        <label class="form-label">Work order</label>
-        <select id="wq-bulk-wo" class="form-select" onchange="wqBulkRenderRows()" data-sort></select>
-        <div class="form-text">
-          Tick a step to change it. Every non-complete step with that name — across all elevations
-          of this work order — is set to the operator(s) you pick. Select more than one to have
-          them share the step (it shows in each queue; whoever completes it clears it for all).
-        </div>
-      </div>
-      <div id="wq-bulk-rows"></div>
-    </div>
-    <div class="card-footer d-flex justify-content-between align-items-center">
-      <div id="wq-bulk-status" class="text-muted small"></div>
-      <div>
-        <button class="btn btn-link" onclick="wqCloseBulk()">Cancel</button>
-        <button class="btn btn-primary" onclick="wqApplyBulk()">Apply</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -431,7 +416,44 @@ function elevSummary(c) {
   return ` · <span title="${esc((c.elevation_tags || []).join(', '))}">${c.elevation_count} elevations</span>`;
 }
 
-function cardHtml(c) {
+// Elevations with no steps: nothing to assign or tick off, just a Complete button
+function stagelessCardHtml(c, prio, due) {
+  return `<div class="wq-card${isPast(c.due_date) ? ' overdue' : ''}" data-wo="${c.work_order_id}" data-elevs="${c.elevation_ids}">
+    <div class="d-flex align-items-start gap-1">
+      <div class="flex-fill"><strong>${esc(woLabel(c.job_name, c.release_token ?? c.release_label))}</strong>
+        <span class="text-secondary small">${elevSummary(c).replace(/^ · /, '· ')}</span></div>
+      <button class="btn btn-sm btn-success py-0" data-permission="fabrication.work-orders.edit"
+          onclick="event.stopPropagation(); wqCompleteStageless(this, [${c.elevation_ids}])"><i class="ti ti-check"></i> Complete</button>
+    </div>
+    <div class="wq-meta">
+      ${prio ? `<span class="text-secondary">${prio}</span>` : ''}
+      ${due || ''}
+      ${c.date_requested ? `<span class="text-secondary">need ${esc(c.date_requested)}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+async function wqCompleteStageless(btn, elevationIds) {
+  btn.disabled = true;
+  try {
+    for (const id of elevationIds) {
+      const r = await API(`/elevations/${id}/complete-all-stages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: '{}',
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Failed to complete');
+    }
+    loadBoard();
+  } catch (e) {
+    btn.disabled = false;
+    alert(e.message);
+  }
+}
+
+const wqMoreBtn = '<button type="button" class="btn btn-sm btn-ghost-secondary p-0 px-1 wq-more" title="More — same as right-click"><i class="ti ti-dots-vertical"></i></button>';
+
+function cardHtml(c, opId) {
   const prio = `#<input type="number" min="1" class="wq-inline" style="width:2.8rem" value="${c.priority ?? ''}"
       title="Priority — editing pins this work order" onclick="event.stopPropagation()"
       onchange="wqSetPriority(${c.work_order_id}, this.value)">`;
@@ -442,17 +464,17 @@ function cardHtml(c) {
   const lock = c.gated
     ? ` <i class="ti ti-lock wq-lock" title="Blocked by &quot;${esc(c.blocking_stage_name || 'an earlier step')}&quot;"></i>`
     : '';
-  const names = c.assignee_names || [];
-  const shared = names.length > 1
-    ? `<span class="badge bg-purple-lt text-purple" title="Shared with ${esc(names.join(', '))}">
-         <i class="ti ti-users" style="font-size:.75rem"></i> ${names.length}
-       </span>` : '';
-  return `<div class="wq-card${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" draggable="true" data-stage="${c.stage_id}"
+  // Who else is on this step, so a shared card reads the same in every column it appears in
+  const others = (c.assignee_ids || []).filter(id => id !== opId).map(wqUser);
+  const shared = opId && others.length
+    ? `<span class="text-secondary small" title="Shared with ${esc(others.map(u => u.name).join(', '))}"><i class="ti ti-users"></i> with</span> `
+      + others.map(u => `<span class="badge bg-purple-lt text-purple" title="${esc(u.name)}">${esc(u.initials || u.name)}</span>`).join(' ') : '';
+  if (c.stageless) return stagelessCardHtml(c, prio, due);
+  return `<div class="wq-card${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" draggable="true" data-stage="${c.stage_id}" data-wo="${c.work_order_id}"
       ondragstart="wqDragStart(event, [${c.stage_ids}])" ondragend="wqDragEnd(event)">
     <div class="d-flex align-items-start gap-1">
-      <div class="flex-fill"><strong>${esc(c.name)}</strong>${active}${lock} ${shared}</div>
-      <button class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Edit assignees"
-          onclick="event.stopPropagation(); wqEditAssignees(${c.stage_id})"><i class="ti ti-user-plus"></i></button>
+      <div class="flex-fill"><strong>${esc(c.name)}</strong>${active}${lock}</div>
+      ${wqMoreBtn}
     </div>
     <div class="text-secondary">${esc(woLabel(c.job_name, c.release_token ?? c.release_label))}${elevSummary(c)}</div>
     <div class="wq-meta">
@@ -460,6 +482,7 @@ function cardHtml(c) {
       ${due}
       ${c.date_requested ? `<span class="text-secondary">need ${esc(c.date_requested)}</span>` : ''}
     </div>
+    ${shared ? `<div class="wq-meta">${shared}</div>` : ''}
   </div>`;
 }
 
@@ -474,7 +497,7 @@ function colHtml(opId, title, oldest, stages, initials, muted) {
       <span class="${muted ? 'text-secondary' : ''}">${esc(title)}</span>
       <span class="ms-auto text-secondary small">${countLabel}${oldest ? ` · oldest ${esc(oldest)}` : ''}</span>
     </div>
-    <div>${shown.map(cardHtml).join('') || '<div class="text-secondary small text-center py-2">—</div>'}</div>
+    <div>${shown.map(c => cardHtml(c, opId)).join('') || '<div class="text-secondary small text-center py-2">—</div>'}</div>
   </div>`;
 }
 
@@ -488,7 +511,7 @@ function wqSetGroup(g) {
 // Steps in workflow order: stages are created in sequence, so the lowest stage id seen per name approximates it
 function wqStepOrder(cards) {
   const first = new Map();
-  cards.forEach(c => { if (!first.has(c.name) || c.stage_id < first.get(c.name)) first.set(c.name, c.stage_id); });
+  cards.forEach(c => { const sid = c.stage_id ?? Infinity; if (!first.has(c.name) || sid < first.get(c.name)) first.set(c.name, sid); });
   return [...first.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]);
 }
 
@@ -502,12 +525,12 @@ function groupedCardHtml(c, users, mode) {
   // The column/sub-header already names the step (or job), so the card leads with what's left
   const lead = c.elevation_count > 1 ? `${c.elevation_count} elevations` : c.elevation_tag;
   const where = esc(c.release_token ?? c.release_label);
-  return `<div class="wq-card static${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" data-stage="${c.stage_id}">
+  if (c.stageless) return stagelessCardHtml(c, '', '');
+  return `<div class="wq-card static${c.gated ? ' locked' : ''}${isPast(c.due_date) ? ' overdue' : ''}" data-stage="${c.stage_id}" data-wo="${c.work_order_id}">
     <div class="d-flex align-items-start gap-1">
       <div class="flex-fill"><strong>${esc(lead)}</strong>${active}${lock}
         <span class="text-secondary small ms-1">${where}</span></div>
-      <button class="btn btn-sm btn-ghost-secondary p-0 px-1" title="Edit assignees"
-          onclick="event.stopPropagation(); wqEditAssignees(${c.stage_id})"><i class="ti ti-user-plus"></i></button>
+      ${wqMoreBtn}
     </div>
     <div class="wq-meta">
       ${ops}
@@ -654,38 +677,39 @@ function wqSyncTopScroll() {
 }
 
 // ── drag & drop (hand-rolled HTML5, matches the Reorder Queue pattern) ──
+let wqDragFrom = 0;
 function wqDragStart(e, stageIds) {
   wqDragStageId = stageIds;
+  wqDragFrom = +(e.currentTarget.closest('.wq-col')?.dataset.op || 0);
   e.currentTarget.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
 }
-function wqDragEnd(e) { e.currentTarget.classList.remove('dragging'); }
+function wqDragEnd(e) { e.currentTarget.classList.remove('dragging'); wqDragStageId = null; }
 function wqDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drop-hover'); }
 function wqDragLeave(e) { e.currentTarget.classList.remove('drop-hover'); }
 
-// A card is job-level, so an assignment change is applied to each elevation's stage
-async function wqPatchStages(stageIds, body) {
-  const rs = await Promise.all(stageIds.map(id => API(`/work-order-stages/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })));
-  if (rs.some(r => !r.ok)) throw new Error('assign failed');
-}
+// Assignment changes go through one endpoint that edits each stage's own assignee set, so moving
+// one operator off a shared step never disturbs the others on it.
+const wqReassign = (stageIds, body) => wqJson('/work-queue/reassign', 'POST', { stage_ids: stageIds, ...body });
+const wqSetWindow = (woId, opId, S, E) => wqJson(`/work-queue/work-orders/${woId}/operators/${opId}/schedule`, 'PUT',
+  { start_date: S.d, start_quarter: S.q, end_date: E.d, end_quarter: E.q });
 
+// Drop on another column: that operator takes over from the column the card came from.
+// Ctrl/Cmd-drop adds them alongside instead (shared step).
 async function wqDrop(e, opId) {
   e.preventDefault();
   e.currentTarget.classList.remove('drop-hover');
   if (wqDragStageId == null) return;
-  const stageIds = wqDragStageId;
+  const stageIds = wqDragStageId, from = wqDragFrom, share = e.ctrlKey || e.metaKey;
   wqDragStageId = null;
+  if (opId === from) return;
   try {
-    await wqPatchStages(stageIds, { assigned_to_id: opId || null, log_message: 'Reassigned via Work Queue' });
-    await loadBoard();
+    await wqReassign(stageIds, { remove_user_id: share ? null : (from || null), add_user_ids: opId ? [opId] : [] });
   } catch (err) {
     console.error(err);
-    alert('Failed to reassign the stage.');
+    alert('Failed to reassign the step.');
   }
+  await loadBoard();
 }
 
 async function wqSetDue(woId, val) {
@@ -751,18 +775,22 @@ function wqCalModel(startVal, weekends) {
   const soleOwner = woId => { const o = owners.get(woId); return o && o.size === 1 && ![...o][0].toString().match(/^(shared|none)$/); };
 
   const rows = [];
+  const opsOf = wqWoOperators();
   const addRow = (title, opId, cards, always) => {
     const wos = new Map(), uns = new Map();
     cards.filter(wqCardVisible).forEach(c => {
-      const end = c.planned_completion_date || c.due_date || c.planned_start_date;
-      const start = c.planned_start_date || end;
+      // This operator's own window when they have one, else the work order's planned dates
+      const win = opId ? wqWin(c.work_order_id, opId) : null;
+      const end = win ? win.end_date : (c.planned_completion_date || c.due_date || c.planned_start_date);
+      const start = win ? win.start_date : (c.planned_start_date || end);
       const map = end ? wos : uns;
       const w = map.get(c.work_order_id) || map.set(c.work_order_id, {
         woId: c.work_order_id, opId, label: woLabel(c.job_name, c.release_token ?? c.release_label),
-        steps: [], stageIds: [], assigneeIds: c.assignee_ids || [],
-        rawStart: c.planned_start_date, rawEnd: c.planned_completion_date, start, end, locked: true,
+        steps: [], stageIds: [], start, end, locked: true,
+        others: [...(opsOf.get(c.work_order_id) || [])].filter(id => id !== opId),
         estMin: c.estimated_minutes, due: c.due_date,
-        sq: c.planned_start_date ? (c.planned_start_quarter ?? 0) : 0, eq: c.planned_completion_date ? (c.planned_completion_quarter ?? 3) : 3,
+        sq: win ? win.start_quarter : (c.planned_start_date ? (c.planned_start_quarter ?? 0) : 0),
+        eq: win ? win.end_quarter : (c.planned_completion_date ? (c.planned_completion_quarter ?? 3) : 3),
         allOne: soleOwner(c.work_order_id),
       }).get(c.work_order_id);
       w.steps.push(c.name);
@@ -868,7 +896,8 @@ function wqWeekGrid(wkDays, opRows, entries, o) {
       const bars = [];
       r.list.forEach(w => {
         const s = w.late ? w.from : w.start, e = w.late ? w.from : w.end;
-        bars.push({ kind: 'wo', ref: w, s, e, label: w.label, sub: [...new Set(w.steps)].join(', ') + (w.late ? ' · overdue' : ''),
+        const withOthers = w.others?.length ? ' · with ' + w.others.map(id => wqUser(id).initials || wqUser(id).name).join(', ') : '';
+        bars.push({ kind: 'wo', ref: w, s, e, label: w.label, sub: [...new Set(w.steps)].join(', ') + withOthers + (w.late ? ' · overdue' : ''),
           cls: 'wo' + (w.late ? ' late' : '') + (w.locked ? ' locked' : ''), canResize: !w.late, sq: w.late ? 0 : w.sq, eq: w.late ? 3 : w.eq });
       });
       entries.filter(x => x.user_id === r.opId).forEach(x => bars.push({
@@ -953,7 +982,7 @@ function wqRenderSchedule() {
     const all = wqAllCards().filter(c => c.work_order_id === w.woId).reduce((n, c) => n + c.stage_ids.length, 0);
     const scopes = [...new Set(w.scopes)].join(', ');
     return `<div class="sb wo" draggable="true" ondragstart="wqSchedDragStart(event, ${i})" ondragend="wqSchedDragEnd(event)"
-        oncontextmenu="wqSchedPanelMenu(event, ${i})" title="${esc(w.label)} — right-click to assign part of it"><strong>${esc(w.label)}</strong>
+        oncontextmenu="wqSchedPanelMenu(event, ${i})" title="${esc(w.label)} — right-click for details, dates and operators"><strong>${esc(w.label)}</strong>
         <small class="${overdue ? 'text-danger' : ''}">${w.due ? 'Due ' + fmt(w.due) : 'No due date'} · ${hrs}</small>
         <small>${w.stageIds.length === all ? 'All steps unassigned' : `${w.stageIds.length} of ${all} steps unassigned`}${scopes ? ' · ' + esc(scopes) : ''}</small></div>`;
   }).join('') || '<div class="text-secondary small">Nothing unassigned.</div>';
@@ -964,7 +993,7 @@ function wqRenderSchedule() {
       <div class="subheader mb-1">No dates yet — drag onto a day to schedule</div>
       <div class="wq-sched-tray">${tray.map(({ r, w }) => {
         reg.push({ kind: 'wo', ref: w, keys: [] });
-        return `<div class="sb wo" draggable="true" ondragstart="wqSchedDragStart(event, ${reg.length - 1})" ondragend="wqSchedDragEnd(event)"><strong>${esc(w.label)}</strong><small>${esc(r.title)}</small></div>`;
+        return `<div class="sb wo" draggable="true" ondragstart="wqSchedDragStart(event, ${reg.length - 1})" ondragend="wqSchedDragEnd(event)" oncontextmenu="wqSchedBarMenu(event, ${reg.length - 1})"><strong>${esc(w.label)}</strong><small>${esc(r.title)}</small></div>`;
       }).join('')}</div></div></div>` : '';
 
   const weekBlock = wkDays => wqWeekGrid(wkDays, opRows, entries, { reg, interactive: true });
@@ -1091,53 +1120,52 @@ async function wqSchedDrop(e, opId, day) {
   const d = wqSchedDrag;
   wqSchedDrag = null;
   const skipWk = !document.getElementById('wq-sched-weekends').checked;
-  const tasks = [];
+  const share = e.ctrlKey || e.metaKey;
   const pos = wqAbs(day, wqCellQuarter(e, e.currentTarget));
   const span = wqSchedSpan(d, pos, skipWk);
   if (!span) return;
   const S = wqFromAbs(span.s), E = wqFromAbs(span.e);
+  let run; // the write(s) this drop needs, in order
 
   if (d.mode === 'resizeStart') {
     if (d.kind === 'wo') {
       const w = d.ref;
       if (span.s === wqAbs(w.start, w.sq)) return;
-      tasks.push(wqJson(`/work-orders/${w.woId}`, 'PATCH', { planned_start_date: S.d, planned_start_quarter: S.q, planned_completion_date: w.end, planned_completion_quarter: w.eq }));
+      run = () => wqSetWindow(w.woId, w.opId, S, { d: w.end, q: w.eq });
     } else {
       if (span.s === wqAbs(d.ref.start_date, d.ref.start_quarter ?? 0)) return;
-      tasks.push(wqJson(`/schedule-entries/${d.ref.id}`, 'PATCH', { start_date: S.d, start_quarter: S.q }));
+      run = () => wqJson(`/schedule-entries/${d.ref.id}`, 'PATCH', { start_date: S.d, start_quarter: S.q });
     }
   } else if (d.mode === 'resize') {
     if (d.kind === 'wo') {
       const w = d.ref;
       if (span.e === wqAbs(w.end, w.eq)) return;
-      tasks.push(wqJson(`/work-orders/${w.woId}`, 'PATCH', { planned_start_date: w.start, planned_start_quarter: w.sq, planned_completion_date: E.d, planned_completion_quarter: E.q }));
+      run = () => wqSetWindow(w.woId, w.opId, { d: w.start, q: w.sq }, E);
     } else {
       if (span.e === wqAbs(d.ref.end_date, d.ref.end_quarter ?? 3)) return;
-      tasks.push(wqJson(`/schedule-entries/${d.ref.id}`, 'PATCH', { end_date: E.d, end_quarter: E.q }));
+      run = () => wqJson(`/schedule-entries/${d.ref.id}`, 'PATCH', { end_date: E.d, end_quarter: E.q });
     }
   } else if (d.kind === 'assist' || d.kind === 'note') {
     const x = d.ref;
     if (opId === x.user_id && span.s === wqAbs(x.start_date, x.start_quarter ?? 0)) return;
-    tasks.push(wqJson(`/schedule-entries/${x.id}`, 'PATCH', { user_id: opId, start_date: S.d, start_quarter: S.q, end_date: E.d, end_quarter: E.q }));
+    run = () => wqJson(`/schedule-entries/${x.id}`, 'PATCH', { user_id: opId, start_date: S.d, start_quarter: S.q, end_date: E.d, end_quarter: E.q });
   } else {
+    // A work order bar (or one dragged in from the unassigned list / no-dates tray). Only this
+    // operator's steps and this operator's dates change; anyone else on the work order stays put.
     const w = d.ref;
     const reassign = opId !== w.opId;
-    if (reassign) {
-      // A step shared by several operators keeps the others; only this row's operator is swapped
-      const ids = (w.assigneeIds || []).filter(id => id !== w.opId);
-      if (opId) ids.push(opId);
-      tasks.push(wqPatchStages(w.stageIds, ids.length > 1
-        ? { assigned_to_ids: ids, log_message: 'Reassigned via Work Queue schedule' }
-        : { assigned_to_id: ids[0] || null, log_message: 'Reassigned via Work Queue schedule' }));
-    }
     const dated = d.kind === 'wo' && w.end;
     const moved = !dated || span.s !== wqAbs(w.start, w.sq) || span.e !== wqAbs(w.end, w.eq);
     if (!moved && !reassign) return;
-    // No dates yet (or dragged in from the unassigned panel): length comes from the work content
-    if (moved) tasks.push(wqJson(`/work-orders/${w.woId}`, 'PATCH', { planned_start_date: S.d, planned_start_quarter: S.q, planned_completion_date: E.d, planned_completion_quarter: E.q }));
+    run = async () => {
+      // Ctrl-drop on another row shares the steps instead of handing them over
+      if (reassign) await wqReassign(w.stageIds, { remove_user_id: share ? null : (w.opId || null), add_user_ids: [opId] });
+      // No dates yet: the length comes from the work content. A plain hand-over keeps its dates server-side.
+      if (moved || (reassign && share)) await wqSetWindow(w.woId, opId, S, E);
+    };
   }
   try {
-    await Promise.all(tasks);
+    await run();
   } catch (err) {
     console.error(err);
     alert('Failed to update the schedule.');
@@ -1155,11 +1183,8 @@ async function wqSchedDropPanel(e) {
   if (!d || d.mode !== 'move' || d.kind === 'panel') return;
   try {
     if (d.kind === 'wo') {
-      // A step shared by several operators keeps the others
-      const w = d.ref, ids = (w.assigneeIds || []).filter(id => id !== w.opId);
-      await wqPatchStages(w.stageIds, ids.length > 1
-        ? { assigned_to_ids: ids, log_message: 'Unassigned via Work Queue schedule' }
-        : { assigned_to_id: ids[0] || null, log_message: 'Unassigned via Work Queue schedule' });
+      // Co-assignees keep the steps; only this row's operator comes off
+      await wqReassign(d.ref.stageIds, { remove_user_id: d.ref.opId });
     } else {
       await wqJson(`/schedule-entries/${d.ref.id}`, 'DELETE', {});
     }
@@ -1177,19 +1202,75 @@ function wqSchedMenu(e, items) {
   document.getElementById('wq-sched-ctx')?.remove();
   const m = document.createElement('div');
   m.id = 'wq-sched-ctx';
-  m.className = 'dropdown-menu show';
-  m.style.cssText = `position:fixed;z-index:1080;left:${e.clientX}px;top:${e.clientY}px;max-height:60vh;overflow:auto`;
+  m.className = 'dropdown-menu show wq-ctx';
+  m.style.cssText = `position:fixed;z-index:1080;left:${e.clientX}px;top:${e.clientY}px;max-height:70vh;overflow:auto`;
   items.forEach(it => {
+    if (it.divider) { const hr = document.createElement('div'); hr.className = 'dropdown-divider'; m.appendChild(hr); return; }
     const el = document.createElement(it.header ? 'h6' : 'button');
     el.className = it.header ? 'dropdown-header' : 'dropdown-item ' + (it.cls || '');
-    el.textContent = it.label;
+    if (it.icon) { const i = document.createElement('i'); i.className = 'ti ti-' + it.icon; el.appendChild(i); }
+    el.appendChild(document.createTextNode(it.label));
     if (!it.header) el.onclick = () => { m.remove(); it.fn(); };
     m.appendChild(el);
   });
   document.body.appendChild(m);
-  const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } };
-  setTimeout(() => document.addEventListener('click', close), 0);
+  // Keep it on screen
+  const r = m.getBoundingClientRect();
+  if (r.right > innerWidth - 8) m.style.left = Math.max(8, innerWidth - r.width - 8) + 'px';
+  if (r.bottom > innerHeight - 8) m.style.top = Math.max(8, innerHeight - r.height - 8) + 'px';
+  const close = ev => { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('mousedown', close); } };
+  setTimeout(() => document.addEventListener('mousedown', close), 0);
 }
+
+const wqCanEdit = () => typeof hasPermission !== 'function' || hasPermission('fabrication.work-orders.edit');
+
+// The work-order part of every right-click menu (cards, bars, the unassigned list)
+function wqWoMenuItems(woId, extra = []) {
+  const c = wqAllCards().find(x => x.work_order_id === woId);
+  const items = [
+    { header: true, label: c ? woLabel(c.job_name, c.release_token ?? c.release_label) : 'Work order' },
+    { label: 'Work order details…', icon: 'file-description', fn: () => wqWoOpen(woId) },
+  ];
+  if (wqCanEdit()) {
+    items.push({ label: 'Set dates…', icon: 'calendar-event', fn: () => wqDatesOpen(woId) });
+    if (wqAllCards().some(x => x.work_order_id === woId && !x.stageless)) items.push({ label: 'Assign operators…', icon: 'users', fn: () => wqAssignOpen(woId) });
+    items.push(...extra);
+  }
+  items.push({ divider: true });
+  const sel = document.getElementById('wq-wo');
+  if (sel.value !== String(woId) && [...sel.options].some(o => o.value === String(woId))) {
+    items.push({ label: 'Show only this work order', icon: 'filter', fn: () => { sel.value = String(woId); loadBoard(); } });
+  } else if (sel.value === String(woId)) {
+    items.push({ label: 'Show all work orders', icon: 'filter-off', fn: () => { sel.value = ''; loadBoard(); } });
+  }
+  items.push({ label: 'Open in Work Orders', icon: 'external-link', fn: () => window.open('/fabrication/work-orders?wo=' + woId, '_blank') });
+  return items;
+}
+
+// Board cards: right-click, or the ⋮ button
+function wqCardMenu(e, cardEl) {
+  const woId = +cardEl.dataset.wo;
+  if (!woId) return;
+  const stageId = cardEl.dataset.stage ? +cardEl.dataset.stage : null;
+  const opId = +(cardEl.closest('.wq-col')?.dataset.op || 0);
+  wqSchedMenu(e, wqWoMenuItems(woId, stageId ? [{ label: 'Operators on this step…', icon: 'user-plus', fn: () => wqEditAssignees(stageId, opId) }] : []));
+}
+document.getElementById('wq-board').addEventListener('contextmenu', e => {
+  const card = e.target.closest('.wq-card');
+  if (!card || e.target.closest('input, select, textarea')) return;
+  wqCardMenu(e, card);
+});
+document.getElementById('wq-board').addEventListener('click', e => {
+  const more = e.target.closest('.wq-more');
+  if (more) wqCardMenu(e, more.closest('.wq-card'));
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const menu = document.getElementById('wq-sched-ctx');
+  if (menu) { menu.remove(); return; }
+  const dyn = [...document.querySelectorAll('.wq-dyn')].pop();
+  if (dyn) dyn.remove();
+});
 
 async function wqSchedCreate(body) {
   try { await wqJson('/schedule-entries', 'POST', body); } catch (err) { console.error(err); alert('Failed to save.'); }
@@ -1202,7 +1283,7 @@ async function wqSchedDelete(id) {
 
 function wqSchedPanelMenu(e, i) {
   const w = wqSchedReg[i].ref;
-  wqSchedMenu(e, [{ label: 'Assign part of job…', fn: () => wqScopeOpen(w.woId, w.label, { unassignedOnly: true }) }]);
+  wqSchedMenu(e, wqWoMenuItems(w.woId, [{ label: 'Assign part of job…', icon: 'layout-list', fn: () => wqScopeOpen(w.woId, w.label, { unassignedOnly: true }) }]));
 }
 
 function wqSchedCellMenu(e, opId, day) {
@@ -1216,22 +1297,30 @@ function wqSchedBarMenu(e, i) {
   const it = wqSchedReg[i];
   const day = wqSchedGrabDay(e, it) || it.keys[0];
   const rowUser = it.opId;
-  const items = [];
+  const edit = wqCanEdit();
   if (it.kind === 'note') {
-    items.push({ label: 'Edit note…', fn: async () => {
-      const note = (prompt('Note:', it.ref.note) || '').trim();
-      if (!note) return;
-      try { await wqJson(`/schedule-entries/${it.ref.id}`, 'PATCH', { note }); } catch (err) { alert('Failed to save.'); }
-      await loadBoard();
-    } });
-  } else {
-    const woId = it.kind === 'assist' ? it.ref.work_order_id : it.ref.woId;
-    items.push({ header: true, label: `Add team member for ${new Date(day + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}` });
+    if (!edit) return;
+    wqSchedMenu(e, [
+      { label: 'Edit note…', icon: 'pencil', fn: async () => {
+        const note = (prompt('Note:', it.ref.note) || '').trim();
+        if (!note) return;
+        try { await wqJson(`/schedule-entries/${it.ref.id}`, 'PATCH', { note }); } catch (err) { alert('Failed to save.'); }
+        await loadBoard();
+      } },
+      { label: 'Remove', icon: 'trash', cls: 'text-danger', fn: () => wqSchedDelete(it.ref.id) },
+    ]);
+    return;
+  }
+  const woId = it.kind === 'assist' ? it.ref.work_order_id : it.ref.woId;
+  const items = wqWoMenuItems(woId, it.kind === 'wo'
+    ? [{ label: 'Assign part of job to a user…', icon: 'layout-list', fn: () => wqScopeOpen(it.ref.woId, it.ref.label) }] : []);
+  if (edit && it.kind === 'assist') items.push({ label: 'Remove assist', icon: 'trash', cls: 'text-danger', fn: () => wqSchedDelete(it.ref.id) });
+  if (edit && day) {
+    items.push({ divider: true });
+    items.push({ header: true, label: `Add a helper for ${new Date(day + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}` });
     (wqData.fab_users || []).filter(u => u.id !== rowUser).forEach(u =>
       items.push({ label: u.name, fn: () => wqSchedCreate({ user_id: u.id, work_order_id: woId, start_date: day, end_date: day }) }));
   }
-  if (it.kind === 'wo') items.push({ label: 'Assign part of job to a user…', fn: () => wqScopeOpen(it.ref.woId, it.ref.label) });
-  if (it.kind === 'assist' || it.kind === 'note') items.push({ label: 'Remove', cls: 'text-danger', fn: () => wqSchedDelete(it.ref.id) });
   wqSchedMenu(e, items);
 }
 
@@ -1293,7 +1382,7 @@ function wqScopeOpen(woId, label, opts = {}) {
         .filter(id => !onlyOpen || stages.get(id).open);
       if (!ids.length) return;
       try {
-        await wqPatchStages(ids, { assigned_to_id: +el.querySelector('#wq-scope-user').value, log_message: 'Assigned via Work Queue schedule' });
+        await wqReassign(ids, { set_user_ids: [+el.querySelector('#wq-scope-user').value] });
       } catch (err) { console.error(err); alert('Failed to assign.'); }
       el.remove();
       await loadBoard();
@@ -1303,125 +1392,331 @@ function wqScopeOpen(woId, label, opts = {}) {
   draw();
 }
 
-// ── Bulk assign (all steps of a given name, across a work order) ────────
+// Every card on the board once
 function wqAllCards() {
   if (!wqData) return [];
   const cards = [...(wqData.unassigned?.stages || [])];
   (wqData.operators || []).forEach(o => cards.push(...(o.stages || [])));
   // A stage shared by several operators is listed under each of them — count it once
   const seen = new Set();
-  return cards.filter(c => { const k = c.stage_ids.join(','); return !seen.has(k) && seen.add(k); });
+  return cards.filter(c => { const k = c.stageless ? 'e' + c.elevation_ids.join(',') : c.stage_ids.join(','); return !seen.has(k) && seen.add(k); });
 }
 
-function wqOpenBulk() {
-  const cards = wqAllCards();
-  const byWo = new Map();
-  // "Job name – release" (the release token alone, not the job-number prefix)
-  cards.forEach(c => {
-    if (c.work_order_id && !byWo.has(c.work_order_id)) {
-      byWo.set(c.work_order_id, woLabel(c.job_name, c.release_token ?? c.release_label));
-    }
+// ── Lookups shared by the menus and dialogs ─────────────────────────────
+function wqUser(id) {
+  return (wqData?.fab_users || []).find(u => u.id === id)
+    || (wqData?.operators || []).find(o => o.user.id === id)?.user
+    || { id, name: 'Unknown', initials: '?' };
+}
+
+// One operator's own planning window on a work order, if they have one
+function wqWin(woId, userId) {
+  return (wqData?.operator_windows || []).find(w => w.work_order_id === woId && w.user_id === userId) || null;
+}
+
+// Every open stage on the board once, with exactly who is on it (a card only carries the union for its step)
+function wqStageIndex() {
+  const idx = new Map();
+  const add = (c, uid) => (c.stage_ids || []).forEach((id, i) => {
+    const s = idx.get(id) || idx.set(id, {
+      id, woId: c.work_order_id, step: c.name, scope: c.stage_scopes?.[i] || 'Other', users: new Set(),
+    }).get(id);
+    if (uid) s.users.add(uid);
   });
-
-  const sel = document.getElementById('wq-bulk-wo');
-  const currentWo = document.getElementById('wq-wo').value;
-  sel.innerHTML = [...byWo.entries()]
-    .map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join('');
-  if (!sel.options.length) {
-    document.getElementById('wq-bulk-rows').innerHTML = '<div class="text-muted">No work orders on the board to assign from.</div>';
-  } else {
-    sel.value = currentWo && byWo.has(parseInt(currentWo)) ? currentWo : sel.options[0].value;
-  }
-  document.getElementById('wq-bulk-status').textContent = '';
-  document.getElementById('wq-bulk-overlay').style.display = 'flex';
-  wqBulkRenderRows();
+  (wqData?.unassigned?.stages || []).forEach(c => add(c, 0));
+  (wqData?.operators || []).forEach(o => (o.stages || []).forEach(c => add(c, o.user.id)));
+  return idx;
 }
 
-function wqCloseBulk() {
-  document.getElementById('wq-bulk-overlay').style.display = 'none';
+// work order id → Set of operator ids holding open steps on it
+function wqWoOperators() {
+  const m = new Map();
+  wqStageIndex().forEach(s => { const set = m.get(s.woId) || m.set(s.woId, new Set()).get(s.woId); s.users.forEach(u => set.add(u)); });
+  return m;
 }
 
-function wqEqSet(a, b) {
-  const x = [...new Set((a || []).map(Number))].sort((m, n) => m - n);
-  const y = [...new Set((b || []).map(Number))].sort((m, n) => m - n);
-  return x.length === y.length && x.every((v, i) => v === y[i]);
+function wqDialog(id, width, html) {
+  document.getElementById(id)?.remove();
+  const el = document.createElement('div');
+  el.id = id;
+  el.className = 'wq-overlay wq-dyn';
+  el.style.display = 'flex';
+  el.innerHTML = `<div class="card" style="width:min(${width}px, 94vw); max-height:90vh; display:flex; flex-direction:column">${html}</div>`;
+  el.addEventListener('mousedown', e => { if (e.target === el) el.remove(); });
+  document.body.appendChild(el);
+  return el;
 }
 
-function wqBulkRenderRows() {
-  const woId = document.getElementById('wq-bulk-wo').value;
-  const container = document.getElementById('wq-bulk-rows');
-  if (!woId) { container.innerHTML = ''; return; }
+const wqFmtDay = k => k ? new Date(k + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
+const wqHrs = m => m == null ? '—' : `${(m / 60).toFixed(1)} h`;
 
-  const cards = wqAllCards().filter(c => String(c.work_order_id) === String(woId));
-  const byName = new Map();
-  cards.forEach(c => {
-    if (!byName.has(c.name)) byName.set(c.name, []);
-    byName.get(c.name).push(c);
-  });
+// ── Work order details (read-only summary, straight from the work order) ──
+const WQ_STAGE_CLS = { complete: 'bg-green-lt text-green', in_progress: 'bg-yellow-lt text-yellow', blocked: 'bg-red-lt text-red', on_hold: 'bg-orange-lt text-orange', not_required: 'bg-secondary-lt text-secondary text-decoration-line-through', pending: 'bg-secondary-lt text-secondary' };
 
-  const users = wqData.fab_users || [];
-
-  container.innerHTML = [...byName.entries()].map(([name, group]) => {
-    // The group's current assignees, if every step in it shares the same set.
-    const first = (group[0].assignee_ids || []).map(Number);
-    const uniform = group.every(c => wqEqSet(c.assignee_ids, first)) ? first : [];
-    const opts = users.map(u =>
-      `<option value="${u.id}" ${uniform.includes(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
-    const nm = esc(name).replace(/"/g, '&quot;');
-    return `<div class="row align-items-start mb-2 pb-2 border-bottom" data-row>
-      <div class="col-5">
-        <label class="form-check mb-0">
-          <input class="form-check-input" type="checkbox" data-row-toggle
-                 onchange="this.closest('[data-row]').querySelector('select').disabled = !this.checked">
-          <span class="form-check-label"><strong>${esc(name)}</strong>
-            <span class="text-muted small">(${group.length})</span></span>
-        </label>
-      </div>
-      <div class="col-7">
-        <select multiple size="${Math.min(Math.max(users.length, 2), 5)}"
-                class="form-select form-select-sm" data-stage-name="${nm}" disabled>${opts}</select>
-        <div class="form-text">Ctrl/Cmd-click for more than one. None selected = unassign.</div>
-      </div>
-    </div>`;
-  }).join('') || '<div class="text-muted">No steps found on this work order.</div>';
-}
-
-async function wqApplyBulk() {
-  const woId = document.getElementById('wq-bulk-wo').value;
-  if (!woId) return;
-
-  const assignments = [];
-  document.querySelectorAll('#wq-bulk-rows [data-row]').forEach(row => {
-    if (!row.querySelector('[data-row-toggle]')?.checked) return;
-    const sel = row.querySelector('select[data-stage-name]');
-    assignments.push({
-      stage_name: sel.dataset.stageName,
-      assigned_to_ids: [...sel.selectedOptions].map(o => parseInt(o.value)),
-    });
-  });
-
-  const status = document.getElementById('wq-bulk-status');
-  if (!assignments.length) {
-    status.textContent = 'Tick at least one step to change.';
+async function wqWoOpen(woId) {
+  const el = wqDialog('wq-wo-overlay', 960, '<div class="card-body text-center py-5"><div class="spinner-border" role="status"></div></div>');
+  const card = el.querySelector('.card');
+  let wo;
+  try {
+    const r = await API('/work-orders/' + woId, { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error('load failed');
+    wo = await r.json();
+  } catch (err) {
+    console.error(err);
+    card.innerHTML = '<div class="card-body"><div class="text-danger mb-3">Could not load this work order.</div><button class="btn" data-close>Close</button></div>';
+    card.querySelector('[data-close]').onclick = () => el.remove();
     return;
   }
+  if (!el.isConnected) return;
 
-  status.textContent = 'Applying…';
-  try {
-    const r = await API('/work-order-stages/bulk-assign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ work_order_id: parseInt(woId), assignments }),
-    });
-    if (!r.ok) throw new Error('bulk assign failed');
-    const data = await r.json();
-    status.textContent = `Updated ${data.updated} step(s).`;
-    await loadBoard();
-    setTimeout(wqCloseBulk, 700);
-  } catch (e) {
-    console.error(e);
-    status.textContent = 'Failed to apply bulk assignment.';
+  const edit = wqCanEdit();
+  const title = woLabel(wo.job?.job_name, wo.release_token);
+  const overdue = isPast(wo.due_date) && wo.status !== 'complete';
+  const fact = (k, v) => `<div><div class="k">${k}</div><div>${v}</div></div>`;
+  const ops = [...(wqWoOperators().get(woId) || [])].map(wqUser);
+  const opRows = ops.map(u => {
+    const w = wqWin(woId, u.id);
+    const from = w ? w.start_date : wo.planned_start_date, to = w ? w.end_date : wo.planned_completion_date;
+    return `<span class="badge bg-blue-lt text-blue me-1 mb-1" title="${esc(u.name)}">${esc(u.name)}${to ? ` · ${esc(wqFmtDay(from || to))} → ${esc(wqFmtDay(to))}` : ''}</span>`;
+  }).join('') || '<span class="text-secondary">Nobody yet</span>';
+
+  const steps = (wo.steps || []).map(s =>
+    `<span class="badge wq-stage-pill ${WQ_STAGE_CLS[s.status] || WQ_STAGE_CLS.pending}" title="${esc(s.status.replace('_', ' '))}${s.completed_by_name ? ' · ' + esc(s.completed_by_name) : ''}">${esc(s.name)}</span>`).join('');
+
+  const elevs = (wo.elevations || []).map(e => {
+    const stages = (e.stages || []).map(s => {
+      const who = (s.assignee_names || []).join(', ');
+      const done = s.status === 'complete' && s.completed_by_name ? ` · done by ${s.completed_by_name}` : '';
+      return `<span class="badge wq-stage-pill ${WQ_STAGE_CLS[s.status] || WQ_STAGE_CLS.pending}" title="${esc(s.status.replace('_', ' '))}${who ? ' · ' + esc(who) : ''}${esc(done)}">${esc(s.name)}${who && !['complete', 'not_required'].includes(s.status) ? ` <span class="fw-normal">· ${esc(who)}</span>` : ''}</span>`;
+    }).join('') || '<span class="text-secondary small">No steps</span>';
+    return `<tr class="${e.date_completed ? 'text-secondary' : ''}">
+      <td class="text-nowrap">${e.date_completed ? '<i class="ti ti-check text-green me-1"></i>' : ''}<strong>${esc(e.elevation_tag || '—')}</strong></td>
+      <td>${esc(e.elevation_type?.name || '')}</td>
+      <td class="text-end">${e.quantity ?? ''}</td>
+      <td class="text-nowrap">${e.date_completed ? 'done ' + esc(wqFmtDay(e.date_completed)) : esc(wqFmtDay(e.date_requested))}</td>
+      <td>${stages}</td>
+    </tr>`;
+  }).join('');
+
+  const drawings = (wo.drawings || []).map(d =>
+    `<a class="btn btn-sm btn-outline-secondary me-1 mb-1" href="${esc(d.download_url)}" target="_blank" rel="noopener"><i class="ti ti-file me-1"></i>${esc(d.original_name)}</a>`).join('');
+  const blockers = (wo.completion_blockers || []).map(b => `<li>${esc(typeof b === 'string' ? b : (b.message || JSON.stringify(b)))}</li>`).join('');
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <h3 class="card-title mb-0">${esc(title)} <span class="badge bg-secondary-lt text-secondary ms-1">${esc(wo.status_label || wo.status || '')}</span>
+          ${wo.priority != null ? `<span class="badge bg-blue-lt text-blue ms-1">#${wo.priority}${wo.priority_locked ? ' <i class="ti ti-pin"></i>' : ''}</span>` : ''}</h3>
+        <div class="text-secondary small">${esc(wo.release_label || '')}${wo.job?.project_manager ? ' · PM ' + esc(wo.job.project_manager) : ''}${wo.job?.superintendent ? ' · Super ' + esc(wo.job.superintendent) : ''}</div>
+      </div>
+      <button type="button" class="btn-close ms-auto" data-close></button>
+    </div>
+    <div class="card-body" style="overflow-y:auto">
+      <div class="wq-facts mb-3">
+        ${fact('Due', `<span class="${overdue ? 'text-danger fw-bold' : ''}">${esc(wqFmtDay(wo.due_date))}</span>`)}
+        ${fact('Planned', wo.planned_completion_date || wo.planned_start_date ? `${esc(wqFmtDay(wo.planned_start_date || wo.planned_completion_date))} → ${esc(wqFmtDay(wo.planned_completion_date))}` : '<span class="text-secondary">Not scheduled</span>')}
+        ${fact('Issued', esc(wqFmtDay(wo.date_issued)))}
+        ${fact('Estimate', `${wqHrs(wo.estimated_minutes)} <span class="text-secondary small">(${wqHrs(wo.estimated_minutes_remaining)} left)</span>`)}
+        ${fact('Elevations', `${(wo.elevations || []).filter(e => e.date_completed).length} of ${(wo.elevations || []).length} complete`)}
+        ${fact('Material', esc(wo.material_delivery || '—'))}
+      </div>
+      <div class="mb-3"><div class="subheader mb-1">Operators on open steps</div>${opRows}</div>
+      ${wo.notes ? `<div class="mb-3"><div class="subheader mb-1">Notes</div><div style="white-space:pre-wrap">${esc(wo.notes)}</div></div>` : ''}
+      ${steps ? `<div class="mb-3"><div class="subheader mb-1">Job steps</div>${steps}</div>` : ''}
+      ${blockers ? `<div class="mb-3"><div class="subheader mb-1">Before it can be completed</div><ul class="mb-0 small">${blockers}</ul></div>` : ''}
+      <div class="subheader mb-1">Elevations</div>
+      <div class="table-responsive mb-3"><table class="table table-sm table-vcenter mb-0">
+        <thead><tr><th>Tag</th><th>Type</th><th class="text-end">Qty</th><th>Needed</th><th>Steps</th></tr></thead>
+        <tbody>${elevs || '<tr><td colspan="5" class="text-secondary">No elevations.</td></tr>'}</tbody>
+      </table></div>
+      ${drawings ? `<div class="subheader mb-1">Drawings</div><div>${drawings}</div>` : ''}
+    </div>
+    <div class="card-footer d-flex flex-wrap gap-2">
+      ${edit ? `<button class="btn btn-outline-primary" data-act="dates"><i class="ti ti-calendar-event me-1"></i>Set dates</button>
+      <button class="btn btn-outline-primary" data-act="assign"><i class="ti ti-users me-1"></i>Assign operators</button>` : ''}
+      <a class="btn btn-outline-secondary ms-auto" href="/fabrication/work-orders?wo=${woId}" target="_blank" rel="noopener"><i class="ti ti-external-link me-1"></i>Open in Work Orders</a>
+      <button class="btn" data-close>Close</button>
+    </div>`;
+  card.querySelectorAll('[data-close]').forEach(b => b.onclick = () => el.remove());
+  card.querySelector('[data-act="dates"]')?.addEventListener('click', () => { el.remove(); wqDatesOpen(woId); });
+  card.querySelector('[data-act="assign"]')?.addEventListener('click', () => { el.remove(); wqAssignOpen(woId); });
+}
+
+// ── Dates: due date and planned window; one window per operator when the work order is shared ──
+function wqDatesOpen(woId) {
+  const c = wqAllCards().find(x => x.work_order_id === woId);
+  if (!c) return;
+  const ops = [...(wqWoOperators().get(woId) || [])].map(wqUser);
+  const split = ops.length > 1;
+  const woWin = { s: c.planned_start_date || '', e: c.planned_completion_date || '', sq: c.planned_start_quarter ?? 0, eq: c.planned_completion_quarter ?? 3 };
+  const eff = uid => { const w = wqWin(woId, uid); return w ? { s: w.start_date, e: w.end_date, sq: w.start_quarter, eq: w.end_quarter } : { ...woWin }; };
+
+  const el = wqDialog('wq-dates-overlay', 560, `
+    <div class="card-header"><div><h3 class="card-title mb-0">Dates</h3><div class="text-secondary small">${esc(woLabel(c.job_name, c.release_token ?? c.release_label))}</div></div>
+      <button type="button" class="btn-close ms-auto" data-close></button></div>
+    <div class="card-body" style="overflow-y:auto">
+      <div class="row g-2 mb-3">
+        <div class="col-sm-4"><label class="form-label">Due date</label><input type="date" class="form-control" id="wq-d-due" value="${c.due_date || ''}"></div>
+        <div class="col-sm-4"><label class="form-label">${split ? 'Everyone starts' : 'Planned start'}</label><input type="date" class="form-control" id="wq-d-start" value="${split ? '' : woWin.s}"></div>
+        <div class="col-sm-4"><label class="form-label">${split ? 'Everyone finishes' : 'Planned finish'}</label><input type="date" class="form-control" id="wq-d-end" value="${split ? '' : woWin.e}"></div>
+      </div>
+      ${split ? `<div class="subheader mb-1">Per operator</div>
+        <div class="text-secondary small mb-2">Each operator has their own dates on the schedule. Fill the two fields above to give everyone the same ones.</div>
+        ${ops.map(u => { const w = eff(u.id); return `<div class="row g-2 align-items-center mb-2" data-op="${u.id}">
+          <div class="col-4 text-truncate" title="${esc(u.name)}"><span class="badge bg-blue-lt text-blue me-1">${esc(u.initials || '?')}</span>${esc(u.name)}</div>
+          <div class="col-4"><input type="date" class="form-control form-control-sm" data-f="s" value="${w.s}"></div>
+          <div class="col-4"><input type="date" class="form-control form-control-sm" data-f="e" value="${w.e}"></div>
+        </div>`; }).join('')}` : (ops.length ? `<div class="text-secondary small">On ${esc(ops[0].name)}'s row of the schedule.</div>` : '<div class="text-secondary small">Nobody is assigned yet — these dates apply once someone is.</div>')}
+    </div>
+    <div class="card-footer d-flex align-items-center gap-2">
+      <div class="text-danger small flex-fill" id="wq-d-status"></div>
+      <button class="btn btn-link" data-close>Cancel</button>
+      <button class="btn btn-primary" id="wq-d-save">Save</button>
+    </div>`);
+  el.querySelectorAll('[data-close]').forEach(b => b.onclick = () => el.remove());
+  const $ = q => el.querySelector(q);
+  if (split) {
+    $('#wq-d-start').onchange = ev => el.querySelectorAll('[data-f="s"]').forEach(i => { i.value = ev.target.value; });
+    $('#wq-d-end').onchange = ev => el.querySelectorAll('[data-f="e"]').forEach(i => { i.value = ev.target.value; });
   }
+
+  $('#wq-d-save').onclick = async () => {
+    const status = $('#wq-d-status');
+    const due = $('#wq-d-due').value;
+    const dueBody = due !== (c.due_date || '') ? { due_date: due || null } : {};
+    const writes = [];
+    if (!split) {
+      let s = $('#wq-d-start').value, e = $('#wq-d-end').value;
+      if (s && !e) e = s;
+      if (e && !s) s = e;
+      if (s > e) { status.textContent = 'The finish is before the start.'; return; }
+      const body = { ...dueBody };
+      if (s !== woWin.s || e !== woWin.e) {
+        Object.assign(body, {
+          planned_start_date: s || null, planned_start_quarter: s && s === woWin.s ? woWin.sq : 0,
+          planned_completion_date: e || null, planned_completion_quarter: e && e === woWin.e ? woWin.eq : 3,
+        });
+      }
+      if (Object.keys(body).length) writes.push(() => wqJson(`/work-orders/${woId}`, 'PATCH', body));
+    } else {
+      if (Object.keys(dueBody).length) writes.push(() => wqJson(`/work-orders/${woId}`, 'PATCH', dueBody));
+      for (const row of el.querySelectorAll('[data-op]')) {
+        const uid = +row.dataset.op, was = eff(uid);
+        let s = row.querySelector('[data-f="s"]').value, e = row.querySelector('[data-f="e"]').value;
+        if (s && !e) e = s;
+        if (e && !s) s = e;
+        if (!s) { if (was.s || was.e) { status.textContent = `Give ${wqUser(uid).name} a start and finish (dates can be moved, not cleared, here).`; return; } continue; }
+        if (s > e) { status.textContent = `${wqUser(uid).name}: the finish is before the start.`; return; }
+        // Untouched rows are left alone; the server pins them where they are when someone else's dates change
+        if (s === was.s && e === was.e) continue;
+        writes.push(() => wqSetWindow(woId, uid, { d: s, q: s === was.s ? was.sq : 0 }, { d: e, q: e === was.e ? was.eq : 3 }));
+      }
+    }
+    if (!writes.length) { el.remove(); return; }
+    $('#wq-d-save').disabled = true;
+    try {
+      for (const w of writes) await w(); // in order: each operator write re-derives the work order's envelope
+      el.remove();
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Failed to save the dates.';
+      $('#wq-d-save').disabled = false;
+    }
+    await loadBoard();
+  };
+}
+
+// ── Assign operators: one work order, steps down the side, operators across ──
+// Tick = on every elevation's stage of that step; dash = on some of them. Only the boxes you change are written.
+function wqAssignOpen(woId) {
+  const wos = new Map();
+  wqAllCards().filter(c => !c.stageless && c.work_order_id).forEach(c => {
+    if (!wos.has(c.work_order_id)) wos.set(c.work_order_id, woLabel(c.job_name, c.release_token ?? c.release_label));
+  });
+  if (!wos.size) { alert('No open steps on the board to assign.'); return; }
+  woId = +woId || +document.getElementById('wq-wo').value || 0;
+  if (!wos.has(woId)) woId = wos.keys().next().value;
+
+  const el = wqDialog('wq-assign-overlay', 860, '');
+  const card = el.querySelector('.card');
+  let steps = [];
+
+  const draw = () => {
+    const mine = [...wqStageIndex().values()].filter(s => s.woId === woId);
+    const byStep = new Map();
+    mine.forEach(s => (byStep.get(s.step) || byStep.set(s.step, []).get(s.step)).push(s));
+    steps = [...byStep.entries()].map(([name, list]) => ({ name, list, first: Math.min(...list.map(s => s.id)) })).sort((a, b) => a.first - b.first);
+    // Active fab users, plus anyone inactive still holding one of these steps
+    const users = [...(wqData.fab_users || [])];
+    mine.forEach(s => s.users.forEach(uid => { if (!users.some(u => u.id === uid)) users.push(wqUser(uid)); }));
+    const gated = new Set(wqAllCards().filter(c => c.work_order_id === woId && c.gated).map(c => c.name));
+
+    card.innerHTML = `
+      <div class="card-header gap-2">
+        <h3 class="card-title">Assign operators</h3>
+        <select class="form-select form-select-sm" id="wq-a-wo" style="width:auto; max-width:60%">${[...wos.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, label]) => `<option value="${id}" ${id === woId ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+        <button type="button" class="btn-close ms-auto" data-close></button>
+      </div>
+      <div class="card-body p-0" style="overflow:auto">
+        <table class="table table-sm table-hover wq-matrix mb-0">
+          <thead><tr><th>Step</th>${users.map(u => `<th data-col="${u.id}" title="${esc(u.name)} — click to tick or clear the whole column">${esc(u.initials || u.name)}<div class="fw-normal small text-secondary">${esc(u.name.split(' ')[0])}</div></th>`).join('')}</tr></thead>
+          <tbody>${steps.map((st, i) => `<tr>
+            <td><strong>${esc(st.name)}</strong> <span class="text-secondary small">· ${st.list.length} elevation${st.list.length === 1 ? '' : 's'}</span>${gated.has(st.name) ? ' <i class="ti ti-lock text-secondary" title="Waiting on an earlier step"></i>' : ''}</td>
+            ${users.map(u => {
+              const n = st.list.filter(s => s.users.has(u.id)).length;
+              const init = n === 0 ? 'none' : n === st.list.length ? 'all' : 'some';
+              return `<td><input type="checkbox" class="form-check-input m-0" data-step="${i}" data-user="${u.id}" data-init="${init}" ${init === 'all' ? 'checked' : ''}></td>`;
+            }).join('')}
+          </tr>`).join('') || `<tr><td colspan="${users.length + 1}" class="text-secondary">No open steps on this work order.</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div class="card-footer d-flex align-items-center gap-2">
+        <div class="text-secondary small flex-fill" id="wq-a-status">Tick several operators on a step to share it — it shows in each of their queues, and whoever completes it clears it for all.</div>
+        <button class="btn btn-link" data-scope>By scope…</button>
+        <button class="btn btn-link" data-close>Cancel</button>
+        <button class="btn btn-primary" id="wq-a-apply">Apply</button>
+      </div>`;
+    card.querySelectorAll('input[data-init="some"]').forEach(cb => { cb.indeterminate = true; });
+    card.querySelectorAll('[data-close]').forEach(b => b.onclick = () => el.remove());
+    card.querySelector('#wq-a-wo').onchange = ev => { woId = +ev.target.value; draw(); };
+    card.querySelector('[data-scope]').onclick = () => { el.remove(); wqScopeOpen(woId, wos.get(woId)); };
+    card.querySelectorAll('th[data-col]').forEach(th => th.onclick = () => {
+      const boxes = [...card.querySelectorAll(`input[data-user="${th.dataset.col}"]`)];
+      const on = !boxes.every(b => b.checked && !b.indeterminate);
+      boxes.forEach(b => { b.checked = on; b.indeterminate = false; });
+    });
+    card.querySelector('#wq-a-apply').onclick = apply;
+  };
+
+  const apply = async () => {
+    const jobs = [];
+    steps.forEach((st, i) => {
+      const adds = [], removes = [];
+      card.querySelectorAll(`input[data-step="${i}"]`).forEach(cb => {
+        const now = cb.indeterminate ? 'some' : cb.checked ? 'all' : 'none';
+        if (now === cb.dataset.init) return;
+        (now === 'all' ? adds : removes).push(+cb.dataset.user);
+      });
+      const ids = st.list.map(s => s.id);
+      if (adds.length) jobs.push(() => wqReassign(ids, { add_user_ids: adds }));
+      removes.forEach(uid => jobs.push(() => wqReassign(ids, { remove_user_id: uid })));
+    });
+    if (!jobs.length) { el.remove(); return; }
+    const btn = card.querySelector('#wq-a-apply'), status = card.querySelector('#wq-a-status');
+    btn.disabled = true;
+    status.textContent = 'Applying…';
+    try {
+      for (const j of jobs) await j();
+      el.remove();
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Failed to apply — refresh and check what changed.';
+      btn.disabled = false;
+    }
+    await loadBoard();
+  };
+
+  draw();
 }
 
 // ── Group assign: a whole job, or chosen steps of it (and a step across jobs) ──
@@ -1443,7 +1738,7 @@ function wqGrpScope(jobId) {
 
 function wqGrpOpenJob(jobId, presetStep) {
   const wo = document.getElementById('wq-wo').value;
-  const cards = wqAllCards().filter(c => c.business_job_id === jobId && (!wo || String(c.work_order_id) === wo));
+  const cards = wqAllCards().filter(c => !c.stageless && c.business_job_id === jobId && (!wo || String(c.work_order_id) === wo));
   if (!cards.length) return;
   const order = wqStepOrder(cards);
   const items = order.map(n => {
@@ -1542,11 +1837,15 @@ async function wqGrpApply() {
 // ── Per-stage assignee editor ─────────────────────────────────────────
 let wqAsStageIds = null;
 
-function wqEditAssignees(stageId) {
-  const card = wqAllCards().find(c => c.stage_id === stageId);
+function wqEditAssignees(stageId, opId) {
+  // The card as it appears in the column it was opened from, then the same step across every column
+  const col = opId ? (wqData.operators || []).find(o => o.user.id === opId)?.stages : null;
+  const card = (col || []).find(c => c.stage_id === stageId) || wqAllCards().find(c => c.stage_id === stageId);
   if (!card) return;
-  wqAsStageIds = card.stage_ids;
-  document.getElementById('wq-as-name').textContent = card.name;
+  const idx = wqStageIndex();
+  wqAsStageIds = [...idx.values()].filter(s => s.woId === card.work_order_id && s.step === card.name).map(s => s.id);
+  if (!wqAsStageIds.length) wqAsStageIds = card.stage_ids;
+  document.getElementById('wq-as-name').textContent = `${card.name} · ${woLabel(card.job_name, card.release_token ?? card.release_label)}`;
   document.getElementById('wq-as-status').textContent = '';
   const current = (card.assignee_ids || []).map(Number);
   document.getElementById('wq-as-list').innerHTML = (wqData.fab_users || []).map(u => `
@@ -1568,7 +1867,7 @@ async function wqSaveAssignees() {
   const status = document.getElementById('wq-as-status');
   status.textContent = 'Saving…';
   try {
-    await wqPatchStages(wqAsStageIds, { assigned_to_ids: ids, log_message: 'Assignees changed via Work Queue' });
+    await wqReassign(wqAsStageIds, { set_user_ids: ids });
     await loadBoard();
     wqCloseAssignees();
   } catch (e) {

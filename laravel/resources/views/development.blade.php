@@ -22,6 +22,11 @@
 
   <div class="page-body">
     <div id="devDenied" class="alert alert-danger" style="display:none;">This page is only available to administrators.</div>
+    <ul class="nav nav-tabs mb-3" id="devTabs" style="display:none;">
+      <li class="nav-item"><a class="nav-link active" href="#" data-tab="tracker">Tracker</a></li>
+      <li class="nav-item"><a class="nav-link" href="#" data-tab="rules"><i class="ti ti-ruler-measure me-1"></i>Cut-list rules</a></li>
+    </ul>
+    @include('development.cutlist-rules')
     <div id="devMain" style="display:none;">
       <div class="row row-cards mb-3">
         <div class="col-6 col-md-3"><div class="card card-sm"><div class="card-body"><div class="subheader">Open</div><div class="h2 mb-0" id="cntOpen">-</div></div></div></div>
@@ -187,7 +192,17 @@
   (window.sessionReady || Promise.resolve()).then(() => {
     if (typeof isAdmin === 'function' && !isAdmin()) { $('devDenied').style.display = 'block'; return; }
     $('devMain').style.display = 'block';
+    $('devTabs').style.display = 'flex';
     load();
+    const show = (tab) => {
+      document.querySelectorAll('#devTabs [data-tab]').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
+      $('devMain').style.display = tab === 'tracker' ? 'block' : 'none';
+      $('crPane').style.display = tab === 'rules' ? 'block' : 'none';
+      if (tab === 'rules') window.cutlistRulesShow();
+      history.replaceState(null, '', tab === 'rules' ? '#rules' : location.pathname);
+    };
+    $('devTabs').addEventListener('click', (e) => { const a = e.target.closest('[data-tab]'); if (a) { e.preventDefault(); show(a.dataset.tab); } });
+    if (location.hash === '#rules') show('rules');
   });
 })();
 </script>

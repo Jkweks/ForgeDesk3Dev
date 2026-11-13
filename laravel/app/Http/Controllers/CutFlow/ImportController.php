@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CutFlow;
 
 use App\Http\Controllers\Controller;
 use App\Services\CutFlow\CutlistIngestService;
+use App\Services\CutFlow\CutlistRuleEngine;
 use App\Services\CutFlow\SillQuarterPointService;
 use Illuminate\Http\Request;
 
@@ -26,7 +27,7 @@ class ImportController extends Controller
      * column, falling back to the uploaded filename) — one job per upload.
      * See CutlistIngestService::ingest() for the identity/merge rules.
      */
-    public function store(Request $request, CutlistIngestService $ingest, SillQuarterPointService $sillReport)
+    public function store(Request $request, CutlistIngestService $ingest, SillQuarterPointService $sillReport, CutlistRuleEngine $rules)
     {
         $request->validate([
             'csv' => 'required|file|mimes:csv,txt',
@@ -36,7 +37,17 @@ class ImportController extends Controller
         $rawRows = $ingest->parseCsv($file);
         $fallbackJobName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
 
+        // Admin-defined integrity rules (Development > Cut-list rules): errors stop the import, warnings ride along.
+        $findings = $rules->evaluate($rules->rowsFromRaw($rawRows));
+        $errors = array_values(array_filter($findings, fn ($f) => $f['severity'] === 'error'));
+        if ($errors) {
+            return back()->withErrors(['csv' => 'Not imported — the cut list failed integrity rules: '
+                .implode(' | ', array_map([CutlistRuleEngine::class, 'describe'], $errors))]);
+        }
+        $ruleWarnings = array_map([CutlistRuleEngine::class, 'describe'], $findings);
+
         $result = $ingest->ingest($rawRows, $fallbackJobName);
+        $result['warnings'] = array_merge($result['warnings'], $ruleWarnings);
 
         $sill = $sillReport->storeUpload($file, $result['job']->id);
         $note = $sill ? ' Sill quarter-point report is available from Fabrication > Cut Lists.' : '';

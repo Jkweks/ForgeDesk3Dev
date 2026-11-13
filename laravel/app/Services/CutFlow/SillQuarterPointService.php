@@ -23,8 +23,6 @@ class SillQuarterPointService
 {
     private const UNIT = 100_000_000;
 
-    private const DOOR_TAGS = ['{SIDELITE JAMB}', '{TERMINATING JAMB}'];
-
     /** Upper bound on receptor-piece assignments tried per elevation before the check is skipped. */
     private const MAX_PARTITIONS = 300_000;
 
@@ -37,12 +35,18 @@ class SillQuarterPointService
 
     public function __construct(?array $config = null, ?Closure $productWidth = null)
     {
-        $this->cfg = $config ?? config('sill_quarter_points');
+        $this->cfg = $config ?? SillQuarterPointSettings::effective();
         $this->productWidth = $productWidth ?? function (string $partNumber): ?float {
             $w = Product::where('part_number', $partNumber)->whereNotNull('dimension_width')->value('dimension_width');
 
             return $w === null ? null : (float) $w;
         };
+    }
+
+    /** Upper-cased cut-list "use" text that marks a kind of row (see config 'roles'). */
+    private function role(string $key): string
+    {
+        return strtoupper(trim($this->cfg['roles'][$key] ?? SillQuarterPointSettings::ROLE_DEFAULTS[$key]));
     }
 
     // ---------------------------------------------------------------- storage
@@ -117,7 +121,7 @@ class SillQuarterPointService
                 'bay' => ctype_digit($f[7]) ? (int) $f[7] : null,
                 'desc' => $base,
                 'tags' => $tags,
-                'door_member' => array_intersect($tags, self::DOOR_TAGS) !== [],
+                'door_member' => array_intersect($tags, array_map('strtoupper', $this->cfg['door_tags'] ?? SillQuarterPointSettings::DOOR_TAG_DEFAULTS)) !== [],
             ];
         }
         fclose($handle);
@@ -143,8 +147,8 @@ class SillQuarterPointService
 
         foreach ($groups as $group) {
             $label = trim($group['project'].' / '.$group['work_order'].' / '.$group['elevation'], ' /');
-            if (! collect($group['rows'])->contains(fn ($r) => $r['desc'] === 'SILL')) {
-                if (collect($group['rows'])->contains(fn ($r) => $r['desc'] === 'THRESHOLD' || str_contains($r['desc'], 'JAMB'))) {
+            if (! collect($group['rows'])->contains(fn ($r) => $r['desc'] === $this->role('sill'))) {
+                if (collect($group['rows'])->contains(fn ($r) => $r['desc'] === $this->role('threshold') || str_contains($r['desc'], 'JAMB'))) {
                     $out['no_sills'][] = $label;
                 }
 
@@ -189,7 +193,7 @@ class SillQuarterPointService
         $byDesc = fn (string $d, bool $withDoor = false) => $rows->filter(fn ($r) => $r['desc'] === $d && ($withDoor || ! $r['door_member']))->values();
 
         $sills = [];
-        foreach ($byDesc('SILL') as $r) {
+        foreach ($byDesc($this->role('sill')) as $r) {
             if ($r['bay'] === null) {
                 throw new ReviewException('A SILL row has no bay number.');
             }
@@ -199,20 +203,20 @@ class SillQuarterPointService
             $sills[$r['bay']] = $r;
         }
         $doorBays = [];
-        foreach ($byDesc('THRESHOLD', true) as $r) {
+        foreach ($byDesc($this->role('threshold'), true) as $r) {
             if ($r['bay'] !== null && ! isset($sills[$r['bay']])) {
                 $doorBays[$r['bay']] = true;
             }
         }
         $verts = [];
-        foreach ($byDesc('FEMALE VERTICAL') as $r) {
+        foreach ($byDesc($this->role('female_vertical')) as $r) {
             if ($r['bay'] === null || isset($verts[$r['bay']])) {
                 throw new ReviewException('FEMALE VERTICAL rows are missing a bay number or duplicated.');
             }
             $verts[$r['bay']] = $r;
         }
-        $lefts = $byDesc('LEFT JAMB');
-        $rights = $byDesc('RIGHT JAMB');
+        $lefts = $byDesc($this->role('left_jamb'));
+        $rights = $byDesc($this->role('right_jamb'));
         if ($lefts->count() !== 1 || $rights->count() !== 1) {
             throw new ReviewException("Expected exactly one LEFT JAMB and one RIGHT JAMB, found {$lefts->count()} and {$rights->count()}.");
         }
@@ -313,7 +317,7 @@ class SillQuarterPointService
 
         // --- receptor pieces
         $pieces = [];
-        foreach ($byDesc('SILL RECEPTORS CHANNEL', true) as $r) {
+        foreach ($byDesc($this->role('receptor'), true) as $r) {
             for ($i = 0; $i < $r['qty']; $i++) {
                 $pieces[] = $r['len'];
             }

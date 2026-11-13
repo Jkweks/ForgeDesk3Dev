@@ -47,7 +47,6 @@ class NavigationConfigTest extends TestCase
             '/operations/replenishment' => 'nav.operations', '/purchase-orders' => 'nav.operations',
             '/cycle-counting' => 'nav.operations', '/storage-locations' => 'nav.operations',
             '/jobs' => 'nav.fulfillment', '/fulfillment/material-check' => 'nav.fulfillment', '/fulfillment/job-reservations' => 'nav.fulfillment',
-            'http://fab.vosglassintra.net/configurator' => 'nav.fulfillment',
             '/config' => 'nav.configurator', '/config/package' => 'nav.configurator', '/config/labels' => 'nav.configurator', '/config/admin' => 'nav.configurator',
             '/fabrication/work-orders' => 'nav.fabrication', '/fabrication/work-queue' => 'nav.fabrication', '/fabrication/cut-lists' => 'nav.fabrication',
             '/shop' => 'nav.fabrication', '/cut-station' => 'nav.fabrication',

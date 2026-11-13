@@ -4,8 +4,8 @@
 
 @section('content')
 @php
-  // Split layout (/config/split): job/entry tree on the left, builder on the right. Same page, same JS.
-  $split = $split ?? false;
+  // Split layout (default at /config): job/entry tree on the left, builder on the right. Classic layout lives at /config/classic. Same page, same JS.
+  $split = $split ?? true;
 @endphp
 <div class="page-wrapper">
   <div class="page-header d-print-none">
@@ -18,7 +18,7 @@
         </div>
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
-            <a href="{{ $split ? '/config' : '/config/split' }}" class="btn btn-outline-secondary" title="Switch layout"><i class="ti {{ $split ? 'ti-layout-rows' : 'ti-layout-sidebar' }} me-1"></i>{{ $split ? 'Classic Layout' : 'Split Layout' }}</a>
+            <a href="{{ $split ? '/config/classic' : '/config' }}" class="btn btn-outline-secondary" title="Switch layout"><i class="ti {{ $split ? 'ti-layout-rows' : 'ti-layout-sidebar' }} me-1"></i>{{ $split ? 'Classic Layout' : 'Split Layout' }}</a>
             <a href="/config/admin#tab-configurator-catalog" class="btn btn-outline-secondary" data-permission="configurator.catalog.manage"><i class="ti ti-settings me-1"></i>Catalog Admin</a>
             <button class="btn btn-primary" onclick="fbOpenNewModal()" data-permission="configurator.edit"><i class="ti ti-plus me-1"></i>New Configuration</button>
           </div>
