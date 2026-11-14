@@ -36,3 +36,12 @@ so they report missing-file failures unless you copy it in.
 ## Running it
 Optional compose profile, so the existing stack is unchanged: set `PM_WORKER_TOKEN` in `.env`, then
 `docker compose --profile pm up -d pm-worker`. Laravel reaches it at `http://pm-worker:8780`.
+
+## Parser regression tests (vendored from the PM Suite)
+`tests/test_drawing_import*.py` are the PM Suite's own drawing-import tests (script style: exit code 0 = pass).
+`test_drawing_import_balance.py` (the frame-closure arithmetic, 14 checks) and `test_drawing_import.py` run on synthetic
+data. The others (`curtainwall`, `door_pairs`, `door_terms`, `expansion_mullion`, `system_block`, `title_block`, `typed_markups`, `2up_value_gap`)
+need real client drawing sets in `test_samples/drawing_import/` (not in git) and report SKIP without them; copy the sets in to run them.
+```
+for f in tests/test_drawing_import*.py; do docker run --rm pm-worker-test python $f; done
+```
