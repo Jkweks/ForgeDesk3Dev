@@ -43,6 +43,9 @@ services:
       - ./laravel:/var/www/html
       - ./tiger-bridge:/opt/tiger-bridge:ro
       - ./php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      # F: share for the Project Management file ingest. Mount it READ-ONLY (SMB/CIFS on the host), then set
+      # FDRIVE_SCAN_ROOTS / FDRIVE_PATH_MAP in laravel/.env. Uncomment once the host mount exists:
+      # - /mnt/f:/mnt/f:ro
     environment:
       - DB_CONNECTION=pgsql
       - DB_HOST=postgres
