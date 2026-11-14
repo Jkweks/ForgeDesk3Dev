@@ -19,6 +19,7 @@ return [
         'url' => env('PM_WORKER_URL', 'http://pm-worker:8780'),
         'token' => env('PM_WORKER_TOKEN'),
         'timeout' => (int) env('PM_WORKER_TIMEOUT', 60),
+        'poll_ms' => (int) env('PM_WORKER_POLL_MS', 2000),
     ],
 
     // F: share ingest (docs/plans/pm-suite-integration.md 4a): the Windows-side watcher posts file events here.

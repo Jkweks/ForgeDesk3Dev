@@ -507,6 +507,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pm/jobs/{jobId}/drawing-sets/{id}', [\App\Http\Controllers\Api\DrawingSetController::class, 'show'])->middleware('permission:pm.jobs.view');
         Route::get('/pm/jobs/{jobId}/drawing-sets/{id}/pages/{page}/image', [\App\Http\Controllers\Api\DrawingSetController::class, 'pageImage'])->whereNumber('page')->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs/{jobId}/drawing-sets/{id}/marks', [\App\Http\Controllers\Api\DrawingSetController::class, 'confirmMarks'])->middleware('permission:pm.jobs.manage');
+        Route::get('/pm/jobs/{jobId}/drawing-elevations', [\App\Http\Controllers\Api\DrawingSetController::class, 'jobElevations'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/drawing-sets/bulk', [\App\Http\Controllers\Api\DrawingSetController::class, 'bulkStore'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/drawing-elevations/bulk-review', [\App\Http\Controllers\Api\DrawingSetController::class, 'bulkReview'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/drawing-sets/{setId}/elevations/{id}/review', [\App\Http\Controllers\Api\DrawingSetController::class, 'review'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/drawing-sets/{setId}/elevations/{id}/axes/{axis}/resolve', [\App\Http\Controllers\Api\DrawingSetController::class, 'resolveAxis'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/drawing-sets/{setId}/elevations/{id}/axes/{axis}/resolve', [\App\Http\Controllers\Api\DrawingSetController::class, 'clearAxisResolution'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{jobId}/drawing-sets/{id}/reimport', [\App\Http\Controllers\Api\DrawingSetController::class, 'reimport'])->middleware('permission:pm.jobs.manage');
         Route::delete('/pm/jobs/{jobId}/drawing-sets/{id}', [\App\Http\Controllers\Api\DrawingSetController::class, 'destroy'])->middleware('permission:pm.jobs.manage');
 

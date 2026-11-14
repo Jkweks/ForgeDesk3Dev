@@ -28,6 +28,16 @@ class DrawingSetTest extends TestCase
         $this->job = BusinessJob::withoutGlobalScopes()->create(['job_number' => '1701', 'job_name' => 'D', 'status' => 'active']);
     }
 
+    /** The worker reads a set as a job: start, poll for progress, then fetch the result. */
+    private function fakeRead(array $result, array $extra = []): void
+    {
+        Http::fake($extra + [
+            'worker.test/drawing/jobs' => Http::response(['id' => 'job-1'], 202),
+            'worker.test/drawing/jobs/*' => fn ($request) => Http::response(['state' => 'done', 'done' => $result['pageCount'] ?? 0, 'count' => $result['pageCount'] ?? 0, 'note' => 'C3', 'busy' => 0, 'error' => null]
+                + (str_contains($request->url(), 'result=1') ? ['result' => $result] : [])),
+        ]);
+    }
+
     private function upload(string $content = '%PDF-1 set')
     {
         return $this->post("/api/v1/pm/jobs/{$this->job->id}/drawing-sets", ['file' => UploadedFile::fake()->createWithContent('shop.pdf', $content)], ['Accept' => 'application/json']);
@@ -45,7 +55,7 @@ class DrawingSetTest extends TestCase
 
     public function test_upload_queues_import_and_stores_elevations_relationally(): void
     {
-        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsed())]);
+        $this->fakeRead($this->parsed());
 
         $this->upload()->assertStatus(202);   // QUEUE_CONNECTION=sync in tests: the job has already run
 
@@ -68,26 +78,26 @@ class DrawingSetTest extends TestCase
 
     public function test_same_file_is_not_queued_twice_and_reimport_replaces_results(): void
     {
-        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsed())]);
+        $this->fakeRead($this->parsed());
         $this->upload()->assertStatus(202);
         $this->upload()->assertOk()->assertJsonPath('already_uploaded', true);
         $this->assertSame(1, DrawingSet::count());
-        Http::assertSentCount(1);
+        Http::assertSentCount(3);                      // start + status + result: the duplicate upload was not read again
 
         $set = DrawingSet::first();
         $this->postJson("/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/reimport")->assertStatus(202);
         $this->assertSame(1, $set->elevations()->count());   // replaced, not duplicated
-        Http::assertSentCount(2);
+        Http::assertSentCount(6);                      // the re-read ran the same three calls again
     }
 
     public function test_worker_failures_and_unreadable_files_are_recorded(): void
     {
-        Http::fake(['worker.test/drawing/parse' => Http::response(['ok' => false, 'error' => 'Could not open this file as a PDF: bad'])]);
+        $this->fakeRead(['ok' => false, 'error' => 'Could not open this file as a PDF: bad']);
         $this->upload('%PDF-bad')->assertStatus(202);
         $this->assertSame('failed', DrawingSet::first()->status);
         $this->assertStringContainsString('Could not open', DrawingSet::first()->error);
 
-        Http::fake(['worker.test/drawing/parse' => Http::response('boom', 500)]);
+        Http::fake(['worker.test/drawing/jobs' => Http::response('boom', 500)]);
         $this->upload('%PDF-other')->assertStatus(202);
         $this->assertSame('failed', DrawingSet::orderByDesc('id')->first()->status);
 
@@ -96,7 +106,7 @@ class DrawingSetTest extends TestCase
 
     public function test_scope(): void
     {
-        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsed())]);
+        $this->fakeRead($this->parsed());
         $this->upload()->assertStatus(202);
         Sanctum::actingAs(User::factory()->create(['role' => 'project_manager', 'is_active' => true]), ['*']);
         $this->getJson("/api/v1/pm/jobs/{$this->job->id}/drawing-sets")->assertNotFound();
@@ -113,14 +123,14 @@ class DrawingSetTest extends TestCase
         // the real parser returns each glass tag as an event with its page position
         $p['elevations'][0]['glassTags'] = [['tag' => 'IG-1', 'x0' => 10.5, 'top' => 20], ['tag' => 'IG-1', 'x0' => 90, 'top' => 20], ['tag' => 'IG-2', 'x0' => 50, 'top' => 70]];
         $p['elevations'][0]['finish'] = ['text' => 'CLEAR'];
-        Http::fake(['worker.test/drawing/parse' => Http::response($p)]);
+        $this->fakeRead($p);
         $this->upload()->assertStatus(202);
         $set = DrawingSet::firstOrFail();
         $this->assertSame('done', $set->status);
         $this->assertSame(['IG-1', 'IG-2'], $set->elevations()->first()->glassTags()->pluck('tag')->all());
 
         // anything that goes wrong while storing must fail the set with a message, not leave it "running"
-        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsed())]);
+        $this->fakeRead($this->parsed());
         \App\Models\DrawingElevation::creating(fn () => throw new \RuntimeException('boom'));
         $this->upload('%PDF-2 other')->assertStatus(202);
         $failed = DrawingSet::orderByDesc('id')->first();
@@ -151,7 +161,7 @@ class DrawingSetTest extends TestCase
 
     public function test_dimension_footprints_are_stored_per_sheet_and_status_follows_confirmation(): void
     {
-        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsedWithMarks())]);
+        $this->fakeRead($this->parsedWithMarks());
         $this->upload()->assertStatus(202);
         $set = DrawingSet::firstOrFail();
         $e = $this->getJson("/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}")->assertOk()->json('elevations.0');
@@ -185,17 +195,14 @@ class DrawingSetTest extends TestCase
 
     public function test_sheet_image_is_rendered_by_the_worker_once_and_then_served_from_storage(): void
     {
-        Http::fake([
-            'worker.test/drawing/parse' => Http::response($this->parsedWithMarks()),
-            'worker.test/pdf/page-image*' => Http::response("\x89PNG\r\n\x1a\nfake-image-bytes", 200, ['Content-Type' => 'image/png']),
-        ]);
+        $this->fakeRead($this->parsedWithMarks(), ['worker.test/pdf/page-image*' => Http::response("\x89PNG\r\n\x1a\nfake-image-bytes", 200, ['Content-Type' => 'image/png'])]);
         $this->upload()->assertStatus(202);
         $set = DrawingSet::firstOrFail();
         $img = "/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/pages/12/image";
 
         $this->get($img)->assertOk()->assertHeader('Content-Type', 'image/png');
         $this->get($img)->assertOk();
-        Http::assertSentCount(2);                                               // parse + one render; the second view came from storage
+        Http::assertSentCount(4);                                               // 3 for the read + one render; the second view came from storage
 
         $this->get("/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/pages/99/image")->assertNotFound();   // not a sheet of this set
         Sanctum::actingAs(User::factory()->create(['role' => 'project_manager', 'is_active' => true]), ['*']);

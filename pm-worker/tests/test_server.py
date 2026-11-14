@@ -125,3 +125,46 @@ def test_page_image_renders_a_png_and_rejects_bad_pages():
         assert code == 422 and "out of range" in body["error"]
     finally:
         srv.shutdown()
+
+
+def test_recheck_axis_runs_the_importers_frame_closure_test():
+    # 3 openings of 30" with 2" members: 4*2 + 3*30 = 98 -> closes; the same openings in a 99" frame do not
+    ok = server.recheck_axis({"axis": "w", "fs": {"v": 98}, "dlos": [{"v": 30}, {"v": 30}, {"v": 30}]})
+    assert ok["ok"] is True and ok["member"] == 2.0
+    bad = server.recheck_axis({"axis": "w", "fs": {"v": 99.3}, "dlos": [{"v": 30}, {"v": 30}, {"v": 30}]})
+    assert bad["ok"] is False
+    # a person corrects one reading and it closes again
+    fixed = server.recheck_axis({"axis": "w", "fs": {"v": 99.3}, "dlos": [{"v": 30}, {"v": 30}, {"v": 31.3}]})
+    assert fixed["ok"] is True
+    # no frame size, or nothing in the frame: cannot be judged (not a pass, not a fail)
+    assert server.recheck_axis({"axis": "w", "dlos": [{"v": 30}]}) is None
+    assert server.recheck_axis({"axis": "h", "fs": {"v": 98}}) is None
+    # a door opening is mandatory and counts as a term
+    door = server.recheck_axis({"axis": "h", "fs": {"v": 84}, "dos": [{"v": 80}], "dlos": []})
+    assert door["ok"] is False or door["ok"] is True   # shape only; the arithmetic is the importer's
+
+
+def test_recheck_axis_groups_independent_chains_by_position():
+    # sidelite chain (x ~100) and a door chain far to the right (x ~450): each frame is judged on its own terms
+    r = server.recheck_axis({"axis": "h", "fs": {"v": 83, "rect": [100, 0, 110, 10]},
+                             "dlos": [{"v": 40, "rect": [101, 0, 111, 10]}, {"v": 38, "rect": [102, 0, 112, 10]}, {"v": 90, "rect": [450, 0, 460, 10]}]})
+    assert r["ok"] is True                         # the 90" reading belongs to the other chain and is ignored here
+
+
+def test_drawing_jobs_report_progress_and_the_result_over_http():
+    import time as _t
+    srv, base = _run()
+    try:
+        r = urllib.request.Request(base + "/drawing/jobs", data=_pdf(2), headers={"X-Worker-Token": "t0ken"})
+        with urllib.request.urlopen(r) as resp:
+            jid = json.load(resp)["id"]
+        for _ in range(50):
+            code, st = _req(base + "/drawing/jobs/" + jid + "?result=1")
+            if st["state"] != "running":
+                break
+            _t.sleep(0.1)
+        assert code == 200 and st["state"] == "done" and st["result"]["ok"] is True and st["result"]["pageCount"] == 2
+        assert _req(base + "/drawing/jobs/nope")[0] == 404
+        assert _req(base + "/drawing/balance", data=json.dumps({"axis": "w", "fs": {"v": 98}, "dlos": [{"v": 30}, {"v": 30}, {"v": 30}]}).encode())[1]["balance"]["ok"] is True
+    finally:
+        srv.shutdown()

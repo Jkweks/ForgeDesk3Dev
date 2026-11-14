@@ -24,13 +24,13 @@ class ImportDrawingSet implements ShouldQueue
 
     public function __construct(public DrawingSet $set) {}
 
-    public function handle(PmWorkerClient $worker, PmFileIngestor $files): void
+    public function handle(PmWorkerClient $worker, PmFileIngestor $files, \App\Services\Pm\DrawingChecks $checks): void
     {
         $set = $this->set->fresh();
         $set->update(['status' => 'running', 'error' => null]);
 
         try {
-            $result = $worker->parseDrawingSet($files->bytes($set->file));
+            $result = $this->read($worker, $files->bytes($set->file), $set);
         } catch (\Throwable $e) {
             $set->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 1000), 'finished_at' => now()]);
 
@@ -43,10 +43,34 @@ class ImportDrawingSet implements ShouldQueue
         }
 
         try {
-            $this->store($set, $result);
+            $this->store($set, $result, $checks);
         } catch (\Throwable $e) {
             // Never leave the set stuck on "running": record what went wrong so the page and the user can see it.
             $set->update(['status' => 'failed', 'error' => mb_substr('Could not store the results: '.$e->getMessage(), 0, 1000), 'finished_at' => now()]);
+        }
+    }
+
+    /** Run the read in the worker and follow it: progress is written to the set so the page can show a bar. */
+    private function read(PmWorkerClient $worker, string $pdf, DrawingSet $set): array
+    {
+        $id = $worker->startDrawingJob($pdf);
+        $deadline = time() + 900;
+        while (true) {
+            $st = $worker->drawingJob($id);
+            if ($st === null) {
+                throw new \RuntimeException('The drawing worker lost this job (it may have restarted). Use Read again.');
+            }
+            $set->update(['progress_done' => (int) $st['done'], 'progress_count' => (int) $st['count'], 'progress_note' => $st['note'] ? mb_substr((string) $st['note'], 0, 250) : null]);
+            if ($st['state'] === 'done') {
+                return $worker->drawingJob($id, true)['result'] ?? throw new \RuntimeException('The worker returned no result.');
+            }
+            if ($st['state'] === 'failed') {
+                throw new \RuntimeException($st['error'] ?: 'The drawing could not be read.');
+            }
+            if (time() > $deadline) {
+                throw new \RuntimeException('Reading this set took too long and was stopped.');
+            }
+            usleep((int) (config('services.pm_worker.poll_ms', 2000) * 1000));
         }
     }
 
@@ -54,6 +78,51 @@ class ImportDrawingSet implements ShouldQueue
     public function failed(\Throwable $e): void
     {
         $this->set->fresh()?->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 1000), 'finished_at' => now()]);
+    }
+
+    /** @return array<string, array{review: array, marks: array, axes: array}> keyed by elevation label */
+    private function snapshotDecisions(DrawingSet $set): array
+    {
+        $out = [];
+        foreach ($set->elevations()->with(['marks', 'axisChecks'])->get() as $e) {
+            $out[$e->label] = [
+                'review' => ['status' => $e->review_status, 'by' => $e->reviewed_by, 'at' => $e->reviewed_at],
+                'marks' => $e->marks->filter(fn ($m) => $m->confirmed_value !== null)->mapWithKeys(fn ($m) => ["{$m->page}|{$m->kind}|{$m->idx}" => [
+                    'value' => (float) $m->value, 'confirmed' => $m->confirmed_value, 'by' => $m->confirmed_by, 'at' => $m->confirmed_at]])->all(),
+                'axes' => $e->axisChecks->filter(fn ($c) => $c->resolution)->mapWithKeys(fn ($c) => [$c->axis => [
+                    'resolution' => $c->resolution, 'reason' => $c->resolution_reason, 'by' => $c->resolved_by, 'at' => $c->resolved_at]])->all(),
+            ];
+        }
+
+        return $out;
+    }
+
+    /** A decision survives only where the parser still reads the same value there; otherwise it was about something else. */
+    private function restoreDecisions(DrawingElevation $row, ?array $prev, \App\Services\Pm\DrawingChecks $checks): void
+    {
+        if (! $prev) {
+            return;
+        }
+        $touched = [];
+        foreach ($row->marks()->get() as $m) {
+            $p = $prev['marks']["{$m->page}|{$m->kind}|{$m->idx}"] ?? null;
+            if ($p && abs($p['value'] - (float) $m->value) < 0.0001) {
+                $m->update(['confirmed_value' => $p['confirmed'], 'confirmed_by' => $p['by'], 'confirmed_at' => $p['at']]);
+                $touched[substr($m->kind, -1)] = true;
+            }
+        }
+        foreach (array_keys($touched) as $axis) {
+            $checks->recheck($row->fresh(['marks', 'printedMembers', 'axisChecks']), $axis);
+        }
+        foreach ($prev['axes'] as $axis => $r) {
+            $c = $row->axisChecks()->where('axis', $axis)->first();
+            if ($c && $c->ok === false && ! $c->resolution) {      // still does not close: the decision still applies
+                $c->update(['resolution' => $r['resolution'], 'resolution_reason' => $r['reason'], 'resolved_by' => $r['by'], 'resolved_at' => $r['at']]);
+            }
+        }
+        if (($prev['review']['status'] ?? 'pending') !== 'pending') {
+            $row->update(['review_status' => $prev['review']['status'], 'reviewed_by' => $prev['review']['by'], 'reviewed_at' => $prev['review']['at']]);
+        }
     }
 
     /** The parser returns dicts for some fields (glass tags carry their page position); keep the value we store scalar. */
@@ -106,9 +175,10 @@ class ImportDrawingSet implements ShouldQueue
         }
     }
 
-    private function store(DrawingSet $set, array $result): void
+    private function store(DrawingSet $set, array $result, \App\Services\Pm\DrawingChecks $checks): void
     {
-        DB::transaction(function () use ($set, $result) {
+        $carry = $this->snapshotDecisions($set);   // a re-read keeps what people already decided
+        DB::transaction(function () use ($set, $result, $checks, $carry) {
             $set->elevations()->delete();
             $set->warnings()->delete();
             foreach ($result['elevations'] ?? [] as $e) {
@@ -119,8 +189,12 @@ class ImportDrawingSet implements ShouldQueue
                     'thus_reqd' => $e['thusReqd'] ?? null, 'opp_reqd' => $e['oppReqd'] ?? null, 'total_reqd' => $e['totalReqd'] ?? null,
                     'ro_w' => $e['roW'] ?? null, 'fs_w' => $e['fsW'] ?? null, 'ro_h' => $e['roH'] ?? null, 'fs_h' => $e['fsH'] ?? null,
                     'door_w' => $e['doW'] ?? null, 'door_h' => $e['doH'] ?? null,
+                    'multi_sheet' => (bool) ($e['multiSheet'] ?? false),
+                    'manual_takeoff' => is_array($e['manualTakeoff'] ?? null) ? mb_substr(($e['manualTakeoff']['reason'] ?? 'manual').': '.implode(', ', (array) ($e['manualTakeoff']['tags'] ?? [])), 0, 250) : null,
                 ]);
                 $this->storeMarks($row, $e);
+                $checks->storeFromImport($row, $e);
+                $this->restoreDecisions($row, $carry[$row->label] ?? null, $checks);
                 foreach (['w' => $e['dloWidths'] ?? [], 'h' => $e['dloHeights'] ?? []] as $axis => $values) {
                     foreach (array_values($values) as $i => $v) {
                         $row->dims()->create(['axis' => $axis, 'position' => $i, 'value' => $v]);
@@ -134,7 +208,7 @@ class ImportDrawingSet implements ShouldQueue
                 $set->warnings()->create(['message' => (string) $w]);
             }
             $set->update([
-                'status' => 'done', 'page_count' => $result['pageCount'] ?? null, 'skipped_pages' => $result['skippedPages'] ?? 0,
+                'status' => 'done', 'progress_done' => $result['pageCount'] ?? 0, 'progress_count' => $result['pageCount'] ?? 0, 'page_count' => $result['pageCount'] ?? null, 'skipped_pages' => $result['skippedPages'] ?? 0,
                 'set_finish' => is_array($result['setFinish'] ?? null) ? ($result['setFinish']['finish'] ?? null) : null,
                 'finished_at' => now(),
             ]);

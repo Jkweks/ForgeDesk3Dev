@@ -38,6 +38,36 @@ class PmWorkerClient
         return $res->json();
     }
 
+    /** Start reading a drawing set in the worker; returns the worker's job id (poll with drawingJob). */
+    public function startDrawingJob(string $pdfBytes): string
+    {
+        $res = $this->http()->timeout(120)->withBody($pdfBytes, 'application/pdf')->post('/drawing/jobs');
+        $res->throw();
+
+        return (string) $res->json('id');
+    }
+
+    /** @return array{state: string, done: int, count: int, note: ?string, error: ?string, result?: array}|null null when the worker lost the job */
+    public function drawingJob(string $id, bool $withResult = false): ?array
+    {
+        $res = $this->http()->timeout(60)->get("/drawing/jobs/{$id}".($withResult ? '?result=1' : ''));
+        if ($res->status() === 404) {
+            return null;
+        }
+        $res->throw();
+
+        return $res->json();
+    }
+
+    /** Does the frame close on these values? (the importer's own test, re-run after a person corrects a number) */
+    public function balance(array $payload): ?array
+    {
+        $res = $this->http()->timeout(60)->post('/drawing/balance', $payload);
+        $res->throw();
+
+        return $res->json('balance');
+    }
+
     /** One page of a PDF as PNG bytes (1-based page), for the size-check viewer. */
     public function pageImage(string $pdfBytes, int $page, int $dpi = 110): string
     {
