@@ -109,6 +109,18 @@ Common permissions: `inventory.view/create/edit/delete/adjust`, `orders.view/cre
 
 Reports use `barryvdh/laravel-dompdf` for PDF output and `phpoffice/phpspreadsheet` for Excel export. PDF report views live in `resources/views/pdfs/`.
 
+### Project Management workspace (PM Suite integration)
+
+ForgeDesk has two workspaces in one app: **Fabrication** (back of house, everything above) and **Project Management** (front of house, `/pm/*`, absorbed from the standalone Vos PM Suite). Full plan, decisions and build status: `docs/plans/pm-suite-integration.md` (read it before touching PM code).
+
+- **Switching:** a slide in the sidebar footer (Fab / PM) for users with both; the nav is `config/navigation_pm.php` for `/pm/*` pages, `config/navigation.php` otherwise. `/` and `/pm` render the same customizable dashboard (one layout per user; PM widgets are in `App\Dashboard\WidgetRegistry`).
+- **Jobs are shared with a lifecycle:** `BusinessJob.status` adds `bidding` / `won` / `lost` (PM-only). `FabricationVisibleScope` (global scope) hides them from every Fabrication query until a PM activates the job; PM code uses `App\Services\Pm\PmJobScope` (own jobs unless `pm.jobs.view_all`). `BusinessJob.origin` is `fabrication` (default) or `pm`. Fabrication keeps creating jobs exactly as before.
+- **PO types** (`purchase_orders.type`): `stock` (the original flow; the only type that touches `inventory_locations` / `on_order_qty`), `job` (job-specific material; receipts are records only, `JobPurchaseOrderController`) and `internal` (to a vendor with `suppliers.is_internal`, e.g. Vos Glass - Fabrication; a demand document, never received). Never let a job or internal PO change stock. Stock-only aggregates use `PurchaseOrder::stock()`.
+- **Files:** every PM file is a `pm_files` row (uploads stored in `storage/app/private/pm_files`, F: files referenced in place; the share is mounted **read-only**). `PmFileIngestor` registers both; `PmFileIngestService` + `fdrive-watcher/` + `pm:scan-fdrive` handle the F: drive; unplaceable files go to `/pm/inbox`.
+- **pm-worker** (`pm-worker/`, Python, compose profile `pm`, needs `PM_WORKER_TOKEN`): BidEstimate parser, PDF merge, shop-drawing parser. Laravel calls it through `PmWorkerClient`; long work runs in queue jobs (`ImportDrawingSet`). Keep `BidEstimateImporter::CURRENT_PARSER_REVISION` in step with `pm-worker/estimate_parser.py`.
+- **Conventions:** PM data lives in relational tables (never `.json` data files; a JSON column only when the shape truly varies). Change history is automatic via the `LogsPmChanges` trait. The field app gets **no** PM data or features for now. Any new mutating API route needs a `permission:` middleware (`SecurityHardeningTest` enforces it; token-authenticated exceptions are listed there).
+- **Testing PM pages:** PHP tests can't see inline-script errors; `laravel/tests/js-smoke/` runs each page's script in jsdom (see its README). The full suite needs the raised `memory_limit` in `phpunit.xml`; four older tests (`ConfiguratorEntryBarTest`, `CutStationJobPickerTest`) were already failing when this work started.
+
 ### Testing
 
 Tests use SQLite in-memory (configured in `phpunit.xml`). The test suite is sparse — mostly the Laravel scaffold examples. Feature tests go in `tests/Feature/`, unit tests in `tests/Unit/`.
