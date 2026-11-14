@@ -11,6 +11,10 @@ return [
         'href' => '/pm', 'active' => ['pm'],
     ],
     [
+        'label' => 'To-do', 'icon' => 'checklist', 'permission' => 'nav.pm',
+        'href' => '/pm/todos', 'active' => ['pm/todos'],
+    ],
+    [
         'label' => 'Jobs', 'icon' => 'briefcase', 'permission' => 'nav.pm',
         'href' => '/pm/jobs', 'active' => ['pm/jobs', 'pm/jobs/*'],
     ],

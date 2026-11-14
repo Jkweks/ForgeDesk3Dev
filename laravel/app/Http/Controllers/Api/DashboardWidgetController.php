@@ -747,6 +747,17 @@ class DashboardWidgetController extends Controller
         return response()->json(['bidding' => $count('bidding'), 'won' => $count('won'), 'lost' => $count('lost')]);
     }
 
+    public function pmTodos(Request $request)
+    {
+        $mine = \App\Http\Controllers\Api\PmTodoController::visible($request->user())
+            ->where('assigned_to', $request->user()->id)->whereNull('completed_at');
+
+        return response()->json([
+            'mine_open' => (clone $mine)->count(),
+            'mine_overdue' => (clone $mine)->whereNotNull('due_date')->where('due_date', '<', today()->toDateString())->count(),
+        ]);
+    }
+
     public function pmJobsList(Request $request)
     {
         $items = \App\Services\Pm\PmJobScope::query(auth()->user())

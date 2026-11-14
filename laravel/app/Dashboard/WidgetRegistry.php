@@ -153,6 +153,10 @@ class WidgetRegistry
             ['Project Management', ['pm.jobs.view'], '/dashboard/widgets/pm/jobs/list', [
                 $list('pm_bids_list', 'Open Bids', 'Bidding and won jobs, newest first.', 'ti-briefcase-2'),
             ]],
+            ['Project Management', ['pm.jobs.view'], '/dashboard/widgets/pm/todos', [
+                $stat('pm_todos_open', 'My Open To-dos', 'To-dos assigned to you that are not done.', 'ti-checklist', 'mine_open', '/pm/todos'),
+                $stat('pm_todos_overdue', 'My Overdue To-dos', 'Your open to-dos past their due date.', 'ti-alarm', 'mine_overdue', '/pm/todos'),
+            ]],
             ['Jobs', ['reservations.dashboard.view'], '/dashboard/widgets/reservations', [
                 $stat('reservations_open', 'Open Reservations', 'Reservations not yet fulfilled or cancelled.', 'ti-lock', 'open', '/fulfillment/job-reservations'),
                 $stat('reservations_overdue', 'Overdue Reservations', 'Open reservations past their needed-by date.', 'ti-lock-exclamation', 'overdue', '/fulfillment/job-reservations'),
@@ -375,7 +379,7 @@ class WidgetRegistry
         ['wo_stage_wip', 6, 5], ['quality_incident_rate', 6, 5],
         'break',
         // Project Management (left out for users without pm.jobs.view)
-        ['pm_bidding', 2, 2], ['pm_won', 2, 2], ['pm_bids_list', 4, 5],
+        ['pm_bidding', 2, 2], ['pm_won', 2, 2], ['pm_todos_open', 2, 2], ['pm_todos_overdue', 2, 2], ['pm_bids_list', 4, 5],
     ];
 
     /**

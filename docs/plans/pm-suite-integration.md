@@ -255,6 +255,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Change History (feature #11, built):** a `LogsPmChanges` trait on jobs, job POs (stock POs excluded), submittals, vendors, library products and manufacturers records create/update/delete with old and new values per field and the user (`pm_change_logs`, `pm_change_log_fields`), a `/pm/history` page with filters, and the job scope applied to job-bound entries. Logging is skipped while the history tables don't exist yet, so older migrations and seeders still run. Not built: restore points / per-field restore (PM Suite had them), and logging of PO line edits (revisions cover those).
 
+**To-do (feature #28, built):** `pm_todos` (job-specific or general, assignable, due date, complete/reopen), a `/pm/todos` page, and two dashboard widgets (*My Open To-dos*, *My Overdue To-dos*). A to-do is visible if it is assigned to you, you created it, or its job is in your scope; assigning to someone else needs `pm.act_for_others`. Not built: automatic to-dos derived from submittals/POs (PM Suite's team to-do scoping).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

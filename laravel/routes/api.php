@@ -316,6 +316,7 @@ Route::middleware('auth:sanctum')->group(function () {
         });
         Route::middleware('permission:pm.jobs.view')->group(function () {
             Route::get('/dashboard/widgets/pm/jobs', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'pmJobs']);
+            Route::get('/dashboard/widgets/pm/todos', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'pmTodos']);
             Route::get('/dashboard/widgets/pm/jobs/list', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'pmJobsList']);
         });
         Route::get('/dashboard/widgets/reservations', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'reservations'])->middleware('permission:reservations.dashboard.view');
@@ -493,6 +494,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pm/library/products/{id}/documents', [\App\Http\Controllers\Api\PmLibraryController::class, 'addDocument'])->middleware('permission:pm.library.manage');
         Route::delete('/pm/library/products/{id}/documents/{docId}', [\App\Http\Controllers\Api\PmLibraryController::class, 'removeDocument'])->middleware('permission:pm.library.manage');
         Route::get('/pm/files/{fileId}/download', [\App\Http\Controllers\Api\PmLibraryController::class, 'download'])->middleware('permission:pm.jobs.view');
+
+        // To-dos
+        Route::get('/pm/todos', [\App\Http\Controllers\Api\PmTodoController::class, 'index'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/todos', [\App\Http\Controllers\Api\PmTodoController::class, 'store'])->middleware('permission:pm.jobs.view');
+        Route::put('/pm/todos/{id}', [\App\Http\Controllers\Api\PmTodoController::class, 'update'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/todos/{id}/complete', [\App\Http\Controllers\Api\PmTodoController::class, 'complete'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/todos/{id}/reopen', [\App\Http\Controllers\Api\PmTodoController::class, 'reopen'])->middleware('permission:pm.jobs.view');
+        Route::delete('/pm/todos/{id}', [\App\Http\Controllers\Api\PmTodoController::class, 'destroy'])->middleware('permission:pm.jobs.view');
 
         // Change history
         Route::get('/pm/history', [\App\Http\Controllers\Api\PmHistoryController::class, 'index'])->middleware('permission:pm.history.view');

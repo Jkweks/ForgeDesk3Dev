@@ -56,8 +56,8 @@ class DashboardLayoutTest extends TestCase
         $response = $this->getJson('/api/v1/dashboard/layout')->assertOk()->assertJsonPath('source', 'built-in');
         $widgets = $response->json('layout.widgets');
 
-        // 15 shop widgets + 3 Project Management widgets (admin has pm.jobs.view)
-        $this->assertCount(18, $widgets);
+        // 15 shop widgets + 5 Project Management widgets (admin has pm.jobs.view)
+        $this->assertCount(20, $widgets);
         $this->assertSame('wo_open', $widgets[0]['key']);
         $this->assertSame([0, 0], [$widgets[0]['x'], $widgets[0]['y']]);
     }
