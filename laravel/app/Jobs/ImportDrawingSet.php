@@ -42,14 +42,40 @@ class ImportDrawingSet implements ShouldQueue
             return;
         }
 
+        try {
+            $this->store($set, $result);
+        } catch (\Throwable $e) {
+            // Never leave the set stuck on "running": record what went wrong so the page and the user can see it.
+            $set->update(['status' => 'failed', 'error' => mb_substr('Could not store the results: '.$e->getMessage(), 0, 1000), 'finished_at' => now()]);
+        }
+    }
+
+    /** Last line of defence: if the worker process itself dies, the set must not stay "running". */
+    public function failed(\Throwable $e): void
+    {
+        $this->set->fresh()?->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 1000), 'finished_at' => now()]);
+    }
+
+    /** The parser returns dicts for some fields (glass tags carry their page position); keep the value we store scalar. */
+    private static function scalar(mixed $v, string $key = 'tag'): ?string
+    {
+        if (is_array($v)) {
+            $v = $v[$key] ?? null;
+        }
+
+        return is_scalar($v) && trim((string) $v) !== '' ? trim((string) $v) : null;
+    }
+
+    private function store(DrawingSet $set, array $result): void
+    {
         DB::transaction(function () use ($set, $result) {
             $set->elevations()->delete();
             $set->warnings()->delete();
             foreach ($result['elevations'] ?? [] as $e) {
                 $row = DrawingElevation::create([
                     'drawing_set_id' => $set->id, 'page' => $e['page'] ?? null, 'label' => (string) ($e['label'] ?? '?'),
-                    'arch_ref' => $e['archRef'] ?? null, 'system' => $e['system'] ?? null,
-                    'finish' => $e['finish'] ?? null, 'finish_code' => $e['finishCode'] ?? null,
+                    'arch_ref' => self::scalar($e['archRef'] ?? null, 'text'), 'system' => self::scalar($e['system'] ?? null, 'text'),
+                    'finish' => self::scalar($e['finish'] ?? null, 'text'), 'finish_code' => self::scalar($e['finishCode'] ?? null, 'text'),
                     'thus_reqd' => $e['thusReqd'] ?? null, 'opp_reqd' => $e['oppReqd'] ?? null, 'total_reqd' => $e['totalReqd'] ?? null,
                     'ro_w' => $e['roW'] ?? null, 'fs_w' => $e['fsW'] ?? null, 'ro_h' => $e['roH'] ?? null, 'fs_h' => $e['fsH'] ?? null,
                     'door_w' => $e['doW'] ?? null, 'door_h' => $e['doH'] ?? null,
@@ -59,8 +85,8 @@ class ImportDrawingSet implements ShouldQueue
                         $row->dims()->create(['axis' => $axis, 'position' => $i, 'value' => $v]);
                     }
                 }
-                foreach (array_unique($e['glassTags'] ?? []) as $tag) {
-                    $row->glassTags()->create(['tag' => (string) $tag]);
+                foreach (array_unique(array_filter(array_map(fn ($t) => self::scalar($t), $e['glassTags'] ?? []))) as $tag) {
+                    $row->glassTags()->create(['tag' => $tag]);
                 }
             }
             foreach ($result['warnings'] ?? [] as $w) {

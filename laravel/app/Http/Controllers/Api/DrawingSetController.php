@@ -63,7 +63,8 @@ class DrawingSetController extends Controller
     public function reimport(Request $request, int $jobId, int $id)
     {
         $set = $this->set($request, $jobId, $id);
-        abort_if($set->status === 'running', 422, 'This set is being read right now.');
+        // A set stuck on 'running' (the worker died) can be re-read once it has been silent for longer than any import takes.
+        abort_if($set->status === 'running' && $set->updated_at->gt(now()->subMinutes(20)), 422, 'This set is being read right now.');
         $set->update(['status' => 'queued', 'error' => null]);
         ImportDrawingSet::dispatch($set);
 

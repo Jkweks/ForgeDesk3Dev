@@ -106,4 +106,26 @@ class DrawingSetTest extends TestCase
     {
         $this->get("/pm/jobs/{$this->job->id}")->assertOk()->assertSee('Shop drawings');
     }
+
+    public function test_real_parser_shapes_glass_tag_dicts_and_storage_errors_never_leave_it_running(): void
+    {
+        $p = $this->parsed();
+        // the real parser returns each glass tag as an event with its page position
+        $p['elevations'][0]['glassTags'] = [['tag' => 'IG-1', 'x0' => 10.5, 'top' => 20], ['tag' => 'IG-1', 'x0' => 90, 'top' => 20], ['tag' => 'IG-2', 'x0' => 50, 'top' => 70]];
+        $p['elevations'][0]['finish'] = ['text' => 'CLEAR'];
+        Http::fake(['worker.test/drawing/parse' => Http::response($p)]);
+        $this->upload()->assertStatus(202);
+        $set = DrawingSet::firstOrFail();
+        $this->assertSame('done', $set->status);
+        $this->assertSame(['IG-1', 'IG-2'], $set->elevations()->first()->glassTags()->pluck('tag')->all());
+
+        // anything that goes wrong while storing must fail the set with a message, not leave it "running"
+        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsed())]);
+        \App\Models\DrawingElevation::creating(fn () => throw new \RuntimeException('boom'));
+        $this->upload('%PDF-2 other')->assertStatus(202);
+        $failed = DrawingSet::orderByDesc('id')->first();
+        $this->assertSame('failed', $failed->status);
+        $this->assertStringContainsString('Could not store the results: boom', $failed->error);
+        \App\Models\DrawingElevation::flushEventListeners();
+    }
 }
