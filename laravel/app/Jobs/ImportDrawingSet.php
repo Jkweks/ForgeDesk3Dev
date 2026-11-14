@@ -204,10 +204,18 @@ class ImportDrawingSet implements ShouldQueue
                     $row->glassTags()->create(['tag' => $tag]);
                 }
             }
+            $set->glazingTags()->delete();
+            foreach ($result['glazingSchedule'] ?? [] as $g) {
+                $tag = self::scalar($g['tag'] ?? null);
+                if ($tag) {
+                    $set->glazingTags()->updateOrCreate(['tag' => mb_substr($tag, 0, 40)], ['makeup' => is_array($g['makeup'] ?? null) ? implode("\n", array_map('strval', $g['makeup'])) : self::scalar($g['makeup'] ?? null, 'text')]);
+                }
+            }
             foreach ($result['warnings'] ?? [] as $w) {
                 $set->warnings()->create(['message' => (string) $w]);
             }
             $set->update([
+                'skip_summary' => is_string($result['skipSummary'] ?? null) && $result['skipSummary'] !== '' ? mb_substr($result['skipSummary'], 0, 1000) : null,
                 'status' => 'done', 'progress_done' => $result['pageCount'] ?? 0, 'progress_count' => $result['pageCount'] ?? 0, 'page_count' => $result['pageCount'] ?? null, 'skipped_pages' => $result['skippedPages'] ?? 0,
                 'set_finish' => is_array($result['setFinish'] ?? null) ? ($result['setFinish']['finish'] ?? null) : null,
                 'finished_at' => now(),

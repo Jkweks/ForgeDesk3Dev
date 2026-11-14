@@ -49,7 +49,7 @@ class DrawingChecksTest extends TestCase
             'manualTakeoff' => ['reason' => 'mirror', 'tags' => ['IG-3']], 'dims' => ['dloWidths' => [$this->dim(33.37, [10, 20, 50, 33])]],
             'sheetDims' => [['page' => 3, 'pageSize' => [1224, 792], 'dims' => ['dloWidths' => [$this->dim(33.37, [10, 20, 50, 33])]], 'titleRect' => null]]]);
 
-        return ['ok' => true, 'pageCount' => 6, 'skippedPages' => 3, 'warnings' => [], 'setFinish' => null, 'elevations' => [$w1, $w2, $w3]];
+        return ['ok' => true, 'pageCount' => 6, 'skippedPages' => 3, 'warnings' => [], 'setFinish' => null, 'skipSummary' => '3 pages were not elevations: plans 3', 'glazingSchedule' => [['tag' => 'IG-1', 'makeup' => ["1/4\" clear", "1/2\" air"]], ['tag' => 'IG-1T', 'makeup' => []]], 'elevations' => [$w1, $w2, $w3]];
     }
 
     private function fakeRead(?array $result = null, ?callable $balance = null): void
@@ -94,6 +94,20 @@ class DrawingChecksTest extends TestCase
         $this->assertTrue($this->elev($set, 'W3')['multi_sheet']);
         $this->assertSame('mirror: IG-3', $this->elev($set, 'W3')['manual_takeoff']);
         $this->assertSame(['w'], $this->elev($set, 'W2')['unresolved_axes']);
+    }
+
+    public function test_the_sets_glazing_schedule_and_skip_summary_are_kept(): void
+    {
+        $this->fakeRead();
+        $set = $this->import();
+        $show = $this->getJson($this->url($set))->assertOk();
+        $this->assertSame('3 pages were not elevations: plans 3', $show->json('skip_summary'));
+        $this->assertSame(['IG-1', 'IG-1T'], array_column($show->json('glazing_tags'), 'tag'));
+        $this->assertSame("1/4\" clear\n1/2\" air", $show->json('glazing_tags.0.makeup'));
+        $this->assertSame(2, count($this->getJson("/api/v1/pm/jobs/{$this->job->id}/drawing-sets")->json('0.glazing_tags')));
+
+        $this->postJson($this->url($set, '/reimport'))->assertStatus(202);      // a re-read replaces them rather than duplicating
+        $this->assertSame(2, \App\Models\DrawingGlazingTag::count());
     }
 
     public function test_confidence_reflects_the_checks_and_explains_itself(): void

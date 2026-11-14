@@ -210,6 +210,7 @@
     <div class="modal-body">
       <div class="row g-2 mb-3"><div class="col-6"><label class="form-label">Release code</label><input class="form-control" id="woCode" placeholder="e.g. A"></div>
         <div class="col-6"><label class="form-label">Needed by</label><input type="date" class="form-control" id="woDue"></div></div>
+      <div class="mb-3" id="woElevBox" style="display:none"><label class="form-label">Elevations from the approved drawings</label><div id="woElevList"></div></div>
       <div class="mb-3"><label class="form-label">Scope</label><textarea class="form-control" id="woScope" rows="3" placeholder="Elevations, openings, what is being released"></textarea></div>
       <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="woNotes" rows="2"></textarea></div>
       <div class="mb-1"><label class="form-label">Drawings</label><input type="file" class="form-control" id="woFiles" multiple></div>
@@ -385,7 +386,12 @@
   function renderDrawSets() {
     // finished sets stay out of the way; sets still being read (or failed) show with progress
     const active = drawSetsList.filter(s => s.status !== 'done');
-    drawSets.innerHTML = active.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
+    const done = drawSetsList.filter(s => s.status === 'done');
+    drawSets.innerHTML = done.map(s => `<div class="list-group-item py-2 small"><span class="text-muted">${esc(s.file ? s.file.original_name : 'Drawing set')}</span> · ${s.elevations_count ?? 0} elevations · ${s.page_count ?? '?'} pages
+      ${s.skip_summary ? ' · <span class="text-muted">' + esc(s.skip_summary) + '</span>' : ''}
+      ${(s.glazing_tags || []).length ? '<div class="mt-1">Glazing schedule: ' + s.glazing_tags.map(t => `<span class="badge bg-azure-lt" title="${esc(t.makeup || '')}">${esc(t.tag)}</span>`).join(' ') + '</div>' : ''}
+      <span class="float-end" data-permission="pm.jobs.manage"><button class="btn btn-sm btn-ghost-secondary" onclick="reimportDrawing(${s.id})">Read again</button> <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${s.id})">&times;</button></span></div>`).join('')
+      + active.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
       const pct = s.progress_count ? Math.round(100 * s.progress_done / s.progress_count) : 0;
       return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span><span>${esc(s.file ? s.file.original_name : 'Drawing set')}</span>
         ${s.status === 'running' ? `<span class="text-muted small">page ${s.progress_done} of ${s.progress_count || '?'}${s.progress_note ? ' · found ' + esc(s.progress_note) : ''}</span>` : ''}
@@ -527,6 +533,14 @@
       ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
       ctx.lineWidth = hot ? 3 : 1.5; ctx.strokeStyle = line; ctx.strokeRect(x, y, w, h);
       if (hot) { ctx.shadowColor = line; ctx.shadowBlur = 12; ctx.strokeRect(x, y, w, h); ctx.shadowBlur = 0; }
+      if (m.status === 'mismatch') {   // the PM Suite's correction stamp: the printed value struck in red, the corrected one written beside it
+        ctx.strokeStyle = '#cd281e'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x, y + h / 2); ctx.lineTo(x + w, y + h / 2); ctx.stroke();
+        const fs = Math.max(11, h * 0.95), txt = fmtIn(m.confirmed_value), vertical = /_h$/.test(m.kind);
+        ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'alphabetic';
+        const tx = vertical ? x + w + 4 : x, ty = vertical ? y + h / 2 + fs / 3 : y - 5, tw = ctx.measureText(txt).width;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(tx - 2, ty - fs, tw + 4, fs + 4);
+        ctx.fillStyle = '#111'; ctx.fillText(txt, tx, ty);
+      }
     });
   }
 
@@ -605,11 +619,22 @@
         ${r.work_order ? `<div class="small mt-1">Work order created (release ${r.work_order.release_number}).</div>` : ''}</div>`; }).join('') : '<div class="list-group-item text-muted">No requests yet.</div>';
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
-  function showWoForm() { document.querySelector('#woModal form').reset(); safeShowModal('woModal'); }
+  function showWoForm() {
+    document.querySelector('#woModal form').reset();
+    const ok = (drawData.elevations || []).filter(e => e.review_status === 'approved');
+    woElevBox.style.display = ok.length ? '' : 'none';
+    woElevList.innerHTML = ok.map(e => `<label class="form-check"><input type="checkbox" class="form-check-input" value="${e.id}"><span class="form-check-label">${esc(e.label)} — ${e.total_reqd ?? '?'} lites · R.O. ${dim(e.ro_w)} × ${dim(e.ro_h)} <span class="badge ${CONF_CLASS[e.confidence.level]}">${e.confidence.score}%</span></span></label>`).join('');
+    safeShowModal('woModal');
+  }
+  // the chosen elevations become lines in the request's scope, with the sizes that were checked
+  function woElevScope() {
+    return [...woElevList.querySelectorAll('input:checked')].map(cb => { const e = elevById(+cb.value);
+      const size = (k) => { const m = (e.marks || []).filter(x => x.kind === k).map(x => fmtIn(x.confirmed_value ?? x.value)); return m.length === 1 ? m[0] : null; };
+      return `${e.label}: ${e.total_reqd ?? '?'} lites, R.O. ${dim(e.ro_w)} × ${dim(e.ro_h)}${size('fs_w') ? ', F.S. ' + size('fs_w') + ' × ' + (size('fs_h') || '—') : ''}${e.system ? ', ' + e.system : ''}${e.finish ? ' (' + e.finish + ')' : ''}${e.arch_ref ? ' [' + e.arch_ref + ']' : ''}`; }).join('\n'); }
   async function saveWo(e) {
     e.preventDefault();
     try {
-      const r = await post(`/pm/jobs/${JOB_ID}/work-order-requests`, { release_code: woCode.value || null, requested_due_date: woDue.value || null, scope: woScope.value || null, notes: woNotes.value || null });
+      const r = await post(`/pm/jobs/${JOB_ID}/work-order-requests`, { release_code: woCode.value || null, requested_due_date: woDue.value || null, scope: [woElevScope(), woScope.value].filter(Boolean).join('\n\n') || null, notes: woNotes.value || null });
       for (const f of woFiles.files) { const fd = new FormData(); fd.append('file', f); await authenticatedUpload(`/pm/work-order-requests/${r.id}/files`, fd); }
       safeHideModal('woModal'); notice('Request sent to Fabrication.', 'success'); loadWo();
     } catch (err) { notice(err.message || 'Could not send the request', 'danger'); }

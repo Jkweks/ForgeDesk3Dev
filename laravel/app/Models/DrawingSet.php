@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DrawingSet extends Model
 {
-    protected $fillable = ['business_job_id', 'pm_file_id', 'status', 'error', 'page_count', 'skipped_pages', 'set_finish', 'created_by', 'finished_at', 'progress_done', 'progress_count', 'progress_note'];
+    protected $fillable = ['business_job_id', 'pm_file_id', 'status', 'error', 'page_count', 'skipped_pages', 'set_finish', 'created_by', 'finished_at', 'progress_done', 'progress_count', 'progress_note', 'skip_summary'];
 
     protected $casts = ['finished_at' => 'datetime'];
 
@@ -23,6 +23,11 @@ class DrawingSet extends Model
     public function elevations()
     {
         return $this->hasMany(DrawingElevation::class)->orderBy('page')->orderBy('id');
+    }
+
+    public function glazingTags()
+    {
+        return $this->hasMany(DrawingGlazingTag::class)->orderBy('tag');
     }
 
     public function warnings()

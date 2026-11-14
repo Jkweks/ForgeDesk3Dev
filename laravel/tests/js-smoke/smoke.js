@@ -16,10 +16,12 @@ const data = {
     purchase_orders: [{ id: 9, po_number: 'PO-1' }], items: [{ id: 1, label: 'Spec' }, { id: 2, label: 'Shop' }], packages: [{ pm_file_id: 7, file: { original_name: 'Submittal_9001_001.pdf' }, item_count: 2, created_at: '2026-11-03' }] },
   '/pm/library/products': [{ id: 1, name: 'Trifab', documents_count: 1, manufacturer: { name: 'Kawneer' } }],
   '/pm/library/products/1': { id: 1, pm_manufacturer_id: 1, name: 'Trifab', is_active: true, documents: [{ id: 1, kind: 'spec', label: 'Spec', pm_file_id: 4, file: { original_name: 's.pdf' } }] },
-  '/pm/jobs/1/drawing-sets': [{ id: 1, status: 'done', file: { original_name: 'shop.pdf' }, elevations_count: 2, page_count: 40, progress_done: 40, progress_count: 40 },
+  '/pm/jobs/1/drawing-sets': [{ id: 1, status: 'done', file: { original_name: 'shop.pdf' }, elevations_count: 2, page_count: 40, progress_done: 40, progress_count: 40, skip_summary: '38 pages were not elevations: plans 3', glazing_tags: [{ tag: 'IG-1T', makeup: '1/4 clear' }] },
     { id: 2, status: 'running', file: { original_name: 'second.pdf' }, progress_done: 12, progress_count: 40, progress_note: 'C2' }],
   '/pm/jobs/1/drawing-elevations': { summary: { total: 2, pending: 2, approved: 0, excluded: 0, needs_attention: 1, high: 1, average_confidence: 72 },
     elevations: [
+      { id: 7, label: 'W9', page: 20, arch_ref: 'A-409', system: 'TUBELITE', finish: 'CLEAR', total_reqd: 4, ro_w: '60.0000', ro_h: '84.0000', multi_sheet: false, manual_takeoff: null, review_status: 'approved', set: { id: 1, file: 'shop.pdf' }, sheets: [], marks: [], unresolved_axes: [],
+        axis_checks: [{ axis: 'w', state: 'closes', ok: true, member: '2.0000' }, { axis: 'h', state: 'closes', ok: true, member: '2.0000' }], confidence: { score: 95, level: 'high', reasons: ['Frame closes and the readings look plausible'] } },
       { id: 6, label: 'W2', page: 2, arch_ref: 'A-402', system: 'TUBELITE', finish: 'CLEAR', total_reqd: 3, ro_w: null, ro_h: '96.0000', multi_sheet: false, manual_takeoff: null, review_status: 'pending', set: { id: 1, file: 'shop.pdf' },
         sheets: [{ page: 2, width: '1224.00', height: '792.00' }], marks: [], unresolved_axes: ['w'],
         axis_checks: [{ axis: 'w', state: 'flagged', ok: false, member: null }, { axis: 'h', state: 'unverifiable', ok: null }],
@@ -60,13 +62,13 @@ function run(file, pagePath) {
   w.safeShowModal = () => {}; w.safeHideModal = () => {}; w.applyActionPermissions = () => {}; w.alert = () => {}; w.confirm = () => true; w.prompt = () => 'x';
   w.authenticatedFetch = async (url) => { const key = url.split('?')[0] in data && !(url in data) ? url.split('?')[0] : url;
     if (!(key in data)) { errors.push('NO STUB for ' + url); return []; } return data[key]; };
-  w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: (t, k) => (typeof k === 'string' ? () => {} : undefined), set: () => true });
+  w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: (t, k) => (k === 'measureText' ? () => ({ width: 24 }) : (typeof k === 'string' ? () => {} : undefined)), set: () => true });
   w.authenticatedUpload = async () => ({ ok: true, json: async () => ({}) });
   w.console.error = (...a) => errors.push('console.error: ' + a.map(x => (x && x.message) || String(x)).join(' '));
   w.addEventListener('error', e => errors.push('window error: ' + e.message));
   try { w.eval(own); } catch (e) { errors.push('eval: ' + e.message); }
   return new Promise(res => { w.document.dispatchEvent(new w.Event('DOMContentLoaded')); setTimeout(async () => {
-    if (file === 'job') { await w.toggleSubmittal(3); await w.openSheetViewer(6); await new Promise(r => setTimeout(r, 200)); { const t = w.document.getElementById('szElevInfo').textContent; for (const need of ['Frame size ≠ openings', 'Keep, mark unverified', 'Accept with a reason', 'R.O. width not read']) if (!t.includes(need)) errors.push('flagged elevation panel is missing: ' + need); } await w.openSheetViewer(5); await new Promise(r => setTimeout(r, 250)); w.szSelect(2); w.szSelect(2); w.szHoverMove({ clientX: 0, clientY: 0 }); w.szSetHover(3); await w.loadLibDocs(3).catch(() => {}); }
+    if (file === 'job') { await w.toggleSubmittal(3); await w.openSheetViewer(6); await new Promise(r => setTimeout(r, 200)); { const t = w.document.getElementById('szElevInfo').textContent; for (const need of ['Frame size ≠ openings', 'Keep, mark unverified', 'Accept with a reason', 'R.O. width not read']) if (!t.includes(need)) errors.push('flagged elevation panel is missing: ' + need); } await w.openSheetViewer(5); await new Promise(r => setTimeout(r, 250)); w.szSelect(2); w.szSelect(2); w.szHoverMove({ clientX: 0, clientY: 0 }); w.szSetHover(3); await w.loadLibDocs(3).catch(() => {}); w.showWoForm(); { const t = w.document.getElementById('woElevList').textContent; if (!t.includes('W9') || !t.includes('95%')) errors.push('work order picker missing approved elevation'); w.document.querySelector('#woElevList input').checked = true; const sc = w.woElevScope(); if (!/^W9: 4 lites, R\.O\. 60" × 7'?/.test(sc) && !sc.startsWith('W9: 4 lites')) errors.push('work order scope line wrong: ' + sc); } }
     if (file === 'po') { const before = w.document.querySelectorAll('#linesBody tr').length; w.addGroup(); w.addLine(); const after = w.document.querySelectorAll('#linesBody tr').length; if (after !== before + 3) errors.push('po rows ' + before + ' -> ' + after); const inp = w.document.querySelector('#linesBody tr:last-child input:nth-of-type(1)'); }
     await new Promise(r => setTimeout(r, 200));
     const text = w.document.body.textContent.replace(/\s+/g, ' ');
@@ -76,7 +78,7 @@ function run(file, pagePath) {
 (async () => {
   const checks = [
     ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'second.pdf', 'page 12 of 40', 'Request work order', 'ACME GC', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses',
-      'Drop the whole drawing package', 'doesn’t close', 'corrected · closes', '91% high', '41% low', 'Check sizes', 'Approve 1 high-confidence', '2 elevations'.replace('2 elevations', 'elevations'), 'Confidence', 'R.O. height', 'D.L.O. width #2', '40 1/2"', 'Confirm all', 'uniform member 2"']],
+      'Drop the whole drawing package', 'Glazing schedule', 'IG-1T', 'plans 3', 'Elevations from the approved drawings', 'doesn’t close', 'corrected · closes', '91% high', '41% low', 'Check sizes', 'Approve 1 high-confidence', '2 elevations'.replace('2 elevations', 'elevations'), 'Confidence', 'R.O. height', 'D.L.O. width #2', '40 1/2"', 'Confirm all', 'uniform member 2"']],
     ['po', '/pm/purchase-orders/9', ['PO PO-1', 'Group', 'Receive now', 'Rev 0', 'Flagged']],
     ['pos', '/pm/purchase-orders', ['PO-1']],
     ['library', '/pm/library', ['Trifab']],

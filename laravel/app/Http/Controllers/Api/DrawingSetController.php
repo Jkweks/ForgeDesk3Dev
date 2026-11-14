@@ -26,7 +26,7 @@ class DrawingSetController extends Controller
     {
         $s->load('file:id,original_name,size');
         if ($full) {
-            $s->load(['elevations.dims', 'elevations.glassTags', 'elevations.sheets', 'elevations.marks', 'elevations.axisChecks', 'warnings']);
+            $s->load(['elevations.dims', 'elevations.glassTags', 'elevations.sheets', 'elevations.marks', 'elevations.axisChecks', 'warnings', 'glazingTags']);
         }
         $out = $s->toArray();
         if ($full) {
@@ -54,7 +54,7 @@ class DrawingSetController extends Controller
     {
         $job = PmJobScope::find($request->user(), $jobId);
 
-        return response()->json(DrawingSet::where('business_job_id', $job->id)->withCount('elevations')->with('file:id,original_name,size')->orderByDesc('id')->get());
+        return response()->json(DrawingSet::where('business_job_id', $job->id)->withCount('elevations')->with(['file:id,original_name,size', 'glazingTags'])->orderByDesc('id')->get());
     }
 
     public function show(Request $request, int $jobId, int $id)
