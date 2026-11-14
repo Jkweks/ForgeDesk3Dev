@@ -126,4 +126,21 @@ class PmWorkspaceTest extends TestCase
         $this->getJson('/api/v1/dashboard/widgets/pm/jobs/list')->assertOk()->assertJsonPath('items.0.label', '9200');
         $this->getJson('/api/v1/dashboard/widgets/jobs')->assertOk()->assertJsonPath('active', 0);
     }
+
+    public function test_job_po_pages_render_and_vendor_lookup_hides_internal_vendors(): void
+    {
+        $this->actingAs($this->admin());
+        \App\Models\Supplier::create(['name' => 'Glass Co', 'is_active' => true]);
+        \App\Models\Supplier::create(['name' => 'Shop', 'is_active' => true, 'is_internal' => true]);
+
+        $this->get('/pm/purchase-orders')->assertOk()->assertSee('Job Purchase Orders');
+        $this->get('/pm/purchase-orders/new')->assertOk()->assertSee('New purchase order');
+        $this->get('/pm/purchase-orders/12')->assertOk();
+        $this->get('/pm/purchase-orders/abc')->assertNotFound();
+
+        $names = collect($this->getJson('/api/v1/pm/vendors')->assertOk()->json())->pluck('name');
+        $this->assertTrue($names->contains('Glass Co'));
+        $this->assertFalse($names->contains('Shop'));
+        $this->assertFalse($names->contains('Vos Glass - Fabrication'));
+    }
 }

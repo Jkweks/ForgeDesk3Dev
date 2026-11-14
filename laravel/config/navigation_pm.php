@@ -16,8 +16,9 @@ return [
     ],
     [
         'label' => 'Purchasing', 'icon' => 'shopping-cart', 'permission' => 'nav.pm',
-        'active' => ['pm/vendors'],
+        'active' => ['pm/vendors', 'pm/purchase-orders', 'pm/purchase-orders/*'],
         'items' => [
+            ['label' => 'Job Purchase Orders', 'href' => '/pm/purchase-orders', 'nav' => 'nav.pm', 'active' => ['pm/purchase-orders', 'pm/purchase-orders/*']],
             ['label' => 'Vendors', 'href' => '/pm/vendors', 'nav' => 'nav.pm'],
         ],
     ],

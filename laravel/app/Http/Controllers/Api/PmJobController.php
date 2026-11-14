@@ -60,6 +60,13 @@ class PmJobController extends Controller
         return response()->json($forecast->forJob($job, $sheets, $category === 'all' ? null : $category));
     }
 
+    /** Vendors a PM can order job material from (internal vendors are for internal POs only). */
+    public function vendors()
+    {
+        return response()->json(\App\Models\Supplier::where('is_active', true)->where('is_internal', false)
+            ->orderBy('name')->get(['id', 'name', 'code', 'bidestimate_code']));
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
