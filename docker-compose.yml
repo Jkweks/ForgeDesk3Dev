@@ -128,6 +128,21 @@ networks:
   forgedesk_network:
     driver: bridge
 
+  # Project Management worker (BidEstimate parser; later OCR / drawing import). Optional:
+  # start with `docker compose --profile pm up -d pm-worker`. See pm-worker/README.md.
+  pm-worker:
+    build:
+      context: ./pm-worker
+      args:
+        INSTALL_DEV: "0"
+    container_name: forgedesk_pm_worker
+    profiles: ["pm"]
+    restart: unless-stopped
+    environment:
+      WORKER_TOKEN: ${PM_WORKER_TOKEN:-}
+    networks:
+      - forgedesk_network
+
 volumes:
   postgres_data:
     driver: local
