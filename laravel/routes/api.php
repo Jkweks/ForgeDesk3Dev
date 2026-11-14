@@ -495,6 +495,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/pm/library/products/{id}/documents/{docId}', [\App\Http\Controllers\Api\PmLibraryController::class, 'removeDocument'])->middleware('permission:pm.library.manage');
         Route::get('/pm/files/{fileId}/download', [\App\Http\Controllers\Api\PmLibraryController::class, 'download'])->middleware('permission:pm.jobs.view');
 
+        // Receiving overview (job POs; records only)
+        Route::get('/pm/receiving/outstanding', [\App\Http\Controllers\Api\PmReceivingController::class, 'outstanding'])->middleware('permission:orders.view');
+        Route::get('/pm/receiving/flagged', [\App\Http\Controllers\Api\PmReceivingController::class, 'flagged'])->middleware('permission:orders.view');
+
         // To-dos
         Route::get('/pm/todos', [\App\Http\Controllers\Api\PmTodoController::class, 'index'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/todos', [\App\Http\Controllers\Api\PmTodoController::class, 'store'])->middleware('permission:pm.jobs.view');

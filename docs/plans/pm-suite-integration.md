@@ -257,6 +257,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **To-do (feature #28, built):** `pm_todos` (job-specific or general, assignable, due date, complete/reopen), a `/pm/todos` page, and two dashboard widgets (*My Open To-dos*, *My Overdue To-dos*). A to-do is visible if it is assigned to you, you created it, or its job is in your scope; assigning to someone else needs `pm.act_for_others`. Not built: automatic to-dos derived from submittals/POs (PM Suite's team to-do scoping).
 
+**Receiving (feature #3, built):** `/pm/receiving` lists issued, open job POs with lines still to receive (oldest expected first, overdue highlighted, quick receive per PO) and receipts flagged on arrival. Records only; never touches stock. Job-scoped like everything else.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

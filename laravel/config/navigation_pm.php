@@ -28,9 +28,10 @@ return [
     ],
     [
         'label' => 'Purchasing', 'icon' => 'shopping-cart', 'permission' => 'nav.pm',
-        'active' => ['pm/vendors', 'pm/purchase-orders', 'pm/purchase-orders/*'],
+        'active' => ['pm/vendors', 'pm/purchase-orders', 'pm/purchase-orders/*', 'pm/receiving'],
         'items' => [
             ['label' => 'Job Purchase Orders', 'href' => '/pm/purchase-orders', 'nav' => 'nav.pm', 'active' => ['pm/purchase-orders', 'pm/purchase-orders/*']],
+            ['label' => 'Receiving', 'href' => '/pm/receiving', 'nav' => 'nav.pm', 'active' => ['pm/receiving']],
             ['label' => 'Vendors', 'href' => '/pm/vendors', 'nav' => 'nav.pm'],
         ],
     ],
