@@ -21,6 +21,12 @@ return [
         'timeout' => (int) env('PM_WORKER_TIMEOUT', 60),
     ],
 
+    // F: share ingest (docs/plans/pm-suite-integration.md 4a): the Windows-side watcher posts file events here.
+    'fdrive_ingest' => [
+        'token' => env('FDRIVE_INGEST_TOKEN'),
+        'roots' => array_values(array_filter(explode('|', (string) env('FDRIVE_SCAN_ROOTS', '')))),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

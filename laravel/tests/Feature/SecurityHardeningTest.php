@@ -28,6 +28,8 @@ class SecurityHardeningTest extends TestCase
         'api/v1/user/change-password', 'api/v1/user/profile', 'api/v1/user/theme-preferences',
         'api/v1/user/wo-column-prefs', 'api/v1/user/jobs-column-prefs', 'api/v1/user/quality-report-prefs',
         'api/v1/dashboard/layout', 'api/v1/notifications/{notification}/dismiss',
+        // F: share watcher: authenticated by the X-Ingest-Token shared secret (no user session); see FdriveIngestTest
+        'api/v1/ingest/fdrive',
     ];
 
     public function test_every_mutating_api_route_has_a_permission_gate(): void

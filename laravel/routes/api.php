@@ -103,6 +103,9 @@ Route::post('/password/verify-token', [PasswordResetController::class, 'verifyTo
 
 // Fulfillment routes (public for internal use)
 Route::prefix('v1')->group(function () {
+    // F: share watcher (service token in X-Ingest-Token, no user session)
+    Route::post('/ingest/fdrive', [\App\Http\Controllers\Api\FdriveIngestController::class, 'ingest'])->middleware('throttle:600,1');
+
     // ── Shop floor (no auth — tablet kiosk) ──────────────────────────────────
     Route::get('/shop/work-orders', [\App\Http\Controllers\Api\ShopFloorController::class, 'workOrders']);
     Route::get('/shop/my-queue', [\App\Http\Controllers\Api\ShopFloorController::class, 'myQueue'])->middleware('throttle:120,1');
@@ -511,6 +514,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/work-order-requests/{id}/approve', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'approve'])->middleware('permission:fabrication.work-orders.create');
         Route::post('/work-order-requests/{id}/reject', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'reject'])->middleware('permission:fabrication.work-orders.create');
         Route::get('/work-order-requests/{id}/files/{fileId}', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'downloadFile'])->middleware('permission:fabrication.work-orders.view');
+
+        // F: ingest review inbox
+        Route::get('/pm/inbox', [\App\Http\Controllers\Api\FdriveIngestController::class, 'inbox'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/inbox/{id}/assign', [\App\Http\Controllers\Api\FdriveIngestController::class, 'assign'])->middleware('permission:pm.jobs.manage');
 
         // Receiving overview (job POs; records only)
         Route::get('/pm/receiving/outstanding', [\App\Http\Controllers\Api\PmReceivingController::class, 'outstanding'])->middleware('permission:orders.view');

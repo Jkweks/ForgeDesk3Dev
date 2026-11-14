@@ -23,6 +23,10 @@ return [
         'href' => '/pm/library', 'active' => ['pm/library'],
     ],
     [
+        'label' => 'File Inbox', 'icon' => 'inbox', 'permission' => 'nav.pm',
+        'href' => '/pm/inbox', 'active' => ['pm/inbox'], 'action_permission' => 'pm.jobs.manage',
+    ],
+    [
         'label' => 'Change History', 'icon' => 'history', 'permission' => 'nav.pm',
         'href' => '/pm/history', 'active' => ['pm/history'], 'action_permission' => 'pm.history.view',
     ],

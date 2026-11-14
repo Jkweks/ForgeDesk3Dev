@@ -35,3 +35,6 @@ Schedule::command('reservations:check-special-orders')->hourly()->withoutOverlap
 
 // Flag any product whose cached on-hand total stops matching its bins (logs a warning; fix with --fix)
 Schedule::command('inventory:check-totals')->dailyAt('02:15')->withoutOverlapping();
+
+// F: share reconciliation (the Windows watcher is the fast path; this catches anything it missed). No-op until FDRIVE_SCAN_ROOTS is set.
+Schedule::command('pm:scan-fdrive')->dailyAt('02:30')->withoutOverlapping();
