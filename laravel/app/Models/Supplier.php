@@ -30,21 +30,45 @@ class Supplier extends Model
         'is_internal',
         'products_services',
         'bidestimate_code',
-        'extra_phones',
-        'extra_emails',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'is_internal' => 'boolean',
-        'extra_phones' => 'array',
-        'extra_emails' => 'array',
         'minimum_order_amount' => 'decimal:2',
     ];
 
     public function contacts()
     {
         return $this->hasMany(SupplierContact::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function phones()
+    {
+        return $this->hasMany(SupplierPhone::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function emails()
+    {
+        return $this->hasMany(SupplierEmail::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    /** Replace extra phone numbers: [['label' => ..., 'number' => ...], ...] */
+    public function syncPhones(array $phones): void
+    {
+        $this->phones()->delete();
+        foreach (array_values($phones) as $i => $p) {
+            $this->phones()->create(['label' => $p['label'] ?? null, 'number' => $p['number'], 'sort_order' => $i]);
+        }
+    }
+
+    /** Replace extra email addresses: [['label' => ..., 'address' => ...], ...] */
+    public function syncEmails(array $emails): void
+    {
+        $this->emails()->delete();
+        foreach (array_values($emails) as $i => $e) {
+            $this->emails()->create(['label' => $e['label'] ?? null, 'address' => $e['address'], 'sort_order' => $i]);
+        }
     }
 
     public function aliases()

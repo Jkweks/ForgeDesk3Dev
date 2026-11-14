@@ -113,10 +113,10 @@ class SupplierController extends Controller
             return $conflict;
         }
 
-        $supplier = Supplier::create($request->except(['contacts', 'aliases']));
+        $supplier = Supplier::create($request->except(['contacts', 'aliases', 'extra_phones', 'extra_emails']));
         $this->syncRelations($supplier, $request);
 
-        $supplier->load(['contacts', 'aliases'])->loadCount('products');
+        $supplier->load(['contacts', 'aliases', 'phones', 'emails'])->loadCount('products');
 
         return response()->json([
             'message' => 'Supplier created successfully',
@@ -129,7 +129,7 @@ class SupplierController extends Controller
      */
     public function show(Supplier $supplier)
     {
-        $supplier->load(['products', 'contacts', 'aliases']);
+        $supplier->load(['products', 'contacts', 'aliases', 'phones', 'emails']);
         $supplier->loadCount('products');
 
         // Calculate supplier statistics
@@ -210,9 +210,9 @@ class SupplierController extends Controller
             return $conflict;
         }
 
-        $supplier->update($request->except(['contacts', 'aliases']));
+        $supplier->update($request->except(['contacts', 'aliases', 'extra_phones', 'extra_emails']));
         $this->syncRelations($supplier, $request);
-        $supplier->load(['contacts', 'aliases'])->loadCount('products');
+        $supplier->load(['contacts', 'aliases', 'phones', 'emails'])->loadCount('products');
 
         return response()->json([
             'message' => 'Supplier updated successfully',
@@ -384,6 +384,12 @@ class SupplierController extends Controller
     {
         if ($request->has('contacts')) {
             $supplier->syncContacts($request->input('contacts') ?? []);
+        }
+        if ($request->has('extra_phones')) {
+            $supplier->syncPhones($request->input('extra_phones') ?? []);
+        }
+        if ($request->has('extra_emails')) {
+            $supplier->syncEmails($request->input('extra_emails') ?? []);
         }
         if ($request->has('aliases')) {
             $supplier->syncAliases($request->input('aliases') ?? []);

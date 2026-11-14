@@ -42,7 +42,8 @@ class BidEstimateController extends Controller
         return response()->json(BidEstimate::where('business_job_id', $job->id)->orderBy('sheet')->get()
             ->map(fn ($e) => [
                 'id' => $e->id, 'sheet' => $e->sheet, 'imported_at' => $e->updated_at,
-                'contract_amount' => $e->contract_amount, 'line_count' => $e->line_count, 'review_count' => $e->review_count,
+                'contract_amount' => $e->contract_amount, 'line_count' => $e->lines()->count(),
+                'review_count' => $e->lines()->whereNotNull('review_reason')->count(),
                 'parserStale' => $e->parser_revision < BidEstimateImporter::CURRENT_PARSER_REVISION,
             ]));
     }
@@ -78,7 +79,7 @@ class BidEstimateController extends Controller
     public function show(int $jobId, string $sheet)
     {
         $job = $this->job($jobId);
-        $estimate = BidEstimate::where('business_job_id', $job->id)->where('sheet', $sheet)->firstOrFail();
+        $estimate = BidEstimate::with(['lines', 'adjustments', 'warnings'])->where('business_job_id', $job->id)->where('sheet', $sheet)->firstOrFail();
 
         return response()->json($this->presenter->present($estimate));
     }
@@ -89,6 +90,7 @@ class BidEstimateController extends Controller
         $job = $this->job($jobId);
         $estimate = BidEstimate::where('business_job_id', $job->id)->where('sheet', $sheet)->firstOrFail();
         $data = $request->validate([
+            'section' => 'required|in:material,large_sub,other,labor',
             'row' => 'required|integer|min:1',
             'action' => 'required|in:fix,ignore',
             'cost_code' => 'required_if:action,fix|nullable|integer|exists:cost_codes,code',
@@ -96,7 +98,7 @@ class BidEstimateController extends Controller
         ]);
 
         BidEstimateOverride::updateOrCreate(
-            ['business_job_id' => $job->id, 'sheet' => $sheet, 'row' => $data['row']],
+            ['business_job_id' => $job->id, 'sheet' => $sheet, 'section' => $data['section'], 'row' => $data['row']],
             ['action' => $data['action'], 'cost_code' => $data['action'] === 'fix' ? $data['cost_code'] : null,
                 'note' => $data['note'] ?? null, 'created_by' => $request->user()->id]
         );
@@ -104,11 +106,11 @@ class BidEstimateController extends Controller
         return response()->json($this->presenter->present($estimate));
     }
 
-    public function restore(int $jobId, string $sheet, int $row)
+    public function restore(int $jobId, string $sheet, string $section, int $row)
     {
         $job = $this->job($jobId);
         $estimate = BidEstimate::where('business_job_id', $job->id)->where('sheet', $sheet)->firstOrFail();
-        BidEstimateOverride::where(['business_job_id' => $job->id, 'sheet' => $sheet, 'row' => $row])->delete();
+        BidEstimateOverride::where(['business_job_id' => $job->id, 'sheet' => $sheet, 'section' => $section, 'row' => $row])->delete();
 
         return response()->json($this->presenter->present($estimate));
     }

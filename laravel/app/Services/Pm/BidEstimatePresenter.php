@@ -7,60 +7,52 @@ use App\Models\BidEstimateOverride;
 use App\Models\CostCode;
 
 /**
- * The estimate as the PM sees it: parsed data with their manual row decisions applied.
- * Overrides live in their own table keyed by sheet row, so they survive a re-import.
+ * The estimate as the PM sees it: stored lines with their manual row decisions applied.
+ * Overrides live in their own table keyed by (section, sheet row), so they survive a re-import.
  */
 class BidEstimatePresenter
 {
+    /** Keep the camelCase shape the PM Suite pages used, so the API stays stable. */
     public function present(BidEstimate $estimate): array
     {
-        $data = $estimate->data;
-        $lines = $data['lines'] ?? [];
-        $review = $data['reviewNeeded'] ?? [];
         $codes = CostCode::pluck('description', 'code');
-
         $overrides = BidEstimateOverride::where('business_job_id', $estimate->business_job_id)
-            ->where('sheet', $estimate->sheet)->get()->keyBy('row');
+            ->where('sheet', $estimate->sheet)->get()->keyBy(fn ($o) => $o->section.'|'.$o->row);
 
-        $ignored = [];
-        foreach ($overrides as $row => $ov) {
-            if ($ov->action === 'ignore') {
-                $ignored[$row] = true;
+        $lines = [];
+        $review = [];
+        foreach ($estimate->lines as $l) {
+            $ov = $overrides[$l->section.'|'.$l->row] ?? null;
+            if ($ov && $ov->action === 'ignore') {
+                continue;
             }
-        }
-
-        // Lines the parser could not code (not in `lines`) become real lines once fixed.
-        $byRow = [];
-        foreach ($lines as $l) {
-            $byRow[$l['row']] = $l;
-        }
-        foreach ($review as $r) {
-            $ov = $overrides[$r['row']] ?? null;
-            if ($ov && $ov->action === 'fix' && ! isset($byRow[$r['row']])) {
-                $byRow[$r['row']] = $r;
+            $row = [
+                'section' => $l->section, 'row' => $l->row, 'who' => $l->who, 'costCode' => $l->cost_code,
+                'description' => $l->description, 'qty' => $l->qty === null ? null : (float) $l->qty,
+                'unitPrice' => $l->unit_price === null ? null : (float) $l->unit_price,
+                'total' => $l->total === null ? null : (float) $l->total, 'confidence' => $l->confidence,
+            ];
+            if ($l->additional_cost_code) {
+                $row['additionalCostCode'] = $l->additional_cost_code;
             }
-        }
-        $lines = array_values($byRow);
-
-        foreach ($lines as &$l) {
-            $ov = $overrides[$l['row']] ?? null;
             if ($ov && $ov->action === 'fix') {
-                $l['costCode'] = $ov->cost_code;
-                $l['confidence'] = 'pm_fixed';
-                unset($l['reviewReason']);
+                $row['costCode'] = $ov->cost_code;
+                $row['confidence'] = 'pm_fixed';
+            } elseif ($l->review_reason) {
+                $row['reviewReason'] = $l->review_reason;
+                $review[] = $row;
+            }
+            if ($row['costCode'] !== null) {
+                $lines[] = $row;
             }
         }
-        unset($l);
-
-        $lines = array_values(array_filter($lines, fn ($l) => ! isset($ignored[$l['row']])));
-        $review = array_values(array_filter($review, fn ($r) => ! isset($overrides[$r['row']])));
 
         $byCode = [];
         foreach ($lines as $l) {
             $c = $l['costCode'];
             $byCode[$c] ??= ['total' => 0.0, 'lineCount' => 0, 'qty' => 0.0];
-            $byCode[$c]['total'] += (float) ($l['total'] ?? 0);
-            $byCode[$c]['qty'] += (float) ($l['qty'] ?? 0);
+            $byCode[$c]['total'] += $l['total'] ?? 0;
+            $byCode[$c]['qty'] += $l['qty'] ?? 0;
             $byCode[$c]['lineCount']++;
         }
         foreach ($byCode as $c => &$agg) {
@@ -78,13 +70,23 @@ class BidEstimatePresenter
             'imported_at' => $estimate->updated_at,
             'parserRevision' => $estimate->parser_revision,
             'parserStale' => $estimate->parser_revision < BidEstimateImporter::CURRENT_PARSER_REVISION,
-            'meta' => $data['meta'] ?? null,
-            'summary' => $data['summary'] ?? null,
+            'meta' => array_filter([
+                'projectName' => $estimate->project_name, 'gc' => $estimate->gc,
+                'architect' => $estimate->architect, 'due' => $estimate->due,
+            ], fn ($v) => $v !== null),
+            'summary' => array_filter([
+                'contractAmount' => $estimate->contract_amount, 'dollarsPerSquareFootGlass' => $estimate->dollars_per_sf_glass,
+                'material' => $estimate->material, 'tax' => $estimate->tax, 'large_sub' => $estimate->large_sub,
+                'other' => $estimate->other, 'labor' => $estimate->labor, 'material_overhead' => $estimate->material_overhead,
+            ], fn ($v) => $v !== null),
             'lines' => $lines,
-            'adjustments' => $data['adjustments'] ?? [],
+            'adjustments' => $estimate->adjustments->map->only(['section', 'row', 'description', 'rate', 'base', 'amount'])->all(),
             'byCostCode' => $byCode,
             'reviewNeeded' => $review,
-            'warnings' => $data['warnings'] ?? [],
+            'warnings' => $estimate->warnings->map(fn ($w) => array_filter([
+                'type' => $w->type, 'section' => $w->section, 'computedFromLines' => $w->computed_from_lines,
+                'statedInSheet' => $w->stated_in_sheet, 'note' => $w->note,
+            ], fn ($v) => $v !== null))->all(),
             'lineCount' => count($lines),
             'reviewCount' => count($review),
         ];

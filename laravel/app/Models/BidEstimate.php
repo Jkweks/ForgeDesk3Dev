@@ -8,13 +8,28 @@ class BidEstimate extends Model
 {
     protected $fillable = [
         'business_job_id', 'pm_file_id', 'sheet', 'file_sha256', 'parser_revision',
-        'contract_amount', 'line_count', 'review_count', 'data', 'imported_by',
+        'project_name', 'gc', 'architect', 'due',
+        'contract_amount', 'dollars_per_sf_glass', 'material', 'tax', 'large_sub', 'other', 'labor', 'material_overhead',
+        'imported_by',
     ];
-
-    protected $casts = ['data' => 'array', 'contract_amount' => 'decimal:2'];
 
     public function file()
     {
         return $this->belongsTo(PmFile::class, 'pm_file_id');
+    }
+
+    public function lines()
+    {
+        return $this->hasMany(BidEstimateLine::class)->orderBy('row');
+    }
+
+    public function adjustments()
+    {
+        return $this->hasMany(BidEstimateAdjustment::class)->orderBy('row');
+    }
+
+    public function warnings()
+    {
+        return $this->hasMany(BidEstimateWarning::class);
     }
 }

@@ -93,7 +93,11 @@ class BidEstimateImportTest extends TestCase
 
         $this->postJson($url, ['pm_file_id' => $fileId, 'sheet' => 'CONTRACT'])->assertOk()->assertJsonPath('outcome', 'imported');
         $this->assertSame(1, BidEstimate::count());
-        $this->assertEquals(12500.5, BidEstimate::first()->contract_amount);
+        $est = BidEstimate::first();
+        $this->assertEquals(12500.5, $est->contract_amount);
+        $this->assertSame('ACME', $est->gc);
+        $this->assertSame(4, $est->lines()->count()); // 3 usable + 1 codeless review row, no duplicates
+        $this->assertSame(2, $est->lines()->whereNotNull('review_reason')->count());
 
         Http::fake(); // any further worker call would now return an empty 200
         $this->postJson($url, ['pm_file_id' => $fileId, 'sheet' => 'CONTRACT'])->assertOk()->assertJsonPath('outcome', 'unchanged');
@@ -115,8 +119,8 @@ class BidEstimateImportTest extends TestCase
         $base = "/api/v1/pm/jobs/{$this->job->id}/estimates/CONTRACT";
 
         // fix the off-list code on row 12, code the uncoded row 40, ignore nothing yet
-        $this->postJson("$base/override", ['row' => 12, 'action' => 'fix', 'cost_code' => 205])->assertOk();
-        $res = $this->postJson("$base/override", ['row' => 40, 'action' => 'fix', 'cost_code' => 100])->assertOk();
+        $this->postJson("$base/override", ['section' => 'material', 'row' => 12, 'action' => 'fix', 'cost_code' => 205])->assertOk();
+        $res = $this->postJson("$base/override", ['section' => 'material', 'row' => 40, 'action' => 'fix', 'cost_code' => 100])->assertOk();
 
         $this->assertSame(0, $res->json('reviewCount'));
         $this->assertSame(4, $res->json('lineCount')); // row 40 joined the usable lines
@@ -124,18 +128,38 @@ class BidEstimateImportTest extends TestCase
         $this->assertEquals(300, $res->json('byCostCode.205.total'));
         $this->assertSame('Fab - Shop', $res->json('byCostCode.100.description'));
 
-        $res = $this->postJson("$base/override", ['row' => 11, 'action' => 'ignore'])->assertOk();
+        $res = $this->postJson("$base/override", ['section' => 'material', 'row' => 11, 'action' => 'ignore'])->assertOk();
         $this->assertEquals(1000, $res->json('byCostCode.200.total'));
 
         // codes must exist on the master list
-        $this->postJson("$base/override", ['row' => 10, 'action' => 'fix', 'cost_code' => 4242])->assertStatus(422);
+        $this->postJson("$base/override", ['section' => 'material', 'row' => 10, 'action' => 'fix', 'cost_code' => 4242])->assertStatus(422);
 
         // a forced re-import keeps the PM's decisions
         $this->fakeWorker();
         $res = $this->postJson($import, ['pm_file_id' => $fileId, 'sheet' => 'CONTRACT', 'force' => true])->assertOk();
         $this->assertEquals(1000, $res->json('estimate.byCostCode.200.total'));
 
-        $this->deleteJson("$base/override/11")->assertOk()->assertJsonPath('byCostCode.200.total', 1500);
+        $this->deleteJson("$base/override/material/11")->assertOk()->assertJsonPath('byCostCode.200.total', 1500);
+    }
+
+    public function test_same_sheet_row_in_two_sections_does_not_collide(): void
+    {
+        $p = $this->parsed();
+        $p['lines'][] = ['section' => 'labor', 'row' => 10, 'who' => null, 'costCode' => 100, 'description' => 'Shop labor',
+            'qty' => 8, 'unitPrice' => 50, 'total' => 400, 'confidence' => 'parsed'];
+        Http::fake([
+            'worker.test/estimate/sheets' => Http::response(['sheets' => ['CONTRACT']]),
+            'worker.test/estimate/parse*' => Http::response($p),
+        ]);
+        $fileId = $this->upload()->json('file.id');
+        $res = $this->postJson("/api/v1/pm/jobs/{$this->job->id}/estimates/import", ['pm_file_id' => $fileId, 'sheet' => 'CONTRACT'])->assertOk();
+        $this->assertSame(1000.0, (float) $res->json('estimate.byCostCode.200.total') - 500); // material row 10
+        $this->assertEquals(400, $res->json('estimate.byCostCode.100.total'));              // labor row 10 kept
+
+        // ignoring the material row 10 leaves the labor row 10 alone
+        $res = $this->postJson("/api/v1/pm/jobs/{$this->job->id}/estimates/CONTRACT/override", ['section' => 'material', 'row' => 10, 'action' => 'ignore'])->assertOk();
+        $this->assertEquals(400, $res->json('byCostCode.100.total'));
+        $this->assertEquals(500, $res->json('byCostCode.200.total'));
     }
 
     public function test_worker_problems_are_reported_cleanly(): void

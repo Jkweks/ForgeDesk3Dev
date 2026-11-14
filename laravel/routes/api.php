@@ -482,7 +482,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pm/jobs/{jobId}/estimates/import', [\App\Http\Controllers\Api\BidEstimateController::class, 'import'])->middleware('permission:pm.jobs.manage');
         Route::get('/pm/jobs/{jobId}/estimates/{sheet}', [\App\Http\Controllers\Api\BidEstimateController::class, 'show'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs/{jobId}/estimates/{sheet}/override', [\App\Http\Controllers\Api\BidEstimateController::class, 'override'])->middleware('permission:pm.jobs.manage');
-        Route::delete('/pm/jobs/{jobId}/estimates/{sheet}/override/{row}', [\App\Http\Controllers\Api\BidEstimateController::class, 'restore'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/estimates/{sheet}/override/{section}/{row}', [\App\Http\Controllers\Api\BidEstimateController::class, 'restore'])->middleware('permission:pm.jobs.manage');
 
         // Job-specific POs (PM Suite): never touch stock; receiving only records arrival
         Route::get('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'index'])->middleware('permission:orders.view');

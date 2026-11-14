@@ -623,8 +623,8 @@
         document.getElementById('supplierIsActive').checked = supplier.supplier.is_active;
         document.getElementById('supplierIsInternal').checked = !!supplier.supplier.is_internal;
         renderContactRows(supplier.supplier.contacts || []);
-        document.getElementById('supplierExtraPhones').value = (supplier.supplier.extra_phones || []).map(p => (p.label ? p.label + ': ' : '') + p.number).join('\n');
-        document.getElementById('supplierExtraEmails').value = (supplier.supplier.extra_emails || []).map(e => (e.label ? e.label + ': ' : '') + e.address).join('\n');
+        document.getElementById('supplierExtraPhones').value = (supplier.supplier.phones || []).map(p => (p.label ? p.label + ': ' : '') + p.number).join('\n');
+        document.getElementById('supplierExtraEmails').value = (supplier.supplier.emails || []).map(e => (e.label ? e.label + ': ' : '') + e.address).join('\n');
         document.getElementById('supplierProductsServices').value = supplier.supplier.products_services || '';
         document.getElementById('supplierBidCode').value = supplier.supplier.bidestimate_code || '';
         document.getElementById('supplierAliases').value = (supplier.supplier.aliases || []).filter(a => a.source === 'manual').map(a => a.alias).join(', ');

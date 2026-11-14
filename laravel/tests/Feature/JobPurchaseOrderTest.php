@@ -104,6 +104,7 @@ class JobPurchaseOrderTest extends TestCase
         $this->assertSame(1, $rev->json('revision_number'));
         $this->assertCount(1, $rev->json('revisions'));
         $this->assertSame(0, $rev->json('revisions.0.revision_number'));
+        $this->assertCount(4, $rev->json('revisions.0.lines')); // group, its 2 children, sealant
 
         $this->postJson("/api/v1/job-purchase-orders/{$po['id']}/void", [])->assertStatus(422);
         $this->postJson("/api/v1/job-purchase-orders/{$po['id']}/close")->assertOk();

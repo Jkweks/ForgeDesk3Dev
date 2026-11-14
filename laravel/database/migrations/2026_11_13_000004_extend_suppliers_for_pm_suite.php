@@ -15,9 +15,25 @@ return new class extends Migration
         Schema::table('suppliers', function (Blueprint $table) {
             $table->text('products_services')->nullable()->after('notes');
             $table->string('bidestimate_code')->nullable()->after('products_services');
-            $table->json('extra_phones')->nullable()->after('bidestimate_code');
-            $table->json('extra_emails')->nullable()->after('extra_phones');
             $table->index('bidestimate_code');
+        });
+
+        Schema::create('supplier_phones', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('supplier_id')->constrained()->cascadeOnDelete();
+            $table->string('label')->nullable();
+            $table->string('number', 50);
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('supplier_emails', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('supplier_id')->constrained()->cascadeOnDelete();
+            $table->string('label')->nullable();
+            $table->string('address');
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->timestamps();
         });
 
         Schema::create('supplier_contacts', function (Blueprint $table) {
@@ -45,10 +61,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('supplier_aliases');
+        Schema::dropIfExists('supplier_emails');
+        Schema::dropIfExists('supplier_phones');
         Schema::dropIfExists('supplier_contacts');
         Schema::table('suppliers', function (Blueprint $table) {
             $table->dropIndex(['bidestimate_code']);
-            $table->dropColumn(['products_services', 'bidestimate_code', 'extra_phones', 'extra_emails']);
+            $table->dropColumn(['products_services', 'bidestimate_code']);
         });
     }
 };

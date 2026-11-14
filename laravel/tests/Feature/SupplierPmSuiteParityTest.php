@@ -36,7 +36,8 @@ class SupplierPmSuiteParityTest extends TestCase
         $s = Supplier::with(['contacts', 'aliases'])->findOrFail($id);
         $this->assertSame(['Ann', 'Bob'], $s->contacts->pluck('name')->all());
         $this->assertTrue($s->contacts->first()->is_preferred_rep);
-        $this->assertSame('555-0100', $s->extra_phones[0]['number']);
+        $this->assertSame('555-0100', $s->phones()->first()->number);
+        $this->assertSame('Shop', $s->phones()->first()->label);
         $this->assertCount(2, $s->aliases);
 
         $this->putJson("/api/v1/suppliers/{$id}", ['name' => 'Perry Glass', 'contacts' => [['name' => 'Cy']], 'aliases' => ['Perry Brg']])->assertOk();

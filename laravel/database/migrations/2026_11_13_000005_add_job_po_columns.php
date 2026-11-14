@@ -50,15 +50,37 @@ return new class extends Migration
             $table->id();
             $table->foreignId('purchase_order_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('revision_number');
-            $table->json('snapshot');
+            // Header as it stood when the revision was cut
+            $table->foreignId('supplier_id')->nullable()->constrained('suppliers')->nullOnDelete();
+            $table->string('issue_stage', 40)->nullable();
+            $table->date('expected_date')->nullable();
+            $table->string('cost_code')->nullable();
+            $table->text('notes')->nullable();
+            $table->decimal('total_amount', 12, 2)->default(0);
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->unique(['purchase_order_id', 'revision_number']);
+        });
+
+        // Lines as they stood at that revision (relational copy, not a blob)
+        Schema::create('purchase_order_revision_lines', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('purchase_order_revision_id')->constrained('purchase_order_revisions')->cascadeOnDelete();
+            $table->unsignedBigInteger('parent_line_id')->nullable()->index();
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->text('description')->nullable();
+            $table->string('kind', 30)->nullable();
+            $table->integer('quantity_ordered')->default(0);
+            $table->decimal('unit_cost', 12, 2)->default(0);
+            $table->decimal('total_cost', 12, 2)->default(0);
+            $table->string('cost_code')->nullable();
+            $table->text('notes')->nullable();
         });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('purchase_order_revision_lines');
         Schema::dropIfExists('purchase_order_revisions');
         Schema::dropIfExists('purchase_order_receipts');
         Schema::table('purchase_order_items', function (Blueprint $table) {

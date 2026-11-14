@@ -158,13 +158,24 @@ class JobPurchaseOrderController extends Controller
             return $blocked;
         }
         DB::transaction(function () use ($jobPurchaseOrder) {
-            $current = $this->present($this->job($jobPurchaseOrder));
-            $jobPurchaseOrder->revisions()->create([
-                'revision_number' => $jobPurchaseOrder->revision_number,
-                'snapshot' => $current,
+            $po = $this->job($jobPurchaseOrder);
+            $revision = $po->revisions()->create([
+                'revision_number' => $po->revision_number,
+                'supplier_id' => $po->supplier_id,
+                'issue_stage' => $po->issue_stage,
+                'expected_date' => $po->expected_date,
+                'cost_code' => $po->cost_code,
+                'notes' => $po->notes,
+                'total_amount' => $po->total_amount,
                 'created_by' => auth()->id(),
             ]);
-            $jobPurchaseOrder->increment('revision_number');
+            foreach ($po->items as $i => $group) {
+                $parent = $revision->lines()->create($this->revisionLine($group, $i));
+                foreach ($group->children as $j => $child) {
+                    $revision->lines()->create($this->revisionLine($child, $j) + ['parent_line_id' => $parent->id]);
+                }
+            }
+            $po->increment('revision_number');
         });
 
         return response()->json($this->present($this->job($jobPurchaseOrder->fresh())));
@@ -264,7 +275,16 @@ class JobPurchaseOrderController extends Controller
         abort_unless($po->isJob(), 404);
 
         return $po->load(['supplier', 'job', 'items' => fn ($q) => $q->whereNull('parent_item_id')->orderBy('sort_order')->orderBy('id'),
-            'items.children', 'receipts', 'revisions']);
+            'items.children', 'receipts', 'revisions.lines']);
+    }
+
+    private function revisionLine(PurchaseOrderItem $i, int $order): array
+    {
+        return [
+            'sort_order' => $order, 'description' => $i->description, 'kind' => $i->kind,
+            'quantity_ordered' => $i->quantity_ordered, 'unit_cost' => $i->unit_cost,
+            'total_cost' => $i->total_cost, 'cost_code' => $i->cost_code, 'notes' => $i->notes,
+        ];
     }
 
     private function present(PurchaseOrder $po): array
