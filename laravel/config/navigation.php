@@ -35,10 +35,6 @@ return [
         'href' => '/', 'active' => ['/'],
     ],
     [
-        'label' => 'Search', 'icon' => 'search', 'permission' => 'nav.dashboard',
-        'href' => '/search', 'active' => ['search'],
-    ],
-    [
         // Stock and purchasing. Purchasing + stock control used to live under "Operations" (nav.operations).
         'label' => 'Inventory', 'icon' => 'package', 'permission' => ['nav.inventory', 'nav.operations'],
         'active' => ['inventory/*', 'low-stock', 'critical-stock', 'transactions', 'categories', 'suppliers',
