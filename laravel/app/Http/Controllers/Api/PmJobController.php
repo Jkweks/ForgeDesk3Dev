@@ -23,7 +23,7 @@ class PmJobController extends Controller
 
     private function jobs()
     {
-        return BusinessJob::withoutGlobalScope(FabricationVisibleScope::class);
+        return \App\Services\Pm\PmJobScope::query(auth()->user());
     }
 
     public function index(Request $request)
@@ -79,7 +79,13 @@ class PmJobController extends Controller
             'target_completion_date' => 'nullable|date',
         ]);
 
-        $job = BusinessJob::create($data + ['status' => 'bidding', 'origin' => 'pm', 'created_by_id' => auth()->id()]);
+        $me = auth()->user();
+        if (! empty($data['project_manager_id']) && (int) $data['project_manager_id'] !== $me->id && ! $me->hasPermission('pm.act_for_others')) {
+            return response()->json(['message' => 'You can only create jobs for yourself.', 'errors' => ['project_manager_id' => ['Not allowed to act for another project manager.']]], 403);
+        }
+        $data['project_manager_id'] ??= $me->id;
+
+        $job = BusinessJob::create($data + ['status' => 'bidding', 'origin' => 'pm', 'created_by_id' => $me->id]);
 
         return response()->json($job->fresh()->toArray() + ['status_label' => $job->status_label], 201);
     }

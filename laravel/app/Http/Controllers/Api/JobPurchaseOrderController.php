@@ -36,6 +36,9 @@ class JobPurchaseOrderController extends Controller
     public function index(Request $request)
     {
         $q = PurchaseOrder::jobType()->with(['supplier', 'job']);
+        if (($ids = \App\Services\Pm\PmJobScope::visibleIds($request->user())) !== null) {
+            $q->whereIn('business_job_id', $ids);
+        }
         if ($request->filled('business_job_id')) {
             $q->where('business_job_id', $request->business_job_id);
         }
@@ -75,6 +78,7 @@ class JobPurchaseOrderController extends Controller
         if ($err = $this->rejectInternalVendor($request->supplier_id)) {
             return $err;
         }
+        \App\Services\Pm\PmJobScope::find($request->user(), (int) $request->business_job_id); // 404 for jobs outside your scope
 
         $po = DB::transaction(function () use ($request) {
             $stage = $request->input('issue_stage', 'draft');
@@ -273,6 +277,8 @@ class JobPurchaseOrderController extends Controller
     private function job(PurchaseOrder $po): PurchaseOrder
     {
         abort_unless($po->isJob(), 404);
+        $ids = \App\Services\Pm\PmJobScope::visibleIds(auth()->user());
+        abort_if($ids !== null && ! in_array($po->business_job_id, $ids, true), 404);
 
         return $po->load(['supplier', 'job', 'items' => fn ($q) => $q->whereNull('parent_item_id')->orderBy('sort_order')->orderBy('id'),
             'items.children', 'receipts', 'revisions.lines']);
@@ -299,6 +305,8 @@ class JobPurchaseOrderController extends Controller
     private function blocked(PurchaseOrder $po)
     {
         abort_unless($po->isJob(), 404);
+        $ids = \App\Services\Pm\PmJobScope::visibleIds(auth()->user());
+        abort_if($ids !== null && ! in_array($po->business_job_id, $ids, true), 404);
         if ($po->isVoided()) {
             return response()->json(['message' => 'Voided orders cannot be changed'], 422);
         }

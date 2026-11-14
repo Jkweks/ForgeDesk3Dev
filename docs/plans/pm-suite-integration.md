@@ -247,6 +247,8 @@ Built and committed on `feature/pm-suite-integration`: internal vendors and PO t
 
 Next: Material Forecast (estimated vs ordered vs received per cost code, reading job POs), then glass-to-PO (vendor matching via `Supplier::findByEstimateTag`), budget tracking on the estimate, Submittal Tracker/Builder, Product Library, roles (superintendent / company dashboard). Not yet done from the BidEstimate feature set: manually added lines, PO line import from the estimate.
 
+**Roles (feature #14, built):** PM Suite's admin/standard roles plus flags map to ForgeDesk roles and permissions. New roles `project_manager` (own jobs only) and `superintendent`; permissions `pm.jobs.view_all` (company scope: admin, manager, office_staff, superintendent), `pm.act_for_others` (admin, manager), `pm.superintendent`, `pm.company_dashboard`. A PM without `view_all` sees only jobs where they are the project manager or the creator: enforced in the PM job, estimate, forecast, job PO and dashboard-widget endpoints. Creating a job defaults the project manager to yourself; assigning another PM needs `pm.act_for_others`. Not built yet: company-dashboard widgets, superintendent-only features (crew schedule).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

@@ -742,15 +742,14 @@ class DashboardWidgetController extends Controller
     /** Project Management stage counts (every stage, incl. the ones hidden from Fabrication). */
     public function pmJobs()
     {
-        $count = fn (string $status) => BusinessJob::withoutGlobalScope(\App\Models\Scopes\FabricationVisibleScope::class)
-            ->where('status', $status)->count();
+        $count = fn (string $status) => \App\Services\Pm\PmJobScope::query(auth()->user())->where('status', $status)->count();
 
         return response()->json(['bidding' => $count('bidding'), 'won' => $count('won'), 'lost' => $count('lost')]);
     }
 
     public function pmJobsList(Request $request)
     {
-        $items = BusinessJob::withoutGlobalScope(\App\Models\Scopes\FabricationVisibleScope::class)
+        $items = \App\Services\Pm\PmJobScope::query(auth()->user())
             ->whereIn('status', ['bidding', 'won'])
             ->latest('updated_at')
             ->limit($this->limitFor($request, 'pm_bids_list'))

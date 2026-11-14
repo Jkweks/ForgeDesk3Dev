@@ -32,7 +32,7 @@ class BidEstimateController extends Controller
 
     private function job(int $id): BusinessJob
     {
-        return BusinessJob::withoutGlobalScope(FabricationVisibleScope::class)->findOrFail($id);
+        return \App\Services\Pm\PmJobScope::find(auth()->user(), $id);
     }
 
     public function index(int $jobId)
