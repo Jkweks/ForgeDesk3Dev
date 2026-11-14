@@ -271,6 +271,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Estimate tags to vendors (feature #2 note, built):** in the job PO editor's *Add from estimate* picker each estimate Supplier tag is matched to a vendor (`Supplier::findByEstimateTag`: BidEstimate code, learned alias, supplier code or name, punctuation/case-insensitive; internal vendors are never suggested). Picking a vendor for an unmatched tag teaches it (stored as a `bidestimate` alias, one owner per alias), and the PO vendor is suggested when the chosen lines point at exactly one vendor. Not built: the glass-specific *Pick glass types* screen, estimator "guess, no quote" tags, glass schedule tags.
 
+**Verification notes (2026-11-13):** all 16 migrations were run from scratch on a throwaway Postgres 16 (not just the SQLite the tests use) and a smoke script exercised the forecast, receiving, to-do, history, scope and `lockForUpdate` queries there; they passed. The dev database itself has **not** been migrated yet (it runs on the next container restart). The default queue `retry_after` was raised from 90 s to 1200 s because a drawing-set import can run for minutes and the Redis/database queue would otherwise hand the same job to a second worker.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).
