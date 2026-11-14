@@ -45,6 +45,21 @@
         </div>
       </div>
 
+      <div class="card mb-3">
+        <div class="card-header">
+          <h3 class="card-title">Material forecast</h3>
+          <div class="card-actions"><label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="fcAll" onchange="loadForecast()"><span class="form-check-label">All cost codes</span></label></div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table">
+            <thead><tr><th>Code</th><th>Description</th><th class="text-end">Estimated</th><th class="text-end">Ordered</th><th class="text-end">Ordered %</th><th class="text-end">Planned (draft)</th><th class="text-end">Received</th><th>Status</th></tr></thead>
+            <tbody id="forecastBody"><tr><td colspan="8" class="text-muted">Loading...</td></tr></tbody>
+            <tfoot id="forecastFoot"></tfoot>
+          </table>
+        </div>
+        <div class="card-footer text-muted small">Ordered and received count issued job purchase orders only. Draft POs are shown as planned. Stock and internal POs are not job material.</div>
+      </div>
+
       <div id="estimateBody" style="display:none">
         <div class="row row-cards mb-3" id="estSummary"></div>
         <div id="estStale" class="alert alert-warning" style="display:none">This sheet was imported with an older parser. Re-import it to pick up parser fixes.</div>
@@ -153,6 +168,30 @@
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
 
+  const FC_STATUS = {
+    none: ['—', 'bg-secondary-lt'], not_ordered: ['Not ordered', 'bg-orange-lt'], draft_only: ['Draft only', 'bg-yellow-lt'],
+    ordered: ['Ordered', 'bg-blue-lt'], partially_received: ['Partly received', 'bg-cyan-lt'], received: ['Received', 'bg-green-lt'],
+    over_budget: ['Over estimate', 'bg-red-lt'],
+  };
+
+  async function loadForecast() {
+    const all = document.getElementById('fcAll').checked;
+    const f = await authenticatedFetch(`/pm/jobs/${JOB_ID}/forecast${all ? '?category=all' : ''}`);
+    const body = document.getElementById('forecastBody');
+    body.innerHTML = f.rows.length ? f.rows.map(r => {
+      const [label, cls] = FC_STATUS[r.status] || [r.status, 'bg-secondary-lt'];
+      return `<tr><td>${r.costCode}</td><td>${esc(r.description)}</td>
+        <td class="text-end">${money(r.estimatedTotal)}<div class="text-muted small">${r.estimatedQty} qty</div></td>
+        <td class="text-end">${money(r.orderedTotal)}<div class="text-muted small">${r.orderedQty} qty</div></td>
+        <td class="text-end">${r.orderedPct == null ? '—' : r.orderedPct + '%'}</td>
+        <td class="text-end">${r.draftTotal ? money(r.draftTotal) : '—'}</td>
+        <td class="text-end">${money(r.receivedTotal)}<div class="text-muted small">${r.receivedPct == null ? '—' : r.receivedPct + '% of ordered'}</div></td>
+        <td><span class="badge ${cls}">${label}</span></td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="text-muted">Import an estimate or add job purchase orders to see the forecast.</td></tr>';
+    const t = f.totals;
+    document.getElementById('forecastFoot').innerHTML = f.rows.length ? `<tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(t.estimatedTotal)}</td><td class="text-end">${money(t.orderedTotal)}</td><td></td><td class="text-end">${money(t.draftTotal)}</td><td class="text-end">${money(t.receivedTotal)}</td><td></td></tr>` : '';
+  }
+
   async function decide(section, row, action, i) {
     const body = { section, row, action };
     if (action === 'fix') {
@@ -190,7 +229,7 @@
     try {
       const d = await post(`${base()}/import`, { pm_file_id: uploadedFile.id, sheet });
       const msg = { imported: 'Imported.', reimported: 'Re-imported with the new file.', unchanged: 'Nothing changed since the last import, so nothing was re-read.' }[d.outcome];
-      await loadSheets(sheet); notice(msg, 'success');
+      await Promise.all([loadSheets(sheet), loadForecast()]); notice(msg, 'success');
     } catch (e) { notice(e.message || 'Import failed', 'danger'); }
   }
 
@@ -198,7 +237,7 @@
     document.getElementById('sheetPick').addEventListener('change', (ev) => showSheet(ev.target.value));
     try {
       [costCodes] = await Promise.all([authenticatedFetch('/pm/cost-codes'), loadJob()]);
-      await loadSheets();
+      await Promise.all([loadSheets(), loadForecast()]);
     } catch (e) { console.error(e); notice(e.message || 'Could not load this job', 'danger'); }
   });
 </script>

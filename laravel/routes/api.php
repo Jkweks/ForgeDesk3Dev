@@ -473,6 +473,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Project Management workspace: jobs across every stage (bidding -> won -> active)
         Route::get('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'index'])->middleware('permission:pm.jobs.view');
         Route::get('/pm/jobs/{id}', [\App\Http\Controllers\Api\PmJobController::class, 'show'])->whereNumber('id')->middleware('permission:pm.jobs.view');
+        Route::get('/pm/jobs/{id}/forecast', [\App\Http\Controllers\Api\PmJobController::class, 'forecast'])->whereNumber('id')->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'store'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{id}/stage', [\App\Http\Controllers\Api\PmJobController::class, 'setStage'])->middleware('permission:pm.jobs.manage');
 

@@ -50,6 +50,16 @@ class PmJobController extends Controller
         return response()->json($j->toArray() + ['status_label' => $j->status_label]);
     }
 
+    /** Estimated vs ordered vs received per cost code for one job (job POs only). */
+    public function forecast(Request $request, int $id, \App\Services\Pm\MaterialForecastService $forecast)
+    {
+        $job = $this->jobs()->findOrFail($id);
+        $sheets = $request->filled('sheets') ? array_filter(explode(',', (string) $request->sheets)) : null;
+        $category = $request->input('category', 'material');
+
+        return response()->json($forecast->forJob($job, $sheets, $category === 'all' ? null : $category));
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
