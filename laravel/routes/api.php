@@ -518,6 +518,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/work-order-requests/{id}/reject', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'reject'])->middleware('permission:fabrication.work-orders.create');
         Route::get('/work-order-requests/{id}/files/{fileId}', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'downloadFile'])->middleware('permission:fabrication.work-orders.view');
 
+        // Universal search (results are limited per group by the user's own permissions and job scope)
+        Route::get('/search', [\App\Http\Controllers\Api\UniversalSearchController::class, 'search'])->middleware('throttle:60,1');
+
         // F: ingest review inbox
         Route::get('/pm/inbox', [\App\Http\Controllers\Api\FdriveIngestController::class, 'inbox'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/inbox/{id}/assign', [\App\Http\Controllers\Api\FdriveIngestController::class, 'assign'])->middleware('permission:pm.jobs.manage');

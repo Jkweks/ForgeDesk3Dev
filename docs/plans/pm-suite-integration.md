@@ -273,6 +273,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Verification notes (2026-11-13):** all 16 migrations were run from scratch on a throwaway Postgres 16 (not just the SQLite the tests use) and a smoke script exercised the forecast, receiving, to-do, history, scope and `lockForUpdate` queries there; they passed. The dev database itself has **not** been migrated yet (it runs on the next container restart). The default queue `retry_after` was raised from 90 s to 1200 s because a drawing-set import can run for minutes and the Redis/database queue would otherwise hand the same job to a second worker.
 
+**Universal search (feature #26, built):** `/search` (a Search entry in both navs) calls `GET /api/v1/search?q=` which looks across PM jobs, job POs, submittals, the product library, Fabrication jobs, work orders, stock POs, stock products and vendors (including BidEstimate codes and aliases). Each group appears only if the user has its permission, and PM groups follow the job scope. Not built: a search box in the header (it is its own page), and ranking.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

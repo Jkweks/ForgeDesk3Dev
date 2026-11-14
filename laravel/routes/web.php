@@ -32,6 +32,7 @@ Route::get('/pm/vendors', fn () => view('suppliers'));
 Route::get('/pm/library', fn () => view('pm.library'));
 Route::get('/pm/history', fn () => view('pm.history'));
 Route::get('/pm/todos', fn () => view('pm.todos'));
+Route::get('/search', fn () => view('search'));
 Route::get('/pm/receiving', fn () => view('pm.receiving'));
 Route::get('/pm/inbox', fn () => view('pm.inbox'));
 Route::get('/fabrication/work-order-requests', fn () => view('fabrication.work-order-requests'));
