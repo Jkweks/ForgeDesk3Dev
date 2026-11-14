@@ -66,12 +66,34 @@
       <div class="card mb-3" id="drawCard">
         <div class="card-header">
           <h3 class="card-title">Shop drawings</h3>
-          <div class="card-actions" data-permission="pm.jobs.manage">
-            <div class="input-group input-group-sm"><input type="file" accept=".pdf" class="form-control" id="drawFile"><button class="btn btn-primary" onclick="uploadDrawing()">Upload set</button></div>
+          <div class="card-actions btn-list" data-permission="pm.jobs.manage">
+            <button class="btn btn-sm" id="drawApproveBtn" onclick="approveHigh()">Approve all high confidence</button>
           </div>
         </div>
-        <div class="list-group list-group-flush" id="drawBody"><div class="list-group-item text-muted">Loading...</div></div>
-        <div class="card-footer text-muted small">The set is read in the background (a large set can take a few minutes). Sizes and quantities are suggestions for work orders: nothing is applied until someone confirms it.</div>
+        <div class="card-body border-bottom" data-permission="pm.jobs.manage">
+          <div id="drawDrop" class="border border-dashed rounded p-3 text-center text-muted" style="border-style:dashed !important"
+               ondragover="event.preventDefault(); this.classList.add('bg-azure-lt')" ondragleave="this.classList.remove('bg-azure-lt')" ondrop="dropDrawings(event)">
+            Drop the whole drawing package here (several PDFs at once), or
+            <label class="btn btn-sm btn-primary ms-1 mb-0">Choose files<input type="file" accept=".pdf" multiple hidden id="drawFiles" onchange="uploadDrawings(this.files)"></label>
+          </div>
+        </div>
+        <div id="drawSets" class="list-group list-group-flush"></div>
+        <div class="card-body border-bottom py-2" id="drawSummary"></div>
+        <div class="card-body border-bottom py-2">
+          <div class="btn-group btn-group-sm" id="drawTabs">
+            <button class="btn" data-tab="attention" onclick="setDrawTab('attention')">Needs attention</button>
+            <button class="btn" data-tab="pending" onclick="setDrawTab('pending')">To review</button>
+            <button class="btn" data-tab="approved" onclick="setDrawTab('approved')">Approved</button>
+            <button class="btn" data-tab="all" onclick="setDrawTab('all')">All</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table">
+            <thead><tr><th>Elevation</th><th>System / finish</th><th class="text-end">Qty</th><th>R.O. W × H</th><th>Width</th><th>Height</th><th>Confidence</th><th></th></tr></thead>
+            <tbody id="drawBody"><tr><td colspan="8" class="text-muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card-footer text-muted small">Each set is read in the background (a large one can take a few minutes). The importer checks that every frame closes (frame size = openings + members) and rates how far to trust each reading. Nothing is applied to a work order until someone approves it.</div>
       </div>
 
       <div class="card mb-3" id="woCard">
@@ -171,6 +193,7 @@
           </div>
         </div>
         <div class="col-lg-4">
+          <div id="szElevInfo" class="mb-3"></div>
           <div class="d-flex align-items-center mb-2"><h4 class="mb-0">Values on this sheet</h4>
             <button class="btn btn-sm btn-primary ms-auto" data-permission="pm.jobs.manage" onclick="szConfirmAll()">Confirm all</button></div>
           <div id="szList"></div>
@@ -338,17 +361,102 @@
     document.getElementById('forecastFoot').innerHTML = f.rows.length ? `<tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(t.estimatedTotal)}</td><td class="text-end">${money(t.orderedTotal)}</td><td></td><td class="text-end">${money(t.draftTotal)}</td><td class="text-end">${money(t.receivedTotal)}</td><td></td></tr>` : '';
   }
 
-  // ---- shop drawings ----
-  let drawTimer = null;
-  const drawSetsCache = {};
-  const szBadge = (e) => { const m = e.marks || [], c = m.filter(x => x.status === 'confirmed').length, r = m.filter(x => x.status === 'mismatch').length;
-    return `<span class="badge ${r ? 'bg-red-lt' : (c === m.length ? 'bg-green-lt' : 'bg-yellow-lt')}">${c}/${m.length} checked${r ? ', ' + r + ' corrected' : ''}</span>`; };
+  // ---- shop drawings: upload a whole package, review elevations with automatic checks and confidence ----
+  let drawTimer = null, drawTab = 'attention', drawData = { summary: null, elevations: [] }, drawSetsList = [];
   const DR_STATUS = { queued: ['Queued', 'bg-secondary-lt'], running: ['Reading…', 'bg-blue-lt'], done: ['Ready', 'bg-green-lt'], failed: ['Failed', 'bg-red-lt'] };
-  const dim = (v) => v == null ? '—' : String(+v);
+  const AX_STATE = { closes: ['closes', 'bg-green-lt'], corrected: ['corrected · closes', 'bg-green-lt'], flagged: ['doesn’t close', 'bg-red-lt'], unverified: ['unverified', 'bg-yellow-lt'],
+    accepted: ['accepted', 'bg-yellow-lt'], unverifiable: ['can’t check', 'bg-secondary-lt'] };
+  const CONF_CLASS = { high: 'bg-green-lt', medium: 'bg-yellow-lt', low: 'bg-red-lt' };
+  const dim = (v) => v == null ? '—' : fmtIn(v);
+
+  const axisChip = (e, axis) => { const c = (e.axis_checks || []).find(x => x.axis === axis); const [l, cls] = AX_STATE[c ? c.state : 'unverifiable'];
+    return `<span class="badge ${cls}"${c && c.member ? ` title="uniform member ${fmtIn(c.member)}"` : ''}>${l}</span>`; };
+  const confChip = (cf) => `<span class="badge ${CONF_CLASS[cf.level]}" title="${esc(cf.reasons.join(' • '))}">${cf.score}% ${cf.level}</span>`;
+
+  async function loadDrawings() {
+    const [sets, rev] = await Promise.all([authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets`), authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-elevations`)]);
+    drawSetsList = sets; drawData = rev;
+    renderDrawSets(); renderDrawReview();
+    clearTimeout(drawTimer);
+    if (sets.some(s => s.status === 'queued' || s.status === 'running')) drawTimer = setTimeout(loadDrawings, 3000);
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+
+  function renderDrawSets() {
+    // finished sets stay out of the way; sets still being read (or failed) show with progress
+    const active = drawSetsList.filter(s => s.status !== 'done');
+    drawSets.innerHTML = active.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
+      const pct = s.progress_count ? Math.round(100 * s.progress_done / s.progress_count) : 0;
+      return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span><span>${esc(s.file ? s.file.original_name : 'Drawing set')}</span>
+        ${s.status === 'running' ? `<span class="text-muted small">page ${s.progress_done} of ${s.progress_count || '?'}${s.progress_note ? ' · found ' + esc(s.progress_note) : ''}</span>` : ''}
+        ${s.error ? `<span class="text-danger small">${esc(s.error)}</span>` : ''}
+        <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage">${s.status === 'failed' ? `<button class="btn btn-sm" onclick="reimportDrawing(${s.id})">Read again</button>` : ''}
+          <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${s.id})">&times;</button></span></div>
+        ${s.status === 'running' ? `<div class="progress progress-sm mt-2"><div class="progress-bar" style="width:${pct}%"></div></div>` : ''}</div>`; }).join('');
+  }
+
+  function renderDrawReview() {
+    const sm = drawData.summary, els = drawData.elevations;
+    drawSummary.innerHTML = sm && sm.total ? `<span class="me-3"><strong>${sm.total}</strong> elevations</span>
+      <span class="me-3 ${sm.needs_attention ? 'text-danger' : ''}"><strong>${sm.needs_attention}</strong> need attention</span>
+      <span class="me-3"><strong>${sm.pending}</strong> to review</span><span class="me-3"><strong>${sm.approved}</strong> approved</span>
+      ${sm.excluded ? `<span class="me-3">${sm.excluded} excluded</span>` : ''}
+      <span class="text-muted">average confidence ${sm.average_confidence}%</span>` : '<span class="text-muted">No drawing sets read yet.</span>';
+    drawApproveBtn.disabled = !(sm && sm.high);
+    drawApproveBtn.textContent = sm && sm.high ? `Approve ${sm.high} high-confidence` : 'Approve high confidence';
+    document.querySelectorAll('#drawTabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === drawTab));
+    const show = els.filter(e => drawTab === 'all' || (drawTab === 'approved' && e.review_status === 'approved')
+      || (drawTab === 'pending' && e.review_status === 'pending')
+      || (drawTab === 'attention' && e.review_status === 'pending' && (e.unresolved_axes.length || e.confidence.level === 'low')));
+    drawBody.innerHTML = show.length ? show.map(e => `<tr${e.review_status === 'excluded' ? ' class="text-muted"' : ''}>
+      <td><strong>${esc(e.label)}</strong>${e.multi_sheet ? ' <span class="badge bg-azure-lt" title="Runs across several sheets">multi-sheet</span>' : ''}
+        <div class="text-muted small">${esc(e.arch_ref || '')} ${e.sheets.length ? '· sheet' + (e.sheets.length > 1 ? 's ' : ' ') + e.sheets.map(s => s.page).join(', ') : ''}</div></td>
+      <td>${esc(e.system || '')}<div class="text-muted small">${esc(e.finish || '')}</div></td>
+      <td class="text-end">${e.total_reqd ?? '—'}</td><td>${dim(e.ro_w)} × ${dim(e.ro_h)}</td>
+      <td>${axisChip(e, 'w')}</td><td>${axisChip(e, 'h')}</td><td>${confChip(e.confidence)}</td>
+      <td class="text-nowrap">${e.marks.length ? `<button class="btn btn-sm" onclick="openSheetViewer(${e.id})">Check sizes</button>` : ''}
+        <span data-permission="pm.jobs.manage">${e.review_status === 'pending' ? `<button class="btn btn-sm btn-primary" onclick="reviewElev(${e.id}, 'approve')">Approve</button> <button class="btn btn-sm btn-ghost-secondary" onclick="reviewElev(${e.id}, 'exclude')">Exclude</button>`
+          : `<span class="badge bg-${e.review_status === 'approved' ? 'green' : 'secondary'}-lt">${e.review_status}</span> <button class="btn btn-sm btn-ghost-secondary" onclick="reviewElev(${e.id}, 'reopen')">Reopen</button>`}</span></td></tr>`).join('')
+      : `<tr><td colspan="8" class="text-muted">${els.length ? 'Nothing in this view.' : 'Upload a drawing package to begin.'}</td></tr>`;
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+
+  function setDrawTab(t) { drawTab = t; renderDrawReview(); }
+  const elevById = (id) => drawData.elevations.find(e => e.id === id);
+
+  async function reviewElev(id, action) {
+    const e = elevById(id);
+    try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${e.set.id}/elevations/${id}/review`, { action }); await loadDrawings(); }
+    catch (err) { notice(err.message || 'Could not update', 'danger'); if (action === 'approve') openSheetViewer(id); }
+  }
+  async function approveHigh() {
+    try {
+      const r = await post(`/pm/jobs/${JOB_ID}/drawing-elevations/bulk-review`, { min_level: 'high' });
+      notice(`Approved ${r.approved} elevation${r.approved === 1 ? '' : 's'}.${r.skipped.length ? ' Left for you: ' + r.skipped.map(s => s.label + ' (' + s.why + ')').join(', ') + '.' : ''}`, r.approved ? 'success' : 'info');
+      loadDrawings();
+    } catch (err) { notice(err.message || 'Could not approve', 'danger'); }
+  }
+
+  function dropDrawings(ev) { ev.preventDefault(); drawDrop.classList.remove('bg-azure-lt'); uploadDrawings(ev.dataTransfer.files); }
+  async function uploadDrawings(fileList) {
+    const files = [...fileList].filter(f => /\.pdf$/i.test(f.name));
+    if (!files.length) { notice('Choose PDF drawing files.', 'warning'); return; }
+    const fd = new FormData(); files.forEach(f => fd.append('files[]', f));
+    notice(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`, 'info');
+    const r = await authenticatedUpload(`/pm/jobs/${JOB_ID}/drawing-sets/bulk`, fd);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { notice(d.message || (d.errors ? Object.values(d.errors).flat().join(' ') : 'Upload failed'), 'danger'); return; }
+    const dup = d.filter(x => x.already_uploaded).length;
+    notice(`${d.length - dup} set${d.length - dup === 1 ? '' : 's'} queued${dup ? `, ${dup} already uploaded` : ''}. They are read one after another in the background.`, 'info');
+    drawFiles.value = ''; loadDrawings();
+  }
+  async function reimportDrawing(id) { try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${id}/reimport`, {}); loadDrawings(); } catch (e) { notice(e.message, 'danger'); } }
+  async function deleteDrawing(id) { if (confirm('Delete this drawing set and its results?')) { try { await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${id}`, { method: 'DELETE' }); loadDrawings(); } catch (e) { notice(e.message, 'danger'); } } }
+
   // ---- visual size check (the sheet with each read dimension drawn over it) ----
   const SZ_KIND = { ro_w: 'R.O. width', fs_w: 'F.S. width', ro_h: 'R.O. height', fs_h: 'F.S. height', do_w: 'Door opening width', do_h: 'Door opening height', dlo_w: 'D.L.O. width', dlo_h: 'D.L.O. height' };
   const SZ_COLORS = { confirmed: ['rgba(40,170,70,0.28)', '#1e8c37'], suggested: ['rgba(255,215,0,0.34)', '#d4a00a'], mismatch: ['rgba(225,45,35,0.28)', '#cd281e'] };
-  let sz = null;   // { setId, elev, page, img, hover, selected, zoom }
+  let sz = null;   // { elevId, page, img, hover, selected, zoom }
 
   // inches -> 38 1/4" (nearest 1/16)
   function fmtIn(v) { v = Number(v); const w = Math.floor(v), s = Math.round((v - w) * 16); const W = s === 16 ? w + 1 : w, S = s === 16 ? 0 : s;
@@ -357,17 +465,38 @@
   function parseIn(t) { t = String(t).replace(/["”]/g, '').trim(); if (!t) return NaN; const m = t.match(/^(\d+(?:\.\d+)?)?[\s-]*(?:(\d+)\/(\d+))?$/); if (!m || (!m[1] && !m[2])) return NaN;
     return (m[1] ? parseFloat(m[1]) : 0) + (m[2] ? parseInt(m[2]) / parseInt(m[3]) : 0); }
 
-  function szElev() { return drawSetsCache[sz.setId].elevations.find(e => e.id === sz.elevId); }
-  function szMarksOnPage() { return szElev().marks.filter(m => m.page === sz.page); }
+  const szElev = () => elevById(sz.elevId);
+  const szMarksOnPage = () => szElev().marks.filter(m => m.page === sz.page);
 
-  async function openSheetViewer(setId, elevId) {
-    const e = drawSetsCache[setId].elevations.find(x => x.id === elevId);
-    sz = { setId, elevId, page: e.sheets.length ? e.sheets[0].page : null, img: null, hover: null, selected: null, zoom: null };
+  async function openSheetViewer(elevId) {
+    const e = elevById(elevId);
+    sz = { elevId, page: e.sheets.length ? e.sheets[0].page : null, img: null, hover: null, selected: null, zoom: null };
     szTitle.textContent = `Check sizes — elevation ${e.label}`;
     szPage.innerHTML = e.sheets.map(s => `<option value="${s.page}">Sheet ${s.page}</option>`).join('');
-    szNote.innerHTML = e.sheets.length > 1 ? `<div class="text-muted">This elevation runs across ${e.sheets.length} sheets. Check each one.</div>` : '';
+    szNote.innerHTML = '';
     safeShowModal('szModal');
+    szRenderInfo();
     setTimeout(szLoadPage, 150);   // let the modal lay out so the canvas has a width
+  }
+
+  // elevation-level panel: confidence and why, and each frame's check with what to do about it
+  function szRenderInfo() {
+    const e = szElev(), cf = e.confidence;
+    const axisBlock = (axis, label) => {
+      const c = (e.axis_checks || []).find(x => x.axis === axis); if (!c) return '';
+      const [l, cls] = AX_STATE[c.state];
+      const detail = c.state === 'closes' || c.state === 'corrected' ? `uniform member ${c.member ? fmtIn(c.member) : '—'}${c.printed ? ' (members as printed)' : ''}${c.dropped ? `, ${c.dropped} reading${c.dropped === 1 ? '' : 's'} left out` : ''}`
+        : c.state === 'unverifiable' ? (e.multi_sheet ? 'This elevation runs across several sheets; each frame closes per sheet, so it is not judged.' : 'No frame size, or nothing in the frame, to check against.')
+        : c.state === 'accepted' ? `Accepted: ${esc(c.resolution_reason || '')}` : c.state === 'unverified' ? 'Kept as read, marked unverified.' : 'Frame size ≠ openings + a uniform 1" to 4 1/2" member. A reading is probably wrong.';
+      const act = (c.state === 'flagged') ? `<div class="mt-1" data-permission="pm.jobs.manage"><button class="btn btn-sm" onclick="szResolve('${axis}', 'unverified')">Keep, mark unverified</button> <button class="btn btn-sm" onclick="szResolve('${axis}', 'accepted')">Accept with a reason…</button></div>`
+        : (c.state === 'accepted' || c.state === 'unverified') ? `<div class="mt-1" data-permission="pm.jobs.manage"><button class="btn btn-sm btn-ghost-secondary" onclick="szUnresolve('${axis}')">Undo</button></div>` : '';
+      return `<div class="border rounded p-2 mb-2"><div class="d-flex align-items-center"><strong>${label}</strong><span class="badge ${cls} ms-2">${l}</span></div><div class="small text-muted">${detail}</div>${act}</div>`;
+    };
+    szElevInfo.innerHTML = `<div class="d-flex align-items-center mb-2"><h4 class="mb-0">Confidence</h4><span class="ms-auto">${confChip(cf)}</span></div>
+      <ul class="small text-muted ps-3 mb-2">${cf.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      ${e.manual_takeoff ? `<div class="alert alert-warning py-1 small">Manual takeoff: ${esc(e.manual_takeoff)}. The numbers are what the sheet printed; nothing was sized.</div>` : ''}
+      ${axisBlock('w', 'Width frame')}${axisBlock('h', 'Height frame')}`;
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
 
   function szLoadPage() {
@@ -378,7 +507,7 @@
     const img = new Image();
     img.onload = () => { sz.img = img; szCap.textContent = `Sheet ${sz.page}`; szDraw(); };
     img.onerror = () => { sz.error = true; szCap.textContent = 'The sheet image could not be loaded (is the drawing worker running?). The values are still listed.'; szDraw(); };
-    img.src = `${location.origin}/api/v1/pm/jobs/${JOB_ID}/drawing-sets/${sz.setId}/pages/${sz.page}/image`;
+    img.src = `${location.origin}/api/v1/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/pages/${sz.page}/image`;
   }
 
   function szDraw() {
@@ -406,7 +535,8 @@
     szList.innerHTML = marks.length ? marks.map(m => {
       const [, line] = SZ_COLORS[m.status] || SZ_COLORS.suggested;
       return `<div class="border rounded p-2 mb-2" style="border-left:4px solid ${line} !important" onmouseenter="szSetHover(${m.id})" onmouseleave="szSetHover(null)" onclick="szSelect(${m.id})">
-        <div class="d-flex align-items-center"><div><div class="small text-muted">${esc(SZ_KIND[m.kind] || m.kind)}${/^dlo/.test(m.kind) ? ' #' + (m.idx + 1) : ''}</div>
+        <div class="d-flex align-items-center"><div><div class="small text-muted">${esc(SZ_KIND[m.kind] || m.kind)}${/^dlo/.test(m.kind) ? ' #' + (m.idx + 1) : ''}
+            <span class="badge ${CONF_CLASS[m.confidence.level]} ms-1" title="${esc(m.confidence.reasons.join(' • '))}">${m.confidence.score}%</span></div>
           <strong>${fmtIn(m.value)}</strong>${m.status === 'mismatch' ? ` <span class="text-danger">→ ${fmtIn(m.confirmed_value)}</span>` : ''}</div>
           <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage">
             <button class="btn btn-sm ${m.status === 'confirmed' ? 'btn-success' : ''}" onclick="event.stopPropagation(); szMark([${m.id}], 'confirm')">✓</button>
@@ -434,13 +564,14 @@
     sz.zoom = { cx: (ev.clientX - r.left) / r.width * sheet.width, cy: (ev.clientY - r.top) / r.height * sheet.height, scale: 2.6 }; szDraw();
   }
 
+  // after any change the server re-runs the frame check and recomputes confidence: reload and repaint
+  async function szRefresh() {
+    await loadDrawings();
+    if (sz && elevById(sz.elevId)) { szRenderInfo(); szRenderList(); szDraw(); }
+  }
   async function szMark(ids, action, value) {
-    try {
-      const upd = await post(`/pm/jobs/${JOB_ID}/drawing-sets/${sz.setId}/marks`, { ids, action, value });
-      const e = szElev(); upd.forEach(u => { const i = e.marks.findIndex(m => m.id === u.id); if (i >= 0) e.marks[i] = u; });
-      szRenderList(); szDraw(); szNote.innerHTML = '';
-      toggleDrawing(sz.setId, true).catch(() => {});   // refresh the checked-count badges behind the dialog
-    } catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; }
+    try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/marks`, { ids, action, value }); szNote.innerHTML = ''; await szRefresh(); }
+    catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; }
   }
   function szCorrect(id) {
     const m = szMarksOnPage().find(x => x.id === id), t = prompt(`What is the real ${SZ_KIND[m.kind]}? (the drawing read ${fmtIn(m.value)})`, fmtIn(m.confirmed_value ?? m.value));
@@ -449,46 +580,16 @@
     szMark([id], 'correct', v);
   }
   function szConfirmAll() { const ids = szMarksOnPage().filter(m => m.status === 'suggested').map(m => m.id); if (ids.length) szMark(ids, 'confirm'); }
-
-  async function loadDrawings() {
-    const sets = await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets`);
-    drawBody.innerHTML = sets.length ? sets.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
-      return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span>
-        <a href="#" onclick="toggleDrawing(${s.id}); return false;">${esc(s.file ? s.file.original_name : 'Drawing set')}</a>
-        <span class="text-muted small">${s.status === 'done' ? `${s.elevations_count} elevations · ${s.page_count} pages` : ''}${s.error ? ' · ' + esc(s.error) : ''}</span>
-        <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage"><button class="btn btn-sm" onclick="reimportDrawing(${s.id})" ${s.status === 'running' ? 'disabled' : ''}>Read again</button>
-          <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${s.id})">&times;</button></span></div>
-        <div id="drawd-${s.id}" style="display:none" class="mt-2"></div></div>`; }).join('') : '<div class="list-group-item text-muted">No drawing sets yet.</div>';
-    clearTimeout(drawTimer);
-    if (sets.some(s => s.status === 'queued' || s.status === 'running')) drawTimer = setTimeout(loadDrawings, 5000);
-    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  async function szResolve(axis, mode) {
+    let reason = null;
+    if (mode === 'accepted') { reason = prompt('Accept this frame as it is? Say why in one line. It stays on the record.'); if (!reason || !reason.trim()) return; }
+    try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/elevations/${sz.elevId}/axes/${axis}/resolve`, { mode, reason }); await szRefresh(); }
+    catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; }
   }
-  async function toggleDrawing(id, keep) {
-    const box = document.getElementById('drawd-' + id);
-    if (!box) return;
-    if (!keep && box.style.display !== 'none') { box.style.display = 'none'; return; }
-    const s = await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${id}`);
-    drawSetsCache[id] = s;
-    box.style.display = '';
-    box.innerHTML = s.status !== 'done' ? '<div class="text-muted small">Not ready yet.</div>' : `
-      ${s.set_finish ? `<div class="small mb-1">Set finish: ${esc(s.set_finish)}</div>` : ''}
-      <div class="table-responsive"><table class="table table-sm table-vcenter"><thead><tr><th>Elevation</th><th>Sheet</th><th>System / finish</th><th class="text-end">Qty (thus/opp/total)</th><th>R.O. W × H</th><th>F.S. W × H</th><th>D.L.O. widths</th><th>Glass</th><th></th></tr></thead><tbody>
-      ${s.elevations.map(e => `<tr><td>${esc(e.label)}<div class="text-muted small">${esc(e.arch_ref || '')}</div></td><td>${e.page ?? ''}</td><td>${esc(e.system || '')}<div class="text-muted small">${esc(e.finish || '')}</div></td>
-        <td class="text-end">${e.thus_reqd ?? '—'} / ${e.opp_reqd ?? '—'} / ${e.total_reqd ?? '—'}</td><td>${dim(e.ro_w)} × ${dim(e.ro_h)}</td><td>${dim(e.fs_w)} × ${dim(e.fs_h)}</td>
-        <td>${e.dims.filter(d => d.axis === 'w').map(d => dim(d.value)).join(', ')}</td><td>${e.glass_tags.map(t => esc(t.tag)).join(', ')}</td><td class="text-nowrap">${(e.marks || []).length ? `<button class="btn btn-sm" onclick="openSheetViewer(${s.id}, ${e.id})">Check sizes</button> ${szBadge(e)}` : '<span class="text-muted small">no sheet marks</span>'}</td></tr>`).join('') || '<tr><td colspan="9" class="text-muted">No elevations were found.</td></tr>'}
-      </tbody></table></div>
-      ${s.warnings.length ? `<div class="small text-warning">${s.warnings.map(w => esc(w.message)).join('<br>')}</div>` : ''}`;
+  async function szUnresolve(axis) {
+    try { await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/elevations/${sz.elevId}/axes/${axis}/resolve`, { method: 'DELETE' }); await szRefresh(); }
+    catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; }
   }
-  async function uploadDrawing() {
-    const f = drawFile.files[0]; if (!f) { notice('Choose a PDF first.', 'warning'); return; }
-    const fd = new FormData(); fd.append('file', f);
-    const r = await authenticatedUpload(`/pm/jobs/${JOB_ID}/drawing-sets`, fd);
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { notice(d.message || (d.errors ? Object.values(d.errors).flat().join(' ') : 'Upload failed'), 'danger'); return; }
-    drawFile.value = ''; notice(d.already_uploaded ? 'That set was already uploaded.' : 'Uploaded. It is being read in the background.', 'info'); loadDrawings();
-  }
-  async function reimportDrawing(id) { try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${id}/reimport`, {}); loadDrawings(); } catch (e) { notice(e.message, 'danger'); } }
-  async function deleteDrawing(id) { if (confirm('Delete this drawing set and its results?')) { try { await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${id}`, { method: 'DELETE' }); loadDrawings(); } catch (e) { notice(e.message, 'danger'); } } }
 
   // ---- work order requests ----
   const WO_STATUS = { pending: ['Pending', 'bg-orange-lt'], approved: ['Approved', 'bg-green-lt'], rejected: ['Rejected', 'bg-red-lt'], withdrawn: ['Withdrawn', 'bg-secondary-lt'] };

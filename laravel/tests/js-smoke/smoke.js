@@ -16,16 +16,25 @@ const data = {
     purchase_orders: [{ id: 9, po_number: 'PO-1' }], items: [{ id: 1, label: 'Spec' }, { id: 2, label: 'Shop' }], packages: [{ pm_file_id: 7, file: { original_name: 'Submittal_9001_001.pdf' }, item_count: 2, created_at: '2026-11-03' }] },
   '/pm/library/products': [{ id: 1, name: 'Trifab', documents_count: 1, manufacturer: { name: 'Kawneer' } }],
   '/pm/library/products/1': { id: 1, pm_manufacturer_id: 1, name: 'Trifab', is_active: true, documents: [{ id: 1, kind: 'spec', label: 'Spec', pm_file_id: 4, file: { original_name: 's.pdf' } }] },
-  '/pm/jobs/1/drawing-sets/1': { id: 1, status: 'done', set_finish: 'CLEAR', elevations: [{ id: 5, label: 'W1', page: 12, arch_ref: 'A-401', system: 'TUBELITE', finish: 'CLEAR', thus_reqd: 2, opp_reqd: 1, total_reqd: 3, ro_w: '120.5000', ro_h: '96.0000', fs_w: null, fs_h: null, dims: [{ axis: 'w', value: '38.2500' }], glass_tags: [{ tag: 'IG-1' }],
-      sheets: [{ page: 12, width: '1224.00', height: '792.00' }, { page: 13, width: '1224.00', height: '792.00' }],
-      marks: [{ id: 1, page: 12, kind: 'ro_h', idx: 0, value: '96.0000', x0: '842.2', top: '331.6', x1: '855.3', bottom: '361.8', confirmed_value: null, status: 'suggested' },
-              { id: 2, page: 12, kind: 'dlo_w', idx: 0, value: '38.2500', x0: '146', top: '215', x1: '191', bottom: '228', confirmed_value: '38.2500', status: 'confirmed' },
-              { id: 3, page: 12, kind: 'dlo_w', idx: 1, value: '40.0000', x0: '200', top: '215', x1: '242', bottom: '228', confirmed_value: '40.5000', status: 'mismatch' },
-              { id: 4, page: 13, kind: 'dlo_w', idx: 0, value: '33.7500', x0: '10', top: '20', x1: '50', bottom: '33', confirmed_value: null, status: 'suggested' }] }], warnings: [{ message: 'Page 9 unreadable' }] },
+  '/pm/jobs/1/drawing-sets': [{ id: 1, status: 'done', file: { original_name: 'shop.pdf' }, elevations_count: 2, page_count: 40, progress_done: 40, progress_count: 40 },
+    { id: 2, status: 'running', file: { original_name: 'second.pdf' }, progress_done: 12, progress_count: 40, progress_note: 'C2' }],
+  '/pm/jobs/1/drawing-elevations': { summary: { total: 2, pending: 2, approved: 0, excluded: 0, needs_attention: 1, high: 1, average_confidence: 72 },
+    elevations: [
+      { id: 6, label: 'W2', page: 2, arch_ref: 'A-402', system: 'TUBELITE', finish: 'CLEAR', total_reqd: 3, ro_w: null, ro_h: '96.0000', multi_sheet: false, manual_takeoff: null, review_status: 'pending', set: { id: 1, file: 'shop.pdf' },
+        sheets: [{ page: 2, width: '1224.00', height: '792.00' }], marks: [], unresolved_axes: ['w'],
+        axis_checks: [{ axis: 'w', state: 'flagged', ok: false, member: null }, { axis: 'h', state: 'unverifiable', ok: null }],
+        confidence: { score: 41, level: 'low', reasons: ['Width: the frame does not close', 'R.O. width not read'] } },
+      { id: 5, label: 'W1', page: 12, arch_ref: 'A-401', system: 'TUBELITE', finish: 'CLEAR', total_reqd: 3, ro_w: '120.5000', ro_h: '96.0000', multi_sheet: false, manual_takeoff: null, review_status: 'pending', set: { id: 1, file: 'shop.pdf' },
+        sheets: [{ page: 12, width: '1224.00', height: '792.00' }, { page: 13, width: '1224.00', height: '792.00' }], unresolved_axes: [],
+        axis_checks: [{ axis: 'w', state: 'closes', ok: true, member: '2.0000', used: 3, dropped: 0 }, { axis: 'h', state: 'corrected', ok: true, member: '2.0000', edited: true }],
+        confidence: { score: 91, level: 'high', reasons: ['Frame closes and the readings look plausible'] },
+        marks: [{ id: 1, page: 12, kind: 'ro_h', idx: 0, value: '96.0000', x0: '842.2', top: '331.6', x1: '855.3', bottom: '361.8', confirmed_value: null, status: 'suggested', confidence: { score: 92, level: 'high', reasons: ['The frame closes on these readings'] } },
+                { id: 2, page: 12, kind: 'dlo_w', idx: 0, value: '38.2500', x0: '146', top: '215', x1: '191', bottom: '228', confirmed_value: '38.2500', status: 'confirmed', confidence: { score: 100, level: 'high', reasons: ['Confirmed by a person'] } },
+                { id: 3, page: 12, kind: 'dlo_w', idx: 1, value: '40.0000', x0: '200', top: '215', x1: '242', bottom: '228', confirmed_value: '40.5000', status: 'mismatch', confidence: { score: 100, level: 'high', reasons: ['Corrected by a person'] } },
+                { id: 4, page: 13, kind: 'dlo_w', idx: 0, value: '33.7500', x0: '10', top: '20', x1: '50', bottom: '33', confirmed_value: null, status: 'suggested', confidence: { score: 45, level: 'low', reasons: ['Nothing to check this reading against'] } }] }] },
   '/pm/jobs/1/estimates/CO%20%231': {}, 
   '/pm/library/lookups': { manufacturers: [{ id: 1, name: 'Kawneer' }], categories: [{ id: 1, name: 'Storefront' }] },
   '/pm/jobs/1/work-order-requests': [{ id: 1, status: 'pending', release_code: 'A', requested_due_date: '2026-12-01', scope: 'x', files: [], checks: [] }],
-  '/pm/jobs/1/drawing-sets': [{ id: 1, status: 'done', file: { original_name: 'shop.pdf' }, elevations_count: 1, page_count: 40 }],
   '/pm/vendors': [{ id: 1, name: 'Glass Co' }],
   '/job-purchase-orders?business_job_id=1': { data: [{ id: 9, po_number: 'PO-1' }] },
   '/job-purchase-orders': { data: [{ id: 9, po_number: 'PO-1', voided_at: null, closed_at: null, job: { job_number: '9001' }, supplier: { name: 'Glass Co' }, issue_stage: 'draft', status: 'draft', total_amount: 10, revision_number: 0 }] },
@@ -57,7 +66,7 @@ function run(file, pagePath) {
   w.addEventListener('error', e => errors.push('window error: ' + e.message));
   try { w.eval(own); } catch (e) { errors.push('eval: ' + e.message); }
   return new Promise(res => { w.document.dispatchEvent(new w.Event('DOMContentLoaded')); setTimeout(async () => {
-    if (file === 'job') { await w.toggleSubmittal(3); await w.toggleDrawing(1); await w.openSheetViewer(1, 5); await new Promise(r => setTimeout(r, 250)); w.szSelect(2); w.szSelect(2); w.szHoverMove({ clientX: 0, clientY: 0 }); w.szSetHover(3); await w.loadLibDocs(3).catch(() => {}); }
+    if (file === 'job') { await w.toggleSubmittal(3); await w.openSheetViewer(6); await new Promise(r => setTimeout(r, 200)); { const t = w.document.getElementById('szElevInfo').textContent; for (const need of ['Frame size ≠ openings', 'Keep, mark unverified', 'Accept with a reason', 'R.O. width not read']) if (!t.includes(need)) errors.push('flagged elevation panel is missing: ' + need); } await w.openSheetViewer(5); await new Promise(r => setTimeout(r, 250)); w.szSelect(2); w.szSelect(2); w.szHoverMove({ clientX: 0, clientY: 0 }); w.szSetHover(3); await w.loadLibDocs(3).catch(() => {}); }
     if (file === 'po') { const before = w.document.querySelectorAll('#linesBody tr').length; w.addGroup(); w.addLine(); const after = w.document.querySelectorAll('#linesBody tr').length; if (after !== before + 3) errors.push('po rows ' + before + ' -> ' + after); const inp = w.document.querySelector('#linesBody tr:last-child input:nth-of-type(1)'); }
     await new Promise(r => setTimeout(r, 200));
     const text = w.document.body.textContent.replace(/\s+/g, ' ');
@@ -66,7 +75,8 @@ function run(file, pagePath) {
 
 (async () => {
   const checks = [
-    ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'shop.pdf', 'Request work order', 'ACME GC', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses', 'Page 9 unreadable', 'IG-1', '38.25', 'Check sizes', 'R.O. height', '96"', 'D.L.O. width #2', '40"', '40 1/2"', 'Confirm all', '1/4 checked, 1 corrected']],
+    ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'second.pdf', 'page 12 of 40', 'Request work order', 'ACME GC', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses',
+      'Drop the whole drawing package', 'doesn’t close', 'corrected · closes', '91% high', '41% low', 'Check sizes', 'Approve 1 high-confidence', '2 elevations'.replace('2 elevations', 'elevations'), 'Confidence', 'R.O. height', 'D.L.O. width #2', '40 1/2"', 'Confirm all', 'uniform member 2"']],
     ['po', '/pm/purchase-orders/9', ['PO PO-1', 'Group', 'Receive now', 'Rev 0', 'Flagged']],
     ['pos', '/pm/purchase-orders', ['PO-1']],
     ['library', '/pm/library', ['Trifab']],
