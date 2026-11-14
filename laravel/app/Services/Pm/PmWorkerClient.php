@@ -29,6 +29,15 @@ class PmWorkerClient
         return $this->post('/estimate/parse?sheet='.urlencode($sheet), $bytes);
     }
 
+    /** Read a shop-drawing set PDF. Slow (about a second a page), so it gets a long timeout; run it from a queue job. */
+    public function parseDrawingSet(string $pdfBytes): array
+    {
+        $res = $this->http()->timeout(900)->withBody($pdfBytes, 'application/pdf')->post('/drawing/parse');
+        $res->throw();
+
+        return $res->json();
+    }
+
     /** Merge PDFs (given as raw bytes, in order) into one. @param string[] $pdfs */
     public function mergePdfs(array $pdfs): string
     {

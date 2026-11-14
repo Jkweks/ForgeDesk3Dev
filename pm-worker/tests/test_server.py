@@ -99,3 +99,15 @@ def test_pdf_merge_combines_in_name_order_and_rejects_bad_input():
         assert code == 422
     finally:
         srv.shutdown()
+
+
+def test_drawing_parse_returns_a_structured_result_for_a_pdf_without_elevations():
+    srv, base = _run()
+    try:
+        code, body = _req(base + "/drawing/parse", data=_pdf(2))
+        assert code == 200 and body["ok"] is True
+        assert body["elevations"] == [] and body["pageCount"] == 2
+        code, body = _req(base + "/drawing/parse", data=b"not a pdf")
+        assert code == 200 and body["ok"] is False and "PDF" in body["error"]
+    finally:
+        srv.shutdown()

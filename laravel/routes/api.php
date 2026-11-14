@@ -495,6 +495,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/pm/library/products/{id}/documents/{docId}', [\App\Http\Controllers\Api\PmLibraryController::class, 'removeDocument'])->middleware('permission:pm.library.manage');
         Route::get('/pm/files/{fileId}/download', [\App\Http\Controllers\Api\PmLibraryController::class, 'download'])->middleware('permission:pm.jobs.view');
 
+        // Drawing import
+        Route::get('/pm/jobs/{jobId}/drawing-sets', [\App\Http\Controllers\Api\DrawingSetController::class, 'index'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/drawing-sets', [\App\Http\Controllers\Api\DrawingSetController::class, 'store'])->middleware('permission:pm.jobs.manage');
+        Route::get('/pm/jobs/{jobId}/drawing-sets/{id}', [\App\Http\Controllers\Api\DrawingSetController::class, 'show'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/drawing-sets/{id}/reimport', [\App\Http\Controllers\Api\DrawingSetController::class, 'reimport'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/drawing-sets/{id}', [\App\Http\Controllers\Api\DrawingSetController::class, 'destroy'])->middleware('permission:pm.jobs.manage');
+
         // Work order requests (PM asks, Fabrication validates)
         Route::get('/pm/jobs/{jobId}/work-order-requests', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'forJob'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs/{jobId}/work-order-requests', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'store'])->middleware('permission:pm.jobs.manage');

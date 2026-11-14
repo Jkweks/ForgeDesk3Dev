@@ -45,6 +45,17 @@
         </div>
       </div>
 
+      <div class="card mb-3" id="drawCard">
+        <div class="card-header">
+          <h3 class="card-title">Shop drawings</h3>
+          <div class="card-actions" data-permission="pm.jobs.manage">
+            <div class="input-group input-group-sm"><input type="file" accept=".pdf" class="form-control" id="drawFile"><button class="btn btn-primary" onclick="uploadDrawing()">Upload set</button></div>
+          </div>
+        </div>
+        <div class="list-group list-group-flush" id="drawBody"><div class="list-group-item text-muted">Loading...</div></div>
+        <div class="card-footer text-muted small">The set is read in the background (a large set can take a few minutes). Sizes and quantities are suggestions for work orders: nothing is applied until someone confirms it.</div>
+      </div>
+
       <div class="card mb-3" id="woCard">
         <div class="card-header">
           <h3 class="card-title">Work order requests</h3>
@@ -256,6 +267,48 @@
     document.getElementById('forecastFoot').innerHTML = f.rows.length ? `<tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(t.estimatedTotal)}</td><td class="text-end">${money(t.orderedTotal)}</td><td></td><td class="text-end">${money(t.draftTotal)}</td><td class="text-end">${money(t.receivedTotal)}</td><td></td></tr>` : '';
   }
 
+  // ---- shop drawings ----
+  let drawTimer = null;
+  const DR_STATUS = { queued: ['Queued', 'bg-secondary-lt'], running: ['Reading…', 'bg-blue-lt'], done: ['Ready', 'bg-green-lt'], failed: ['Failed', 'bg-red-lt'] };
+  const dim = (v) => v == null ? '—' : String(+v);
+  async function loadDrawings() {
+    const sets = await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets`);
+    drawBody.innerHTML = sets.length ? sets.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
+      return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span>
+        <a href="#" onclick="toggleDrawing(${s.id}); return false;">${esc(s.file ? s.file.original_name : 'Drawing set')}</a>
+        <span class="text-muted small">${s.status === 'done' ? `${s.elevations_count} elevations · ${s.page_count} pages` : ''}${s.error ? ' · ' + esc(s.error) : ''}</span>
+        <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage"><button class="btn btn-sm" onclick="reimportDrawing(${s.id})" ${s.status === 'running' ? 'disabled' : ''}>Read again</button>
+          <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${s.id})">&times;</button></span></div>
+        <div id="drawd-${s.id}" style="display:none" class="mt-2"></div></div>`; }).join('') : '<div class="list-group-item text-muted">No drawing sets yet.</div>';
+    clearTimeout(drawTimer);
+    if (sets.some(s => s.status === 'queued' || s.status === 'running')) drawTimer = setTimeout(loadDrawings, 5000);
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+  async function toggleDrawing(id) {
+    const box = document.getElementById('drawd-' + id);
+    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+    const s = await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${id}`);
+    box.style.display = '';
+    box.innerHTML = s.status !== 'done' ? '<div class="text-muted small">Not ready yet.</div>' : `
+      ${s.set_finish ? `<div class="small mb-1">Set finish: ${esc(s.set_finish)}</div>` : ''}
+      <div class="table-responsive"><table class="table table-sm table-vcenter"><thead><tr><th>Elevation</th><th>Sheet</th><th>System / finish</th><th class="text-end">Qty (thus/opp/total)</th><th>R.O. W × H</th><th>F.S. W × H</th><th>D.L.O. widths</th><th>Glass</th></tr></thead><tbody>
+      ${s.elevations.map(e => `<tr><td>${esc(e.label)}<div class="text-muted small">${esc(e.arch_ref || '')}</div></td><td>${e.page ?? ''}</td><td>${esc(e.system || '')}<div class="text-muted small">${esc(e.finish || '')}</div></td>
+        <td class="text-end">${e.thus_reqd ?? '—'} / ${e.opp_reqd ?? '—'} / ${e.total_reqd ?? '—'}</td><td>${dim(e.ro_w)} × ${dim(e.ro_h)}</td><td>${dim(e.fs_w)} × ${dim(e.fs_h)}</td>
+        <td>${e.dims.filter(d => d.axis === 'w').map(d => dim(d.value)).join(', ')}</td><td>${e.glass_tags.map(t => esc(t.tag)).join(', ')}</td></tr>`).join('') || '<tr><td colspan="8" class="text-muted">No elevations were found.</td></tr>'}
+      </tbody></table></div>
+      ${s.warnings.length ? `<div class="small text-warning">${s.warnings.map(w => esc(w.message)).join('<br>')}</div>` : ''}`;
+  }
+  async function uploadDrawing() {
+    const f = drawFile.files[0]; if (!f) { notice('Choose a PDF first.', 'warning'); return; }
+    const fd = new FormData(); fd.append('file', f);
+    const r = await authenticatedUpload(`/pm/jobs/${JOB_ID}/drawing-sets`, fd);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { notice(d.message || (d.errors ? Object.values(d.errors).flat().join(' ') : 'Upload failed'), 'danger'); return; }
+    drawFile.value = ''; notice(d.already_uploaded ? 'That set was already uploaded.' : 'Uploaded. It is being read in the background.', 'info'); loadDrawings();
+  }
+  async function reimportDrawing(id) { try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${id}/reimport`, {}); loadDrawings(); } catch (e) { notice(e.message, 'danger'); } }
+  async function deleteDrawing(id) { if (confirm('Delete this drawing set and its results?')) { try { await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${id}`, { method: 'DELETE' }); loadDrawings(); } catch (e) { notice(e.message, 'danger'); } } }
+
   // ---- work order requests ----
   const WO_STATUS = { pending: ['Pending', 'bg-orange-lt'], approved: ['Approved', 'bg-green-lt'], rejected: ['Rejected', 'bg-red-lt'], withdrawn: ['Withdrawn', 'bg-secondary-lt'] };
   async function loadWo() {
@@ -442,7 +495,7 @@
     document.getElementById('sheetPick').addEventListener('change', (ev) => showSheet(ev.target.value));
     try {
       [costCodes] = await Promise.all([authenticatedFetch('/pm/cost-codes'), loadJob()]);
-      await Promise.all([loadSheets(), loadForecast(), loadSubmittals(), loadWo()]);
+      await Promise.all([loadSheets(), loadForecast(), loadSubmittals(), loadWo(), loadDrawings()]);
     } catch (e) { console.error(e); notice(e.message || 'Could not load this job', 'danger'); }
   });
 </script>

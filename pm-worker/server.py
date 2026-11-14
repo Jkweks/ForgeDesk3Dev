@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import cost_codes
+import drawing_import
 import estimate_parser
 
 MAX_BODY = 50 * 1024 * 1024
@@ -100,6 +101,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path == "/estimate/sheets":
                 return self._send(200, {"sheets": sheets(data)})
+            if url.path == "/drawing/parse":
+                return self._send(200, drawing_import.parse_drawing_set(data))
             if url.path == "/pdf/merge":
                 return self._send_bytes(200, merge_pdfs(data), "application/pdf")
             if url.path == "/estimate/parse":
