@@ -478,6 +478,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'store'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{id}/stage', [\App\Http\Controllers\Api\PmJobController::class, 'setStage'])->middleware('permission:pm.jobs.manage');
 
+        // Submittal tracker
+        Route::get('/pm/jobs/{jobId}/submittals', [\App\Http\Controllers\Api\SubmittalController::class, 'index'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/submittals', [\App\Http\Controllers\Api\SubmittalController::class, 'store'])->middleware('permission:pm.jobs.manage');
+        Route::get('/pm/jobs/{jobId}/submittals/{id}', [\App\Http\Controllers\Api\SubmittalController::class, 'show'])->middleware('permission:pm.jobs.view');
+        Route::put('/pm/jobs/{jobId}/submittals/{id}', [\App\Http\Controllers\Api\SubmittalController::class, 'update'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/submittals/{id}', [\App\Http\Controllers\Api\SubmittalController::class, 'destroy'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/revise', [\App\Http\Controllers\Api\SubmittalController::class, 'revise'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/responses', [\App\Http\Controllers\Api\SubmittalController::class, 'addResponse'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/samples', [\App\Http\Controllers\Api\SubmittalController::class, 'addSample'])->middleware('permission:pm.jobs.manage');
+        Route::put('/pm/jobs/{jobId}/submittals/{id}/samples/{sampleId}', [\App\Http\Controllers\Api\SubmittalController::class, 'updateSample'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/submittals/{id}/samples/{sampleId}', [\App\Http\Controllers\Api\SubmittalController::class, 'removeSample'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/purchase-orders', [\App\Http\Controllers\Api\SubmittalController::class, 'linkPo'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/submittals/{id}/purchase-orders/{poId}', [\App\Http\Controllers\Api\SubmittalController::class, 'unlinkPo'])->middleware('permission:pm.jobs.manage');
+
         // BidEstimate import (upload today; the F: watcher registers files through the same service)
         Route::get('/pm/cost-codes', [\App\Http\Controllers\Api\BidEstimateController::class, 'costCodes'])->middleware('permission:pm.jobs.view');
         Route::get('/pm/jobs/{jobId}/estimates', [\App\Http\Controllers\Api\BidEstimateController::class, 'index'])->middleware('permission:pm.jobs.view');

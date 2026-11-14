@@ -249,6 +249,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Roles (feature #14, built):** PM Suite's admin/standard roles plus flags map to ForgeDesk roles and permissions. New roles `project_manager` (own jobs only) and `superintendent`; permissions `pm.jobs.view_all` (company scope: admin, manager, office_staff, superintendent), `pm.act_for_others` (admin, manager), `pm.superintendent`, `pm.company_dashboard`. A PM without `view_all` sees only jobs where they are the project manager or the creator: enforced in the PM job, estimate, forecast, job PO and dashboard-widget endpoints. Creating a job defaults the project manager to yourself; assigning another PM needs `pm.act_for_others`. Not built yet: company-dashboard widgets, superintendent-only features (crew schedule).
 
+**Submittal Tracker (feature #7, built):** per-job register with sequential numbers, kind (docs / sample / docs+samples), status, revisions (each round recorded, then reset to pending), GC/AE responses (file via `pm_files` + status + returned date, which also sets the submittal's status), sample lines, links to job POs of the same job, the "needs response" filter, and a register on the PM job page. Not built yet: the Submittal Builder (combined submittal PDF from the product library), bulk email / apply approval, markup review, the activity timeline, Procore sync (Hold).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

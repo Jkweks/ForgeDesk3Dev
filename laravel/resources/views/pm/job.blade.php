@@ -47,6 +47,22 @@
 
       <div class="card mb-3">
         <div class="card-header">
+          <h3 class="card-title">Submittals</h3>
+          <div class="card-actions btn-list">
+            <label class="form-check form-switch m-0 me-2"><input class="form-check-input" type="checkbox" id="smNeeds" onchange="loadSubmittals()"><span class="form-check-label">Needs response</span></label>
+            <button class="btn btn-sm btn-primary" data-permission="pm.jobs.manage" onclick="showSubmittalForm()">+ Submittal</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table">
+            <thead><tr><th>#</th><th>Name / section</th><th>Kind</th><th>POs</th><th>Sent</th><th style="width:190px">Status</th><th class="w-1"></th></tr></thead>
+            <tbody id="smBody"><tr><td colspan="7" class="text-muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header">
           <h3 class="card-title">Material forecast</h3>
           <div class="card-actions"><label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="fcAll" onchange="loadForecast()"><span class="form-check-label">All cost codes</span></label></div>
         </div>
@@ -98,6 +114,31 @@
       </div>
     </div>
   </main>
+</div>
+
+<div class="modal fade" id="smModal" tabindex="-1">
+  <div class="modal-dialog"><form class="modal-content" onsubmit="saveSubmittal(event)">
+    <div class="modal-header"><h5 class="modal-title">New submittal</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="mb-3"><label class="form-label required">Name</label><input class="form-control" id="smName" required></div>
+      <div class="row g-2"><div class="col-6"><label class="form-label">Spec section</label><input class="form-control" id="smSpec" placeholder="08 41 13"></div>
+      <div class="col-6"><label class="form-label">Kind</label><select class="form-select" id="smKind"><option value="docs">Docs</option><option value="sample">Sample</option><option value="docs_samples">Docs + samples</option></select></div></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Create</button></div>
+  </form></div>
+</div>
+
+<div class="modal fade" id="smRespModal" tabindex="-1">
+  <div class="modal-dialog"><form class="modal-content" onsubmit="saveResponse(event)">
+    <div class="modal-header"><h5 class="modal-title">Record GC/AE response</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="mb-3"><label class="form-label required">Response</label><select class="form-select" id="rStatus" required></select></div>
+      <div class="row g-2 mb-3"><div class="col-6"><label class="form-label required">Returned</label><input type="date" class="form-control" id="rReturned" required></div>
+      <div class="col-6"><label class="form-label">Responded by</label><input class="form-control" id="rBy"></div></div>
+      <div class="mb-3"><label class="form-label">Marked-up document</label><input type="file" class="form-control" id="rFile"></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Save response</button></div>
+  </form></div>
 </div>
 
 <script>
@@ -192,6 +233,78 @@
     document.getElementById('forecastFoot').innerHTML = f.rows.length ? `<tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(t.estimatedTotal)}</td><td class="text-end">${money(t.orderedTotal)}</td><td></td><td class="text-end">${money(t.draftTotal)}</td><td class="text-end">${money(t.receivedTotal)}</td><td></td></tr>` : '';
   }
 
+  // ---- submittals ----
+  const SM_STATUS = { pending: 'Pending', approved: 'Approved', approved_as_noted: 'Approved as noted', revise_resubmit: 'Revise & resubmit', rejected: 'Rejected', for_record_only: 'For record only' };
+  const SM_KIND = { docs: 'Docs', sample: 'Sample', docs_samples: 'Docs + samples' };
+  const smBase = () => `/pm/jobs/${JOB_ID}/submittals`;
+  let smOpen = null, smRespFor = null, jobPos = [];
+
+  async function loadSubmittals() {
+    const needs = document.getElementById('smNeeds').checked;
+    const rows = await authenticatedFetch(smBase() + (needs ? '?needs_response=1' : ''));
+    const body = document.getElementById('smBody');
+    body.innerHTML = rows.length ? rows.map(s => `<tr style="cursor:pointer" onclick="toggleSubmittal(${s.id})">
+      <td>${esc(s.number)}${s.revision_number ? ` <span class="badge bg-azure-lt">Rev ${s.revision_number}</span>` : ''}</td>
+      <td>${esc(s.name)}<div class="text-muted small">${esc(s.spec_section || '')}</div></td><td>${SM_KIND[s.kind] || s.kind}</td>
+      <td>${(s.purchase_orders || []).map(p => `<a href="/pm/purchase-orders/${p.id}" onclick="event.stopPropagation()">${esc(p.po_number)}</a>`).join(', ')}</td>
+      <td>${esc((s.sent_at || '').slice(0, 10))}</td>
+      <td onclick="event.stopPropagation()"><select class="form-select form-select-sm" data-permission="pm.jobs.manage" onchange="setSmStatus(${s.id}, this.value)">${Object.entries(SM_STATUS).map(([k, v]) => `<option value="${k}" ${k === s.status ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+      <td class="text-nowrap" onclick="event.stopPropagation()" data-permission="pm.jobs.manage"><button class="btn btn-sm" onclick="reviseSm(${s.id})">Revise</button></td></tr>
+      <tr id="smd-${s.id}" style="display:none"><td colspan="7" class="bg-body-tertiary" id="smdc-${s.id}"></td></tr>`).join('') : '<tr><td colspan="7" class="text-muted">No submittals yet.</td></tr>';
+    if (smOpen) toggleSubmittal(smOpen, true);
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+
+  async function toggleSubmittal(id, keep) {
+    const row = document.getElementById('smd-' + id); if (!row) return;
+    if (!keep && row.style.display !== 'none') { row.style.display = 'none'; smOpen = null; return; }
+    document.querySelectorAll('[id^="smd-"]').forEach(r => r.style.display = 'none');
+    const s = await authenticatedFetch(`${smBase()}/${id}`);
+    smOpen = id; row.style.display = '';
+    if (!jobPos.length) { try { jobPos = (await authenticatedFetch(`/job-purchase-orders?business_job_id=${JOB_ID}`)).data || []; } catch (e) {} }
+    const linked = new Set((s.purchase_orders || []).map(p => p.id));
+    document.getElementById('smdc-' + id).innerHTML = `<div class="row g-3">
+      <div class="col-md-4"><h4>GC/AE responses</h4>${(s.responses || []).map(r => `<div class="mb-2">${SM_STATUS[r.status] || r.status} · ${esc((r.returned_at || '').slice(0, 10))}${r.responded_by ? ' · ' + esc(r.responded_by) : ''}${r.file ? `<div class="text-muted small">${esc(r.file.original_name)} (Rev ${r.revision_number})</div>` : ''}</div>`).join('') || '<div class="text-muted">None yet.</div>'}
+        <button class="btn btn-sm mt-1" data-permission="pm.jobs.manage" onclick="showResponse(${id})">+ Record response</button></div>
+      <div class="col-md-4"><h4>Samples</h4>${(s.samples || []).map(x => `<div class="mb-2 d-flex gap-2 align-items-center"><span class="flex-fill">${esc(x.description)}${x.manufacturer ? ' · ' + esc(x.manufacturer) : ''}</span>
+        <select class="form-select form-select-sm w-auto" data-permission="pm.jobs.manage" onchange="setSampleStatus(${id}, ${x.id}, this.value)">${Object.entries(SM_STATUS).map(([k, v]) => `<option value="${k}" ${k === x.status ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="btn btn-sm btn-ghost-danger" data-permission="pm.jobs.manage" onclick="delSample(${id}, ${x.id})">&times;</button></div>`).join('') || '<div class="text-muted">None.</div>'}
+        <button class="btn btn-sm mt-1" data-permission="pm.jobs.manage" onclick="addSampleRow(${id})">+ Sample</button></div>
+      <div class="col-md-4"><h4>Purchase orders</h4>${(s.purchase_orders || []).map(p => `<div class="mb-1"><a href="/pm/purchase-orders/${p.id}">${esc(p.po_number)}</a> <button class="btn btn-sm btn-ghost-danger" data-permission="pm.jobs.manage" onclick="unlinkPo(${id}, ${p.id})">&times;</button></div>`).join('') || '<div class="text-muted">None linked.</div>'}
+        <div class="input-group input-group-sm mt-1" data-permission="pm.jobs.manage"><select class="form-select" id="linkPo-${id}"><option value="">Link a PO…</option>${jobPos.filter(p => !linked.has(p.id)).map(p => `<option value="${p.id}">${esc(p.po_number)}</option>`).join('')}</select><button class="btn" onclick="linkPo(${id})">Link</button></div></div></div>
+      <div class="mt-3 text-end"><button class="btn btn-sm btn-ghost-danger" data-permission="pm.jobs.manage" onclick="deleteSm(${id})">Delete submittal</button></div>`;
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+
+  const smCall = async (path, body, method = 'POST') => { try { await post(smBase() + path, body, method); } catch (e) { notice(e.message || 'Could not save', 'danger'); return false; } return true; };
+  async function setSmStatus(id, status) { if (await smCall(`/${id}`, { status }, 'PUT')) loadSubmittals(); }
+  async function reviseSm(id) { if (confirm('Record this round and start the next revision?') && await smCall(`/${id}/revise`)) loadSubmittals(); }
+  async function deleteSm(id) { if (confirm('Delete this submittal and its history?')) { try { await authenticatedFetch(`${smBase()}/${id}`, { method: 'DELETE' }); smOpen = null; loadSubmittals(); } catch (e) { notice(e.message, 'danger'); } } }
+  async function setSampleStatus(id, sid, status) { if (await smCall(`/${id}/samples/${sid}`, { status }, 'PUT')) loadSubmittals(); }
+  async function delSample(id, sid) { try { await authenticatedFetch(`${smBase()}/${id}/samples/${sid}`, { method: 'DELETE' }); loadSubmittals(); } catch (e) { notice(e.message, 'danger'); } }
+  async function addSampleRow(id) { const d = prompt('Sample description:'); if (d && await smCall(`/${id}/samples`, { description: d })) loadSubmittals(); }
+  async function linkPo(id) { const v = document.getElementById('linkPo-' + id).value; if (v && await smCall(`/${id}/purchase-orders`, { purchase_order_id: +v })) loadSubmittals(); }
+  async function unlinkPo(id, poId) { try { await authenticatedFetch(`${smBase()}/${id}/purchase-orders/${poId}`, { method: 'DELETE' }); loadSubmittals(); } catch (e) { notice(e.message, 'danger'); } }
+
+  function showSubmittalForm() { document.querySelector('#smModal form').reset(); safeShowModal('smModal'); }
+  async function saveSubmittal(e) {
+    e.preventDefault();
+    if (await smCall('', { name: smName.value, spec_section: smSpec.value || null, kind: smKind.value })) { safeHideModal('smModal'); loadSubmittals(); }
+  }
+  function showResponse(id) {
+    smRespFor = id; document.querySelector('#smRespModal form').reset();
+    rStatus.innerHTML = Object.entries(SM_STATUS).filter(([k]) => k !== 'pending').map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    rReturned.value = new Date().toISOString().slice(0, 10); safeShowModal('smRespModal');
+  }
+  async function saveResponse(e) {
+    e.preventDefault();
+    const fd = new FormData(); fd.append('status', rStatus.value); fd.append('returned_at', rReturned.value);
+    if (rBy.value) fd.append('responded_by', rBy.value); if (rFile.files[0]) fd.append('file', rFile.files[0]);
+    const r = await authenticatedUpload(`${smBase()}/${smRespFor}/responses`, fd);
+    if (!r.ok) { const d = await r.json().catch(() => ({})); notice(d.message || 'Could not save the response', 'danger'); return; }
+    safeHideModal('smRespModal'); loadSubmittals();
+  }
+
   async function decide(section, row, action, i) {
     const body = { section, row, action };
     if (action === 'fix') {
@@ -237,7 +350,7 @@
     document.getElementById('sheetPick').addEventListener('change', (ev) => showSheet(ev.target.value));
     try {
       [costCodes] = await Promise.all([authenticatedFetch('/pm/cost-codes'), loadJob()]);
-      await Promise.all([loadSheets(), loadForecast()]);
+      await Promise.all([loadSheets(), loadForecast(), loadSubmittals()]);
     } catch (e) { console.error(e); notice(e.message || 'Could not load this job', 'danger'); }
   });
 </script>
