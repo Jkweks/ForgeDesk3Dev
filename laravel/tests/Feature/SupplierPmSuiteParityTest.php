@@ -67,4 +67,23 @@ class SupplierPmSuiteParityTest extends TestCase
         $this->assertNull(Supplier::findByEstimateTag('unknown'));
         $this->assertNull(Supplier::findByEstimateTag('  '));
     }
+
+    public function test_estimate_tags_are_matched_and_learned_through_the_pm_endpoints(): void
+    {
+        $perry = Supplier::create(['name' => 'Perry Glass', 'bidestimate_code' => 'Perrybrg $', 'is_active' => true]);
+        $other = Supplier::create(['name' => 'Other Co', 'is_active' => true]);
+        Supplier::create(['name' => 'Shop', 'is_active' => true, 'is_internal' => true, 'bidestimate_code' => 'SHOP']);
+
+        $m = $this->getJson('/api/v1/pm/vendors/match?tags[]=perrybrg&tags[]=Splendor $&tags[]=SHOP')->assertOk()->json();
+        $this->assertSame($perry->id, $m['perrybrg']['id']);
+        $this->assertNull($m['Splendor $']);
+        $this->assertNull($m['SHOP']);                       // internal vendors are never suggested for job POs
+
+        $this->postJson("/api/v1/pm/vendors/{$other->id}/aliases", ['alias' => 'Splendor $'])->assertOk();
+        $this->assertSame($other->id, $this->getJson('/api/v1/pm/vendors/match?tags[]=splendor')->json('splendor.id'));
+        $this->assertSame('bidestimate', \App\Models\SupplierAlias::first()->source);
+
+        $this->postJson("/api/v1/pm/vendors/{$perry->id}/aliases", ['alias' => 'splendor'])->assertStatus(422); // already Other Co's
+        $this->postJson("/api/v1/pm/vendors/{$perry->id}/aliases", ['alias' => '   '])->assertStatus(422);
+    }
 }

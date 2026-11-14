@@ -269,6 +269,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 - **`fdrive-watcher/`**: the Windows-side watcher (Node, no dependencies, read-only): debounce, settle wait, SHA-256, retrying POSTs. Tested with `node --test`; the Windows scheduled-task installer is **not yet tested on a Windows machine**.
 - Not built: the identity marker embedded inside Forge-generated PDFs (content-hash matching already recognises a Forge file saved back to F:), a watcher heartbeat / "watcher offline" indicator, and auto-import for submittal documents and OCR types.
 
+**Estimate tags to vendors (feature #2 note, built):** in the job PO editor's *Add from estimate* picker each estimate Supplier tag is matched to a vendor (`Supplier::findByEstimateTag`: BidEstimate code, learned alias, supplier code or name, punctuation/case-insensitive; internal vendors are never suggested). Picking a vendor for an unmatched tag teaches it (stored as a `bidestimate` alias, one owner per alias), and the PO vendor is suggested when the chosen lines point at exactly one vendor. Not built: the glass-specific *Pick glass types* screen, estimator "guess, no quote" tags, glass schedule tags.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

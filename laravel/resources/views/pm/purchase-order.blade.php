@@ -84,6 +84,7 @@
         <div class="col-md-4"><select class="form-select" id="estSheet"></select></div>
         <div class="col-md-5"><select class="form-select" id="estCode"></select></div>
       </div>
+      <div id="tagMap" class="mb-3"></div>
       <div class="table-responsive"><table class="table table-sm"><thead><tr><th></th><th>Section</th><th>Supplier tag</th><th>Description</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Total</th></tr></thead><tbody id="estBody"></tbody></table></div>
       <div class="text-muted small">Quantities are whole numbers. A line with a fractional estimate quantity (for example square feet) is added as 1 at its total, with the estimate quantity noted in the description.</div>
     </div>
@@ -235,11 +236,34 @@
     if (fCode.value && e.byCostCode[fCode.value]) estCode.value = fCode.value;
     renderEstimateLines();
   }
+  let tagVendors = {};   // estimate tag -> vendor id chosen for it (matched or picked)
+  let tagMatched = {};   // estimate tag -> vendor id already known to Forge
+  async function renderTagMap(rows) {
+    const tags = [...new Set(rows.map(x => (x.l.who || '').trim()).filter(Boolean))];
+    if (!tags.length) { tagMap.innerHTML = ''; return; }
+    const q = new URLSearchParams(); tags.forEach(t => q.append('tags[]', t));
+    const match = await authenticatedFetch('/pm/vendors/match?' + q);
+    tags.forEach(t => { if (!(t in tagVendors)) tagVendors[t] = match[t] ? match[t].id : ''; tagMatched[t] = match[t] ? match[t].id : ''; });
+    const opts = (sel) => '<option value="">No vendor</option>' + [...fVendor.options].filter(o => o.value).map(o => `<option value="${o.value}" ${String(sel) === o.value ? 'selected' : ''}>${o.text}</option>`).join('');
+    tagMap.innerHTML = '<div class="small text-muted mb-1">Estimate supplier tags. Pick a vendor for a tag once and Forge remembers it.</div>' + tags.map(t =>
+      `<div class="d-flex align-items-center gap-2 mb-1"><span class="badge bg-azure-lt">${esc(t)}</span><span>&rarr;</span>
+        <select class="form-select form-select-sm w-auto" onchange="tagVendors[${JSON.stringify(t).replace(/"/g, '&quot;')}] = this.value">${opts(tagVendors[t])}</select>
+        ${tagMatched[t] ? '<span class="text-green small">✓ remembered</span>' : ''}</div>`).join('');
+  }
   function renderEstimateLines() {
     const rows = estLines.map((l, idx) => ({ l, idx })).filter(x => String(x.l.costCode) === estCode.value);
+    renderTagMap(rows).catch(console.error);
     estBody.innerHTML = rows.map(({ l, idx }) => `<tr><td><input type="checkbox" class="form-check-input" data-est="${idx}" checked></td><td>${esc(l.section)}</td><td>${esc(l.who)}</td><td>${esc(l.description)}</td><td class="text-end">${l.qty ?? ''}</td><td class="text-end">${money(l.unitPrice)}</td><td class="text-end">${money(l.total)}</td></tr>`).join('');
   }
-  function addEstimateLines() {
+  async function addEstimateLines() {
+    const picked = [...document.querySelectorAll('[data-est]:checked')].map(cb => estLines[+cb.dataset.est]);
+    // remember newly chosen tag -> vendor mappings, and suggest the PO vendor when the lines point at exactly one
+    const used = [...new Set(picked.map(l => (l.who || '').trim()).filter(Boolean))];
+    for (const t of used) if (tagVendors[t] && String(tagVendors[t]) !== String(tagMatched[t] || '')) {
+      try { await post(`/pm/vendors/${tagVendors[t]}/aliases`, { alias: t }); tagMatched[t] = tagVendors[t]; } catch (e) { notice(e.message || 'Could not remember that tag', 'warning'); }
+    }
+    const vendors = [...new Set(used.map(t => tagVendors[t]).filter(Boolean).map(String))];
+    if (!fVendor.value && vendors.length === 1) fVendor.value = vendors[0];
     [...document.querySelectorAll('[data-est]:checked')].forEach(cb => {
       const l = estLines[+cb.dataset.est], whole = Number.isInteger(Number(l.qty)) && Number(l.qty) > 0;
       lines.push({ description: whole ? l.description : `${l.description} (est. ${l.qty} @ ${money(l.unitPrice)})`, kind: null,

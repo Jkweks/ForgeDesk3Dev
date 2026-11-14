@@ -67,6 +67,36 @@ class PmJobController extends Controller
             ->orderBy('name')->get(['id', 'name', 'code', 'bidestimate_code']));
     }
 
+    /** Which vendor each estimate tag ("Supplier" column text) refers to: BidEstimate code, learned alias, code or name. */
+    public function matchVendors(Request $request)
+    {
+        $tags = array_values(array_unique(array_filter((array) $request->query('tags', []), fn ($t) => is_string($t) && trim($t) !== '')));
+        $out = [];
+        foreach (array_slice($tags, 0, 100) as $tag) {
+            $s = \App\Models\Supplier::findByEstimateTag($tag);
+            $out[$tag] = $s && $s->is_active && ! $s->is_internal ? ['id' => $s->id, 'name' => $s->name] : null;
+        }
+
+        return response()->json($out);
+    }
+
+    /** Remember that an estimate tag means this vendor ("Remember for future estimates"). */
+    public function learnAlias(Request $request, int $supplierId)
+    {
+        $supplier = \App\Models\Supplier::where('is_internal', false)->findOrFail($supplierId);
+        $alias = trim($request->validate(['alias' => 'required|string|max:255'])['alias']);
+        $key = \App\Models\SupplierAlias::normalize($alias);
+        abort_if($key === '', 422, 'That tag is empty.');
+
+        $owner = \App\Models\SupplierAlias::where('alias_normalized', $key)->first();
+        if ($owner && $owner->supplier_id !== $supplier->id) {
+            return response()->json(['message' => "\"{$alias}\" already belongs to {$owner->supplier->name}."], 422);
+        }
+        \App\Models\SupplierAlias::firstOrCreate(['alias_normalized' => $key], ['supplier_id' => $supplier->id, 'alias' => $alias, 'source' => 'bidestimate']);
+
+        return response()->json(['ok' => true, 'supplier' => $supplier->only(['id', 'name'])]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
