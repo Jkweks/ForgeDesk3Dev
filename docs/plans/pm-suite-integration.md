@@ -14,6 +14,41 @@ Source: `/mnt/homeNAS/Container/jv_vos` (git repo, build 573, GHCR image `ghcr.i
 
 Effect on phases: skip Phase 1 SSO/proxy work (replace with import-only tooling), replace PM-side Work Orders in Phase 4 with a PM work-order *request* into `FdWorkOrder`, make "F: share integration" a Phase 0/2 deliverable, and treat PM Suite data as a one-time/repeatable import into ForgeDesk tables.
 
+## Status at a glance (end of 2026-11-13)
+
+Branch `feature/pm-suite-integration` (42+ commits, unpushed; git credentials missing in the Claude shell). Dev DB is migrated. Tests: 660 pass, 4 unrelated older failures (`ConfiguratorEntryBarTest` 1, `CutStationJobPickerTest` 3). Not yet used in a browser end to end except by the user (the job page and a real drawing set were exercised and fixed).
+
+| # | Feature (see 4b) | Priority | Status | Left to do |
+|---|---|---|---|---|
+| 1 | Jobs / job dashboard | High | **Built** | PM job page with details, stages, estimate, forecast, submittals, drawings, WO requests. No per-job "overview dashboard" widgets beyond the shared dashboard |
+| 2 | Purchase orders | High | **Built** (job + internal types, UI) | PDF output of a job PO; the glass-specific "Pick glass types" screen; budget-vs-committed % on the estimate |
+| 3 | Receiving | Medium | **Built** | none planned |
+| 4 | Vendors / contacts | High | **Built** | vendor document attachments |
+| 5 | Material Forecast | High | **Built** | per-job only; no cross-job rollup page |
+| 6 | BidEstimate import | High | **Built** (upload + F: ingest, row fixes) | manually added lines; test with more real workbooks |
+| 7 | Submittal Tracker | High | **Built** | bulk email, apply-approval dialog, markup review, activity timeline |
+| 8 | Submittal Builder | High | **Built** (cover + merge via worker) | sample transmittal / overview PDFs; review-before-save gate |
+| 9 | Closeout | Hold | Not started | |
+| 10 | Product Library | High | **Built** | importers from Kawneer / Glazier / hardware (Hold) |
+| 11 | Change History | Medium | **Built** (logged, viewable) | restore points / per-field restore |
+| 12 | Labor Schedule | Low | Not started | groundwork only when needed |
+| 13 | OCR imports | Low | **Groundwork built** (F: ingest, inbox, `pm_files`, worker) | the OCR parsers themselves (PO / quote / acknowledgement / receiving) |
+| 14 | Users / roles | High | **Built** | company-dashboard widgets, superintendent-only features |
+| 15 | Work orders (request flow) | Medium | **Built** (request, validate, approve into `FdWorkOrder`, bell notification) | copy request drawings into job documents; pre-fill from drawing elevations |
+| 16 | Dropbox photo folders | Hold | Not started | |
+| 17-18, 20, 22-25, 27, 29-30 | Procore, email templates, PDF markup, importers, activity timeline, production chart, QR codes | Hold | Not started | |
+| 19 | Glass Visualizer | Low | Not started | |
+| 21 | Drawing import | Medium | **Built** (worker + queued import, tested on a real 13-page set) | use elevations to pre-fill WO requests; store the cover glazing schedule |
+| 26 | Universal search | Low | **Built** (page + API) | header search box; Fabrication menu entry (menu structure is pinned by `NavigationTest`) |
+| 28 | To-do | Medium | **Built** | auto-generated to-dos from submittals / POs |
+| 31 | Dashboard widgets | Low | **Built** (bids, won, to-dos, open bids) | company-wide portfolio widgets |
+
+**Infrastructure built:** workspace switch + `/pm` nav, shared dashboard, bid-to-active job lifecycle hidden from Fabrication, PO types (stock / job / internal), `pm-worker` (parser, PDF merge, drawing import), `pm_files` registry, F: ingest (webhook, classifier, inbox, nightly scan, path map, read-only roots) and the `fdrive-watcher` service, relational storage throughout, JS smoke checks, CLAUDE.md notes.
+
+**Needs the user / environment:** push the branch (and `develop`); mount F: read-only and set `FDRIVE_SCAN_ROOTS` / `FDRIVE_PATH_MAP`; install and test the Windows watcher (installer untested); real-world tests with more BidEstimates and drawing sets; decide where Fabrication's Search menu entry goes; the 4 unrelated failing tests belong to earlier work.
+
+**Not planned in this pass:** everything marked Hold, the Labor Schedule, Glass Visualizer, change-history restore, field-app exposure of any PM data (deliberately held).
+
 ## Inventory model constraint (2026-11-13)
 
 ForgeDesk inventory is **stock inventory**, kept separate from job-specific material:
@@ -241,11 +276,7 @@ PM Suite is the **front-of-house** (project management, office) system; ForgeDes
 - Jobs created as PM bids (`origin = pm`) reserve their job number against Fabrication but are otherwise invisible to it until activated.
 - Both workspaces edit the same record. No field ownership rules yet; once PM is the standard entry point, tighten which fields Fabrication can edit using `origin` as the migration marker.
 
-## 4e. Build status (2026-11-14)
-
-Built and committed on `feature/pm-suite-integration`: internal vendors and PO types, vendor parity (contacts, aliases, BidEstimate code), job POs (grouped lines, issue stage, revisions, receipts without stock effect), Project Management workspace and switcher, job lifecycle (bid -> won -> active, hidden from Fabrication until active), shared dashboard with PM widgets, `pm-worker` (BidEstimate parser), `pm_files` registry (upload now, watcher-ready), BidEstimate import API and the **job page `/pm/jobs/{id}`** (upload, tab picker, summary, review rows with cost-code fix/ignore, cost-code groups, parser warnings, stale flag).
-
-Next: Material Forecast (estimated vs ordered vs received per cost code, reading job POs), then glass-to-PO (vendor matching via `Supplier::findByEstimateTag`), budget tracking on the estimate, Submittal Tracker/Builder, Product Library, roles (superintendent / company dashboard). Not yet done from the BidEstimate feature set: manually added lines, PO line import from the estimate.
+## 4e. Build notes per feature (status table is at the top of this document)
 
 **Roles (feature #14, built):** PM Suite's admin/standard roles plus flags map to ForgeDesk roles and permissions. New roles `project_manager` (own jobs only) and `superintendent`; permissions `pm.jobs.view_all` (company scope: admin, manager, office_staff, superintendent), `pm.act_for_others` (admin, manager), `pm.superintendent`, `pm.company_dashboard`. A PM without `view_all` sees only jobs where they are the project manager or the creator: enforced in the PM job, estimate, forecast, job PO and dashboard-widget endpoints. Creating a job defaults the project manager to yourself; assigning another PM needs `pm.act_for_others`. Not built yet: company-dashboard widgets, superintendent-only features (crew schedule).
 
