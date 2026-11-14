@@ -19,18 +19,33 @@ class NotificationController extends Controller
         if ($user?->isAdmin()) {
             return response()->json(SystemNotification::active()->latest()->get());
         }
-        // Approvers see only the shipping requests waiting on them.
-        if ($user?->hasPermission('shipments.approve')) {
-            return response()->json(SystemNotification::active()->where('type', 'shipment_request')->latest()->get());
+        // Approvers see only the requests waiting on them (shipping, work orders).
+        $types = $this->approverTypes($user);
+        if ($types) {
+            return response()->json(SystemNotification::active()->whereIn('type', $types)->latest()->get());
         }
 
         return response()->json([]);
     }
 
+    /** Notification types a non-admin may see and dismiss, by the permission that lets them act on it. */
+    private function approverTypes($user): array
+    {
+        $types = [];
+        if ($user?->hasPermission('shipments.approve')) {
+            $types[] = 'shipment_request';
+        }
+        if ($user?->hasPermission('fabrication.work-orders.create')) {
+            $types[] = 'work_order_request';
+        }
+
+        return $types;
+    }
+
     public function dismiss(Request $request, SystemNotification $notification)
     {
         $user = $request->user();
-        $allowed = $user?->isAdmin() || ($notification->type === 'shipment_request' && $user?->hasPermission('shipments.approve'));
+        $allowed = $user?->isAdmin() || in_array($notification->type, $this->approverTypes($user), true);
         if (! $allowed) {
             return response()->json([
                 'message' => 'You do not have permission to perform this action.',

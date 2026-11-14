@@ -103,6 +103,7 @@
     function notificationLink(n) {
       const d = n.data || {};
       if (d.shipment_request_id) return { href: '/shipments/queue', label: 'Open shipping queue' };
+      if (d.work_order_request_id) return { href: '/fabrication/work-order-requests', label: 'Open work order requests' };
       if (d.job_reservation_id) return { href: '/fulfillment/job-reservations', label: 'Open job reservations' };
       return null;
     }

@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use App\Models\SystemNotification;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -95,5 +96,26 @@ class WorkOrderRequestTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]));
         $this->get('/fabrication/work-order-requests')->assertOk()->assertSee('Work Order Requests');
         $this->get("/pm/jobs/{$this->job->id}")->assertOk()->assertSee('Request work order');
+    }
+
+    public function test_fabrication_approvers_get_a_bell_notification_until_it_is_decided(): void
+    {
+        $id = $this->postJson($this->url(), ['release_code' => 'N', 'scope' => 'x'])->assertCreated()->json('id');
+        $this->assertSame(1, SystemNotification::active()->where('type', 'work_order_request')->count());
+
+        // a fabrication approver (not an admin) sees it; someone without the permission does not
+        \App\Models\Permission::firstOrCreate(['name' => 'fabrication.work-orders.create'], ['display_name' => 'x', 'description' => 'x', 'category' => 'fabrication']);
+        $role = \App\Models\Role::firstOrCreate(['name' => 'wo_approver'], ['display_name' => 'WO approver']);
+        $role->assignPermission('fabrication.work-orders.create');
+        Sanctum::actingAs(User::factory()->create(['role' => 'wo_approver', 'is_active' => true]), ['*']);
+        $this->assertCount(1, $this->getJson('/api/v1/notifications')->assertOk()->json());
+
+        \App\Models\Role::firstOrCreate(['name' => 'nobody'], ['display_name' => 'Nobody']);
+        Sanctum::actingAs(User::factory()->create(['role' => 'nobody', 'is_active' => true]), ['*']);
+        $this->assertCount(0, $this->getJson('/api/v1/notifications')->json());
+
+        Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]), ['*']);
+        $this->postJson("/api/v1/work-order-requests/{$id}/reject", ['decision_note' => 'no'])->assertOk();
+        $this->assertSame(0, SystemNotification::active()->where('type', 'work_order_request')->count());
     }
 }

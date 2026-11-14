@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\FdWorkOrder;
+use App\Models\SystemNotification;
 use App\Models\WorkOrderRequest;
 use App\Services\Pm\PmFileIngestor;
 use App\Services\Pm\PmJobScope;
@@ -72,6 +73,13 @@ class WorkOrderRequestController extends Controller
         ]);
         $r = WorkOrderRequest::create($data + ['business_job_id' => $job->id, 'status' => 'pending', 'requested_by' => $request->user()->id]);
 
+        // In-app bell for Fabrication approvers (cleared when the request is decided or withdrawn).
+        SystemNotification::create(['type' => 'work_order_request', 'level' => 'info',
+            'title' => 'Work order requested',
+            'message' => ($request->user()->name ?? 'A project manager').' requested a work order for '.$job->job_number.' '.$job->job_name
+                .($r->release_code ? ' (release '.$r->release_code.')' : '').($r->requested_due_date ? ', needed '.$r->requested_due_date->format('M j') : '').'.',
+            'data' => ['work_order_request_id' => $r->id]]);
+
         return response()->json($this->present($r), 201);
     }
 
@@ -94,6 +102,7 @@ class WorkOrderRequestController extends Controller
         PmJobScope::find($request->user(), $r->business_job_id);
         abort_unless($r->status === 'pending', 422, 'This request has already been '.$r->status.'.');
         $r->update(['status' => 'withdrawn', 'decided_by' => $request->user()->id, 'decided_at' => now()]);
+        $this->clearNotification($r->id, $request->user()->id);
 
         return response()->json($this->present($r));
     }
@@ -131,6 +140,7 @@ class WorkOrderRequestController extends Controller
             FdWorkOrder::resequencePriorities();
             $r->update(['status' => 'approved', 'decided_by' => $request->user()->id, 'decided_at' => now(),
                 'decision_note' => $data['decision_note'] ?? null, 'fd_work_order_id' => $wo->id]);
+            $this->clearNotification($r->id, $request->user()->id);
 
             return $wo;
         });
@@ -144,8 +154,16 @@ class WorkOrderRequestController extends Controller
         $r = WorkOrderRequest::findOrFail($id);
         abort_unless($r->status === 'pending', 422, 'This request has already been '.$r->status.'.');
         $r->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['decision_note']]);
+        $this->clearNotification($r->id, $request->user()->id);
 
         return response()->json($this->present($r));
+    }
+
+    private function clearNotification(int $requestId, int $userId): void
+    {
+        SystemNotification::active()->where('type', 'work_order_request')->get()
+            ->filter(fn ($n) => ($n->data['work_order_request_id'] ?? null) === $requestId)
+            ->each(fn ($n) => $n->update(['dismissed_at' => now(), 'dismissed_by_user_id' => $userId]));
     }
 
     /** Drawings attached to a request, for the reviewer. */
