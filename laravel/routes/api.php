@@ -314,6 +314,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/widgets/jobs', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'jobs']);
             Route::get('/dashboard/widgets/jobs/due', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'jobsDue']);
         });
+        Route::middleware('permission:pm.jobs.view')->group(function () {
+            Route::get('/dashboard/widgets/pm/jobs', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'pmJobs']);
+            Route::get('/dashboard/widgets/pm/jobs/list', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'pmJobsList']);
+        });
         Route::get('/dashboard/widgets/reservations', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'reservations'])->middleware('permission:reservations.dashboard.view');
         Route::middleware('permission:inventory.view')->group(function () {
             Route::get('/dashboard/widgets/transactions', [\App\Http\Controllers\Api\DashboardWidgetController::class, 'transactions']);

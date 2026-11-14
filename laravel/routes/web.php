@@ -24,7 +24,8 @@ Route::get('/', function () {
 });
 
 // Project Management workspace (front of house)
-Route::get('/pm', fn () => view('pm.dashboard'));
+// One shared dashboard: /pm renders the same customizable dashboard (and per-user layout) as /.
+Route::get('/pm', fn () => view('dashboard'));
 Route::get('/pm/jobs', fn () => view('pm.jobs'));
 Route::get('/pm/vendors', fn () => view('suppliers'));
 

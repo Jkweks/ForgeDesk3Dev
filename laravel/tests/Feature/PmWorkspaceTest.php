@@ -98,9 +98,32 @@ class PmWorkspaceTest extends TestCase
     {
         $this->actingAs($this->admin());
 
-        $this->get('/pm')->assertOk()->assertSee('Project Management')->assertSee('workspace-switcher', false);
+        $this->get('/pm')->assertOk()->assertSee('workspace-switcher', false);
         $this->get('/pm/jobs')->assertOk();
         $this->get('/pm/vendors')->assertOk();
         $this->get('/')->assertOk()->assertSee('workspace-switcher', false);
+    }
+
+    public function test_dashboard_is_shared_across_workspaces(): void
+    {
+        $user = $this->admin();
+        $this->actingAs($user);
+
+        // Same view on both URLs
+        $a = $this->get('/')->assertOk()->getContent();
+        $b = $this->get('/pm')->assertOk()->getContent();
+        $this->assertStringContainsString('dashboard', strtolower($b));
+        $this->assertSame(substr_count($a, 'dashboard-grid'), substr_count($b, 'dashboard-grid'));
+
+        // One layout per user; PM widgets are in the catalog next to fabrication ones
+        $keys = collect($this->getJson('/api/v1/dashboard/widgets')->assertOk()->json('widgets'))->pluck('key');
+        $this->assertTrue($keys->contains('pm_bidding'));
+        $this->assertTrue($keys->contains('wo_open'));
+
+        // PM widget data counts bids that Fabrication cannot see
+        $this->postJson('/api/v1/pm/jobs', ['job_number' => '9200', 'job_name' => 'Bid'])->assertCreated();
+        $this->getJson('/api/v1/dashboard/widgets/pm/jobs')->assertOk()->assertJsonPath('bidding', 1);
+        $this->getJson('/api/v1/dashboard/widgets/pm/jobs/list')->assertOk()->assertJsonPath('items.0.label', '9200');
+        $this->getJson('/api/v1/dashboard/widgets/jobs')->assertOk()->assertJsonPath('active', 0);
     }
 }

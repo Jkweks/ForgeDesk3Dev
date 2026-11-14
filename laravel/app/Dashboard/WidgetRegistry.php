@@ -144,6 +144,15 @@ class WidgetRegistry
             ['Jobs', ['jobs.view'], '/dashboard/widgets/jobs/due', [
                 $list('jobs_due_list', 'Jobs by Target Date', 'Live jobs ordered by target completion, overdue first.', 'ti-timeline-event'),
             ]],
+            // Project Management. The dashboard is shared by both workspaces: one layout per user,
+            // widgets from either side (a widget only appears if the user has its permission).
+            ['Project Management', ['pm.jobs.view'], '/dashboard/widgets/pm/jobs', [
+                $stat('pm_bidding', 'Bids In Progress', 'Jobs currently being bid.', 'ti-file-dollar', 'bidding', '/pm/jobs?status=bidding'),
+                $stat('pm_won', 'Won, Not Active', 'Won jobs waiting to be activated for Fabrication.', 'ti-trophy', 'won', '/pm/jobs?status=won'),
+            ]],
+            ['Project Management', ['pm.jobs.view'], '/dashboard/widgets/pm/jobs/list', [
+                $list('pm_bids_list', 'Open Bids', 'Bidding and won jobs, newest first.', 'ti-briefcase-2'),
+            ]],
             ['Jobs', ['reservations.dashboard.view'], '/dashboard/widgets/reservations', [
                 $stat('reservations_open', 'Open Reservations', 'Reservations not yet fulfilled or cancelled.', 'ti-lock', 'open', '/fulfillment/job-reservations'),
                 $stat('reservations_overdue', 'Overdue Reservations', 'Open reservations past their needed-by date.', 'ti-lock-exclamation', 'overdue', '/fulfillment/job-reservations'),
@@ -364,6 +373,9 @@ class WidgetRegistry
         ['po_due_list', 4, 5], ['maintenance_upcoming', 4, 5], ['jobs_due_list', 4, 5],
         'break',
         ['wo_stage_wip', 6, 5], ['quality_incident_rate', 6, 5],
+        'break',
+        // Project Management (left out for users without pm.jobs.view)
+        ['pm_bidding', 2, 2], ['pm_won', 2, 2], ['pm_bids_list', 4, 5],
     ];
 
     /**

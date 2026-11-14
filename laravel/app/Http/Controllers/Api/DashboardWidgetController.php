@@ -739,6 +739,33 @@ class DashboardWidgetController extends Controller
         ]);
     }
 
+    /** Project Management stage counts (every stage, incl. the ones hidden from Fabrication). */
+    public function pmJobs()
+    {
+        $count = fn (string $status) => BusinessJob::withoutGlobalScope(\App\Models\Scopes\FabricationVisibleScope::class)
+            ->where('status', $status)->count();
+
+        return response()->json(['bidding' => $count('bidding'), 'won' => $count('won'), 'lost' => $count('lost')]);
+    }
+
+    public function pmJobsList(Request $request)
+    {
+        $items = BusinessJob::withoutGlobalScope(\App\Models\Scopes\FabricationVisibleScope::class)
+            ->whereIn('status', ['bidding', 'won'])
+            ->latest('updated_at')
+            ->limit($this->limitFor($request, 'pm_bids_list'))
+            ->get(['id', 'job_number', 'job_name', 'customer_name', 'status'])
+            ->map(fn (BusinessJob $j) => [
+                'label' => $j->job_number,
+                'sub' => trim($j->job_name.($j->customer_name ? ' · '.$j->customer_name : '')),
+                'meta' => $j->status_label,
+                'meta_class' => $j->status === 'won' ? 'bg-green-lt' : 'bg-azure-lt',
+                'link' => '/pm/jobs?status='.$j->status,
+            ])->values();
+
+        return response()->json(['items' => $items]);
+    }
+
     /** Live jobs ordered by target completion date, overdue first. */
     public function jobsDue(Request $request)
     {

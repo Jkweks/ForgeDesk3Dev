@@ -259,3 +259,6 @@ PM Suite is the **front-of-house** (project management, office) system; ForgeDes
 4. Who uses PM Suite (PM count) and can it be down during cut-over windows? currently not used in production environment, newly developed
 5. Is the existing Work Orders feature in PM Suite in active use vs. ForgeDesk's `FdWorkOrder`? pm suite no; goal is PM-requested work orders validated by Forge
 6. Should PM Suite's separate roles (admin/superintendent/company dashboard) map to ForgeDesk roles? forgedesk roles to develop to suppport pm roles (office staff is current forge role with simialr)
+
+**Shared dashboard (decided and built):** there is one customizable dashboard for both workspaces. `/` and `/pm` render the same page and the same per-user layout (the existing widget registry, `/dashboard/layout`), so a user sets it up once and can mix Fabrication and Project Management widgets. Widgets only appear if the user has their permission. The first PM widgets are *Bids In Progress*, *Won, Not Active* and *Open Bids* (gated by `pm.jobs.view`, counting stages Fabrication cannot see); they are added to the end of the built-in default layout and left out for users without that permission. Future PM widgets are added with the normal recipe in `docs/plans/customizable-dashboard.md`.
+
