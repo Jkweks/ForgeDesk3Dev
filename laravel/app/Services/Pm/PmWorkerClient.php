@@ -38,6 +38,18 @@ class PmWorkerClient
         return $res->json();
     }
 
+    /** One page of a PDF as PNG bytes (1-based page), for the size-check viewer. */
+    public function pageImage(string $pdfBytes, int $page, int $dpi = 110): string
+    {
+        $res = $this->http()->timeout(120)->withBody($pdfBytes, 'application/pdf')->post("/pdf/page-image?page={$page}&dpi={$dpi}");
+        if ($res->status() === 422) {
+            throw new PmWorkerDataException($res->json('error') ?? 'The page could not be rendered.');
+        }
+        $res->throw();
+
+        return $res->body();
+    }
+
     /** Merge PDFs (given as raw bytes, in order) into one. @param string[] $pdfs */
     public function mergePdfs(array $pdfs): string
     {

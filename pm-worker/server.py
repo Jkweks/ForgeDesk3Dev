@@ -44,6 +44,19 @@ def merge_pdfs(zip_bytes: bytes) -> bytes:
     return out.getvalue()
 
 
+def page_image(pdf_bytes: bytes, page: int, dpi: int) -> bytes:
+    """Render one page (1-based) of a PDF to PNG, for the size-check viewer."""
+    import pdfplumber
+
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        if page < 1 or page > len(pdf.pages):
+            raise ValueError("page %d is out of range (the PDF has %d pages)" % (page, len(pdf.pages)))
+        im = pdf.pages[page - 1].to_image(resolution=dpi)
+        buf = io.BytesIO()
+        im.original.save(buf, format="PNG")
+        return buf.getvalue()
+
+
 def parse(data: bytes, sheet: str):
     with tempfile.NamedTemporaryFile(suffix=_suffix(data), delete=True) as f:
         f.write(data)
@@ -101,6 +114,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path == "/estimate/sheets":
                 return self._send(200, {"sheets": sheets(data)})
+            if url.path == "/pdf/page-image":
+                q = parse_qs(url.query)
+                dpi = max(40, min(200, int((q.get("dpi") or ["110"])[0])))
+                return self._send_bytes(200, page_image(data, int((q.get("page") or ["1"])[0]), dpi), "image/png")
             if url.path == "/drawing/parse":
                 return self._send(200, drawing_import.parse_drawing_set(data))
             if url.path == "/pdf/merge":

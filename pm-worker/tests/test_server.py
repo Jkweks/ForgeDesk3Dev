@@ -111,3 +111,17 @@ def test_drawing_parse_returns_a_structured_result_for_a_pdf_without_elevations(
         assert code == 200 and body["ok"] is False and "PDF" in body["error"]
     finally:
         srv.shutdown()
+
+
+def test_page_image_renders_a_png_and_rejects_bad_pages():
+    srv, base = _run()
+    try:
+        r = urllib.request.Request(base + "/pdf/page-image?page=2&dpi=50", data=_pdf(2), headers={"X-Worker-Token": "t0ken"})
+        with urllib.request.urlopen(r) as resp:
+            assert resp.headers["Content-Type"] == "image/png"
+            body = resp.read()
+            assert body[:8] == b"\x89PNG\r\n\x1a\n"
+        code, body = _req(base + "/pdf/page-image?page=9", data=_pdf(2))
+        assert code == 422 and "out of range" in body["error"]
+    finally:
+        srv.shutdown()

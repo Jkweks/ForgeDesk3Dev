@@ -128,4 +128,77 @@ class DrawingSetTest extends TestCase
         $this->assertStringContainsString('Could not store the results: boom', $failed->error);
         \App\Models\DrawingElevation::flushEventListeners();
     }
+
+    private function parsedWithMarks(): array
+    {
+        $p = $this->parsed();
+        $p['elevations'][0]['pageSize'] = [1224, 792];
+        $p['elevations'][0]['titleRect'] = [395.5, 579.0, 696.1, 628.3];
+        $p['elevations'][0]['dims'] = [
+            'roW' => null, 'fsW' => ['v' => 119.75, 'rect' => [100, 50, 140, 62]], 'roH' => ['v' => 96.0, 'rect' => [842.2, 331.6, 855.3, 361.8]],
+            'fsH' => null, 'doW' => null, 'doH' => null,
+            'dloWidths' => [['v' => 38.25, 'rect' => [146, 215, 191, 228]], ['v' => 40.0, 'rect' => [200, 215, 242, 228]]],
+            'dloHeights' => [['v' => 90.5, 'rect' => [900, 300, 912, 340]]],
+        ];
+        // a second sheet of the same elevation (multi-sheet runs keep each sheet's own marks)
+        $p['elevations'][0]['sheetDims'] = [
+            ['page' => 12, 'pageSize' => [1224, 792], 'titleRect' => [395.5, 579.0, 696.1, 628.3], 'dims' => $p['elevations'][0]['dims']],
+            ['page' => 13, 'pageSize' => [1224, 792], 'titleRect' => null, 'dims' => ['dloWidths' => [['v' => 33.75, 'rect' => [10, 20, 50, 33]]]]],
+        ];
+
+        return $p;
+    }
+
+    public function test_dimension_footprints_are_stored_per_sheet_and_status_follows_confirmation(): void
+    {
+        Http::fake(['worker.test/drawing/parse' => Http::response($this->parsedWithMarks())]);
+        $this->upload()->assertStatus(202);
+        $set = DrawingSet::firstOrFail();
+        $e = $this->getJson("/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}")->assertOk()->json('elevations.0');
+
+        $this->assertSame([12, 13], array_column($e['sheets'], 'page'));
+        $this->assertEquals(1224, $e['sheets'][0]['width']);
+        $marks = collect($e['marks']);
+        $this->assertSame(6, $marks->count());                                   // fs_w, ro_h, 2 dlo_w, 1 dlo_h on page 12, 1 dlo_w on page 13
+        $this->assertSame([13], $marks->where('page', 13)->pluck('page')->unique()->values()->all());
+        $this->assertSame(['suggested'], $marks->pluck('status')->unique()->values()->all());
+        $roH = $marks->firstWhere('kind', 'ro_h');
+        $this->assertEquals(842.2, $roH['x0']);
+
+        $url = "/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/marks";
+        $dlo = $marks->where('kind', 'dlo_w')->where('page', 12)->pluck('id')->all();
+        // confirm both lites, then correct one of them
+        $r = $this->postJson($url, ['ids' => $dlo, 'action' => 'confirm'])->assertOk();
+        $this->assertSame(['confirmed'], collect($r->json())->pluck('status')->unique()->all());
+        $r = $this->postJson($url, ['ids' => [$dlo[0]], 'action' => 'correct', 'value' => 38.5])->assertOk();
+        $this->assertSame('mismatch', $r->json('0.status'));
+        $this->assertEquals(38.5, $r->json('0.confirmed_value'));
+        $this->postJson($url, ['ids' => $dlo, 'action' => 'correct', 'value' => 1])->assertStatus(422);   // one at a time
+        $this->postJson($url, ['ids' => [$dlo[0]], 'action' => 'clear'])->assertOk()->assertJsonPath('0.status', 'suggested');
+        $this->postJson($url, ['ids' => [999999], 'action' => 'confirm'])->assertNotFound();
+        $this->postJson($url, ['ids' => [$dlo[0]], 'action' => 'correct'])->assertStatus(422);            // value required
+
+        // a re-read keeps the stored data consistent (marks replaced with the elevation, not duplicated)
+        $this->postJson("/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/reimport")->assertStatus(202);
+        $this->assertSame(6, \App\Models\DrawingDimMark::count());
+    }
+
+    public function test_sheet_image_is_rendered_by_the_worker_once_and_then_served_from_storage(): void
+    {
+        Http::fake([
+            'worker.test/drawing/parse' => Http::response($this->parsedWithMarks()),
+            'worker.test/pdf/page-image*' => Http::response("\x89PNG\r\n\x1a\nfake-image-bytes", 200, ['Content-Type' => 'image/png']),
+        ]);
+        $this->upload()->assertStatus(202);
+        $set = DrawingSet::firstOrFail();
+        $img = "/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/pages/12/image";
+
+        $this->get($img)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get($img)->assertOk();
+        Http::assertSentCount(2);                                               // parse + one render; the second view came from storage
+
+        $this->get("/api/v1/pm/jobs/{$this->job->id}/drawing-sets/{$set->id}/pages/99/image")->assertNotFound();   // not a sheet of this set
+        Sanctum::actingAs(User::factory()->create(['role' => 'project_manager', 'is_active' => true]), ['*']);
+        $this->get($img)->assertNotFound();                                       // outside their job scope
+    }
 }

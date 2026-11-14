@@ -653,6 +653,10 @@ def _merge_continued(elevations):
         head['totalReqd'] = len(lites)
         head['roW'] = sum(lites) if lites else head.get('roW')
         head['multiSheet'] = True
+        # ForgeDesk addition (pm-worker): keep every elevation sheet's own dimension footprints so a viewer can
+        # draw them over each page. The merge above keeps only the head sheet's `dims`.
+        head['sheetDims'] = [{'page': r.get('page'), 'pageSize': r.get('pageSize'), 'dims': r.get('dims'),
+                              'titleRect': r.get('titleRect')} for r in elev]
         # The frame closes per sheet, never across the join, so an axis check
         # on the merged record would be arithmetic on a thing that does not
         # exist. Left unjudged rather than passed or failed.

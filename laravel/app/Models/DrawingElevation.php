@@ -16,6 +16,16 @@ class DrawingElevation extends Model
         return $this->hasMany(DrawingElevationDim::class)->orderBy('axis')->orderBy('position');
     }
 
+    public function sheets()
+    {
+        return $this->hasMany(DrawingSheet::class)->orderBy('page');
+    }
+
+    public function marks()
+    {
+        return $this->hasMany(DrawingDimMark::class)->orderBy('page')->orderBy('kind')->orderBy('idx');
+    }
+
     public function glassTags()
     {
         return $this->hasMany(DrawingElevationGlassTag::class);

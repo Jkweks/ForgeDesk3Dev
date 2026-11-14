@@ -154,6 +154,33 @@
   </main>
 </div>
 
+<div class="modal fade" id="szModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="szTitle">Check sizes</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="d-flex align-items-center gap-2 mb-2"><select class="form-select form-select-sm w-auto" id="szPage" onchange="szLoadPage()"></select>
+            <span class="text-muted small" id="szCap"></span></div>
+          <canvas id="szCanvas" style="width:100%;display:block;background:#fff;border:1px solid var(--tblr-border-color);border-radius:4px;cursor:zoom-in" onclick="szCanvasClick(event)" onmousemove="szHoverMove(event)" onmouseleave="szSetHover(null)"></canvas>
+          <div class="d-flex gap-3 small text-muted mt-2 flex-wrap">
+            <span><span class="badge" style="background:rgba(40,170,70,.5);border:1px solid #1e8c37">&nbsp;</span> confirmed</span>
+            <span><span class="badge" style="background:rgba(255,215,0,.55);border:1px solid #d4a00a">&nbsp;</span> read by the parser, not yet checked</span>
+            <span><span class="badge" style="background:rgba(225,45,35,.45);border:1px solid #cd281e">&nbsp;</span> corrected (differs from the reading)</span>
+            <span class="ms-auto">hover a value to highlight it · click the sheet to zoom</span>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="d-flex align-items-center mb-2"><h4 class="mb-0">Values on this sheet</h4>
+            <button class="btn btn-sm btn-primary ms-auto" data-permission="pm.jobs.manage" onclick="szConfirmAll()">Confirm all</button></div>
+          <div id="szList"></div>
+          <div id="szNote" class="mt-2 small"></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
 <div class="modal fade" id="woModal" tabindex="-1">
   <div class="modal-dialog"><form class="modal-content" onsubmit="saveWo(event)">
     <div class="modal-header"><h5 class="modal-title">Request a work order</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -313,8 +340,116 @@
 
   // ---- shop drawings ----
   let drawTimer = null;
+  const drawSetsCache = {};
+  const szBadge = (e) => { const m = e.marks || [], c = m.filter(x => x.status === 'confirmed').length, r = m.filter(x => x.status === 'mismatch').length;
+    return `<span class="badge ${r ? 'bg-red-lt' : (c === m.length ? 'bg-green-lt' : 'bg-yellow-lt')}">${c}/${m.length} checked${r ? ', ' + r + ' corrected' : ''}</span>`; };
   const DR_STATUS = { queued: ['Queued', 'bg-secondary-lt'], running: ['Reading…', 'bg-blue-lt'], done: ['Ready', 'bg-green-lt'], failed: ['Failed', 'bg-red-lt'] };
   const dim = (v) => v == null ? '—' : String(+v);
+  // ---- visual size check (the sheet with each read dimension drawn over it) ----
+  const SZ_KIND = { ro_w: 'R.O. width', fs_w: 'F.S. width', ro_h: 'R.O. height', fs_h: 'F.S. height', do_w: 'Door opening width', do_h: 'Door opening height', dlo_w: 'D.L.O. width', dlo_h: 'D.L.O. height' };
+  const SZ_COLORS = { confirmed: ['rgba(40,170,70,0.28)', '#1e8c37'], suggested: ['rgba(255,215,0,0.34)', '#d4a00a'], mismatch: ['rgba(225,45,35,0.28)', '#cd281e'] };
+  let sz = null;   // { setId, elev, page, img, hover, selected, zoom }
+
+  // inches -> 38 1/4" (nearest 1/16)
+  function fmtIn(v) { v = Number(v); const w = Math.floor(v), s = Math.round((v - w) * 16); const W = s === 16 ? w + 1 : w, S = s === 16 ? 0 : s;
+    if (!S) return W + '"'; let n = S, d = 16; while (n % 2 === 0) { n /= 2; d /= 2; } return (W ? W + ' ' : '') + n + '/' + d + '"'; }
+  // "38 1/4", "38-1/4", "38.25" -> 38.25
+  function parseIn(t) { t = String(t).replace(/["”]/g, '').trim(); if (!t) return NaN; const m = t.match(/^(\d+(?:\.\d+)?)?[\s-]*(?:(\d+)\/(\d+))?$/); if (!m || (!m[1] && !m[2])) return NaN;
+    return (m[1] ? parseFloat(m[1]) : 0) + (m[2] ? parseInt(m[2]) / parseInt(m[3]) : 0); }
+
+  function szElev() { return drawSetsCache[sz.setId].elevations.find(e => e.id === sz.elevId); }
+  function szMarksOnPage() { return szElev().marks.filter(m => m.page === sz.page); }
+
+  async function openSheetViewer(setId, elevId) {
+    const e = drawSetsCache[setId].elevations.find(x => x.id === elevId);
+    sz = { setId, elevId, page: e.sheets.length ? e.sheets[0].page : null, img: null, hover: null, selected: null, zoom: null };
+    szTitle.textContent = `Check sizes — elevation ${e.label}`;
+    szPage.innerHTML = e.sheets.map(s => `<option value="${s.page}">Sheet ${s.page}</option>`).join('');
+    szNote.innerHTML = e.sheets.length > 1 ? `<div class="text-muted">This elevation runs across ${e.sheets.length} sheets. Check each one.</div>` : '';
+    safeShowModal('szModal');
+    setTimeout(szLoadPage, 150);   // let the modal lay out so the canvas has a width
+  }
+
+  function szLoadPage() {
+    sz.page = parseInt(szPage.value || sz.page); sz.zoom = null; sz.selected = null; sz.img = null; sz.error = null;
+    const sheet = szElev().sheets.find(s => s.page === sz.page);
+    szCap.textContent = sheet ? 'Loading the sheet…' : '';
+    szRenderList(); szDraw();
+    const img = new Image();
+    img.onload = () => { sz.img = img; szCap.textContent = `Sheet ${sz.page}`; szDraw(); };
+    img.onerror = () => { sz.error = true; szCap.textContent = 'The sheet image could not be loaded (is the drawing worker running?). The values are still listed.'; szDraw(); };
+    img.src = `${location.origin}/api/v1/pm/jobs/${JOB_ID}/drawing-sets/${sz.setId}/pages/${sz.page}/image`;
+  }
+
+  function szDraw() {
+    const cv = szCanvas, sheet = szElev().sheets.find(s => s.page === sz.page);
+    if (!sheet) return;
+    const W = cv.clientWidth || 800, ratio = sheet.height / sheet.width, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = W * ratio * dpr; cv.style.height = (W * ratio) + 'px';
+    const ctx = cv.getContext('2d'), k = (cv.width / sheet.width);        // page points -> canvas pixels
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const z = sz.zoom;
+    if (z) { ctx.translate(cv.width / 2 - z.cx * k * z.scale, cv.height / 2 - z.cy * k * z.scale); ctx.scale(z.scale, z.scale); }
+    if (sz.img) ctx.drawImage(sz.img, 0, 0, cv.width, cv.height);
+    szMarksOnPage().forEach(m => {
+      const [fill, line] = SZ_COLORS[m.status] || SZ_COLORS.suggested, pad = 3;
+      const x = m.x0 * k - pad, y = m.top * k - pad, w = (m.x1 - m.x0) * k + pad * 2, h = (m.bottom - m.top) * k + pad * 2;
+      const hot = sz.hover === m.id || sz.selected === m.id;
+      ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
+      ctx.lineWidth = hot ? 3 : 1.5; ctx.strokeStyle = line; ctx.strokeRect(x, y, w, h);
+      if (hot) { ctx.shadowColor = line; ctx.shadowBlur = 12; ctx.strokeRect(x, y, w, h); ctx.shadowBlur = 0; }
+    });
+  }
+
+  function szRenderList() {
+    const marks = szMarksOnPage();
+    szList.innerHTML = marks.length ? marks.map(m => {
+      const [, line] = SZ_COLORS[m.status] || SZ_COLORS.suggested;
+      return `<div class="border rounded p-2 mb-2" style="border-left:4px solid ${line} !important" onmouseenter="szSetHover(${m.id})" onmouseleave="szSetHover(null)" onclick="szSelect(${m.id})">
+        <div class="d-flex align-items-center"><div><div class="small text-muted">${esc(SZ_KIND[m.kind] || m.kind)}${/^dlo/.test(m.kind) ? ' #' + (m.idx + 1) : ''}</div>
+          <strong>${fmtIn(m.value)}</strong>${m.status === 'mismatch' ? ` <span class="text-danger">→ ${fmtIn(m.confirmed_value)}</span>` : ''}</div>
+          <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage">
+            <button class="btn btn-sm ${m.status === 'confirmed' ? 'btn-success' : ''}" onclick="event.stopPropagation(); szMark([${m.id}], 'confirm')">✓</button>
+            <button class="btn btn-sm" onclick="event.stopPropagation(); szCorrect(${m.id})">Correct</button>
+            ${m.status !== 'suggested' ? `<button class="btn btn-sm btn-ghost-secondary" onclick="event.stopPropagation(); szMark([${m.id}], 'clear')">Clear</button>` : ''}</span></div></div>`;
+    }).join('') : '<div class="text-muted small">No dimensions were located on this sheet.</div>';
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+
+  function szSetHover(id) { sz.hover = id; szDraw(); }
+  function szHoverMove(ev) {
+    const cv = szCanvas, r = cv.getBoundingClientRect(), sheet = szElev().sheets.find(s => s.page === sz.page);
+    if (!sheet || sz.zoom) return;
+    const px = (ev.clientX - r.left) / r.width * sheet.width, py = (ev.clientY - r.top) / r.height * sheet.height;
+    const hit = szMarksOnPage().find(m => px >= m.x0 - 3 && px <= m.x1 + 3 && py >= m.top - 3 && py <= m.bottom + 3);
+    if ((hit ? hit.id : null) !== sz.hover) szSetHover(hit ? hit.id : null);
+  }
+  function szSelect(id) {
+    const m = szMarksOnPage().find(x => x.id === id); if (!m) return;
+    sz.selected = id; sz.zoom = sz.zoom ? null : { cx: (m.x0 + m.x1) / 2, cy: (m.top + m.bottom) / 2, scale: 2.6 }; szDraw();
+  }
+  function szCanvasClick(ev) {
+    if (sz.zoom) { sz.zoom = null; szDraw(); return; }
+    const r = szCanvas.getBoundingClientRect(), sheet = szElev().sheets.find(s => s.page === sz.page);
+    sz.zoom = { cx: (ev.clientX - r.left) / r.width * sheet.width, cy: (ev.clientY - r.top) / r.height * sheet.height, scale: 2.6 }; szDraw();
+  }
+
+  async function szMark(ids, action, value) {
+    try {
+      const upd = await post(`/pm/jobs/${JOB_ID}/drawing-sets/${sz.setId}/marks`, { ids, action, value });
+      const e = szElev(); upd.forEach(u => { const i = e.marks.findIndex(m => m.id === u.id); if (i >= 0) e.marks[i] = u; });
+      szRenderList(); szDraw(); szNote.innerHTML = '';
+      toggleDrawing(sz.setId, true).catch(() => {});   // refresh the checked-count badges behind the dialog
+    } catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; }
+  }
+  function szCorrect(id) {
+    const m = szMarksOnPage().find(x => x.id === id), t = prompt(`What is the real ${SZ_KIND[m.kind]}? (the drawing read ${fmtIn(m.value)})`, fmtIn(m.confirmed_value ?? m.value));
+    if (t === null) return;
+    const v = parseIn(t); if (isNaN(v)) { szNote.innerHTML = '<div class="text-danger">Enter inches like 38 1/4 or 38.25.</div>'; return; }
+    szMark([id], 'correct', v);
+  }
+  function szConfirmAll() { const ids = szMarksOnPage().filter(m => m.status === 'suggested').map(m => m.id); if (ids.length) szMark(ids, 'confirm'); }
+
   async function loadDrawings() {
     const sets = await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets`);
     drawBody.innerHTML = sets.length ? sets.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
@@ -328,17 +463,19 @@
     if (sets.some(s => s.status === 'queued' || s.status === 'running')) drawTimer = setTimeout(loadDrawings, 5000);
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
-  async function toggleDrawing(id) {
+  async function toggleDrawing(id, keep) {
     const box = document.getElementById('drawd-' + id);
-    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+    if (!box) return;
+    if (!keep && box.style.display !== 'none') { box.style.display = 'none'; return; }
     const s = await authenticatedFetch(`/pm/jobs/${JOB_ID}/drawing-sets/${id}`);
+    drawSetsCache[id] = s;
     box.style.display = '';
     box.innerHTML = s.status !== 'done' ? '<div class="text-muted small">Not ready yet.</div>' : `
       ${s.set_finish ? `<div class="small mb-1">Set finish: ${esc(s.set_finish)}</div>` : ''}
-      <div class="table-responsive"><table class="table table-sm table-vcenter"><thead><tr><th>Elevation</th><th>Sheet</th><th>System / finish</th><th class="text-end">Qty (thus/opp/total)</th><th>R.O. W × H</th><th>F.S. W × H</th><th>D.L.O. widths</th><th>Glass</th></tr></thead><tbody>
+      <div class="table-responsive"><table class="table table-sm table-vcenter"><thead><tr><th>Elevation</th><th>Sheet</th><th>System / finish</th><th class="text-end">Qty (thus/opp/total)</th><th>R.O. W × H</th><th>F.S. W × H</th><th>D.L.O. widths</th><th>Glass</th><th></th></tr></thead><tbody>
       ${s.elevations.map(e => `<tr><td>${esc(e.label)}<div class="text-muted small">${esc(e.arch_ref || '')}</div></td><td>${e.page ?? ''}</td><td>${esc(e.system || '')}<div class="text-muted small">${esc(e.finish || '')}</div></td>
         <td class="text-end">${e.thus_reqd ?? '—'} / ${e.opp_reqd ?? '—'} / ${e.total_reqd ?? '—'}</td><td>${dim(e.ro_w)} × ${dim(e.ro_h)}</td><td>${dim(e.fs_w)} × ${dim(e.fs_h)}</td>
-        <td>${e.dims.filter(d => d.axis === 'w').map(d => dim(d.value)).join(', ')}</td><td>${e.glass_tags.map(t => esc(t.tag)).join(', ')}</td></tr>`).join('') || '<tr><td colspan="8" class="text-muted">No elevations were found.</td></tr>'}
+        <td>${e.dims.filter(d => d.axis === 'w').map(d => dim(d.value)).join(', ')}</td><td>${e.glass_tags.map(t => esc(t.tag)).join(', ')}</td><td class="text-nowrap">${(e.marks || []).length ? `<button class="btn btn-sm" onclick="openSheetViewer(${s.id}, ${e.id})">Check sizes</button> ${szBadge(e)}` : '<span class="text-muted small">no sheet marks</span>'}</td></tr>`).join('') || '<tr><td colspan="9" class="text-muted">No elevations were found.</td></tr>'}
       </tbody></table></div>
       ${s.warnings.length ? `<div class="small text-warning">${s.warnings.map(w => esc(w.message)).join('<br>')}</div>` : ''}`;
   }

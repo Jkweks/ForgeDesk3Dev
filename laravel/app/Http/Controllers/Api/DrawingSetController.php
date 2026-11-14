@@ -23,7 +23,7 @@ class DrawingSetController extends Controller
     {
         $s->load('file:id,original_name,size');
         if ($full) {
-            $s->load(['elevations.dims', 'elevations.glassTags', 'warnings']);
+            $s->load(['elevations.dims', 'elevations.glassTags', 'elevations.sheets', 'elevations.marks', 'warnings']);
         }
 
         return $s->toArray();
@@ -57,6 +57,56 @@ class DrawingSetController extends Controller
         }
 
         return response()->json($this->present($set->fresh()) + ['already_uploaded' => ! $set->wasRecentlyCreated], $set->wasRecentlyCreated ? 202 : 200);
+    }
+
+    /**
+     * The sheet page as an image, for the size-check viewer. Rendered by the worker once per set, page and
+     * resolution, then served from storage.
+     */
+    public function pageImage(Request $request, int $jobId, int $id, int $page, PmFileIngestor $files, \App\Services\Pm\PmWorkerClient $worker)
+    {
+        $set = $this->set($request, $jobId, $id);
+        $dpi = max(60, min(160, (int) $request->query('dpi', 110)));
+        abort_unless($set->elevations()->whereHas('sheets', fn ($q) => $q->where('page', $page))->exists(), 404);
+
+        $path = "pm_files/pages/{$set->file->sha256}-p{$page}-{$dpi}.png";
+        $disk = \Illuminate\Support\Facades\Storage::disk(PmFileIngestor::DISK);
+        if (! $disk->exists($path)) {
+            try {
+                $disk->put($path, $worker->pageImage($files->bytes($set->file), $page, $dpi));
+            } catch (\App\Services\Pm\PmWorkerDataException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            } catch (\Illuminate\Http\Client\ConnectionException|\RuntimeException $e) {
+                return response()->json(['message' => 'The drawing worker is unavailable: '.$e->getMessage()], 503);
+            }
+        }
+
+        return response($disk->get($path), 200, ['Content-Type' => 'image/png', 'Cache-Control' => 'private, max-age=86400']);
+    }
+
+    /**
+     * Confirm what the parser read (no body), correct it (confirmed_value), or clear the decision (confirmed_value null).
+     * Several marks can be done at once with `ids` (confirm all on a sheet).
+     */
+    public function confirmMarks(Request $request, int $jobId, int $id)
+    {
+        $set = $this->set($request, $jobId, $id);
+        $data = $request->validate([
+            'ids' => 'required|array|min:1|max:500', 'ids.*' => 'integer',
+            'action' => 'required|in:confirm,correct,clear', 'value' => 'required_if:action,correct|nullable|numeric|min:0|max:100000',
+        ]);
+        $marks = \App\Models\DrawingDimMark::whereIn('id', $data['ids'])
+            ->whereHas('elevation', fn ($q) => $q->where('drawing_set_id', $set->id))->get();
+        abort_if($marks->count() !== count(array_unique($data['ids'])), 404);
+        abort_if($data['action'] === 'correct' && $marks->count() !== 1, 422, 'Correct one value at a time.');
+
+        foreach ($marks as $m) {
+            $m->update($data['action'] === 'clear'
+                ? ['confirmed_value' => null, 'confirmed_by' => null, 'confirmed_at' => null]
+                : ['confirmed_value' => $data['action'] === 'confirm' ? $m->value : $data['value'], 'confirmed_by' => $request->user()->id, 'confirmed_at' => now()]);
+        }
+
+        return response()->json($marks->fresh()->values());
     }
 
     /** Read it again, e.g. after a parser update or a failure. */

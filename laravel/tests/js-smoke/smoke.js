@@ -16,7 +16,12 @@ const data = {
     purchase_orders: [{ id: 9, po_number: 'PO-1' }], items: [{ id: 1, label: 'Spec' }, { id: 2, label: 'Shop' }], packages: [{ pm_file_id: 7, file: { original_name: 'Submittal_9001_001.pdf' }, item_count: 2, created_at: '2026-11-03' }] },
   '/pm/library/products': [{ id: 1, name: 'Trifab', documents_count: 1, manufacturer: { name: 'Kawneer' } }],
   '/pm/library/products/1': { id: 1, pm_manufacturer_id: 1, name: 'Trifab', is_active: true, documents: [{ id: 1, kind: 'spec', label: 'Spec', pm_file_id: 4, file: { original_name: 's.pdf' } }] },
-  '/pm/jobs/1/drawing-sets/1': { id: 1, status: 'done', set_finish: 'CLEAR', elevations: [{ label: 'W1', page: 12, arch_ref: 'A-401', system: 'TUBELITE', finish: 'CLEAR', thus_reqd: 2, opp_reqd: 1, total_reqd: 3, ro_w: '120.5000', ro_h: '96.0000', fs_w: null, fs_h: null, dims: [{ axis: 'w', value: '38.2500' }], glass_tags: [{ tag: 'IG-1' }] }], warnings: [{ message: 'Page 9 unreadable' }] },
+  '/pm/jobs/1/drawing-sets/1': { id: 1, status: 'done', set_finish: 'CLEAR', elevations: [{ id: 5, label: 'W1', page: 12, arch_ref: 'A-401', system: 'TUBELITE', finish: 'CLEAR', thus_reqd: 2, opp_reqd: 1, total_reqd: 3, ro_w: '120.5000', ro_h: '96.0000', fs_w: null, fs_h: null, dims: [{ axis: 'w', value: '38.2500' }], glass_tags: [{ tag: 'IG-1' }],
+      sheets: [{ page: 12, width: '1224.00', height: '792.00' }, { page: 13, width: '1224.00', height: '792.00' }],
+      marks: [{ id: 1, page: 12, kind: 'ro_h', idx: 0, value: '96.0000', x0: '842.2', top: '331.6', x1: '855.3', bottom: '361.8', confirmed_value: null, status: 'suggested' },
+              { id: 2, page: 12, kind: 'dlo_w', idx: 0, value: '38.2500', x0: '146', top: '215', x1: '191', bottom: '228', confirmed_value: '38.2500', status: 'confirmed' },
+              { id: 3, page: 12, kind: 'dlo_w', idx: 1, value: '40.0000', x0: '200', top: '215', x1: '242', bottom: '228', confirmed_value: '40.5000', status: 'mismatch' },
+              { id: 4, page: 13, kind: 'dlo_w', idx: 0, value: '33.7500', x0: '10', top: '20', x1: '50', bottom: '33', confirmed_value: null, status: 'suggested' }] }], warnings: [{ message: 'Page 9 unreadable' }] },
   '/pm/jobs/1/estimates/CO%20%231': {}, 
   '/pm/library/lookups': { manufacturers: [{ id: 1, name: 'Kawneer' }], categories: [{ id: 1, name: 'Storefront' }] },
   '/pm/jobs/1/work-order-requests': [{ id: 1, status: 'pending', release_code: 'A', requested_due_date: '2026-12-01', scope: 'x', files: [], checks: [] }],
@@ -46,12 +51,13 @@ function run(file, pagePath) {
   w.safeShowModal = () => {}; w.safeHideModal = () => {}; w.applyActionPermissions = () => {}; w.alert = () => {}; w.confirm = () => true; w.prompt = () => 'x';
   w.authenticatedFetch = async (url) => { const key = url.split('?')[0] in data && !(url in data) ? url.split('?')[0] : url;
     if (!(key in data)) { errors.push('NO STUB for ' + url); return []; } return data[key]; };
+  w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: (t, k) => (typeof k === 'string' ? () => {} : undefined), set: () => true });
   w.authenticatedUpload = async () => ({ ok: true, json: async () => ({}) });
   w.console.error = (...a) => errors.push('console.error: ' + a.map(x => (x && x.message) || String(x)).join(' '));
   w.addEventListener('error', e => errors.push('window error: ' + e.message));
   try { w.eval(own); } catch (e) { errors.push('eval: ' + e.message); }
   return new Promise(res => { w.document.dispatchEvent(new w.Event('DOMContentLoaded')); setTimeout(async () => {
-    if (file === 'job') { await w.toggleSubmittal(3); await w.toggleDrawing(1); await w.loadLibDocs(3).catch(() => {}); }
+    if (file === 'job') { await w.toggleSubmittal(3); await w.toggleDrawing(1); await w.openSheetViewer(1, 5); await new Promise(r => setTimeout(r, 250)); w.szSelect(2); w.szSelect(2); w.szHoverMove({ clientX: 0, clientY: 0 }); w.szSetHover(3); await w.loadLibDocs(3).catch(() => {}); }
     if (file === 'po') { const before = w.document.querySelectorAll('#linesBody tr').length; w.addGroup(); w.addLine(); const after = w.document.querySelectorAll('#linesBody tr').length; if (after !== before + 3) errors.push('po rows ' + before + ' -> ' + after); const inp = w.document.querySelector('#linesBody tr:last-child input:nth-of-type(1)'); }
     await new Promise(r => setTimeout(r, 200));
     const text = w.document.body.textContent.replace(/\s+/g, ' ');
@@ -60,7 +66,7 @@ function run(file, pagePath) {
 
 (async () => {
   const checks = [
-    ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'shop.pdf', 'Request work order', 'ACME GC', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses', 'Page 9 unreadable', 'IG-1', '38.25']],
+    ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'shop.pdf', 'Request work order', 'ACME GC', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses', 'Page 9 unreadable', 'IG-1', '38.25', 'Check sizes', 'R.O. height', '96"', 'D.L.O. width #2', '40"', '40 1/2"', 'Confirm all', '1/4 checked, 1 corrected']],
     ['po', '/pm/purchase-orders/9', ['PO PO-1', 'Group', 'Receive now', 'Rev 0', 'Flagged']],
     ['pos', '/pm/purchase-orders', ['PO-1']],
     ['library', '/pm/library', ['Trifab']],

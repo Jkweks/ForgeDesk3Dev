@@ -505,6 +505,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pm/jobs/{jobId}/drawing-sets', [\App\Http\Controllers\Api\DrawingSetController::class, 'index'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs/{jobId}/drawing-sets', [\App\Http\Controllers\Api\DrawingSetController::class, 'store'])->middleware('permission:pm.jobs.manage');
         Route::get('/pm/jobs/{jobId}/drawing-sets/{id}', [\App\Http\Controllers\Api\DrawingSetController::class, 'show'])->middleware('permission:pm.jobs.view');
+        Route::get('/pm/jobs/{jobId}/drawing-sets/{id}/pages/{page}/image', [\App\Http\Controllers\Api\DrawingSetController::class, 'pageImage'])->whereNumber('page')->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/drawing-sets/{id}/marks', [\App\Http\Controllers\Api\DrawingSetController::class, 'confirmMarks'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{jobId}/drawing-sets/{id}/reimport', [\App\Http\Controllers\Api\DrawingSetController::class, 'reimport'])->middleware('permission:pm.jobs.manage');
         Route::delete('/pm/jobs/{jobId}/drawing-sets/{id}', [\App\Http\Controllers\Api\DrawingSetController::class, 'destroy'])->middleware('permission:pm.jobs.manage');
 

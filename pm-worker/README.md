@@ -15,6 +15,7 @@ imports parsed with an older revision as stale.
 - `GET  /health`
 - `GET  /cost-codes` - the master cost code list
 - `POST /estimate/sheets` - body = workbook bytes; returns `{sheets: [...]}`
+- `POST /pdf/page-image?page=N&dpi=110` - body = PDF; returns that page as a PNG (used by the size-check viewer)
 - `POST /drawing/parse` - body = a shop-drawing set PDF (slow: ~1s/page, up to minutes); returns elevations with R.O./F.S./D.L.O. sizes, quantities, system, finish, glass tags
 - `POST /pdf/merge` - body = zip of PDFs (merged in file-name order); returns the merged `application/pdf`
 - `POST /estimate/parse?sheet=CONTRACT` - body = workbook bytes; returns the parsed estimate

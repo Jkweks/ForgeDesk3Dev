@@ -66,6 +66,46 @@ class ImportDrawingSet implements ShouldQueue
         return is_scalar($v) && trim((string) $v) !== '' ? trim((string) $v) : null;
     }
 
+    /**
+     * Where each dimension is printed, per sheet. A multi-sheet elevation carries `sheetDims` (one entry per sheet);
+     * a single-sheet one has just its own `dims` and `pageSize`.
+     */
+    private function storeMarks(DrawingElevation $row, array $e): void
+    {
+        $sheets = $e['sheetDims'] ?? [['page' => $e['page'] ?? null, 'pageSize' => $e['pageSize'] ?? null, 'dims' => $e['dims'] ?? null, 'titleRect' => $e['titleRect'] ?? null]];
+        $single = ['roW' => 'ro_w', 'fsW' => 'fs_w', 'roH' => 'ro_h', 'fsH' => 'fs_h', 'doW' => 'do_w', 'doH' => 'do_h'];
+        $lists = ['dloWidths' => 'dlo_w', 'dloHeights' => 'dlo_h'];
+
+        foreach ($sheets as $sh) {
+            $page = (int) ($sh['page'] ?? 0);
+            $size = $sh['pageSize'] ?? null;
+            $dims = $sh['dims'] ?? null;
+            if (! $page || ! is_array($size) || count($size) < 2 || ! is_array($dims)) {
+                continue;
+            }
+            $t = is_array($sh['titleRect'] ?? null) && count($sh['titleRect']) === 4 ? $sh['titleRect'] : [null, null, null, null];
+            $row->sheets()->create(['page' => $page, 'width' => $size[0], 'height' => $size[1],
+                'title_x0' => $t[0], 'title_top' => $t[1], 'title_x1' => $t[2], 'title_bottom' => $t[3]]);
+
+            $add = function (string $kind, int $idx, $d) use ($row, $page) {
+                if (! is_array($d) || ! isset($d['v']) || ! is_array($d['rect'] ?? null) || count($d['rect']) !== 4 || ! is_numeric($d['v'])) {
+                    return;
+                }
+                [$x0, $top, $x1, $bottom] = $d['rect'];
+                $row->marks()->create(['page' => $page, 'kind' => $kind, 'idx' => $idx, 'value' => $d['v'],
+                    'x0' => $x0, 'top' => $top, 'x1' => $x1, 'bottom' => $bottom]);
+            };
+            foreach ($single as $key => $kind) {
+                $add($kind, 0, $dims[$key] ?? null);
+            }
+            foreach ($lists as $key => $kind) {
+                foreach (array_values($dims[$key] ?? []) as $i => $d) {
+                    $add($kind, $i, $d);
+                }
+            }
+        }
+    }
+
     private function store(DrawingSet $set, array $result): void
     {
         DB::transaction(function () use ($set, $result) {
@@ -80,6 +120,7 @@ class ImportDrawingSet implements ShouldQueue
                     'ro_w' => $e['roW'] ?? null, 'fs_w' => $e['fsW'] ?? null, 'ro_h' => $e['roH'] ?? null, 'fs_h' => $e['fsH'] ?? null,
                     'door_w' => $e['doW'] ?? null, 'door_h' => $e['doH'] ?? null,
                 ]);
+                $this->storeMarks($row, $e);
                 foreach (['w' => $e['dloWidths'] ?? [], 'h' => $e['dloHeights'] ?? []] as $axis => $values) {
                     foreach (array_values($values) as $i => $v) {
                         $row->dims()->create(['axis' => $axis, 'position' => $i, 'value' => $v]);
