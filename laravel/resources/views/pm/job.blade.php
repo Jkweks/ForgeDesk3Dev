@@ -193,6 +193,8 @@
   </form></div>
 </div>
 
+@include('partials.pm-modal-helpers')
+
 <script>
   const JOB_ID = {{ (int) $jobId }};
   const money = (n) => n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });

@@ -46,6 +46,8 @@
   </form></div>
 </div>
 
+@include('partials.pm-modal-helpers')
+
 <script>
   const esc = (s) => escapeHtml(String(s ?? ''));
   const todayStr = new Date().toISOString().slice(0, 10);

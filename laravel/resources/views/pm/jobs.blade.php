@@ -55,6 +55,8 @@
   </form></div>
 </div>
 
+@include('partials.pm-modal-helpers')
+
 <script>
   const NEXT = { bidding: [['won','Mark won'],['lost','Mark lost']], won: [['active','Activate (hand to Fabrication)'],['lost','Mark lost']], lost: [['bidding','Reopen bid']] };
   const BADGE = { bidding: 'bg-azure-lt', won: 'bg-green-lt', lost: 'bg-red-lt', active: 'bg-blue-lt' };

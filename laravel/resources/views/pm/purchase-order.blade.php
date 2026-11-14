@@ -92,6 +92,8 @@
   </div></div>
 </div>
 
+@include('partials.pm-modal-helpers')
+
 <script>
   const PO_ID = @json($poId);
   const IS_NEW = PO_ID === 'new';

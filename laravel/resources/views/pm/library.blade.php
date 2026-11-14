@@ -71,6 +71,8 @@
   </div></div>
 </div>
 
+@include('partials.pm-modal-helpers')
+
 <script>
   const esc = (s) => escapeHtml(String(s ?? ''));
   let lookups = { manufacturers: [], categories: [] }, editing = null;

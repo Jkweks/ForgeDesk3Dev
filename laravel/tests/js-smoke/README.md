@@ -15,7 +15,7 @@ cp laravel/tests/js-smoke/smoke.js /tmp/smoke/
 docker run --rm -v /tmp/smoke:/s -w /s node:22-slim sh -c "npm i --silent jsdom@24 && node smoke.js"
 ```
 
-`globals.js` loads each full page with all of its inline scripts as real classic scripts in one shared global scope (like a browser) and fails on script-level SyntaxErrors such as `Identifier 'x' has already been declared`, which `smoke.js` cannot see because it runs only the page's own script. Run it the same way (`node globals.js`) over all dumped pages (add dashboard, jobs, vendors, search, inbox to the copy list).
+`globals.js` loads each full page with all of its inline scripts as real classic scripts in one shared global scope (like a browser) and fails on script-level SyntaxErrors such as `Identifier 'x' has already been declared`, and on any function an inline handler or a shared helper calls that is not defined (e.g. `safeShowModal`), which `smoke.js` cannot see because it runs only the page's own script. Run it the same way (`node globals.js`) over all dumped pages (add dashboard, jobs, vendors, search, inbox to the copy list).
 
 The canned data in `smoke.js` mirrors the API shapes; update it when an endpoint's shape changes.
 Remember `config:clear` before and `config:cache` after running tests in the dev container.
