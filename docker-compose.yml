@@ -124,10 +124,6 @@ services:
       - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
     restart: unless-stopped
 
-networks:
-  forgedesk_network:
-    driver: bridge
-
   # Project Management worker (BidEstimate parser; later OCR / drawing import). Optional:
   # start with `docker compose --profile pm up -d pm-worker`. See pm-worker/README.md.
   pm-worker:
@@ -142,6 +138,10 @@ networks:
       WORKER_TOKEN: ${PM_WORKER_TOKEN:-}
     networks:
       - forgedesk_network
+
+networks:
+  forgedesk_network:
+    driver: bridge
 
 volumes:
   postgres_data:
