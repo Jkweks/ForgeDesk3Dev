@@ -27,7 +27,7 @@ class SubmittalController extends Controller
 
     private function present(Submittal $s): array
     {
-        $s->refresh()->load(['revisions', 'responses.file', 'samples', 'purchaseOrders:id,po_number']);
+        $s->refresh()->load(['revisions', 'responses.file', 'samples', 'purchaseOrders:id,po_number', 'items.file:id,original_name', 'packages.file:id,original_name,size']);
 
         return $s->toArray();
     }
@@ -141,6 +141,93 @@ class SubmittalController extends Controller
             ]);
             $s->update(['status' => $data['status'], 'returned_at' => $data['returned_at']]);
         });
+
+        return response()->json($this->present($s), 201);
+    }
+
+    // ---- package builder ----
+
+    /** Add a document to the package: a library document, or an uploaded PDF. */
+    public function addItem(Request $request, int $jobId, int $id, PmFileIngestor $files)
+    {
+        $s = $this->submittal($jobId, $id);
+        $request->validate([
+            'product_document_id' => 'required_without:file|nullable|integer|exists:pm_product_documents,id',
+            'file' => 'required_without:product_document_id|nullable|file|max:51200|extensions:pdf',
+            'label' => 'nullable|string|max:255',
+        ]);
+
+        if ($request->filled('product_document_id')) {
+            $doc = \App\Models\PmProductDocument::with(['file', 'product:id,name'])->findOrFail($request->product_document_id);
+            $fileId = $doc->pm_file_id;
+            $label = $request->input('label') ?: trim($doc->product->name.' — '.($doc->label ?: $doc->file->original_name));
+        } else {
+            [$file] = $files->registerUpload($request->file('file'), 'submittal_item', $s->job, $request->user());
+            $fileId = $file->id;
+            $label = $request->input('label') ?: $file->original_name;
+        }
+        $s->items()->create([
+            'pm_file_id' => $fileId, 'pm_product_document_id' => $doc->id ?? null, 'label' => $label,
+            'sort_order' => ($s->items()->max('sort_order') ?? -1) + 1,
+        ]);
+
+        return response()->json($this->present($s), 201);
+    }
+
+    public function removeItem(int $jobId, int $id, int $itemId)
+    {
+        $s = $this->submittal($jobId, $id);
+        $s->items()->findOrFail($itemId)->delete();
+
+        return response()->json($this->present($s));
+    }
+
+    public function reorderItems(Request $request, int $jobId, int $id)
+    {
+        $s = $this->submittal($jobId, $id);
+        $order = $request->validate(['order' => 'required|array', 'order.*' => 'integer'])['order'];
+        $own = $s->items()->pluck('id')->all();
+        abort_unless(count($order) === count($own) && ! array_diff($order, $own), 422, 'The order must list every item once.');
+        foreach ($order as $i => $itemId) {
+            $s->items()->whereKey($itemId)->update(['sort_order' => $i]);
+        }
+
+        return response()->json($this->present($s));
+    }
+
+    /** Cover sheet + every item, merged into one PDF and stored as a numbered package. */
+    public function buildPackage(Request $request, int $jobId, int $id, PmFileIngestor $files, \App\Services\Pm\PmWorkerClient $worker)
+    {
+        $s = $this->submittal($jobId, $id);
+        $items = $s->items()->with('file')->get();
+        if ($items->isEmpty()) {
+            return response()->json(['message' => 'Add at least one document first.'], 422);
+        }
+        $notPdf = $items->first(fn ($i) => strtolower(pathinfo($i->file->original_name, PATHINFO_EXTENSION)) !== 'pdf');
+        if ($notPdf) {
+            return response()->json(['message' => "\"{$notPdf->label}\" is not a PDF, so it cannot be merged into the package."], 422);
+        }
+
+        $cover = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.pm-submittal-cover', [
+            'submittal' => $s, 'job' => $s->job, 'items' => $items,
+            'preparedBy' => $request->user()->name ?? $request->user()->email, 'date' => now()->format('F j, Y'),
+        ])->output();
+
+        try {
+            $merged = $worker->mergePdfs(array_merge([$cover], $items->map(fn ($i) => $files->bytes($i->file))->all()));
+        } catch (\App\Services\Pm\PmWorkerDataException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Illuminate\Http\Client\ConnectionException|\RuntimeException $e) {
+            return response()->json(['message' => 'The PDF worker is unavailable: '.$e->getMessage()], 503);
+        }
+
+        $rev = $s->revision_number ? "_Rev{$s->revision_number}" : '';
+        $name = "Submittal_{$s->job->job_number}_{$s->number}{$rev}.pdf";
+        $file = $files->registerBytes($merged, $name, 'submittal_package', $s->job, $request->user());
+        $s->packages()->create([
+            'revision_number' => $s->revision_number, 'pm_file_id' => $file->id,
+            'item_count' => $items->count(), 'created_by' => $request->user()->id,
+        ]);
 
         return response()->json($this->present($s), 201);
     }

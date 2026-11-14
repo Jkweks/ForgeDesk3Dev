@@ -7,6 +7,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -118,5 +119,50 @@ class SubmittalTrackerTest extends TestCase
     public function test_job_page_has_the_submittals_card(): void
     {
         $this->get("/pm/jobs/{$this->job->id}")->assertOk()->assertSee('Submittals')->assertSee('Record GC/AE response');
+    }
+
+    public function test_builder_assembles_items_and_builds_a_numbered_package(): void
+    {
+        config(['services.pm_worker.token' => 'tok', 'services.pm_worker.url' => 'http://worker.test']);
+        Http::fake(['worker.test/pdf/merge' => Http::response('%PDF-merged', 200, ['Content-Type' => 'application/pdf'])]);
+        $s = $this->create();
+
+        // a library document and an uploaded PDF
+        $m = $this->postJson('/api/v1/pm/library/manufacturers', ['name' => 'Kawneer'])->json();
+        $p = $this->postJson('/api/v1/pm/library/products', ['pm_manufacturer_id' => $m['id'], 'name' => 'Trifab'])->json();
+        $doc = $this->post("/api/v1/pm/library/products/{$p['id']}/documents", ['file' => UploadedFile::fake()->createWithContent('spec.pdf', '%PDF-1 a'), 'kind' => 'spec'], ['Accept' => 'application/json'])->json('documents.0');
+
+        $this->postJson($this->url("/{$s['id']}/items"), ['product_document_id' => $doc['id']])->assertCreated()->assertJsonPath('items.0.label', 'Trifab — spec.pdf');
+        $this->post($this->url("/{$s['id']}/items"), ['file' => UploadedFile::fake()->createWithContent('shop.pdf', '%PDF-1 b'), 'label' => 'Shop drawings'], ['Accept' => 'application/json'])->assertCreated();
+        $this->post($this->url("/{$s['id']}/items"), ['file' => UploadedFile::fake()->createWithContent('x.docx', 'x')], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $items = $this->getJson($this->url("/{$s['id']}"))->json('items');
+        $this->assertSame(['Trifab — spec.pdf', 'Shop drawings'], array_column($items, 'label'));
+        $reordered = $this->postJson($this->url("/{$s['id']}/items/reorder"), ['order' => [$items[1]['id'], $items[0]['id']]])->assertOk();
+        $this->assertSame(['Shop drawings', 'Trifab — spec.pdf'], array_column($reordered->json('items'), 'label'));
+        $this->postJson($this->url("/{$s['id']}/items/reorder"), ['order' => [$items[0]['id']]])->assertStatus(422);
+
+        $built = $this->postJson($this->url("/{$s['id']}/package"))->assertCreated();
+        $this->assertSame('Submittal_8001_001.pdf', $built->json('packages.0.file.original_name'));
+        $this->assertSame(2, $built->json('packages.0.item_count'));
+        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/pdf/merge') && $r->header('X-Worker-Token')[0] === 'tok');
+
+        // revision 1 builds a separately named package; history is kept
+        $this->postJson($this->url("/{$s['id']}/revise"))->assertOk();
+        $built = $this->postJson($this->url("/{$s['id']}/package"))->assertCreated();
+        $this->assertSame(['Submittal_8001_001_Rev1.pdf', 'Submittal_8001_001.pdf'], array_column(array_column($built->json('packages'), 'file'), 'original_name'));
+
+        $this->deleteJson($this->url("/{$s['id']}/items/{$items[0]['id']}"))->assertOk()->assertJsonCount(1, 'items');
+    }
+
+    public function test_package_needs_items_and_reports_worker_problems(): void
+    {
+        config(['services.pm_worker.token' => 'tok', 'services.pm_worker.url' => 'http://worker.test']);
+        $s = $this->create();
+        $this->postJson($this->url("/{$s['id']}/package"))->assertStatus(422);
+
+        $this->post($this->url("/{$s['id']}/items"), ['file' => UploadedFile::fake()->createWithContent('a.pdf', '%PDF-1'), 'label' => 'A'], ['Accept' => 'application/json'])->assertCreated();
+        Http::fake(['worker.test/pdf/merge' => Http::response(['error' => '0001.pdf: broken'], 422)]);
+        $this->postJson($this->url("/{$s['id']}/package"))->assertStatus(422)->assertJsonPath('message', '0001.pdf: broken');
     }
 }

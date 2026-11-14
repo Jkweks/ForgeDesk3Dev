@@ -63,3 +63,39 @@ def test_lists_sheets_and_reports_parse_errors_as_422():
         assert _req(base + "/estimate/parse", data=b"")[0] == 400
     finally:
         srv.shutdown()
+
+
+def _pdf(pages):
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    for _ in range(pages):
+        w.add_blank_page(width=200, height=200)
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def _zip(files):
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in files:
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+def test_pdf_merge_combines_in_name_order_and_rejects_bad_input():
+    from pypdf import PdfReader
+    srv, base = _run()
+    try:
+        r = urllib.request.Request(base + "/pdf/merge", data=_zip([("0002.pdf", _pdf(3)), ("0001.pdf", _pdf(1))]), headers={"X-Worker-Token": "t0ken"})
+        with urllib.request.urlopen(r) as resp:
+            assert resp.headers["Content-Type"] == "application/pdf"
+            assert len(PdfReader(io.BytesIO(resp.read())).pages) == 4
+
+        code, body = _req(base + "/pdf/merge", data=_zip([("0001.pdf", b"not a pdf")]))
+        assert code == 422 and "0001.pdf" in body["error"]
+        code, body = _req(base + "/pdf/merge", data=_zip([]))
+        assert code == 422
+    finally:
+        srv.shutdown()

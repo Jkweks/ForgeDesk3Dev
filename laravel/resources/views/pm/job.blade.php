@@ -272,11 +272,55 @@
         <button class="btn btn-sm mt-1" data-permission="pm.jobs.manage" onclick="addSampleRow(${id})">+ Sample</button></div>
       <div class="col-md-4"><h4>Purchase orders</h4>${(s.purchase_orders || []).map(p => `<div class="mb-1"><a href="/pm/purchase-orders/${p.id}">${esc(p.po_number)}</a> <button class="btn btn-sm btn-ghost-danger" data-permission="pm.jobs.manage" onclick="unlinkPo(${id}, ${p.id})">&times;</button></div>`).join('') || '<div class="text-muted">None linked.</div>'}
         <div class="input-group input-group-sm mt-1" data-permission="pm.jobs.manage"><select class="form-select" id="linkPo-${id}"><option value="">Link a PO…</option>${jobPos.filter(p => !linked.has(p.id)).map(p => `<option value="${p.id}">${esc(p.po_number)}</option>`).join('')}</select><button class="btn" onclick="linkPo(${id})">Link</button></div></div></div>
+      <h4 class="mt-3">Package</h4>
+      <div class="row g-3"><div class="col-md-7">
+        ${(s.items || []).map((it, k, arr) => `<div class="d-flex align-items-center gap-1 mb-1"><span class="text-muted me-1">${k + 1}.</span><span class="flex-fill">${esc(it.label)}</span>
+          <button class="btn btn-sm btn-ghost-secondary" data-permission="pm.jobs.manage" ${k === 0 ? 'disabled' : ''} onclick="moveItem(${id}, ${k}, -1)">↑</button>
+          <button class="btn btn-sm btn-ghost-secondary" data-permission="pm.jobs.manage" ${k === arr.length - 1 ? 'disabled' : ''} onclick="moveItem(${id}, ${k}, 1)">↓</button>
+          <button class="btn btn-sm btn-ghost-danger" data-permission="pm.jobs.manage" onclick="removeItem(${id}, ${it.id})">&times;</button></div>`).join('') || '<div class="text-muted">No documents in this package yet.</div>'}
+        <div data-permission="pm.jobs.manage" class="mt-2">
+          <div class="input-group input-group-sm mb-1"><select class="form-select" id="libProd-${id}" onchange="loadLibDocs(${id})"><option value="">Library product…</option></select>
+            <select class="form-select" id="libDoc-${id}"><option value="">Document…</option></select><button class="btn" onclick="addLibItem(${id})">Add</button></div>
+          <div class="input-group input-group-sm"><input type="file" accept=".pdf" class="form-control" id="itemFile-${id}"><input class="form-control" id="itemLabel-${id}" placeholder="Label (optional)"><button class="btn" onclick="addFileItem(${id})">Upload PDF</button></div>
+        </div></div>
+        <div class="col-md-5"><button class="btn btn-primary btn-sm mb-2" data-permission="pm.jobs.manage" onclick="buildPackage(${id})">Build package PDF</button>
+          ${(s.packages || []).map(pk => `<div><a href="${location.origin}/api/v1/pm/files/${pk.pm_file_id}/download" target="_blank">${esc(pk.file.original_name)}</a> <span class="text-muted small">${pk.item_count} docs · ${esc((pk.created_at || '').slice(0, 10))}</span></div>`).join('') || '<div class="text-muted">Not built yet.</div>'}</div></div>
       <div class="mt-3 text-end"><button class="btn btn-sm btn-ghost-danger" data-permission="pm.jobs.manage" onclick="deleteSm(${id})">Delete submittal</button></div>`;
+    fillLibProducts(id);
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
 
   const smCall = async (path, body, method = 'POST') => { try { await post(smBase() + path, body, method); } catch (e) { notice(e.message || 'Could not save', 'danger'); return false; } return true; };
+  let libProducts = null;
+  async function fillLibProducts(id) {
+    if (!libProducts) { try { libProducts = await authenticatedFetch('/pm/library/products'); } catch (e) { libProducts = []; } }
+    const sel = document.getElementById('libProd-' + id);
+    if (sel) sel.innerHTML = '<option value="">Library product…</option>' + libProducts.filter(p => p.documents_count > 0).map(p => `<option value="${p.id}">${esc(p.manufacturer ? p.manufacturer.name + ' — ' : '')}${esc(p.name)}</option>`).join('');
+  }
+  async function loadLibDocs(id) {
+    const pid = document.getElementById('libProd-' + id).value, sel = document.getElementById('libDoc-' + id);
+    if (!pid) { sel.innerHTML = '<option value="">Document…</option>'; return; }
+    const p = await authenticatedFetch('/pm/library/products/' + pid);
+    sel.innerHTML = p.documents.map(d => `<option value="${d.id}">${esc(d.kind)} — ${esc(d.label || d.file.original_name)}</option>`).join('');
+  }
+  async function addLibItem(id) { const v = document.getElementById('libDoc-' + id).value; if (v && await smCall(`/${id}/items`, { product_document_id: +v })) toggleSubmittal(id, true); }
+  async function addFileItem(id) {
+    const f = document.getElementById('itemFile-' + id).files[0]; if (!f) { notice('Choose a PDF first.', 'warning'); return; }
+    const fd = new FormData(); fd.append('file', f); const l = document.getElementById('itemLabel-' + id).value; if (l) fd.append('label', l);
+    const r = await authenticatedUpload(`${smBase()}/${id}/items`, fd);
+    if (!r.ok) { const d = await r.json().catch(() => ({})); notice(d.message || 'Could not add the PDF', 'danger'); return; }
+    toggleSubmittal(id, true);
+  }
+  async function removeItem(id, itemId) { try { await authenticatedFetch(`${smBase()}/${id}/items/${itemId}`, { method: 'DELETE' }); toggleSubmittal(id, true); } catch (e) { notice(e.message, 'danger'); } }
+  async function moveItem(id, idx, dir) {
+    const s = await authenticatedFetch(`${smBase()}/${id}`), ids = s.items.map(i => i.id), j = idx + dir;
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    if (await smCall(`/${id}/items/reorder`, { order: ids })) toggleSubmittal(id, true);
+  }
+  async function buildPackage(id) {
+    notice('Building the package…', 'info');
+    if (await smCall(`/${id}/package`)) { notice('Package built.', 'success'); toggleSubmittal(id, true); }
+  }
   async function setSmStatus(id, status) { if (await smCall(`/${id}`, { status }, 'PUT')) loadSubmittals(); }
   async function reviseSm(id) { if (confirm('Record this round and start the next revision?') && await smCall(`/${id}/revise`)) loadSubmittals(); }
   async function deleteSm(id) { if (confirm('Delete this submittal and its history?')) { try { await authenticatedFetch(`${smBase()}/${id}`, { method: 'DELETE' }); smOpen = null; loadSubmittals(); } catch (e) { notice(e.message, 'danger'); } } }

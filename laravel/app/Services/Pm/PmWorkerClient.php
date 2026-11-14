@@ -29,6 +29,28 @@ class PmWorkerClient
         return $this->post('/estimate/parse?sheet='.urlencode($sheet), $bytes);
     }
 
+    /** Merge PDFs (given as raw bytes, in order) into one. @param string[] $pdfs */
+    public function mergePdfs(array $pdfs): string
+    {
+        $zip = new \ZipArchive;
+        $tmp = tempnam(sys_get_temp_dir(), 'pmmerge');
+        $zip->open($tmp, \ZipArchive::OVERWRITE);
+        foreach (array_values($pdfs) as $i => $bytes) {
+            $zip->addFromString(sprintf('%04d.pdf', $i), $bytes);
+        }
+        $zip->close();
+        $body = file_get_contents($tmp);
+        unlink($tmp);
+
+        $res = $this->http()->withBody($body, 'application/zip')->post('/pdf/merge');
+        if ($res->status() === 422) {
+            throw new PmWorkerDataException($res->json('error') ?? 'The PDFs could not be merged.');
+        }
+        $res->throw();
+
+        return $res->body();
+    }
+
     private function post(string $path, string $bytes): array
     {
         $res = $this->http()->withBody($bytes, 'application/octet-stream')->post($path);

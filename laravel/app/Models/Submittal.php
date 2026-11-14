@@ -34,6 +34,16 @@ class Submittal extends Model
         return $this->hasMany(SubmittalSample::class)->orderBy('id');
     }
 
+    public function items()
+    {
+        return $this->hasMany(SubmittalItem::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function packages()
+    {
+        return $this->hasMany(SubmittalPackage::class)->orderByDesc('id');
+    }
+
     public function purchaseOrders()
     {
         return $this->belongsToMany(PurchaseOrder::class, 'submittal_purchase_orders');

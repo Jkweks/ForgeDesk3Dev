@@ -1,8 +1,10 @@
 """pm-worker HTTP service (standard library only). See README.md."""
 import hmac
+import io
 import json
 import os
 import tempfile
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -16,6 +18,29 @@ TOKEN = os.environ.get("WORKER_TOKEN", "")
 def _suffix(data: bytes) -> str:
     # .xlsx is a zip; legacy .xls is an OLE2 compound file.
     return ".xlsx" if data[:2] == b"PK" else ".xls"
+
+
+def merge_pdfs(zip_bytes: bytes) -> bytes:
+    """Merge the PDFs inside a zip archive, in file-name order (callers name them 0001.pdf, 0002.pdf ...)."""
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+        names = sorted(n for n in z.namelist() if not n.endswith("/"))
+        if not names:
+            raise ValueError("The archive contains no files")
+        for name in names:
+            try:
+                reader = PdfReader(io.BytesIO(z.read(name)))
+                if reader.is_encrypted:
+                    raise ValueError("is password protected")
+                for page in reader.pages:
+                    writer.add_page(page)
+            except Exception as e:
+                raise ValueError("%s: %s" % (name, e))
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
 
 
 def parse(data: bytes, sheet: str):
@@ -47,6 +72,13 @@ class Handler(BaseHTTPRequestHandler):
         sent = self.headers.get("X-Worker-Token", "")
         return bool(TOKEN) and hmac.compare_digest(sent, TOKEN)
 
+    def _send_bytes(self, code, body, content_type):
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/health":
@@ -68,6 +100,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path == "/estimate/sheets":
                 return self._send(200, {"sheets": sheets(data)})
+            if url.path == "/pdf/merge":
+                return self._send_bytes(200, merge_pdfs(data), "application/pdf")
             if url.path == "/estimate/parse":
                 sheet = (parse_qs(url.query).get("sheet") or ["CONTRACT"])[0]
                 return self._send(200, parse(data, sheet))

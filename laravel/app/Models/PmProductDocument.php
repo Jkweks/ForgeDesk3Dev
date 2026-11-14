@@ -10,6 +10,11 @@ class PmProductDocument extends Model
 
     public const KINDS = ['spec', 'color', 'cut', 'other'];
 
+    public function product()
+    {
+        return $this->belongsTo(PmProduct::class, 'pm_product_id');
+    }
+
     public function file()
     {
         return $this->belongsTo(PmFile::class, 'pm_file_id');

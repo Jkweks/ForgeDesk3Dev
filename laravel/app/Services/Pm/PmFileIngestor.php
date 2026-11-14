@@ -46,6 +46,19 @@ class PmFileIngestor
         ]), false];
     }
 
+    /** Register bytes Forge generated itself (e.g. a built submittal package). */
+    public function registerBytes(string $bytes, string $name, string $docType, ?BusinessJob $job, ?User $by): PmFile
+    {
+        $sha = hash('sha256', $bytes);
+        $path = 'pm_files/'.substr($sha, 0, 2)."/{$sha}.".(pathinfo($name, PATHINFO_EXTENSION) ?: 'bin');
+        Storage::disk(self::DISK)->put($path, $bytes);
+
+        return PmFile::create([
+            'source' => PmFile::SOURCE_UPLOAD, 'doc_type' => $docType, 'original_name' => $name, 'storage_path' => $path,
+            'sha256' => $sha, 'size' => strlen($bytes), 'file_mtime' => now(), 'business_job_id' => $job?->id, 'uploaded_by' => $by?->id,
+        ]);
+    }
+
     /**
      * Entry point for the F: watcher / reconciliation scan. The share is read-only, so the file is
      * referenced in place rather than copied.

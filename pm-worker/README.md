@@ -15,6 +15,7 @@ imports parsed with an older revision as stale.
 - `GET  /health`
 - `GET  /cost-codes` - the master cost code list
 - `POST /estimate/sheets` - body = workbook bytes; returns `{sheets: [...]}`
+- `POST /pdf/merge` - body = zip of PDFs (merged in file-name order); returns the merged `application/pdf`
 - `POST /estimate/parse?sheet=CONTRACT` - body = workbook bytes; returns the parsed estimate
   (lines, byCostCode, reviewNeeded, warnings, summary, parserRevision)
 

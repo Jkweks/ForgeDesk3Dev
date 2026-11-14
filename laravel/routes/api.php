@@ -502,6 +502,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/pm/jobs/{jobId}/submittals/{id}', [\App\Http\Controllers\Api\SubmittalController::class, 'destroy'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{jobId}/submittals/{id}/revise', [\App\Http\Controllers\Api\SubmittalController::class, 'revise'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{jobId}/submittals/{id}/responses', [\App\Http\Controllers\Api\SubmittalController::class, 'addResponse'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/items', [\App\Http\Controllers\Api\SubmittalController::class, 'addItem'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/submittals/{id}/items/{itemId}', [\App\Http\Controllers\Api\SubmittalController::class, 'removeItem'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/items/reorder', [\App\Http\Controllers\Api\SubmittalController::class, 'reorderItems'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/submittals/{id}/package', [\App\Http\Controllers\Api\SubmittalController::class, 'buildPackage'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{jobId}/submittals/{id}/samples', [\App\Http\Controllers\Api\SubmittalController::class, 'addSample'])->middleware('permission:pm.jobs.manage');
         Route::put('/pm/jobs/{jobId}/submittals/{id}/samples/{sampleId}', [\App\Http\Controllers\Api\SubmittalController::class, 'updateSample'])->middleware('permission:pm.jobs.manage');
         Route::delete('/pm/jobs/{jobId}/submittals/{id}/samples/{sampleId}', [\App\Http\Controllers\Api\SubmittalController::class, 'removeSample'])->middleware('permission:pm.jobs.manage');
