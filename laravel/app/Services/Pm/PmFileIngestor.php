@@ -93,11 +93,31 @@ class PmFileIngestor
         if ($file->storage_path && Storage::disk(self::DISK)->exists($file->storage_path)) {
             return Storage::disk(self::DISK)->get($file->storage_path);
         }
-        if ($file->fdrive_path && is_readable($file->fdrive_path)) {
+        if ($file->fdrive_path && self::canReadFdrivePath($file->fdrive_path)) {
             return file_get_contents($file->fdrive_path);
         }
 
         throw new RuntimeException("File {$file->original_name} is no longer available.");
+    }
+
+    /**
+     * F: files are only ever read from inside the configured roots (FDRIVE_SCAN_ROOTS). The path comes from the
+     * watcher, so this keeps a bad token or payload from turning "register a path" into "read any file".
+     */
+    public static function canReadFdrivePath(string $path): bool
+    {
+        $real = realpath($path);
+        if ($real === false || ! is_file($real) || ! is_readable($real)) {
+            return false;
+        }
+        foreach ((array) config('services.fdrive_ingest.roots') as $root) {
+            $rootReal = realpath($root);
+            if ($rootReal !== false && str_starts_with($real, rtrim($rootReal, '/\\').DIRECTORY_SEPARATOR)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function find(string $sha, string $docType, ?BusinessJob $job): ?PmFile

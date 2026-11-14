@@ -158,6 +158,9 @@ class PmLibraryController extends Controller
         $file = PmFile::findOrFail($fileId);
         if ($file->business_job_id) {
             PmJobScope::find($request->user(), $file->business_job_id); // 404 outside your scope
+        } elseif ($file->doc_type !== 'product_document') {
+            // Files with no job and no library role (e.g. unplaced files in the inbox) are for people who manage the inbox.
+            abort_unless($request->user()->hasPermission('pm.jobs.manage'), 404);
         }
         $bytes = $files->bytes($file);
 

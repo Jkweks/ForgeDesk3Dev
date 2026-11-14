@@ -97,4 +97,15 @@ class PmProductLibraryTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]));
         $this->get('/pm/library')->assertOk()->assertSee('Product Library');
     }
+
+    public function test_unplaced_files_are_only_downloadable_by_people_who_manage_the_inbox(): void
+    {
+        $file = \App\Models\PmFile::create(['source' => 'fdrive', 'doc_type' => 'unclassified', 'original_name' => 'loose.pdf', 'storage_path' => 'pm_files/loose.pdf',
+            'sha256' => str_repeat('a', 64), 'size' => 3]);
+        Storage::disk('local')->put('pm_files/loose.pdf', 'abc');
+
+        $this->get("/api/v1/pm/files/{$file->id}/download")->assertOk();           // admin
+        Sanctum::actingAs(User::factory()->create(['role' => 'superintendent', 'is_active' => true]), ['*']);
+        $this->get("/api/v1/pm/files/{$file->id}/download")->assertNotFound();      // can view PM data but does not manage the inbox
+    }
 }

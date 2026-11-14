@@ -21,8 +21,9 @@ set INGEST_URL=https://forgedesk.example.com/api/v1/ingest/fdrive
 set INGEST_TOKEN=<same value as FDRIVE_INGEST_TOKEN in ForgeDesk's .env>
 node watcher.js
 ```
-ForgeDesk side: set `FDRIVE_INGEST_TOKEN` (and `FDRIVE_SCAN_ROOTS`, `|`-separated paths as seen by the ForgeDesk
-container, for the nightly scan).
+ForgeDesk side: set `FDRIVE_INGEST_TOKEN` and `FDRIVE_SCAN_ROOTS` (`|`-separated paths as seen by the ForgeDesk
+container). The roots serve two purposes: the nightly scan walks them, and ForgeDesk **only reads F: files from inside
+them** (so the share must be mounted there and the watcher's paths must map to it).
 
 ## Run as a Windows service
 `service\install-windows.ps1` registers a scheduled task that starts at logon or boot and restarts on failure

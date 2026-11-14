@@ -22,7 +22,7 @@ class FdriveIngestTest extends TestCase
     {
         parent::setUp();
         Storage::fake('local');
-        config(['services.fdrive_ingest.token' => 'ingest-secret', 'services.pm_worker.token' => 'tok', 'services.pm_worker.url' => 'http://worker.test']);
+        config(['services.fdrive_ingest.roots' => [sys_get_temp_dir()], 'services.fdrive_ingest.token' => 'ingest-secret', 'services.pm_worker.token' => 'tok', 'services.pm_worker.url' => 'http://worker.test']);
     }
 
     private function ingest(array $body, ?string $token = 'ingest-secret')
@@ -129,6 +129,19 @@ class FdriveIngestTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]))->get('/pm/inbox')->assertOk()->assertSee('File Inbox');
     }
 
+    public function test_files_outside_the_configured_roots_are_never_read(): void
+    {
+        $outside = tempnam(sys_get_temp_dir(), 'x');
+        file_put_contents($outside, 'secret');
+        $this->assertTrue(\App\Services\Pm\PmFileIngestor::canReadFdrivePath($outside));          // inside the (temp) root
+        $this->assertFalse(\App\Services\Pm\PmFileIngestor::canReadFdrivePath('/etc/passwd'));    // not under any root
+        $this->assertFalse(\App\Services\Pm\PmFileIngestor::canReadFdrivePath(sys_get_temp_dir().'/../etc/passwd')); // traversal resolves outside
+
+        config(['services.fdrive_ingest.roots' => []]);
+        $this->assertFalse(\App\Services\Pm\PmFileIngestor::canReadFdrivePath($outside));          // no roots configured: no disk reads at all
+        unlink($outside);
+    }
+
     public function test_scan_command_walks_a_root_through_the_same_ingest(): void
     {
         $this->job('2303');
@@ -141,6 +154,7 @@ class FdriveIngestTest extends TestCase
         $this->artisan('pm:scan-fdrive', ['--root' => [dirname($dir)]])->expectsOutputToContain('"unchanged":1')->assertSuccessful();
         $this->assertSame(1, PmFile::count());
 
+        config(['services.fdrive_ingest.roots' => []]);
         $this->artisan('pm:scan-fdrive')->expectsOutputToContain('No roots configured')->assertSuccessful();
         unlink("$dir/readme.txt");
     }

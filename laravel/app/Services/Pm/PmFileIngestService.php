@@ -36,7 +36,7 @@ class PmFileIngestService
         }
 
         // 2. Content hash: from the watcher, or read from the (read-only) mount.
-        $sha = $event['sha256'] ?? (is_readable($path) ? hash_file('sha256', $path) : null);
+        $sha = $event['sha256'] ?? (PmFileIngestor::canReadFdrivePath($path) ? hash_file('sha256', $path) : null);
         if (! $sha) {
             return ['file' => null, 'action' => 'needs_hash'];
         }

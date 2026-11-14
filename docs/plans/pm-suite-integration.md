@@ -275,6 +275,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Universal search (feature #26, built):** `/search` (a Search entry in the Project Management nav; Fabrication's menu is pinned by `NavigationTest`, so its entry is left for you to place) calls `GET /api/v1/search?q=` which looks across PM jobs, job POs, submittals, the product library, Fabrication jobs, work orders, stock POs, stock products and vendors (including BidEstimate codes and aliases). Each group appears only if the user has its permission, and PM groups follow the job scope. Not built: a search box in the header (it is its own page), and ranking.
 
+**Hardening from the review pass:** F: files are read only from inside `FDRIVE_SCAN_ROOTS` (resolved paths, so traversal and symlinks outside the roots are refused; with no roots configured nothing is read from disk), so a bad ingest token cannot turn "register this path" into "download any file the app can read". File downloads for files with no job and no library role (the unplaced inbox files) need `pm.jobs.manage`. **Set `FDRIVE_SCAN_ROOTS` before relying on F: imports** (the roots as the ForgeDesk container sees them).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).
