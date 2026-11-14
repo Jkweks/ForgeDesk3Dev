@@ -475,6 +475,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'store'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{id}/stage', [\App\Http\Controllers\Api\PmJobController::class, 'setStage'])->middleware('permission:pm.jobs.manage');
 
+        // BidEstimate import (upload today; the F: watcher registers files through the same service)
+        Route::get('/pm/cost-codes', [\App\Http\Controllers\Api\BidEstimateController::class, 'costCodes'])->middleware('permission:pm.jobs.view');
+        Route::get('/pm/jobs/{jobId}/estimates', [\App\Http\Controllers\Api\BidEstimateController::class, 'index'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/estimates/upload', [\App\Http\Controllers\Api\BidEstimateController::class, 'upload'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/jobs/{jobId}/estimates/import', [\App\Http\Controllers\Api\BidEstimateController::class, 'import'])->middleware('permission:pm.jobs.manage');
+        Route::get('/pm/jobs/{jobId}/estimates/{sheet}', [\App\Http\Controllers\Api\BidEstimateController::class, 'show'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/estimates/{sheet}/override', [\App\Http\Controllers\Api\BidEstimateController::class, 'override'])->middleware('permission:pm.jobs.manage');
+        Route::delete('/pm/jobs/{jobId}/estimates/{sheet}/override/{row}', [\App\Http\Controllers\Api\BidEstimateController::class, 'restore'])->middleware('permission:pm.jobs.manage');
+
         // Job-specific POs (PM Suite): never touch stock; receiving only records arrival
         Route::get('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'index'])->middleware('permission:orders.view');
         Route::post('/job-purchase-orders', [\App\Http\Controllers\Api\JobPurchaseOrderController::class, 'store'])->middleware('permission:orders.create');

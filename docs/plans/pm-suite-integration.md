@@ -146,6 +146,8 @@ Whether a file reaches F: through a direct save later or a user dropping a downl
 - **Version history:** `pm_files` keeps every seen revision with its hash, so the UI can show "v3 saved from Forge, v4 edited on F:" and a person can choose which is current.
 - **Open details:** exact metadata fields; confirm Word/Excel/Outlook "Save as PDF" paths keep the markers; which document types are generated in the first release.
 
+**Manual upload everywhere, built as if the watcher exists (decided 2026-11-13).** Every Project Management import accepts a manual upload today. Uploads and the future watcher go through the same entry point (`PmFileIngestor`): uploads are stored in Forge storage and registered in `pm_files`; watcher events register a reference to the file on F: (`registerFromFdrive`, no copy, since the share is read-only). Both dedupe by content hash per job and document type, recognise moves and renames, and feed the same import services, so adding the watcher later needs no changes downstream. The first user is the BidEstimate import (`BidEstimateImporter`, via `pm-worker`).
+
 **Safety net (reconciliation scan):** the watcher can miss events (service down, server reboot, network blip). A Laravel scheduled command runs nightly, plus on demand from an admin button, and walks only the watched roots over `/mnt/f` comparing path/size/mtime to `pm_files`. Anything new or changed is queued exactly like a watcher event. The watcher also sends a periodic heartbeat so ForgeDesk can show "watcher offline" in the UI.
 
 **Import jobs (queued, idempotent):**

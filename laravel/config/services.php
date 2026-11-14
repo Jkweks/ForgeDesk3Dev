@@ -14,6 +14,13 @@ return [
     |
     */
 
+    // Project Management worker (BidEstimate parser; later OCR). See pm-worker/README.md.
+    'pm_worker' => [
+        'url' => env('PM_WORKER_URL', 'http://pm-worker:8780'),
+        'token' => env('PM_WORKER_TOKEN'),
+        'timeout' => (int) env('PM_WORKER_TIMEOUT', 60),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
