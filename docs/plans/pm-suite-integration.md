@@ -259,6 +259,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Receiving (feature #3, built):** `/pm/receiving` lists issued, open job POs with lines still to receive (oldest expected first, overdue highlighted, quick receive per PO) and receipts flagged on arrival. Records only; never touches stock. Job-scoped like everything else.
 
+**Work order requests (feature #15, built):** PM raises a request on an *active* job from the PM job page (release code, needed-by date, scope, notes, drawings via `pm_files`); Fabrication reviews it on a new **Work Order Requests** page (Fabrication nav) with validation checks (job active, release code unused, reservations/configurations exist, drawings attached) and approves (creates the `FdWorkOrder` through the normal numbering/priority flow, notes carry the scope) or rejects with a required reason; PM can withdraw a pending request. Approve/reject need `fabrication.work-orders.create`. Not built: a bell notification for new requests (the existing bell is shipment-specific), copying request drawings into the job's documents, and the classic-menu entry.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

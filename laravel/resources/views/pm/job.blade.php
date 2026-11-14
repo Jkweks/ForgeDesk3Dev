@@ -45,6 +45,15 @@
         </div>
       </div>
 
+      <div class="card mb-3" id="woCard">
+        <div class="card-header">
+          <h3 class="card-title">Work order requests</h3>
+          <div class="card-actions"><button class="btn btn-sm btn-primary" data-permission="pm.jobs.manage" onclick="showWoForm()">Request work order</button></div>
+        </div>
+        <div class="list-group list-group-flush" id="woBody"><div class="list-group-item text-muted">Loading...</div></div>
+        <div class="card-footer text-muted small">Fabrication validates each request and turns it into a work order. The job must be active.</div>
+      </div>
+
       <div class="card mb-3">
         <div class="card-header">
           <h3 class="card-title">Submittals</h3>
@@ -114,6 +123,20 @@
       </div>
     </div>
   </main>
+</div>
+
+<div class="modal fade" id="woModal" tabindex="-1">
+  <div class="modal-dialog"><form class="modal-content" onsubmit="saveWo(event)">
+    <div class="modal-header"><h5 class="modal-title">Request a work order</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row g-2 mb-3"><div class="col-6"><label class="form-label">Release code</label><input class="form-control" id="woCode" placeholder="e.g. A"></div>
+        <div class="col-6"><label class="form-label">Needed by</label><input type="date" class="form-control" id="woDue"></div></div>
+      <div class="mb-3"><label class="form-label">Scope</label><textarea class="form-control" id="woScope" rows="3" placeholder="Elevations, openings, what is being released"></textarea></div>
+      <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="woNotes" rows="2"></textarea></div>
+      <div class="mb-1"><label class="form-label">Drawings</label><input type="file" class="form-control" id="woFiles" multiple></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Send request</button></div>
+  </form></div>
 </div>
 
 <div class="modal fade" id="smModal" tabindex="-1">
@@ -232,6 +255,31 @@
     const t = f.totals;
     document.getElementById('forecastFoot').innerHTML = f.rows.length ? `<tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(t.estimatedTotal)}</td><td class="text-end">${money(t.orderedTotal)}</td><td></td><td class="text-end">${money(t.draftTotal)}</td><td class="text-end">${money(t.receivedTotal)}</td><td></td></tr>` : '';
   }
+
+  // ---- work order requests ----
+  const WO_STATUS = { pending: ['Pending', 'bg-orange-lt'], approved: ['Approved', 'bg-green-lt'], rejected: ['Rejected', 'bg-red-lt'], withdrawn: ['Withdrawn', 'bg-secondary-lt'] };
+  async function loadWo() {
+    const rows = await authenticatedFetch(`/pm/jobs/${JOB_ID}/work-order-requests`);
+    woBody.innerHTML = rows.length ? rows.map(r => { const [l, c] = WO_STATUS[r.status] || [r.status, 'bg-secondary-lt'];
+      return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span>
+        <strong>${esc(r.release_code || 'Release')}</strong><span class="text-muted">${r.requested_due_date ? 'needed ' + esc(r.requested_due_date) : ''}</span>
+        <span class="ms-auto">${r.status === 'pending' ? `<button class="btn btn-sm" data-permission="pm.jobs.manage" onclick="withdrawWo(${r.id})">Withdraw</button>` : ''}</span></div>
+        ${r.scope ? `<div class="small mt-1">${esc(r.scope)}</div>` : ''}
+        ${r.files.length ? `<div class="small text-muted mt-1">${r.files.length} drawing(s) attached</div>` : ''}
+        ${r.decision_note ? `<div class="small mt-1"><em>Fabrication:</em> ${esc(r.decision_note)}</div>` : ''}
+        ${r.work_order ? `<div class="small mt-1">Work order created (release ${r.work_order.release_number}).</div>` : ''}</div>`; }).join('') : '<div class="list-group-item text-muted">No requests yet.</div>';
+    if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+  function showWoForm() { document.querySelector('#woModal form').reset(); safeShowModal('woModal'); }
+  async function saveWo(e) {
+    e.preventDefault();
+    try {
+      const r = await post(`/pm/jobs/${JOB_ID}/work-order-requests`, { release_code: woCode.value || null, requested_due_date: woDue.value || null, scope: woScope.value || null, notes: woNotes.value || null });
+      for (const f of woFiles.files) { const fd = new FormData(); fd.append('file', f); await authenticatedUpload(`/pm/work-order-requests/${r.id}/files`, fd); }
+      safeHideModal('woModal'); notice('Request sent to Fabrication.', 'success'); loadWo();
+    } catch (err) { notice(err.message || 'Could not send the request', 'danger'); }
+  }
+  async function withdrawWo(id) { if (confirm('Withdraw this request?')) { try { await post(`/pm/work-order-requests/${id}/withdraw`, {}); loadWo(); } catch (e) { notice(e.message, 'danger'); } } }
 
   // ---- submittals ----
   const SM_STATUS = { pending: 'Pending', approved: 'Approved', approved_as_noted: 'Approved as noted', revise_resubmit: 'Revise & resubmit', rejected: 'Rejected', for_record_only: 'For record only' };
@@ -394,7 +442,7 @@
     document.getElementById('sheetPick').addEventListener('change', (ev) => showSheet(ev.target.value));
     try {
       [costCodes] = await Promise.all([authenticatedFetch('/pm/cost-codes'), loadJob()]);
-      await Promise.all([loadSheets(), loadForecast(), loadSubmittals()]);
+      await Promise.all([loadSheets(), loadForecast(), loadSubmittals(), loadWo()]);
     } catch (e) { console.error(e); notice(e.message || 'Could not load this job', 'danger'); }
   });
 </script>

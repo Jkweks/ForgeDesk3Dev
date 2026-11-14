@@ -495,6 +495,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/pm/library/products/{id}/documents/{docId}', [\App\Http\Controllers\Api\PmLibraryController::class, 'removeDocument'])->middleware('permission:pm.library.manage');
         Route::get('/pm/files/{fileId}/download', [\App\Http\Controllers\Api\PmLibraryController::class, 'download'])->middleware('permission:pm.jobs.view');
 
+        // Work order requests (PM asks, Fabrication validates)
+        Route::get('/pm/jobs/{jobId}/work-order-requests', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'forJob'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/jobs/{jobId}/work-order-requests', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'store'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/work-order-requests/{id}/files', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'addFile'])->middleware('permission:pm.jobs.manage');
+        Route::post('/pm/work-order-requests/{id}/withdraw', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'withdraw'])->middleware('permission:pm.jobs.manage');
+        Route::get('/work-order-requests', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'index'])->middleware('permission:fabrication.work-orders.view');
+        Route::post('/work-order-requests/{id}/approve', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'approve'])->middleware('permission:fabrication.work-orders.create');
+        Route::post('/work-order-requests/{id}/reject', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'reject'])->middleware('permission:fabrication.work-orders.create');
+        Route::get('/work-order-requests/{id}/files/{fileId}', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'downloadFile'])->middleware('permission:fabrication.work-orders.view');
+
         // Receiving overview (job POs; records only)
         Route::get('/pm/receiving/outstanding', [\App\Http\Controllers\Api\PmReceivingController::class, 'outstanding'])->middleware('permission:orders.view');
         Route::get('/pm/receiving/flagged', [\App\Http\Controllers\Api\PmReceivingController::class, 'flagged'])->middleware('permission:orders.view');

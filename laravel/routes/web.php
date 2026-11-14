@@ -33,6 +33,7 @@ Route::get('/pm/library', fn () => view('pm.library'));
 Route::get('/pm/history', fn () => view('pm.history'));
 Route::get('/pm/todos', fn () => view('pm.todos'));
 Route::get('/pm/receiving', fn () => view('pm.receiving'));
+Route::get('/fabrication/work-order-requests', fn () => view('fabrication.work-order-requests'));
 Route::get('/pm/purchase-orders', fn () => view('pm.purchase-orders'));
 Route::get('/pm/purchase-orders/{id}', fn (string $id) => view('pm.purchase-order', ['poId' => $id]))->where('id', 'new|[0-9]+');
 

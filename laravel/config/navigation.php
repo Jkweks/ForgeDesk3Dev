@@ -71,6 +71,7 @@ return [
         'active' => ['fabrication*'],
         'items' => [
             ['label' => 'Work Orders', 'href' => '/fabrication/work-orders', 'active' => ['fabrication/work-orders']],
+            ['label' => 'Work Order Requests', 'href' => '/fabrication/work-order-requests', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/work-order-requests']],
             ['label' => 'Work Queue', 'href' => '/fabrication/work-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/work-queue']],
             ['label' => 'Programming Queue', 'href' => '/fabrication/programming-queue', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/programming-queue']],
             ['label' => 'Cut Lists', 'href' => '/fabrication/cut-lists', 'permission' => 'fabrication.work-orders.view', 'active' => ['fabrication/cut-lists']],
