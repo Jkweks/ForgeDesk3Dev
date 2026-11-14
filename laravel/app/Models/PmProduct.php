@@ -2,10 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsPmChanges;
 use Illuminate\Database\Eloquent\Model;
 
 class PmProduct extends Model
 {
+
+    use LogsPmChanges;
+
+    public function pmChangeType(): string
+    {
+        return 'product';
+    }
     protected $fillable = ['pm_manufacturer_id', 'pm_product_category_id', 'name', 'model', 'description', 'is_active'];
 
     protected $casts = ['is_active' => 'boolean'];

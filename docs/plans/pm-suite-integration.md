@@ -253,6 +253,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Product Library (feature #10, built):** `pm_manufacturers`, `pm_product_categories`, `pm_products` (separate from stock Products) and `pm_product_documents` (spec / color / cut / other, stored through `pm_files`), with a `/pm/library` page and file download (job files follow the job scope). Editing needs `pm.library.manage` (admin, manager); viewing needs PM access. Not built yet: bulk import from the Kawneer / Glazier Studio / hardware importers (Hold).
 
+**Change History (feature #11, built):** a `LogsPmChanges` trait on jobs, job POs (stock POs excluded), submittals, vendors, library products and manufacturers records create/update/delete with old and new values per field and the user (`pm_change_logs`, `pm_change_log_fields`), a `/pm/history` page with filters, and the job scope applied to job-bound entries. Logging is skipped while the history tables don't exist yet, so older migrations and seeders still run. Not built: restore points / per-field restore (PM Suite had them), and logging of PO line edits (revisions cover those).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

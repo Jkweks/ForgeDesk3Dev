@@ -2,10 +2,28 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsPmChanges;
 use Illuminate\Database\Eloquent\Model;
 
 class Submittal extends Model
 {
+
+    use LogsPmChanges;
+
+    public function pmChangeType(): string
+    {
+        return 'submittal';
+    }
+
+    public function pmChangeLabel(): string
+    {
+        return $this->number.' '.$this->name;
+    }
+
+    public function pmChangeJobId(): ?int
+    {
+        return $this->business_job_id;
+    }
     protected $fillable = ['business_job_id', 'number', 'name', 'spec_section', 'kind', 'status', 'revision_number', 'sent_at', 'returned_at', 'notes', 'created_by'];
 
     public const STATUSES = ['pending', 'approved', 'approved_as_noted', 'revise_resubmit', 'rejected', 'for_record_only'];

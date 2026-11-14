@@ -3,12 +3,30 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Concerns\LogsPmChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BusinessJob extends Model
 {
     use HasFactory, SoftDeletes;
+
+    use LogsPmChanges;
+
+    public function pmChangeType(): string
+    {
+        return 'job';
+    }
+
+    public function pmChangeLabel(): string
+    {
+        return trim($this->job_number.' '.$this->job_name);
+    }
+
+    public function pmChangeJobId(): ?int
+    {
+        return $this->id;
+    }
 
     /** Project Management stages. Hidden from Fabrication until the job is activated. */
     public const PM_ONLY_STATUSES = ['bidding', 'won', 'lost'];

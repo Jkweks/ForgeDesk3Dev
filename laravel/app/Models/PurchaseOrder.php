@@ -3,12 +3,36 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Concerns\LogsPmChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PurchaseOrder extends Model
 {
     use HasFactory, SoftDeletes;
+
+    use LogsPmChanges;
+
+    public function pmChangeType(): string
+    {
+        return 'po';
+    }
+
+    public function pmChangeLabel(): string
+    {
+        return (string) $this->po_number;
+    }
+
+    public function pmChangeJobId(): ?int
+    {
+        return $this->business_job_id;
+    }
+
+    /** Stock POs have their own history in the stock flow; only job POs are Project Management records. */
+    public function pmChangeShouldLog(): bool
+    {
+        return $this->type === self::TYPE_JOB;
+    }
 
     protected $fillable = [
         'po_number',

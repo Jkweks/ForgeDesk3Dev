@@ -19,6 +19,10 @@ return [
         'href' => '/pm/library', 'active' => ['pm/library'],
     ],
     [
+        'label' => 'Change History', 'icon' => 'history', 'permission' => 'nav.pm',
+        'href' => '/pm/history', 'active' => ['pm/history'], 'action_permission' => 'pm.history.view',
+    ],
+    [
         'label' => 'Purchasing', 'icon' => 'shopping-cart', 'permission' => 'nav.pm',
         'active' => ['pm/vendors', 'pm/purchase-orders', 'pm/purchase-orders/*'],
         'items' => [

@@ -3,12 +3,20 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Concerns\LogsPmChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Supplier extends Model
 {
     use HasFactory, SoftDeletes;
+
+    use LogsPmChanges;
+
+    public function pmChangeType(): string
+    {
+        return 'vendor';
+    }
 
     protected $fillable = [
         'name',

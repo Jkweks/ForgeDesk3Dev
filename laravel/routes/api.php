@@ -494,6 +494,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/pm/library/products/{id}/documents/{docId}', [\App\Http\Controllers\Api\PmLibraryController::class, 'removeDocument'])->middleware('permission:pm.library.manage');
         Route::get('/pm/files/{fileId}/download', [\App\Http\Controllers\Api\PmLibraryController::class, 'download'])->middleware('permission:pm.jobs.view');
 
+        // Change history
+        Route::get('/pm/history', [\App\Http\Controllers\Api\PmHistoryController::class, 'index'])->middleware('permission:pm.history.view');
+
         // Submittal tracker
         Route::get('/pm/jobs/{jobId}/submittals', [\App\Http\Controllers\Api\SubmittalController::class, 'index'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs/{jobId}/submittals', [\App\Http\Controllers\Api\SubmittalController::class, 'store'])->middleware('permission:pm.jobs.manage');
