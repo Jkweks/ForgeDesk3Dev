@@ -15,6 +15,10 @@ return [
         'href' => '/pm/jobs', 'active' => ['pm/jobs', 'pm/jobs/*'],
     ],
     [
+        'label' => 'Product Library', 'icon' => 'books', 'permission' => 'nav.pm',
+        'href' => '/pm/library', 'active' => ['pm/library'],
+    ],
+    [
         'label' => 'Purchasing', 'icon' => 'shopping-cart', 'permission' => 'nav.pm',
         'active' => ['pm/vendors', 'pm/purchase-orders', 'pm/purchase-orders/*'],
         'items' => [

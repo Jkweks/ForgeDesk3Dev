@@ -478,6 +478,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'store'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{id}/stage', [\App\Http\Controllers\Api\PmJobController::class, 'setStage'])->middleware('permission:pm.jobs.manage');
 
+        // Product library + file download
+        Route::get('/pm/library/lookups', [\App\Http\Controllers\Api\PmLibraryController::class, 'lookups'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/library/manufacturers', [\App\Http\Controllers\Api\PmLibraryController::class, 'storeManufacturer'])->middleware('permission:pm.library.manage');
+        Route::put('/pm/library/manufacturers/{id}', [\App\Http\Controllers\Api\PmLibraryController::class, 'updateManufacturer'])->middleware('permission:pm.library.manage');
+        Route::delete('/pm/library/manufacturers/{id}', [\App\Http\Controllers\Api\PmLibraryController::class, 'destroyManufacturer'])->middleware('permission:pm.library.manage');
+        Route::post('/pm/library/categories', [\App\Http\Controllers\Api\PmLibraryController::class, 'storeCategory'])->middleware('permission:pm.library.manage');
+        Route::delete('/pm/library/categories/{id}', [\App\Http\Controllers\Api\PmLibraryController::class, 'destroyCategory'])->middleware('permission:pm.library.manage');
+        Route::get('/pm/library/products', [\App\Http\Controllers\Api\PmLibraryController::class, 'products'])->middleware('permission:pm.jobs.view');
+        Route::post('/pm/library/products', [\App\Http\Controllers\Api\PmLibraryController::class, 'storeProduct'])->middleware('permission:pm.library.manage');
+        Route::get('/pm/library/products/{id}', [\App\Http\Controllers\Api\PmLibraryController::class, 'showProduct'])->middleware('permission:pm.jobs.view');
+        Route::put('/pm/library/products/{id}', [\App\Http\Controllers\Api\PmLibraryController::class, 'updateProduct'])->middleware('permission:pm.library.manage');
+        Route::delete('/pm/library/products/{id}', [\App\Http\Controllers\Api\PmLibraryController::class, 'destroyProduct'])->middleware('permission:pm.library.manage');
+        Route::post('/pm/library/products/{id}/documents', [\App\Http\Controllers\Api\PmLibraryController::class, 'addDocument'])->middleware('permission:pm.library.manage');
+        Route::delete('/pm/library/products/{id}/documents/{docId}', [\App\Http\Controllers\Api\PmLibraryController::class, 'removeDocument'])->middleware('permission:pm.library.manage');
+        Route::get('/pm/files/{fileId}/download', [\App\Http\Controllers\Api\PmLibraryController::class, 'download'])->middleware('permission:pm.jobs.view');
+
         // Submittal tracker
         Route::get('/pm/jobs/{jobId}/submittals', [\App\Http\Controllers\Api\SubmittalController::class, 'index'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/jobs/{jobId}/submittals', [\App\Http\Controllers\Api\SubmittalController::class, 'store'])->middleware('permission:pm.jobs.manage');

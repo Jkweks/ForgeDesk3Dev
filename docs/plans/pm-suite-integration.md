@@ -251,6 +251,8 @@ Next: Material Forecast (estimated vs ordered vs received per cost code, reading
 
 **Submittal Tracker (feature #7, built):** per-job register with sequential numbers, kind (docs / sample / docs+samples), status, revisions (each round recorded, then reset to pending), GC/AE responses (file via `pm_files` + status + returned date, which also sets the submittal's status), sample lines, links to job POs of the same job, the "needs response" filter, and a register on the PM job page. Not built yet: the Submittal Builder (combined submittal PDF from the product library), bulk email / apply approval, markup review, the activity timeline, Procore sync (Hold).
 
+**Product Library (feature #10, built):** `pm_manufacturers`, `pm_product_categories`, `pm_products` (separate from stock Products) and `pm_product_documents` (spec / color / cut / other, stored through `pm_files`), with a `/pm/library` page and file download (job files follow the job scope). Editing needs `pm.library.manage` (admin, manager); viewing needs PM access. Not built yet: bulk import from the Kawneer / Glazier Studio / hardware importers (Hold).
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).
