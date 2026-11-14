@@ -25,6 +25,8 @@ return [
     'fdrive_ingest' => [
         'token' => env('FDRIVE_INGEST_TOKEN'),
         'roots' => array_values(array_filter(explode('|', (string) env('FDRIVE_SCAN_ROOTS', '')))),
+        // How the watcher's Windows paths map into this container, e.g. FDRIVE_PATH_MAP="F:\\Engineering=/mnt/f/Engineering" (several: join with |)
+        'path_map' => array_values(array_filter(array_map(fn ($p) => str_contains($p, '=') ? explode('=', $p, 2) : null, explode('|', (string) env('FDRIVE_PATH_MAP', ''))))),
     ],
 
     'postmark' => [

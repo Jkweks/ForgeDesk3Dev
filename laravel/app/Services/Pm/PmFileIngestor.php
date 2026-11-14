@@ -101,6 +101,24 @@ class PmFileIngestor
     }
 
     /**
+     * Translate a path as the Windows watcher reports it (F:\Engineering\...) into the path this container
+     * sees (/mnt/f/Engineering/...), using FDRIVE_PATH_MAP. Unmapped paths are returned unchanged, so paths
+     * that are already local (the nightly scan) pass straight through.
+     */
+    public static function toLocalPath(string $path): string
+    {
+        $norm = str_replace('\\', '/', $path);
+        foreach ((array) config('services.fdrive_ingest.path_map') as [$from, $to]) {
+            $fromNorm = rtrim(str_replace('\\', '/', $from), '/');
+            if ($fromNorm !== '' && stripos($norm, $fromNorm.'/') === 0) {
+                return rtrim($to, '/').substr($norm, strlen($fromNorm));
+            }
+        }
+
+        return $path;
+    }
+
+    /**
      * F: files are only ever read from inside the configured roots (FDRIVE_SCAN_ROOTS). The path comes from the
      * watcher, so this keeps a bad token or payload from turning "register a path" into "read any file".
      */

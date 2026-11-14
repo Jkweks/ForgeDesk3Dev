@@ -25,7 +25,7 @@ class PmFileIngestService
      */
     public function handle(array $event): array
     {
-        $path = $event['path'];
+        $path = PmFileIngestor::toLocalPath($event['path']);
         $size = (int) $event['size'];
         $mtime = ! empty($event['mtime']) ? new \DateTimeImmutable($event['mtime']) : null;
 

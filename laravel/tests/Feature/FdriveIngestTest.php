@@ -129,6 +129,24 @@ class FdriveIngestTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]))->get('/pm/inbox')->assertOk()->assertSee('File Inbox');
     }
 
+    public function test_watcher_windows_paths_are_mapped_into_the_container(): void
+    {
+        config(['services.fdrive_ingest.path_map' => [['F:\\Engineering', '/mnt/f/Engineering'], ['\\\\fileserver\\eng', '/mnt/eng']]]);
+        $map = fn ($p) => \App\Services\Pm\PmFileIngestor::toLocalPath($p);
+
+        $this->assertSame('/mnt/f/Engineering/Jobs/2301 Wege/BidEstimate_Wege.xls', $map('F:\\Engineering\\Jobs\\2301 Wege\\BidEstimate_Wege.xls'));
+        $this->assertSame('/mnt/f/Engineering/a.pdf', $map('f:\\engineering\\a.pdf'));            // drive letters and folders are case-insensitive on Windows
+        $this->assertSame('/mnt/eng/x/y.pdf', $map('\\\\fileserver\\eng\\x\\y.pdf'));
+        $this->assertSame('/mnt/f/Engineering/z.pdf', $map('/mnt/f/Engineering/z.pdf'));              // already local: unchanged
+        $this->assertSame('F:\\Other\\q.pdf', $map('F:\\Other\\q.pdf'));                          // not mapped: unchanged
+        $this->assertSame('F:\\EngineeringX\\q.pdf', $map('F:\\EngineeringX\\q.pdf'));            // must match a whole folder name
+
+        // the stored path is the local one, so a re-delivered Windows path and the nightly scan agree
+        $this->job();
+        $this->ingest($this->event('F:\\Engineering\\Jobs\\2301 Wege\\notes.txt', 'n'))->assertOk();
+        $this->assertSame('/mnt/f/Engineering/Jobs/2301 Wege/notes.txt', PmFile::firstOrFail()->fdrive_path);
+    }
+
     public function test_files_outside_the_configured_roots_are_never_read(): void
     {
         $outside = tempnam(sys_get_temp_dir(), 'x');
