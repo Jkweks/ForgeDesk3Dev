@@ -120,6 +120,27 @@ class PmJobController extends Controller
         return response()->json($job->fresh()->toArray() + ['status_label' => $job->status_label], 201);
     }
 
+    /** Edit a job's details. The job number and the stage are not editable here (stage has its own rules). */
+    public function update(Request $request, int $id)
+    {
+        $job = $this->jobs()->findOrFail($id);
+        $data = $request->validate([
+            'job_name' => 'sometimes|required|string|max:255', 'customer_name' => 'nullable|string|max:255',
+            'project_manager_id' => 'nullable|exists:users,id', 'superintendent_id' => 'nullable|exists:users,id',
+            'site_address' => 'nullable|string', 'contact_name' => 'nullable|string|max:255',
+            'contact_phone' => 'nullable|string|max:50', 'contact_email' => 'nullable|email|max:255',
+            'target_completion_date' => 'nullable|date', 'notes' => 'nullable|string',
+        ]);
+        $me = $request->user();
+        if (array_key_exists('project_manager_id', $data) && (int) $data['project_manager_id'] !== (int) $job->project_manager_id
+            && (int) $data['project_manager_id'] !== $me->id && ! $me->hasPermission('pm.act_for_others')) {
+            return response()->json(['message' => 'Reassigning a job to another project manager needs permission.'], 403);
+        }
+        $job->update($data);
+
+        return response()->json($job->fresh()->toArray() + ['status_label' => $job->status_label]);
+    }
+
     public function setStage(Request $request, int $id)
     {
         $job = $this->jobs()->findOrFail($id);

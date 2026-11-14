@@ -143,4 +143,26 @@ class PmWorkspaceTest extends TestCase
         $this->assertFalse($names->contains('Shop'));
         $this->assertFalse($names->contains('Vos Glass - Fabrication'));
     }
+
+    public function test_job_details_can_be_edited_but_not_the_number_or_stage(): void
+    {
+        $this->admin();
+        $id = $this->postJson('/api/v1/pm/jobs', ['job_number' => '6100', 'job_name' => 'Edit me'])->assertCreated()->json('id');
+
+        $this->putJson("/api/v1/pm/jobs/{$id}", ['job_name' => 'Edited', 'customer_name' => 'ACME GC', 'site_address' => '1 Main St', 'contact_email' => 'a@b.co',
+            'job_number' => '9999', 'status' => 'active'])->assertOk()->assertJsonPath('job_name', 'Edited')->assertJsonPath('customer_name', 'ACME GC')
+            ->assertJsonPath('job_number', '6100')->assertJsonPath('status', 'bidding');
+        $this->putJson("/api/v1/pm/jobs/{$id}", ['contact_email' => 'nope'])->assertStatus(422);
+
+        // the change is recorded in the history
+        $this->assertTrue(\App\Models\PmChangeLog::where('entity_type', 'job')->where('entity_id', $id)->where('action', 'updated')->exists());
+
+        // a PM cannot hand their job to someone else without permission
+        $pm = User::factory()->create(['role' => 'project_manager', 'is_active' => true]);
+        $other = User::factory()->create(['role' => 'project_manager', 'is_active' => true]);
+        Sanctum::actingAs($pm, ['*']);
+        $mine = $this->postJson('/api/v1/pm/jobs', ['job_number' => '6101', 'job_name' => 'Mine'])->json('id');
+        $this->putJson("/api/v1/pm/jobs/{$mine}", ['project_manager_id' => $other->id])->assertForbidden();
+        $this->putJson("/api/v1/pm/jobs/{$mine}", ['job_name' => 'Renamed'])->assertOk();
+    }
 }

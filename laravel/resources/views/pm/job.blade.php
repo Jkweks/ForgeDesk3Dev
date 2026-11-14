@@ -45,6 +45,24 @@
         </div>
       </div>
 
+      <div class="card mb-3" id="detailsCard">
+        <div class="card-header"><h3 class="card-title">Job details</h3><div class="card-actions"><button class="btn btn-sm" data-permission="pm.jobs.manage" onclick="toggleDetailsEdit()">Edit</button></div></div>
+        <div class="card-body" id="detailsView"></div>
+        <form class="card-body border-top" id="detailsForm" style="display:none" onsubmit="saveDetails(event)">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label required">Job name</label><input class="form-control" id="dName" required></div>
+            <div class="col-md-6"><label class="form-label">Customer / GC</label><input class="form-control" id="dCustomer"></div>
+            <div class="col-md-6"><label class="form-label">Site address</label><input class="form-control" id="dAddress"></div>
+            <div class="col-md-6"><label class="form-label">Target completion</label><input type="date" class="form-control" id="dTarget"></div>
+            <div class="col-md-4"><label class="form-label">Contact</label><input class="form-control" id="dContact"></div>
+            <div class="col-md-4"><label class="form-label">Contact phone</label><input class="form-control" id="dPhone"></div>
+            <div class="col-md-4"><label class="form-label">Contact email</label><input type="email" class="form-control" id="dEmail"></div>
+            <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" id="dNotes" rows="2"></textarea></div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Save</button> <button type="button" class="btn" onclick="toggleDetailsEdit()">Cancel</button></div>
+        </form>
+      </div>
+
       <div class="card mb-3" id="drawCard">
         <div class="card-header">
           <h3 class="card-title">Shop drawings</h3>
@@ -187,8 +205,32 @@
 
   function notice(msg, type = 'info') { document.getElementById('estNotice').innerHTML = msg ? `<div class="alert alert-${type} mb-0">${esc(msg)}</div>` : ''; }
 
+  let jobData = null;
+  function renderDetails(job) {
+    jobData = job;
+    const row = (l, v) => v ? `<div class="col-md-4 mb-2"><div class="text-muted small">${l}</div><div>${esc(v)}</div></div>` : '';
+    detailsView.innerHTML = `<div class="row">${row('Customer / GC', job.customer_name)}${row('Site', job.site_address)}${row('Target completion', (job.target_completion_date || '').slice(0, 10))}
+      ${row('Contact', [job.contact_name, job.contact_phone, job.contact_email].filter(Boolean).join(' · '))}${row('Source', job.origin === 'pm' ? 'PM bid' : 'Created in Fabrication')}${row('Notes', job.notes)}</div>`
+      || '<div class="text-muted">No details yet.</div>';
+  }
+  function toggleDetailsEdit() {
+    const f = detailsForm, show = f.style.display === 'none';
+    f.style.display = show ? '' : 'none';
+    if (show && jobData) { dName.value = jobData.job_name || ''; dCustomer.value = jobData.customer_name || ''; dAddress.value = jobData.site_address || ''; dTarget.value = (jobData.target_completion_date || '').slice(0, 10);
+      dContact.value = jobData.contact_name || ''; dPhone.value = jobData.contact_phone || ''; dEmail.value = jobData.contact_email || ''; dNotes.value = jobData.notes || ''; }
+  }
+  async function saveDetails(e) {
+    e.preventDefault();
+    try {
+      const job = await post(`/pm/jobs/${JOB_ID}`, { job_name: dName.value, customer_name: dCustomer.value || null, site_address: dAddress.value || null, target_completion_date: dTarget.value || null,
+        contact_name: dContact.value || null, contact_phone: dPhone.value || null, contact_email: dEmail.value || null, notes: dNotes.value || null }, 'PUT');
+      renderDetails(job); document.getElementById('jobTitle').textContent = `${job.job_number} — ${job.job_name}`; detailsForm.style.display = 'none'; notice('Saved.', 'success');
+    } catch (err) { notice(err.message || 'Could not save', 'danger'); }
+  }
+
   async function loadJob() {
     const job = await authenticatedFetch(`/pm/jobs/${JOB_ID}`);
+    renderDetails(job);
     document.getElementById('jobTitle').textContent = `${job.job_number} — ${job.job_name}`;
     const b = document.getElementById('jobStage');
     b.textContent = job.status_label || job.status; b.className = 'badge bg-blue-lt';

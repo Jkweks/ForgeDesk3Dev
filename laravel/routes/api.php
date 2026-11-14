@@ -481,6 +481,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pm/vendors/match', [\App\Http\Controllers\Api\PmJobController::class, 'matchVendors'])->middleware('permission:pm.jobs.view');
         Route::post('/pm/vendors/{supplierId}/aliases', [\App\Http\Controllers\Api\PmJobController::class, 'learnAlias'])->whereNumber('supplierId')->middleware('permission:pm.jobs.manage');
         Route::get('/pm/vendors', [\App\Http\Controllers\Api\PmJobController::class, 'vendors'])->middleware('permission:pm.jobs.view');
+        Route::put('/pm/jobs/{id}', [\App\Http\Controllers\Api\PmJobController::class, 'update'])->whereNumber('id')->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs', [\App\Http\Controllers\Api\PmJobController::class, 'store'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/jobs/{id}/stage', [\App\Http\Controllers\Api\PmJobController::class, 'setStage'])->middleware('permission:pm.jobs.manage');
 

@@ -3,7 +3,7 @@ const { JSDOM } = require('jsdom');
 const fs = require('fs');
 
 const data = {
-  '/pm/jobs/1': { id: 1, job_number: '9001', job_name: 'Demo', status: 'won', status_label: 'Won' },
+  '/pm/jobs/1': { id: 1, job_number: '9001', job_name: 'Demo', status: 'won', status_label: 'Won', origin: 'pm', customer_name: 'ACME GC', site_address: '1 Main' },
   '/pm/jobs': [{ id: 1, job_number: '9001', job_name: 'Demo', status: 'won', status_label: 'Won', origin: 'pm' }],
   '/pm/cost-codes': [{ code: 200, category: 'material', description: 'Glass' }, { code: 100, category: 'labor', description: 'Fab' }],
   '/pm/jobs/1/estimates': [{ sheet: 'CONTRACT', contract_amount: 1000, review_count: 1, line_count: 3 }],
@@ -60,7 +60,7 @@ function run(file, pagePath) {
 
 (async () => {
   const checks = [
-    ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'shop.pdf', 'Request work order', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses', 'Page 9 unreadable', 'IG-1', '38.25']],
+    ['job', '/pm/jobs/1', ['9001 — Demo', 'Needs your decision', 'Storefront', 'Glass', 'shop.pdf', 'Request work order', 'ACME GC', 'Build package PDF', 'Submittal_9001_001.pdf', 'GC/AE responses', 'Page 9 unreadable', 'IG-1', '38.25']],
     ['po', '/pm/purchase-orders/9', ['PO PO-1', 'Group', 'Receive now', 'Rev 0', 'Flagged']],
     ['pos', '/pm/purchase-orders', ['PO-1']],
     ['library', '/pm/library', ['Trifab']],
