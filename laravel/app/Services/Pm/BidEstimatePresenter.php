@@ -21,8 +21,13 @@ class BidEstimatePresenter
 
         $lines = [];
         $review = [];
+        $decided = [];
         foreach ($estimate->lines as $l) {
             $ov = $overrides[$l->section.'|'.$l->row] ?? null;
+            if ($ov) {
+                $decided[] = ['section' => $l->section, 'row' => $l->row, 'action' => $ov->action, 'costCode' => $ov->cost_code,
+                    'description' => $l->description, 'total' => $l->total === null ? null : (float) $l->total];
+            }
             if ($ov && $ov->action === 'ignore') {
                 continue;
             }
@@ -83,6 +88,7 @@ class BidEstimatePresenter
             'adjustments' => $estimate->adjustments->map->only(['section', 'row', 'description', 'rate', 'base', 'amount'])->all(),
             'byCostCode' => $byCode,
             'reviewNeeded' => $review,
+            'decisions' => $decided,
             'warnings' => $estimate->warnings->map(fn ($w) => array_filter([
                 'type' => $w->type, 'section' => $w->section, 'computedFromLines' => $w->computed_from_lines,
                 'statedInSheet' => $w->stated_in_sheet, 'note' => $w->note,

@@ -27,6 +27,7 @@ Route::get('/', function () {
 // One shared dashboard: /pm renders the same customizable dashboard (and per-user layout) as /.
 Route::get('/pm', fn () => view('dashboard'));
 Route::get('/pm/jobs', fn () => view('pm.jobs'));
+Route::get('/pm/jobs/{id}', fn (int $id) => view('pm.job', ['jobId' => $id]))->whereNumber('id');
 Route::get('/pm/vendors', fn () => view('suppliers'));
 
 // Inventory Management

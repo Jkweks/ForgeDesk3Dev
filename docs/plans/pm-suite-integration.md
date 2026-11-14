@@ -241,6 +241,12 @@ PM Suite is the **front-of-house** (project management, office) system; ForgeDes
 - Jobs created as PM bids (`origin = pm`) reserve their job number against Fabrication but are otherwise invisible to it until activated.
 - Both workspaces edit the same record. No field ownership rules yet; once PM is the standard entry point, tighten which fields Fabrication can edit using `origin` as the migration marker.
 
+## 4e. Build status (2026-11-14)
+
+Built and committed on `feature/pm-suite-integration`: internal vendors and PO types, vendor parity (contacts, aliases, BidEstimate code), job POs (grouped lines, issue stage, revisions, receipts without stock effect), Project Management workspace and switcher, job lifecycle (bid -> won -> active, hidden from Fabrication until active), shared dashboard with PM widgets, `pm-worker` (BidEstimate parser), `pm_files` registry (upload now, watcher-ready), BidEstimate import API and the **job page `/pm/jobs/{id}`** (upload, tab picker, summary, review rows with cost-code fix/ignore, cost-code groups, parser warnings, stale flag).
+
+Next: Material Forecast (estimated vs ordered vs received per cost code, reading job POs), then glass-to-PO (vendor matching via `Supplier::findByEstimateTag`), budget tracking on the estimate, Submittal Tracker/Builder, Product Library, roles (superintendent / company dashboard). Not yet done from the BidEstimate feature set: manually added lines, PO line import from the estimate.
+
 ## 5. Key risks / things to settle first
 
 0. **Stock contamination:** any code path that lets a job PO change on-hand quantities or stock reports is a bug. Needs tests (job-PO receive leaves `quantity_on_hand` and `inventory_locations` unchanged).

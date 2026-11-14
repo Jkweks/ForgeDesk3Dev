@@ -43,6 +43,13 @@ class PmJobController extends Controller
             ->map(fn ($j) => $j->toArray() + ['status_label' => $j->status_label]));
     }
 
+    public function show(int $id)
+    {
+        $j = $this->jobs()->findOrFail($id);
+
+        return response()->json($j->toArray() + ['status_label' => $j->status_label]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([

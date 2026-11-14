@@ -198,4 +198,18 @@ class BidEstimateImportTest extends TestCase
         $this->assertSame($f->id, $again->id);
         $this->assertSame('F:\\Engineering\\9300\\Renamed.xls', $again->fresh()->fdrive_path);
     }
+
+    public function test_job_page_show_endpoint_and_decisions_list(): void
+    {
+        $this->get("/pm/jobs/{$this->job->id}")->assertOk()->assertSee('Upload BidEstimate workbook');
+        $this->getJson("/api/v1/pm/jobs/{$this->job->id}")->assertOk()->assertJsonPath('job_number', '9300')->assertJsonPath('status_label', 'Bidding');
+        $this->getJson('/api/v1/pm/jobs/999999')->assertNotFound();
+
+        $this->fakeWorker();
+        $fileId = $this->upload()->json('file.id');
+        $this->postJson("/api/v1/pm/jobs/{$this->job->id}/estimates/import", ['pm_file_id' => $fileId, 'sheet' => 'CONTRACT'])->assertOk();
+        $res = $this->postJson("/api/v1/pm/jobs/{$this->job->id}/estimates/CONTRACT/override", ['section' => 'material', 'row' => 11, 'action' => 'ignore'])->assertOk();
+
+        $this->assertEquals([['section' => 'material', 'row' => 11, 'action' => 'ignore', 'costCode' => null, 'description' => 'Line 11', 'total' => 500.0]], $res->json('decisions'));
+    }
 }

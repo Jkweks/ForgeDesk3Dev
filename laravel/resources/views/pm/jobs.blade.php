@@ -73,7 +73,7 @@
     const body = document.getElementById('pmJobsBody');
     if (!pmJobs.length) { body.innerHTML = '<tr><td colspan="6" class="text-muted">No jobs.</td></tr>'; return; }
     body.innerHTML = pmJobs.map(j => `<tr>
-      <td>${escapeHtml(j.job_number)}</td><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.customer_name || '')}</td>
+      <td><a href="/pm/jobs/${j.id}">${escapeHtml(j.job_number)}</a></td><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.customer_name || '')}</td>
       <td><span class="badge ${BADGE[j.status] || 'bg-secondary-lt'}">${escapeHtml(j.status_label || j.status)}</span></td>
       <td class="text-muted">${j.origin === 'pm' ? 'PM bid' : 'Fabrication'}</td>
       <td class="text-nowrap" data-permission="pm.jobs.manage">${(NEXT[j.status] || []).map(([s, l]) =>
