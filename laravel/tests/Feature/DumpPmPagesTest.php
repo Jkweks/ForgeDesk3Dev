@@ -21,7 +21,7 @@ class DumpPmPagesTest extends TestCase
             $this->markTestSkipped('Set DUMP_PM_PAGES=1 to dump the pages for the JS smoke test.');
         }
         $this->actingAs(User::factory()->create(['role' => 'admin', 'is_active' => true]));
-        foreach (['/pm/jobs/1' => 'job', '/pm/purchase-orders' => 'pos', '/pm/purchase-orders/new' => 'po', '/pm/library' => 'library',
+        foreach (['/pm' => 'dashboard', '/pm/jobs' => 'jobs', '/pm/vendors' => 'vendors', '/search' => 'search', '/pm/inbox' => 'inbox', '/pm/jobs/1' => 'job', '/pm/purchase-orders' => 'pos', '/pm/purchase-orders/new' => 'po', '/pm/library' => 'library',
             '/pm/history' => 'history', '/pm/todos' => 'todos', '/pm/receiving' => 'receiving', '/fabrication/work-order-requests' => 'wor'] as $url => $name) {
             file_put_contents("/tmp/pm-page-$name.html", $this->get($url)->assertOk()->getContent());
         }

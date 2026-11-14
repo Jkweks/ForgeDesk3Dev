@@ -197,7 +197,7 @@
   const JOB_ID = {{ (int) $jobId }};
   const money = (n) => n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const REASONS = { no_cost_code_found: 'No cost code found', code_not_on_master_list: 'Code not on master list', recovered_from_malformed_code_prefix: 'Code recovered from a typo' };
-  let costCodes = [], uploadedFile = null, currentSheet = null, canManage = false;
+  let costCodes = [], uploadedFile = null, currentSheet = null;
 
   const esc = (s) => escapeHtml(String(s ?? ''));
   const post = (url, body) => authenticatedFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
