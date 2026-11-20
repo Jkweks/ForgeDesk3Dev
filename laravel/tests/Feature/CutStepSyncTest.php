@@ -206,4 +206,24 @@ class CutStepSyncTest extends TestCase
 
         $this->putJson("/api/v1/cut-lists/{$job->id}/work-order", ['work_order_id' => null])->assertOk()->assertJsonPath('work_order', null);
     }
+
+    public function test_numeric_phases_survive_the_json_round_trip(): void
+    {
+        $this->asUser();
+        $a = $this->elev('15E');
+        $job = CutJob::create(['name' => 'uploaded', 'work_order_id' => $this->wo->id]);
+        $p = $this->part($job, '15', 1);
+
+        $r = $this->getJson("/api/v1/cut-lists/{$job->id}/elevation-links")->assertOk();
+        $this->assertSame('15', $r->json('phases.0.phase'), 'a numeric phase stays a string');
+        $this->assertFalse($r->json('phases.0.linked'));
+
+        // the page sends back whatever the API returned, and a bare number must be accepted too
+        foreach (['15', 15] as $sent) {
+            $this->putJson("/api/v1/cut-lists/{$job->id}/elevation-links", ['phase' => $sent, 'elevation_ids' => [$a->id]])
+                ->assertOk()->assertJsonPath('phases.0.manual.0.id', $a->id);
+        }
+        $this->cut($p);
+        $this->assertSame('complete', $this->cutStep($a)->status);
+    }
 }

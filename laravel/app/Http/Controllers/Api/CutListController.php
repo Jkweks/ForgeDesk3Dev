@@ -198,11 +198,12 @@ class CutListController extends Controller
         $match = $wo ? CutStepSync::phaseMatcher($wo->id, [$job->id]) : null;
 
         $phases = $job->parts()->whereNotNull('phase')->get()->groupBy('phase')->map(function ($parts, $phase) use ($match, $job, $tagOf) {
-            $auto = $match ? $match($phase, $job->id, false) : [];
-            $manual = $match ? array_values(array_diff($match($phase, $job->id, true), $auto)) : [];
+            $auto = $match ? $match((string) $phase, $job->id, false) : [];
+            $manual = $match ? array_values(array_diff($match((string) $phase, $job->id, true), $auto)) : [];
 
             return [
-                'phase' => $phase, 'lines' => $parts->count(),
+                // groupBy turns a numeric phase like "15" into an int key; keep it a string for the client.
+                'phase' => (string) $phase, 'lines' => $parts->count(),
                 'qty' => (int) $parts->sum('qty_original'), 'remaining' => (int) $parts->sum('qty_remaining'),
                 'auto' => array_map(fn ($e) => ['id' => $e, 'tag' => $tagOf($e)], $auto),
                 'manual' => array_map(fn ($e) => ['id' => $e, 'tag' => $tagOf($e)], $manual),
@@ -221,7 +222,8 @@ class CutListController extends Controller
     public function saveElevationLinks(Request $request, int $id)
     {
         $job = CutJob::findOrFail($id);
-        $data = $request->validate(['phase' => 'required|string|max:255', 'elevation_ids' => 'present|array|max:200', 'elevation_ids.*' => 'integer|distinct']);
+        $data = $request->validate(['phase' => 'required|max:255', 'elevation_ids' => 'present|array|max:200', 'elevation_ids.*' => 'integer|distinct']);
+        $data['phase'] = (string) $data['phase'];
         $woId = CutStepSync::workOrderIdFor($job);
         if (! $woId) {
             return response()->json(['message' => 'Link this cut list to a work order first.'], 422);
