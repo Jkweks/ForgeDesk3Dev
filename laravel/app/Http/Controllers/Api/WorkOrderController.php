@@ -28,7 +28,7 @@ class WorkOrderController extends Controller
                 'elevations:id,work_order_id,joint_qty,template_set_id,date_completed',
                 'elevations.stages:id,elevation_id,minutes_per_joint,status',
                 'elevations.templateSet:id,minutes_per_joint',
-                'steps:id,work_order_id,status',
+                'steps:id,work_order_id,name,status',
             ])
                 ->withCount([
                     'elevations',
@@ -714,7 +714,9 @@ class WorkOrderController extends Controller
             'id' => $wo->id,
             'business_job_id' => $wo->business_job_id,
             'status' => $wo->status,
-            'status_label' => ['active' => 'Active', 'on_hold' => 'On Hold', 'complete' => 'Complete'][$wo->status] ?? $wo->status,
+            'pe_pending' => $wo->relationLoaded('steps') && $wo->isPendingPe(),
+            'status_label' => ($wo->relationLoaded('steps') && $wo->isPendingPe()) ? 'Pending PE'
+                : (['pending' => 'Pending', 'active' => 'Active', 'on_hold' => 'On Hold', 'complete' => 'Complete'][$wo->status] ?? $wo->status),
             'completed_at' => $wo->completed_at?->toIso8601String(),
             'completed_by_id' => $wo->completed_by_user_id,
             'completed_by_name' => $wo->relationLoaded('completedByUser') ? $wo->completedByUser?->name : null,

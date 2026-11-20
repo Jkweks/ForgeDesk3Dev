@@ -9,6 +9,9 @@ class FdJobStep extends Model
 {
     protected $table = 'fd_job_steps';
 
+    /** The checklist step whose open state shows a pending work order as "Pending PE". */
+    public const PE_REVIEW = 'Project Engineer Review';
+
     /** Every status a job step may hold. */
     public const STATUSES = ['pending', 'complete', 'not_required', 'on_hold'];
 

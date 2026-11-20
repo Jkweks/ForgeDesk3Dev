@@ -5,18 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\FdJobStep;
 use App\Models\FdWorkOrder;
-use App\Services\StageGateService;
-use App\Services\StageOverrideResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class JobStepController extends Controller
 {
-    public function __construct(
-        private StageGateService $gate,
-        private StageOverrideResolver $overrides,
-    ) {}
 
     public function index(int $workOrderId)
     {
@@ -29,37 +23,24 @@ class JobStepController extends Controller
     public function completeAll(Request $request, int $workOrderId)
     {
         $wo = FdWorkOrder::findOrFail($workOrderId);
-        $resolution = $this->overrides->resolve($request);
-
         // completed_by_id FKs fd_users; only set it when a real fab user is named.
         $completedById = $request->filled('completed_by_id')
             ? \App\Models\FdUser::whereKey($request->completed_by_id)->value('id')
             : null;
 
+        // The Project Engineer Review step is a PM step: signed off on its own, never by this bulk action.
         // Skip steps already terminal (complete/not_required) and steps on hold —
         // a bulk action should never silently clear a hold placed by the office.
-        // Complete in sort order so the sequential gate clears as we go.
-        $steps = $wo->steps()->where('status', 'pending')->orderBy('sort_order')->get();
+        $steps = $wo->steps()->where('status', 'pending')->where('name', '!=', FdJobStep::PE_REVIEW)->orderBy('sort_order')->get();
 
-        try {
-            DB::transaction(function () use ($steps, $resolution, $completedById) {
-                foreach ($steps as $step) {
-                    $this->gate->guardJobStepTransition(
-                        $step,
-                        'complete',
-                        $resolution['allowed'],
-                        $this->overrides->jobStepLogger($step, $resolution),
-                    );
-
-                    $step->status = 'complete';
-                    $step->completed_at = now();
-                    $step->completed_by_id = $completedById;
-                    $step->save();
-                }
-            });
-        } catch (\App\Exceptions\StageGatedException $e) {
-            return $e->render();
-        }
+        DB::transaction(function () use ($steps, $completedById) {
+            foreach ($steps as $step) {
+                $step->status = 'complete';
+                $step->completed_at = now();
+                $step->completed_by_id = $completedById;
+                $step->save();
+            }
+        });
 
         $wo->refreshPhase();
         $all = $wo->steps()->with('completedBy')->get();
@@ -96,18 +77,9 @@ class JobStepController extends Controller
 
         $request->validate([
             'status' => ['sometimes', Rule::in(FdJobStep::STATUSES)],
-            'override' => 'sometimes|boolean',
         ]);
 
         if ($request->has('status')) {
-            $resolution = $this->overrides->resolve($request);
-            $this->gate->guardJobStepTransition(
-                $step,
-                $request->status,
-                $resolution['allowed'],
-                $this->overrides->jobStepLogger($step, $resolution),
-            );
-
             $step->status = $request->status;
             if ($request->status === 'complete') {
                 $step->completed_at = now();

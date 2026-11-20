@@ -376,7 +376,7 @@
                                 <div style="display:flex;align-items:center;gap:14px;">
                                     @if ($currentItem->photo_url)
                                         <img src="{{ $currentItem->photo_url }}" alt=""
-                                             onclick="openPartPhoto()"
+                                             wire:click="togglePartPhoto"
                                              style="width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;cursor:zoom-in;">
                                     @else
                                         <span style="width:64px;height:64px;border-radius:10px;background:var(--surface);border:1.5px solid var(--accent-border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--faint);">&#128247;</span>
@@ -490,7 +490,8 @@
                     </div>
 
                     @if ($currentItem && $currentItem->photo_url)
-                        <div class="photo-lightbox" id="photo-lightbox" onclick="closePartPhoto()">
+                        <div class="photo-lightbox @if ($partPhotoOpen) open @endif" id="photo-lightbox" wire:click="togglePartPhoto"
+                             x-data x-on:keydown.escape.window="$wire.partPhotoOpen && $wire.togglePartPhoto()">
                             <img src="{{ $currentItem->photo_url }}" alt="">
                         </div>
                     @endif
@@ -841,20 +842,6 @@
         @keyframes work-progress-slide { 0% { left: -40%; } 100% { left: 100%; } }
         @media (prefers-reduced-motion: reduce) { .work-progress-bar span { animation: none; left: 0; width: 100%; opacity: .5; } }
     </style>
-
-    <script>
-        function openPartPhoto() {
-            document.getElementById('photo-lightbox')?.classList.add('open');
-        }
-
-        function closePartPhoto() {
-            document.getElementById('photo-lightbox')?.classList.remove('open');
-        }
-
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') closePartPhoto();
-        });
-    </script>
 
     <script>
         document.addEventListener('livewire:init', () => {

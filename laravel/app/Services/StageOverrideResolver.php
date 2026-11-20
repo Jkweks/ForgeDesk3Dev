@@ -74,21 +74,4 @@ class StageOverrideResolver
             ]);
         };
     }
-
-    /**
-     * Logger closure for job steps — no per-row log table, so record to the app
-     * log. The controller also echoes the override in its JSON response.
-     */
-    public function jobStepLogger(FdJobStep $step, array $resolution): callable
-    {
-        return function ($blocking) use ($step, $resolution) {
-            Log::info('Job-step gate overridden', [
-                'work_order_id' => $step->work_order_id,
-                'step_id' => $step->id,
-                'step' => $step->name,
-                'blocking_step' => $blocking->name,
-                'by' => $resolution['actor_label'] ?: 'unknown',
-            ]);
-        };
-    }
 }

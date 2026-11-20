@@ -21,6 +21,38 @@ class ShipmentElevationController extends Controller
         return response()->json($this->payload(Shipment::findOrFail($id)));
     }
 
+    /** A work order's shipments plus every one of its elevations with its delivery state (the work order's Shipments tab). */
+    public function forWorkOrder(int $workOrderId)
+    {
+        $wo = FdWorkOrder::with('businessJob:id,job_number,job_name')->findOrFail($workOrderId);
+        $elevs = FdWoElevation::with('elevationType:id,name,color')->where('work_order_id', $wo->id)->orderBy('id')->get();
+        $states = $this->svc->states($elevs->pluck('id'));
+
+        $onWo = collect($states)->flatMap(fn ($s) => collect($s['shipments'])->pluck('id'))->unique();
+        $shipments = Shipment::where('status', '!=', 'cancelled')
+            ->where(fn ($q) => $q->where('work_order_id', $wo->id)->orWhereIn('id', $onWo))->orderBy('id')->get();
+        $trips = $this->svc->tripLabels($shipments);
+        $counts = DB::table('shipment_elevations')->whereIn('shipment_id', $shipments->pluck('id'))
+            ->whereIn('elevation_id', $elevs->pluck('id'))->selectRaw('shipment_id, count(*) as n')->groupBy('shipment_id')->pluck('n', 'shipment_id');
+
+        return response()->json([
+            'shipments' => $shipments->map(fn (Shipment $s) => [
+                'id' => $s->id, 'number' => $s->shipment_number, 'status' => $s->status, 'trip' => $trips[$s->id] ?? null,
+                'pickup_by_others' => (bool) $s->pickup_by_others, 'picked_up_by' => $s->picked_up_by,
+                'ship_date' => $s->ship_date?->format('Y-m-d'), 'destination' => $s->destination, 'elevations' => (int) ($counts[$s->id] ?? 0),
+            ])->values(),
+            'elevations' => $elevs->map(function ($e) use ($states) {
+                $st = $states[$e->id];
+
+                return [
+                    'id' => $e->id, 'tag' => $e->elevation_tag, 'type' => $e->elevationType?->name, 'quantity' => $e->quantity,
+                    'state' => $st['state'], 'outstanding' => $st['outstanding'], 'previously_delivered' => $st['previously_delivered'],
+                    'shipments' => $st['shipments'],
+                ];
+            })->values(),
+        ]);
+    }
+
     /** Replace the shipment's elevation set (only while it hasn't shipped). */
     public function sync(Request $request, int $id)
     {

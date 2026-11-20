@@ -175,6 +175,9 @@
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-details" type="button" role="tab">Details</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-checklist" type="button" role="tab">Checklist</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-drawings" type="button" role="tab">Drawings</button></li>
+      <li class="nav-item" data-permission="shipments.view">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-shipments" type="button" role="tab" onclick="loadWoShipments()">Shipments</button>
+      </li>
       <li class="nav-item">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-cutlists" type="button" role="tab" onclick="loadWoCutLists()">Cut Lists</button>
       </li>
@@ -330,6 +333,11 @@
 
       <!-- Checklist (WO steps) -->
       <div class="tab-pane fade" id="wo-tab-checklist" role="tabpanel">
+        <!-- PM Steps: steps owned by the project manager / engineer, kept apart from the shop checklist -->
+        <div class="wo-block" id="wo-pm-steps-block" style="display:none">
+          <div class="wo-block-head"><h6>PM Steps</h6></div>
+          <div class="d-flex align-items-center gap-1 flex-wrap" id="wo-pm-steps-container"></div>
+        </div>
         <div class="wo-block">
           <div class="wo-block-head"><h6>Checklist</h6></div>
           <div class="d-flex align-items-center gap-1 flex-wrap" id="wo-steps-container">
@@ -354,6 +362,14 @@
           <div id="drawings-list">
             <div class="text-muted small">No drawings attached.</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Shipments (this work order's shipments + each elevation's delivery state) -->
+      <div class="tab-pane fade" id="wo-tab-shipments" role="tabpanel" data-permission="shipments.view">
+        <div class="wo-block">
+          <div class="wo-block-head"><h6>Shipments</h6><a class="btn btn-sm btn-ghost-primary" href="/shipments"><i class="ti ti-external-link me-1"></i>All shipments</a></div>
+          <div id="wo-shipments-content"><div class="text-muted small">No shipments yet.</div></div>
         </div>
       </div>
 
@@ -1350,6 +1366,8 @@ function renderWOList(wos) {
             ? '<span class="badge bg-green-lt text-green ms-1">Complete</span>'
             : wo.status === 'on_hold'
                 ? '<span class="badge bg-orange-lt text-orange ms-1">On Hold</span>'
+                : wo.pe_pending
+                ? '<span class="badge bg-purple-lt text-purple ms-1" title="Waiting on Project Engineer Review">Pending PE</span>'
                 : wo.status === 'pending'
                 ? '<span class="badge bg-yellow-lt text-yellow ms-1" title="Job steps not complete">Pending</span>'
                 : (wo.is_ready_to_complete ? '<span class="badge bg-blue-lt text-blue ms-1">Ready</span>' : '');
@@ -1606,6 +1624,62 @@ function populateDetail(wo) {
     hideWoJobDocForm();
     woCutListsLoaded = false;
     document.getElementById('wo-cutlists-content').innerHTML = '<div class="text-muted small">No cut list yet.</div>';
+    woShipmentsLoaded = false;
+    document.getElementById('wo-shipments-content').innerHTML = '<div class="text-muted small">No shipments yet.</div>';
+}
+
+// ===== SHIPMENTS TAB (shipments of this work order + each elevation's delivery state, like the shipment's elevation picker) =====
+let woShipmentsLoaded = false;
+const WO_ELEV_STATE = { delivered: ['Delivered', 'success'], in_transit: ['On a truck', 'cyan'], scheduled: ['On a shipment', 'blue'], partial: ['Partly delivered', 'warning'], unscheduled: ['Not scheduled', 'secondary'] };
+const WO_SHIP_STATUS = { draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'], awaiting_verification: ['Awaiting verification', 'orange'],
+    delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], picked_up: ['Picked up by others', 'teal'], cancelled: ['Cancelled', 'secondary'] };
+const woShipBadge = (s, pickup) => {
+    const m = pickup && ['draft', 'pre_check_done'].includes(s) ? ['Pickup by others', 'teal'] : (WO_SHIP_STATUS[s] || [s, 'secondary']);
+    return `<span class="badge bg-${m[1]}-lt text-${m[1]}">${esc(m[0])}</span>`;
+};
+
+async function loadWoShipments() {
+    if (woShipmentsLoaded) return;
+    const el = document.getElementById('wo-shipments-content');
+    const woId = currentWO?.id;
+    if (!woId) return;
+    woShipmentsLoaded = true;
+    el.innerHTML = '<div class="text-muted small">Loading…</div>';
+    try {
+        const r = await API(`/work-orders/${woId}/shipments`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        const fmtDate = s => s ? new Date(s + 'T00:00:00').toLocaleDateString() : '—';
+        const ships = d.shipments.length ? `<table class="table table-sm table-vcenter mb-3">
+            <thead><tr><th>Shipment</th><th>Status</th><th>Ship date</th><th class="text-end">Elevations</th><th></th></tr></thead><tbody>
+            ${d.shipments.map(s => `<tr><td class="fw-medium"><a href="/shipments/${s.id}">${esc(s.number)}</a>${s.trip ? ` <span class="text-muted small">· ${esc(s.trip)}</span>` : ''}
+                ${s.pickup_by_others && s.picked_up_by ? `<div class="small text-muted">Picked up by ${esc(s.picked_up_by)}</div>` : ''}</td>
+              <td>${woShipBadge(s.status, s.pickup_by_others)}</td><td>${fmtDate(s.ship_date)}</td><td class="text-end">${s.elevations}</td>
+              <td class="text-end"><a href="/shipments/${s.id}#elevations">Elevations</a></td></tr>`).join('')}</tbody></table>`
+            : '<div class="text-muted small mb-3">No shipments yet.</div>';
+
+        const rows = d.elevations.map(e => {
+            const prev = e.previously_delivered;
+            const st = WO_ELEV_STATE[e.state] || [e.state, 'secondary'];
+            const notes = [...(e.outstanding || []).filter(o => o.note).map(o => ({ date: o.date, note: o.note, id: o.id, number: o.number })),
+                ...(prev && prev.note ? [{ date: prev.on, note: prev.note, id: null, number: 'Marked previously delivered' }] : [])];
+            const on = (e.shipments || []).map(x => `<a href="/shipments/${x.id}">${esc(x.number)}</a>${x.partial ? ' <span class="text-warning">(partial)</span>' : ''}`).join(', ');
+            return `<tr><td class="fw-bold">${esc(e.tag || '#' + e.id)}</td>
+                <td class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</td>
+                <td>${prev ? `<span class="badge bg-success-lt text-success">Delivered earlier${prev.on ? ' ' + esc(fmtDate(String(prev.on).substring(0, 10))) : ''}</span>` : `<span class="badge bg-${st[1]}-lt text-${st[1]}">${esc(st[0])}</span>`}</td>
+                <td class="small">${on || '<span class="text-muted">—</span>'}</td>
+                <td class="text-end">${notes.length ? `<button type="button" class="btn btn-sm btn-icon btn-ghost-secondary" title="Notes from earlier shipments" onclick="document.getElementById('wo-elevnotes-${e.id}').classList.toggle('d-none')"><i class="ti ti-notes"></i></button>` : ''}</td></tr>
+                ${notes.length ? `<tr id="wo-elevnotes-${e.id}" class="d-none"><td colspan="5" class="small bg-body-tertiary">${notes.map(n => `<div class="mb-1"><span class="text-muted">${n.date ? esc(fmtDate(String(n.date).substring(0, 10))) : 'No ship date'}</span> ·
+                    ${n.id ? `<a href="/shipments/${n.id}#elevations">${esc(n.number)}</a>` : esc(n.number)}: ${esc(n.note)}</div>`).join('')}</td></tr>` : ''}`;
+        }).join('');
+        el.innerHTML = ships + `<h6 class="mb-2">Elevations</h6>` + (d.elevations.length
+            ? `<table class="table table-sm table-vcenter mb-0"><thead><tr><th>Elevation</th><th>Type</th><th>Status</th><th>Shipments</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+            : '<div class="text-muted small">No elevations on this work order yet.</div>');
+    } catch (e) {
+        console.error(e);
+        woShipmentsLoaded = false;
+        el.innerHTML = '<div class="text-muted small">Failed to load shipments.</div>';
+    }
 }
 
 // ===== CUT LISTS TAB (this work order's main + add-on cut lists, expandable to their lines) =====
@@ -2171,7 +2245,7 @@ function archiveCurrentWO() {
 // ============================================================
 // WO lifecycle status (Active / On Hold / Complete)
 // ============================================================
-const WO_STATUS_BADGE = { active: 'bg-blue-lt', on_hold: 'bg-orange-lt', complete: 'bg-green-lt' };
+const WO_STATUS_BADGE = { active: 'bg-blue-lt', on_hold: 'bg-orange-lt', complete: 'bg-green-lt', pending_pe: 'bg-purple-lt' };
 let _woPromptBusy = false;
 
 function renderWoStatusBar(wo) {
@@ -2195,7 +2269,8 @@ function renderWoStatusBar(wo) {
         msg = hold && hold.note ? `On hold: ${hold.note}` : 'On hold';
     } else if (wo.status === 'pending') {
         const open = (wo.steps || []).filter(s => !['complete', 'not_required'].includes(s.status)).length;
-        msg = open ? `Pending — ${open} job step${open === 1 ? '' : 's'} left before it goes active` : 'Pending';
+        if (wo.pe_pending) msg = 'Pending PE — waiting on Project Engineer Review' + (open > 1 ? ` (${open} job steps open)` : '');
+        else msg = open ? `Pending — ${open} job step${open === 1 ? '' : 's'} left before it goes active` : 'Pending';
     } else if (wo.is_ready_to_complete) {
         msg = 'All elevations & steps done — ready to complete';
     }
@@ -2379,11 +2454,19 @@ async function maybePromptWoComplete() {
 function renderWoSteps(woId, steps) {
     const container = document.getElementById('wo-steps-container');
     if (!container) return;
-    const html = steps.map(s => FabStep.stepBadgeHtml(s, {
+    const badge = s => FabStep.stepBadgeHtml(s, {
         esc,
         onClick: `cycleWoStep(${s.id}, '${s.status}')`,
         onContextMenu: `woStepContextMenu(${s.id}, '${s.status}', event)`,
-    })).join('');
+    });
+    // The Project Engineer Review step lives in its own "PM Steps" section above the checklist.
+    const isPm = s => s.name === 'Project Engineer Review';
+    const pmSteps = steps.filter(isPm);
+    steps = steps.filter(s => !isPm(s));
+    document.getElementById('wo-pm-steps-block').style.display = pmSteps.length ? '' : 'none';
+    document.getElementById('wo-pm-steps-container').innerHTML = pmSteps.map(badge).join('');
+    const html = steps.map(badge).join('');
+    // "Complete All" covers the shop checklist only; PM steps are signed off on their own.
     const pendingCount = steps.filter(s => s.status === 'pending').length;
     const bulkBtn = pendingCount > 0
         ? `<button class="btn btn-ghost-success btn-sm ms-1 px-2 py-0" style="font-size:.72rem"

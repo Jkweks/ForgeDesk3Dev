@@ -255,4 +255,16 @@ class CutStationJobPickerTest extends TestCase
         // Picking the next profile clears the note.
         $page->call('pickProfile', 'Head', null)->assertDontSee('Sill · C2 complete');
     }
+
+    public function test_part_photo_enlarge_state_persists_across_refreshes_until_toggled_again(): void
+    {
+        $page = $this->station([$this->pending->id]);
+        $this->assertFalse($page->get('partPhotoOpen'));
+
+        $page->call('togglePartPhoto')->assertSet('partPhotoOpen', true);
+        // Livewire's poll / auto-refresh re-renders the component: the photo stays enlarged.
+        $page->call('$refresh')->call('$refresh')->assertSet('partPhotoOpen', true);
+
+        $page->call('togglePartPhoto')->assertSet('partPhotoOpen', false);
+    }
 }

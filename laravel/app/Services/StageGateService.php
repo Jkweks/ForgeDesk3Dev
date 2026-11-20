@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Exceptions\StageGatedException;
-use App\Models\FdJobStep;
 use App\Models\FdWoStage;
 use Illuminate\Support\Collection;
 
@@ -16,8 +15,8 @@ use Illuminate\Support\Collection;
  * column, or its `sort_order` when that is null — so stages sharing a phase run
  * concurrently and never gate each other. Non-blocking predecessors are ignored.
  *
- * Job steps (the flat WO checklist) gate strict-sequentially: every earlier
- * step must be terminal.
+ * Job steps (the flat WO checklist) are NOT gated: they can be completed in any
+ * order. They only decide whether the work order is pending or active.
  */
 class StageGateService
 {
@@ -86,18 +85,6 @@ class StageGateService
         return "Configurator: opening is still {$config->status_label} — release it before starting production.";
     }
 
-    public function blockingJobStepFor(FdJobStep $step): ?FdJobStep
-    {
-        $earlier = FdJobStep::query()
-            ->where('work_order_id', $step->work_order_id)
-            ->where('id', '!=', $step->id)
-            ->where('sort_order', '<', $step->sort_order)
-            ->orderBy('sort_order')
-            ->get(['id', 'name', 'status', 'sort_order']);
-
-        return $this->firstNonTerminal($earlier);
-    }
-
     /**
      * Enforce the gate for a stage moving to $toStatus. No-op unless the move is
      * an activation. When blocked: throw StageGatedException unless $override, in
@@ -122,26 +109,6 @@ class StageGateService
         }
 
         $blocking = $this->blockingStageFor($stage);
-        if ($blocking === null) {
-            return;
-        }
-
-        if (! $override) {
-            throw new StageGatedException($blocking->id, $blocking->name);
-        }
-
-        if ($logOverride) {
-            $logOverride($blocking);
-        }
-    }
-
-    public function guardJobStepTransition(FdJobStep $step, string $toStatus, bool $override, ?callable $logOverride = null): void
-    {
-        if (! $this->isActivation($step->status, $toStatus)) {
-            return;
-        }
-
-        $blocking = $this->blockingJobStepFor($step);
         if ($blocking === null) {
             return;
         }

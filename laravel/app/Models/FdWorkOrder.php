@@ -31,12 +31,14 @@ class FdWorkOrder extends Model
         static::created(function (FdWorkOrder $wo) {
             // Steps come from the admin-managed templates; later template edits don't touch existing work orders.
             $templates = FdJobStepTemplate::where('active', true)->orderBy('sort_order')->orderBy('id')->get();
+            $needsPe = (bool) $wo->businessJob?->requiresPeReview();
             foreach ($templates as $i => $template) {
                 FdJobStep::create([
                     'work_order_id' => $wo->id,
                     'name' => $template->name,
                     'sort_order' => $i + 1,
-                    'status' => 'pending',
+                    // Project Engineer Review only applies to job numbers starting with 1 or 4 (not dates).
+                    'status' => ($template->name === FdJobStep::PE_REVIEW && ! $needsPe) ? 'not_required' : 'pending',
                 ]);
             }
 
@@ -319,6 +321,13 @@ class FdWorkOrder extends Model
     public function statusLog(): HasMany
     {
         return $this->hasMany(FdWoStatusLog::class, 'work_order_id')->orderByDesc('created_at');
+    }
+
+    /** A pending work order still waiting on its Project Engineer Review step (shown as "Pending PE"). */
+    public function isPendingPe(): bool
+    {
+        return $this->status === 'pending'
+            && $this->steps->contains(fn ($s) => $s->name === FdJobStep::PE_REVIEW && ! in_array($s->status, FdJobStep::TERMINAL, true));
     }
 
     /** True when every work-order-level step is terminal (complete / not_required). */

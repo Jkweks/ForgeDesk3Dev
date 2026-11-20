@@ -275,31 +275,28 @@ class StageGateTest extends TestCase
 
     // ── job steps ───────────────────────────────────────────────────────────
 
-    public function test_job_step_completion_is_strictly_sequential(): void
+    public function test_job_steps_can_be_completed_in_any_order(): void
     {
         $this->actingAsAdmin();
         $job = BusinessJob::create(['job_number' => 'J-js', 'job_name' => 'J', 'status' => 'active']);
         $wo = FdWorkOrder::create(['business_job_id' => $job->id, 'release_number' => 1]);
         $steps = $wo->steps()->orderBy('sort_order')->get(); // 4 seeded by FdWorkOrder::boot
 
-        $this->patchJson("/api/v1/job-steps/{$steps[1]->id}", ['status' => 'complete'])
-            ->assertStatus(422)->assertJson(['code' => 'stage_gated']);
-
-        $this->patchJson("/api/v1/job-steps/{$steps[0]->id}", ['status' => 'complete'])->assertOk();
+        // A later step does not wait for the earlier ones.
         $this->patchJson("/api/v1/job-steps/{$steps[1]->id}", ['status' => 'complete'])->assertOk();
+        $this->patchJson("/api/v1/job-steps/{$steps[0]->id}", ['status' => 'complete'])->assertOk();
     }
 
-    public function test_job_step_complete_all_rolls_back_then_override(): void
+    public function test_job_step_complete_all_skips_held_steps_without_gating(): void
     {
         $this->actingAsAdmin();
         $job = BusinessJob::create(['job_number' => 'J-ca', 'job_name' => 'J', 'status' => 'active']);
         $wo = FdWorkOrder::create(['business_job_id' => $job->id, 'release_number' => 1]);
         $wo->steps()->orderBy('sort_order')->get()[1]->update(['status' => 'on_hold']);
 
-        $this->patchJson("/api/v1/work-orders/{$wo->id}/steps/complete-all")->assertStatus(422);
-        $this->assertSame(0, $wo->steps()->where('status', 'complete')->count());
-
-        $this->patchJson("/api/v1/work-orders/{$wo->id}/steps/complete-all", ['override' => true])->assertOk();
+        // A step on hold no longer blocks the others; the hold itself is left alone.
+        $this->patchJson("/api/v1/work-orders/{$wo->id}/steps/complete-all")->assertOk();
         $this->assertSame(3, $wo->steps()->where('status', 'complete')->count());
+        $this->assertSame(1, $wo->steps()->where('status', 'on_hold')->count());
     }
 }

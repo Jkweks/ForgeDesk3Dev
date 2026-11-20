@@ -358,6 +358,14 @@ class Dashboard extends Component
         $this->modal = 'progress';
     }
 
+    /** Part photo enlarged over the cut card. Lives here (not in the DOM) so it survives Livewire's auto-refreshes. */
+    public bool $partPhotoOpen = false;
+
+    public function togglePartPhoto(): void
+    {
+        $this->partPhotoOpen = ! $this->partPhotoOpen;
+    }
+
     public function toggleShowCompletedJobs(): void
     {
         $this->showCompletedJobs = ! $this->showCompletedJobs;

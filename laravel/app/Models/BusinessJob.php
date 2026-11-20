@@ -10,6 +10,20 @@ class BusinessJob extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /** Job numbers that are dates ("7/23/26", "10-13-26") rather than real project numbers. */
+    public static function isDateJobNumber(?string $number): bool
+    {
+        return (bool) preg_match('#^\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?$#', trim((string) $number));
+    }
+
+    /** Project Engineer review applies to real job numbers starting with 1 or 4; dated or other numbers skip it. */
+    public function requiresPeReview(): bool
+    {
+        $n = trim((string) $this->job_number);
+
+        return $n !== '' && ! self::isDateJobNumber($n) && in_array($n[0], ['1', '4'], true);
+    }
+
     protected $fillable = [
         'job_number',
         'job_name',

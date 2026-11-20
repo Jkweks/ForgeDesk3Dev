@@ -376,6 +376,30 @@ class ShipmentFlowTest extends TestCase
         $this->post("/api/v1/shipments/$nid/documents", ['files' => [$photo()]], ['Accept' => 'application/json'])->assertStatus(422);
     }
 
+    public function test_work_order_shipments_tab_lists_shipments_and_elevation_states(): void
+    {
+        $this->admin();
+        $wo = $this->wo();
+        $e1 = $this->elev($wo, 'E1');
+        $e2 = $this->elev($wo, 'E2');
+        $e3 = $this->elev($wo, 'E3');
+        $s = Shipment::where('work_order_id', $wo->id)->first();
+        $this->postJson('/api/v1/shipments/elevations/previously-delivered', ['elevation_ids' => [$e3->id], 'delivered' => true, 'note' => 'Hand delivered'])->assertOk();
+        $this->patchJson("/api/v1/shipments/{$s->id}/elevations/{$e1->id}", ['partial' => true, 'partial_note' => 'Glass only'])->assertOk();
+        $s->update(['status' => 'awaiting_verification']);
+        app(\App\Services\Shipping\WorkOrderShipmentService::class)->carryOverPartials($s->fresh());
+
+        $r = $this->getJson("/api/v1/work-orders/{$wo->id}/shipments")->assertOk();
+        $this->assertCount(2, $r->json('shipments'));
+        $this->assertContains('Trip 1 of 2', collect($r->json('shipments'))->pluck('trip')->all());
+        $els = collect($r->json('elevations'))->keyBy('id');
+        $this->assertSame('scheduled', $els[$e1->id]['state']);
+        $this->assertSame('Glass only', $els[$e1->id]['outstanding'][0]['note']);
+        $this->assertSame($s->id, $els[$e1->id]['outstanding'][0]['id']);
+        $this->assertSame('delivered', $els[$e2->id]['state']);
+        $this->assertSame('Hand delivered', $els[$e3->id]['previously_delivered']['note']);
+    }
+
     public function test_cancelled_shipments_free_their_elevations(): void
     {
         $wo = $this->wo();
