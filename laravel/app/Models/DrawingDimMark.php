@@ -10,9 +10,9 @@ class DrawingDimMark extends Model
 
     public const KINDS = ['ro_w', 'fs_w', 'ro_h', 'fs_h', 'do_w', 'do_h', 'dlo_w', 'dlo_h'];
 
-    protected $fillable = ['drawing_elevation_id', 'page', 'kind', 'idx', 'value', 'x0', 'top', 'x1', 'bottom', 'confirmed_value', 'confirmed_by', 'confirmed_at'];
+    protected $fillable = ['drawing_elevation_id', 'page', 'kind', 'idx', 'value', 'x0', 'top', 'x1', 'bottom', 'counted', 'confirmed_value', 'confirmed_by', 'confirmed_at'];
 
-    protected $casts = ['confirmed_at' => 'datetime'];
+    protected $casts = ['confirmed_at' => 'datetime', 'counted' => 'boolean'];
 
     protected $appends = ['status'];
 

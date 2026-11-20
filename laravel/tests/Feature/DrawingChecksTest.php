@@ -194,6 +194,63 @@ class DrawingChecksTest extends TestCase
         $this->assertSame('flagged', collect($this->elev($set, 'W2')['axis_checks'])->firstWhere('axis', 'w')['state']);
     }
 
+    public function test_every_leaf_of_a_door_pair_is_kept_and_counted_when_the_frame_is_rechecked(): void
+    {
+        // the PM Suite importer counts each leaf of a pair as its own term (doWExtra); the re-check must do the same
+        $r = $this->parsed();
+        $r['elevations'][0]['dims']['doW'] = $this->dim(36, [100, 60, 130, 72]);
+        $r['elevations'][0]['dims']['doWExtra'] = [$this->dim(36, [140, 60, 170, 72])];
+        $seen = null;
+        $this->fakeRead($r, function (array $p) use (&$seen) {
+            $seen = $p;
+
+            return ['ok' => true, 'member' => 2.0, 'used' => 5, 'dropped' => 0, 'chains' => [['ok' => true]]];
+        });
+        $set = $this->import();
+        $w1 = $this->elev($set, 'W1');
+
+        $doors = collect($w1['marks'])->where('kind', 'do_w')->sortBy('idx')->values();
+        $this->assertCount(2, $doors);                                  // both leaves are stored as marks
+        $this->assertSame([0, 1], $doors->pluck('idx')->all());
+
+        $first = collect($w1['marks'])->firstWhere('kind', 'dlo_w');
+        $this->postJson($this->url($set, '/marks'), ['ids' => [$first['id']], 'action' => 'confirm'])->assertOk();
+        $this->assertSame([36.0, 36.0], array_column($seen['dos'], 'v'));   // and the re-check sends them both
+    }
+
+    public function test_a_multi_sheet_run_keeps_each_sheets_break_lines_and_what_lies_beyond_them(): void
+    {
+        // a sheet draws a little of its neighbour; the parser says which readings are inside its break lines (owned)
+        $r = $this->parsed();
+        $r['elevations'][2]['sheetDims'] = [[
+            'page' => 3, 'pageSize' => [1224, 792], 'titleRect' => null,
+            'matchLines' => [['num' => 1, 'x' => 66.0], ['num' => 2, 'x' => 1023.0]],
+            'dims' => ['dloWidths' => [
+                $this->dim(53.375, [10, 215, 52, 228]) + ['owned' => false],          // left of break line 1: context
+                $this->dim(53.5, [90, 215, 132, 228]) + ['owned' => true],
+                $this->dim(51.5, [180, 215, 222, 228]) + ['owned' => true],
+                $this->dim(57.75, [1040, 215, 1082, 228]) + ['owned' => false],        // right of break line 2: context
+            ]],
+        ]];
+        $this->fakeRead($r);
+        $set = $this->import();
+        $e = $this->elev($set, 'W3');
+
+        $sheet = collect($e['sheets'])->firstWhere('page', 3);
+        $this->assertSame([1, 2], collect($sheet['breaks'])->pluck('num')->all());
+        $this->assertEquals([66.0, 1023.0], collect($sheet['breaks'])->pluck('x')->map(fn ($x) => (float) $x)->all());
+
+        $counted = collect($e['marks'])->where('counted', true)->pluck('value')->map(fn ($v) => (float) $v)->sort()->values()->all();
+        $this->assertSame([51.5, 53.5], $counted);                                   // only what lies between the lines
+        $this->assertCount(2, collect($e['marks'])->where('counted', false));       // kept, for context on the sheet
+
+        // Confirm all on the sheet is about the counted values only, and the context ones stay out of the checked share
+        $ids = collect($e['marks'])->where('counted', true)->pluck('id')->all();
+        $this->postJson($this->url($set, '/marks'), ['ids' => $ids, 'action' => 'confirm'])->assertOk();
+        $after = $this->elev($set, 'W3');
+        $this->assertContains('100% of the values checked by a person', $after['confidence']['reasons']);
+    }
+
     public function test_a_worker_outage_does_not_lose_a_confirmation(): void
     {
         $this->fakeRead();
@@ -250,6 +307,27 @@ class DrawingChecksTest extends TestCase
         $this->postJson($this->url($set, '/reimport'))->assertStatus(202);
         $fsW = collect($this->elev($set, 'W1')['marks'])->firstWhere('kind', 'fs_w');
         $this->assertSame('suggested', $fsW['status']);
+    }
+
+    public function test_a_re_read_relinks_the_elevations_a_work_order_request_released(): void
+    {
+        $this->fakeRead();
+        $set = $this->import();
+        $w1 = $this->elev($set, 'W1');
+        $this->postJson($this->url($set, "/elevations/{$w1['id']}/review"), ['action' => 'approve'])->assertOk();
+        $job = BusinessJob::withoutGlobalScopes()->find($this->job->id);
+        $job->update(['status' => 'active']);
+
+        $r = $this->postJson("/api/v1/pm/jobs/{$this->job->id}/work-order-requests", ['release_code' => 'A', 'drawing_set_id' => $set->id,
+            'elevations' => [['drawing_elevation_id' => $w1['id'], 'quantity' => 2]]])->assertCreated()->json();
+
+        $this->postJson($this->url($set, '/reimport'))->assertStatus(202);       // the elevation rows are replaced ...
+
+        $line = \App\Models\WorkOrderRequestElevation::where('work_order_request_id', $r['id'])->firstOrFail();
+        $new = $this->elev($set, 'W1');
+        $this->assertNotSame($w1['id'], $new['id']);
+        $this->assertSame($new['id'], $line->drawing_elevation_id);             // ... and the request line points at the new one
+        $this->assertSame(2, $new['requested_qty']);                            // so the quantity is still counted against it
     }
 
     public function test_a_full_package_can_be_uploaded_at_once(): void

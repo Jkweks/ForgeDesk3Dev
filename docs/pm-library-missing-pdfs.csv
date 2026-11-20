@@ -1,0 +1,447 @@
+manufacturer,product,label,type,filename
+Kawneer,"1600 Wall System 1","Product Data Sheet","Product Data",Kawneer_1600-Wall-System1_DataSheet.pdf
+Kawneer,"1600 Wall System 1","AAMA 501 Test Report","Test Report",Kawneer_1600-Wall-System1_AAMA501.pdf
+Kawneer,"1600 Wall System 1","Installation Guide",Installation,Kawneer_1600-Wall-System1_Install.pdf
+Kawneer,"350T Storefront","Product Brochure","Product Data",Kawneer_350T_Brochure.pdf
+Kawneer,"350T Storefront","AAMA 101 Test Report","Test Report",Kawneer_350T_AAMA101.pdf
+Trulite,"Series 4200 Storefront","Cut Sheet","Cut Sheet",Trulite_4200_CutSheet.pdf
+Trulite,"Series 4200 Storefront","AAMA 101 Test Report","Test Report",Trulite_4200_TestReport.pdf
+Tubelite,T14000,"Product Data Sheet","Product Data",Tubelite_T14000-Storefront_Promotional-Brochure.pdf
+Tubelite,T14000,"Perimeter Sheet","Cut Sheet",Tubelite_T14000-Storefront_Perimeter-Sheet.pdf
+Tubelite,T14000,"Design Manual",Other,Tubelite_T14000-Storefront_Design-Manual.pdf
+Tubelite,T14000,"Installation Instructions",Installation,Tubelite_E-T-TU14000-Storefront_Installation-Instructions.pdf
+Tubelite,T14000,"AWS Testing","Test Report",Tubelite_T14000-Storefront_Test-Summary_AWS.pdf
+Tubelite,T14000,"CRF Testing","Test Report",Tubelite_T14000-Storefront_Test-Summary_CRF.pdf
+Tubelite,T14000,"Windload Chart",Other,Tubelite_T14000-Storefront_Windload-Charts.pdf
+Tubelite,T14000,"Sustainability Information",Other,Tubelite_T14000-Storefront_Sustainability_Declare_Product_Label.pdf
+Tubelite,"E14000 I/O Inboard","Product Data Sheet","Product Data",Tubelite_E14000-I-O_Promotional-Brochure.pdf
+Tubelite,"E14000 I/O Inboard","Perimeter Sheet","Cut Sheet",Tubelite_E14000-I-O_Perimeter-Sheet_Inboard.pdf
+Tubelite,"E14000 I/O Inboard","Design Manual",Other,Tubelite_E14000-I-O_Design-Manual.pdf
+Tubelite,"E14000 I/O Inboard","Installation Instructions",Installation,Tubelite_E14000-I-O_Installation-Instructions.pdf
+Tubelite,"E14000 I/O Inboard","AWS Testing","Test Report",Tubelite_E14000-I-O_Test-Summary_AWS.pdf
+Tubelite,"E14000 I/O Inboard","Windload Chart",Other,Tubelite_E14000-I-O_Windload-Charts.pdf
+Tubelite,"E14000 I/O Inboard","Sustainability Information",Other,Tubelite_E14000_Storefront_Sustainability_Declare_Product_Labels.pdf
+Tubelite,"E14000 I/O Outboard","Product Data Sheet","Product Data",Tubelite_E14000-I-O_Promotional-Brochure.pdf
+Tubelite,"E14000 I/O Outboard","Perimeter Sheet","Cut Sheet",Tubelite_E14000-I-O_Perimeter-Sheet_Outboard.pdf
+Tubelite,"E14000 I/O Outboard","Design Manual",Other,Tubelite_E14000-I-O_Design-Manual.pdf
+Tubelite,"E14000 I/O Outboard","Installation Instructions",Installation,Tubelite_E14000-I-O_Installation-Instructions.pdf
+Tubelite,"E14000 I/O Outboard","AWS Testing","Test Report",Tubelite_E14000-I-O_Test-Summary_AWS.pdf
+Tubelite,"E14000 I/O Outboard","Windload Chart",Other,Tubelite_E14000-I-O_Windload-Charts.pdf
+Tubelite,"E14000 I/O Outboard","Sustainability Information",Other,Tubelite_E14000_Storefront_Sustainability_Declare_Product_Labels.pdf
+Tubelite,E14000,"Product Data Sheet","Product Data",Tubelite_E14000-Storefront_Promotional-Brochure.pdf
+Tubelite,E14000,"Perimeter Sheet","Cut Sheet",Tubelite_E14000-Storefront_Perimeter-Sheet.pdf
+Tubelite,E14000,"Design Manual",Other,Tubelite_E14000-Storefront_Design-Manual.pdf
+Tubelite,E14000,"Installation Instructions",Installation,Tubelite_E-T-TU14000-Storefront_Installation-Instructions.pdf
+Tubelite,E14000,"AWS Testing","Test Report",Tubelite_E14000-Storefront_Test-Summary_AWS.pdf
+Tubelite,E14000,"WIndload Chart",Other,Tubelite_E14000-Storefront_WL-Chart.pdf
+Tubelite,E14000,"Sustainability Information",Other,Tubelite_E14000_Storefront_Sustainability_Declare_Product_Labels.pdf
+Tubelite,"T14000 I/O Inboard","Product Data Sheet","Product Data",Tubelite_T14000-I-O_Promotional-Brochure.pdf
+Tubelite,"T14000 I/O Inboard","Perimeter Sheet","Cut Sheet",Tubelite_T14000-I-O_Inboard_Perimeter-Sheet.pdf
+Tubelite,"T14000 I/O Inboard","Design Manual",Other,Tubelite_T14000-I-O_Outboard_Design-Manual.pdf
+Tubelite,"T14000 I/O Inboard","Installation Instructions",Installation,Tubelite_T14000-I-O_Installation-Instructions.pdf
+Tubelite,"T14000 I/O Inboard","AWS Testing","Test Report",Tubelite_T14000-I-O_Test-Summary_AWS.pdf
+Tubelite,"T14000 I/O Inboard","CRF Testing","Test Report",Tubelite_T14000-I-O_Test-Summary_CRF.pdf
+Tubelite,"T14000 I/O Inboard","WIndload Chart",Other,Tubelite_T14000-I-O_Windload-Charts.pdf
+Tubelite,"T14000 I/O Inboard","Sustainability Information",Other,Tubelite_T14000-Storefront_Sustainability_Declare_Product_Label.pdf
+Tubelite,"T14000 I/O Outboard","Product Data Sheet","Product Data",Tubelite_T14000-I-O_Promotional-Brochure.pdf
+Tubelite,"T14000 I/O Outboard","Perimeter Sheet","Cut Sheet",Tubelite_T14000-I-O_Outboard_Perimeter-Sheet.pdf
+Tubelite,"T14000 I/O Outboard","Design Manual",Other,Tubelite_T14000-I-O_Outboard_Design-Manual.pdf
+Tubelite,"T14000 I/O Outboard","Installation Instructions",Installation,Tubelite_T14000-I-O_Installation-Instructions.pdf
+Tubelite,"T14000 I/O Outboard","AWS Testing","Test Report",Tubelite_T14000-I-O_Test-Summary_AWS.pdf
+Tubelite,"T14000 I/O Outboard","CRF Testing","Test Report",Tubelite_T14000-I-O_Test-Summary_CRF.pdf
+Tubelite,"T14000 I/O Outboard","Windload Chart",Other,Tubelite_T14000-I-O_Windload-Charts.pdf
+Tubelite,"T14000 I/O Outboard","Sustainability Information","Product Data",Tubelite_T14000-Storefront_Sustainability_Declare_Product_Label.pdf
+Tubelite,TU14000,"Product Data Sheet","Product Data",Tubelite_TU14000_Promotional-Brochure.pdf
+Tubelite,TU14000,"Perimeter Sheet","Cut Sheet",Tubelite_TU14000-Storefront_Perimeter-Sheet.pdf
+Tubelite,TU14000,"Design Manual",Other,Tubelite_TU14000-Storefront_Design-Manual.pdf
+Tubelite,TU14000,"Installation Instructions",Installation,Tubelite_E-T-TU14000-Storefront_Installation-Instructions.pdf
+Tubelite,TU14000,"AWS Testing","Test Report",Tubelite_TU14000-Storefront_Test-Summary_AWS.pdf
+Tubelite,TU14000,"CRF Testing","Test Report",Tubelite_TU14000-Storefront_Test-Summary_CRF.pdf
+Tubelite,TU14000,"Windload Chart",Other,Tubelite_TU14000-Storefront_WL-Charts.pdf
+Tubelite,"TU14000 I/O Inboard","Product Data Sheet","Product Data",Tubelite_TU14000-I-O_Promotional-Brochure.pdf
+Tubelite,"TU14000 I/O Inboard","Perimeter Sheet","Cut Sheet",Tubelite_TU14000-I-O_Perimeter-Sheet_Inboard.pdf
+Tubelite,"TU14000 I/O Inboard","Design Manual",Other,Tubelite_TU14000-IO_Inboard_Design-Manual.pdf
+Tubelite,"TU14000 I/O Inboard","Installation Instructions",Installation,Tubelite_TU14000-I-O_Installation-Instructions.pdf
+Tubelite,"TU14000 I/O Inboard","Acoustic Testing","Test Report",Tubelite_TU14000-IO_Test-Summary_Acoustic.pdf
+Tubelite,"TU14000 I/O Inboard","AWS Testing","Test Report",Tubelite_TU14000-I-O_Test-Summary_AWS.pdf
+Tubelite,"TU14000 I/O Inboard","CRF Testing","Test Report",Tubelite_TU14000-I-O_Test-Summary_CRF.pdf
+Tubelite,"TU14000 I/O Inboard","Windload Chart",Other,Tubelite_TU14000-I-O_Windload-Charts.pdf
+Tubelite,"TU14000 I/O Outboard","Product Data Sheet","Product Data",Tubelite_TU14000-I-O_Promotional-Brochure.pdf
+Tubelite,"TU14000 I/O Outboard","Perimeter Sheet","Cut Sheet",Tubelite_TU14000-I-O_Perimeter-Sheet_Outboard.pdf
+Tubelite,"TU14000 I/O Outboard","Design Manual",Other,Tubelite_TU14000-IO_Outboard_Design-Manual.pdf
+Tubelite,"TU14000 I/O Outboard","Installation Instructions",Installation,Tubelite_TU14000-I-O_Installation-Instructions.pdf
+Tubelite,"TU14000 I/O Outboard","Acoustic Testing","Test Report",Tubelite_TU14000-IO_Test-Summary_Acoustic.pdf
+Tubelite,"TU14000 I/O Outboard","AWS Testing","Test Report",Tubelite_TU14000-I-O_Test-Summary_AWS.pdf
+Tubelite,"TU14000 I/O Outboard","CRF Testing","Test Report",Tubelite_TU14000-I-O_Test-Summary_CRF.pdf
+Tubelite,"TU14000 I/O Outboard","Windload Chart",Other,Tubelite_TU14000-I-O_Windload-Charts.pdf
+Tubelite,E24650,"Product Data Sheet","Product Data",Tubelite_E24650-Storefront_Promotional-Brochure.pdf
+Tubelite,E24650,"Perimeter Sheet","Cut Sheet",Tubelite_E24650-Storefront_Perimeter-Sheets.pdf
+Tubelite,E24650,"Design Manual",Other,Tubelite_E24650-Storefront_Design-Manual.pdf
+Tubelite,E24650,"Installation Instructions",Installation,Tubelite_E24650-Storefront_Installation-Instructions.pdf
+Tubelite,E24650,"AWS Testing","Test Report",Tubelite_E24650-Storefront_Test-Summary_AWS.pdf
+Tubelite,E24650,"Sustainability Information",Other,Tubelite_E24650_Storefront_Sustainability_Declare_Product_Labels.pdf
+Tubelite,"E24650 SSG","Product Data Sheet","Product Data",Tubelite_E24650-Storefront_Promotional-Brochure.pdf
+Tubelite,"E24650 SSG","Perimeter Sheet","Cut Sheet","Tubelite_E24650-Storefront_Perimeter-Sheets SSG.pdf"
+Tubelite,"E24650 SSG","Design Manual",Other,Tubelite_E24650-Storefront_Design-Manual.pdf
+Tubelite,"E24650 SSG","Installation Instructions",Installation,Tubelite_E24650-Storefront_Installation-Instructions.pdf
+Tubelite,"E24650 SSG","AWS Testing","Test Report",Tubelite_E24650-Storefront_Test-Summary_AWS.pdf
+Tubelite,"E24650 SSG","Sustainability Information",Other,Tubelite_E24650_Storefront_Sustainability_Declare_Product_Labels.pdf
+Tubelite,T24650,"Product Data","Product Data",Tubelite_T24650_Storefront_Promotional-Brochure.pdf
+Tubelite,T24650,"Perimeter Sheet","Cut Sheet",Tubelite_24650-Storefront_Perimeter-Sheets.pdf
+Tubelite,T24650,"Design Manual",Other,Tubelite_24650-Storefront_Design-Manual.pdf
+Tubelite,T24650,"Installation Instructions",Installation,Tubelite_24650-Storefront_Installation-Instructions.pdf
+Tubelite,T24650,"Acoustic Testing","Test Report",Tubelite_24650-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,T24650,"AWS Testing","Test Report",Tubelite_24650-Storefront_Test-Summary_AWS.pdf
+Tubelite,T24650,"CRF Testing (P+D Filler)","Test Report",Tubelite_24650-Storefront_Test-Summary_CRF_P-D-Filler.pdf
+Tubelite,T24650,"CRF Testing (Strut Filler)","Test Report",Tubelite_24650-Storefront_Test-Summary_CRF_Strut-Filler.pdf
+Tubelite,T24650,"NFRC Testing","Test Report",Tubelite_T24650-Storefront_Test-Summary_NFRC.pdf
+Tubelite,T24650,"Windload Chart",Other,Tubelite_24650-Storefront_Windload-Charts.pdf
+Tubelite,T24650,"Sustainability Information",Other,Tubelite_T24650-Storefront_Sustainability_Declare_Product_Label.pdf
+Tubelite,"T24650 SSG","Product Data","Product Data",Tubelite_T24650_Storefront_Promotional-Brochure.pdf
+Tubelite,"T24650 SSG","Perimeter Sheet","Cut Sheet","Tubelite_24650-Storefront_Perimeter-Sheets SSG.pdf"
+Tubelite,"T24650 SSG","Design Manual",Other,Tubelite_24650-Storefront_Design-Manual.pdf
+Tubelite,"T24650 SSG","Installation Instructions",Installation,Tubelite_24650-Storefront_Installation-Instructions.pdf
+Tubelite,"T24650 SSG","Acoustic Testing","Test Report",Tubelite_24650-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,"T24650 SSG","AWS Testing","Test Report",Tubelite_24650-Storefront_SSG_Test-Summary_AWS.pdf
+Tubelite,"T24650 SSG","CRF Testing","Test Report",Tubelite_24650-Storefront_SSG_Test-Summary_CRF.pdf
+Tubelite,"T24650 SSG","NFRC Testing","Test Report",Tubelite_T24650-Storefront_Test-Summary_NFRC.pdf
+Tubelite,"T24650 SSG","Windload Chart",Other,Tubelite_24650-Storefront_Windload-Charts.pdf
+Tubelite,"T24650 SSG","Sustainability Information",Other,Tubelite_T24650-Storefront_Sustainability_Declare_Product_Label.pdf
+Tubelite,TU24650,"Product Data Sheet","Product Data",Tubelite_TU24650-Storefront_Promotional-Brochure.pdf
+Tubelite,TU24650,"Perimeter Sheet","Cut Sheet",Tubelite_TU24650-Storefront_Perimeter-Sheets.pdf
+Tubelite,TU24650,"Design Manual",Other,Tubelite_TU24650-Storefront_Design-Manual.pdf
+Tubelite,TU24650,"Installation Instructions",Installation,Tubelite_TU24650-Storefront_Installation-Instructions.pdf
+Tubelite,TU24650,"Acoustic Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,TU24650,"AWS Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_AWS.pdf
+Tubelite,TU24650,"CRF Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_CRF.pdf
+Tubelite,TU24650,"NFRC Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_NFRC.pdf
+Tubelite,TU24650,"Windload Chart",Other,Tubelite_TU24650-Storefront_SSG_Windload-Chart.pdf
+Tubelite,"TU24650 SSG","Product Data Sheet","Product Data",Tubelite_TU24650-Storefront_Promotional-Brochure.pdf
+Tubelite,"TU24650 SSG","Perimeter Sheet","Cut Sheet","Tubelite_TU24650-Storefront_Perimeter-Sheets SSG.pdf"
+Tubelite,"TU24650 SSG","Design Manual",Other,Tubelite_TU24650-Storefront_Design-Manual.pdf
+Tubelite,"TU24650 SSG","Installation Instructions",Installation,Tubelite_TU24650-Storefront_Installation-Instructions.pdf
+Tubelite,"TU24650 SSG","Acoustic Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,"TU24650 SSG","AWS Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_AWS_SSG.pdf
+Tubelite,"TU24650 SSG","CRF Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_CRF_SSG.pdf
+Tubelite,"TU24650 SSG","NFRC Testing","Test Report",Tubelite_TU24650-Storefront_Test-Summary_NFRC.pdf
+Tubelite,"TU24650 SSG","Windload Chart",Other,Tubelite_TU24650-Storefront_SSG_Windload-Chart.pdf
+Tubelite,E4500,"Product Data Sheet","Product Data",Tubelite_4500-Storefront_Promotional-Brochure.pdf
+Tubelite,E4500,"Perimeter Sheet","Cut Sheet",Tubelite_4500-Storefront_Perimeter-Sheet.pdf
+Tubelite,E4500,"Design Manual",Other,Tubelite_4500-Storefront_Design-Manual.pdf
+Tubelite,E4500,"Installation Instructions",Installation,Tubelite_4500-Storefront_Installation-Instructions.pdf
+Tubelite,E4500,"Acoustic Testing","Test Report",Tubelite_4500-Storefront_Test-Summary-ACOUSTIC.pdf
+Tubelite,E4500,"AWS Testing","Test Report",Tubelite_4500-Storefront_Test-Summary-AWS.pdf
+Tubelite,E4500,"Windload Chart",Other,Tubelite_4500-Storefront_Windload-Chart.pdf
+Tubelite,"E34000 ForceFront Blast","Product Data Sheet","Product Data",Tubelite_ForceFront-Blast-E34000-Storefront_Promotional-Brochure.pdf
+Tubelite,"E34000 ForceFront Blast","Perimeter Sheet","Cut Sheet",Tubelite_ForceFront-Blast-E34000-Storefront_Perimeter-Sheets.pdf
+Tubelite,"E34000 ForceFront Blast","Design Manual",Other,Tubelite_ForceFront-Blast-E34000-Storefront_Design-Manual.pdf
+Tubelite,"E34000 ForceFront Blast","Installation Instructions",Installation,Tubelite_ForceFront-Blast-E34000-Storefront_Installation-Instructions.pdf
+Tubelite,"E34000 ForceFront Blast","AWS Testing","Test Report",Tubelite_ForceFront-Blast-E34000-Storefront_Test-Summary_AWS.pdf
+Tubelite,"E34000 ForceFront Blast","Professional Engineer Guidance",Other,Tubelite_ForceFront-Blast-E34000-Storefront_PE-Guidance-Details.pdf
+Tubelite,"T34000 ForceFront Blast","Product Data Sheet","Product Data",Tubelite_ForceFront-Blast-T34000-Storefront_Promotional-Brochure.pdf
+Tubelite,"T34000 ForceFront Blast","Perimeter Sheet","Cut Sheet",Tubelite_ForceFront-Blast-T34000-Storefront_Perimeter-Sheets.pdf
+Tubelite,"T34000 ForceFront Blast","Design Manual",Other,Tubelite_ForceFront-Blast-T34000-Storefront_Design-Manual.pdf
+Tubelite,"T34000 ForceFront Blast","Installation Instructions",Installation,Tubelite_ForceFront-Blast-T34000-Storefront_Installation-Instructions.pdf
+Tubelite,"T34000 ForceFront Blast","Acoustic Testing","Test Report",Tubelite_ForceFront-Blast-T34000-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,"T34000 ForceFront Blast","AWS Testing","Test Report",Tubelite_ForceFront-Blast-T34000-Storefront_Test-Summary_AWS.pdf
+Tubelite,"T34000 ForceFront Blast","CRF Testing","Test Report",Tubelite_ForceFront-Blast-T34000-Storefront_Test-Summary_CRF.pdf
+Tubelite,"T34000 ForceFront Blast","Professional Engineer Guidance",Other,Tubelite_ForceFront-Blast-T34000-Storefront_PE-Guidance-Details.pdf
+Tubelite,"E34000 ForceFront Storm Dry Glaze","Product Data Sheet","Product Data",Tubelite_ForceFront-Storm-E34000-Storefront_Promotional-Brochure_Dry.pdf
+Tubelite,"E34000 ForceFront Storm Dry Glaze","Perimeter Sheet","Cut Sheet",Tubelite_ForceFront-Storm-E34000-Storefront_Perimeter-Sheets.pdf
+Tubelite,"E34000 ForceFront Storm Dry Glaze","Design Manual",Other,Tubelite_ForceFront-Storm-E34000-Storefront_Design-Manual.pdf
+Tubelite,"E34000 ForceFront Storm Dry Glaze","Installation Instructions",Installation,Tubelite_ForceFront-Storm-E34000-Storefront_Installation-Instructions.pdf
+Tubelite,"E34000 ForceFront Storm Dry Glaze","AWS Testing","Test Report",Tubelite_ForceFront-Storm-E34000-Storefront_Test-Summary_AWS.pdf
+Tubelite,"E34000 ForceFront Storm Dry Glaze","Impact Testing 17192.1","Test Report","Florida Building Code 17192.1 Impact Testing.pdf"
+Tubelite,"E34000 ForceFront Storm Dry Glaze","Impact Testing 17192.2","Test Report","Florida Building Code 17192.2 Impact Testing.pdf"
+Tubelite,"E34000 ForceFront Storm Wet Glaze","Product Data Sheet","Product Data",Tubelite_ForceFront-Storm-E34000-Storefront_Promotional-Brochure_Wet.pdf
+Tubelite,"E34000 ForceFront Storm Wet Glaze","Perimeter Sheet","Cut Sheet",Tubelite_ForceFront-Storm-E34000-Storefront_Perimeter-Sheets.pdf
+Tubelite,"E34000 ForceFront Storm Wet Glaze","Design Manual",Other,Tubelite_ForceFront-Storm-E34000-Storefront_Design-Manual.pdf
+Tubelite,"E34000 ForceFront Storm Wet Glaze","Installation Instructions",Installation,Tubelite_ForceFront-Storm-E34000-Storefront_Installation-Instructions.pdf
+Tubelite,"E34000 ForceFront Storm Wet Glaze","AWS Testing","Test Report",Tubelite_ForceFront-Storm-E34000-Storefront_Test-Summary_AWS.pdf
+Tubelite,"E34000 ForceFront Storm Wet Glaze","Impact Testing 17192.1","Test Report","Florida Building Code 17192.1 Impact Testing.pdf"
+Tubelite,"E34000 ForceFront Storm Wet Glaze","Impact Testing 17192.2","Test Report","Florida Building Code 17192.2 Impact Testing.pdf"
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Product Data Sheet","Product Data",Tubelite_ForceFront-Storm-T34000-Storefront_Promotional-Brochure_Dry.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Perimeter Sheet","Cut Sheet",Tubelite_ForceFront-Storm-T34000-Storefront_Perimeter-Sheets.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Design Manual",Other,Tubelite_ForceFront-Storm-T34000-Storefront_Design-Manual.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Installation Instructions",Installation,Tubelite_ForceFront-Storm-T34000-Storefront_Installation-Instructions.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Acoustic Testing","Test Report",Tubelite_ForceFront-Storm-T34000-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","AWS Testing","Test Report",Tubelite_ForceFront-Storm-T34000-Storefront_Test-Summary_AWS.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","CRF Testing","Test Report",Tubelite_ForceFront-Storm-T34000-Storefront_Test-Summary_CRF.pdf
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Impact Testing 17192.1","Test Report","Florida Building Code 17192.1 Impact Testing.pdf"
+Tubelite,"T34000 ForceFront Storm Dry Glaze","Impact Testing 17192.2","Test Report","Florida Building Code 17192.2 Impact Testing.pdf"
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Product Data Sheet","Product Data",Tubelite_ForceFront-Storm-T34000-Storefront_Promotional-Brochure_Wet.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Perimeter Sheet","Cut Sheet",Tubelite_ForceFront-Storm-T34000-Storefront_Perimeter-Sheets.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Design Manual",Other,Tubelite_ForceFront-Storm-T34000-Storefront_Design-Manual.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Installation Instructions",Installation,Tubelite_ForceFront-Storm-T34000-Storefront_Installation-Instructions.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Acoustic Testing","Test Report",Tubelite_ForceFront-Storm-T34000-Storefront_Test-Summary_Acoustic.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","AWS Testing","Test Report",Tubelite_ForceFront-Storm-T34000-Storefront_Test-Summary_AWS.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","CRF Testing","Test Report",Tubelite_ForceFront-Storm-T34000-Storefront_Test-Summary_CRF.pdf
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Impact Testing 17192.1","Test Report","Florida Building Code 17192.1 Impact Testing.pdf"
+Tubelite,"T34000 ForceFront Storm Wet Glaze","Impact Testing 17192.2","Test Report","Florida Building Code 17192.2 Impact Testing.pdf"
+Tubelite,"Monumental Narrow","Product Data Sheet","Product Data",Tubelite_Monumental-Narrow-Entrance_Promotional-Brochure.pdf
+Tubelite,"Monumental Narrow","Perimeter Sheet","Cut Sheet",Tubelite_Monumental-Narrow-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Monumental Narrow","Design Manual",Other,Tubelite_Monumental-Narrow-Entrance_Design-Manual.pdf
+Tubelite,"Monumental Narrow","Installation Instructions",Installation,Tubelite_Monumental-Narrow-Entrance_Installation-Instructions.pdf
+Tubelite,"Monumental Narrow","AWS Testing","Test Report",Tubelite_Monumental-Narrow-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Monumental Narrow","CRF Testing","Test Report",Tubelite_Monumental-Narrow-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Monumental Narrow","Sustainability Information",Other,Tubelite_Monumental_Entrance_Sustainability_Declare_Product_Label-1.pdf
+Tubelite,"Monumental Medium","Product Data Sheet","Product Data",Tubelite_Monumental-Medium-Entrance_Promotional-Brochure.pdf
+Tubelite,"Monumental Medium","Perimeter Sheet","Cut Sheet",Tubelite_Monumental-Medium-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Monumental Medium","Design Manual",Other,Tubelite_Monumental-Medium-Entrance_Design-Manual.pdf
+Tubelite,"Monumental Medium","Installation Instructions",Installation,Tubelite_Monumental-Medium-Entrance_Installation-Instructions.pdf
+Tubelite,"Monumental Medium","AWS Testing","Test Report",Tubelite_Monumental-Medium-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Monumental Medium","CRF Testing","Test Report",Tubelite_Monumental-Medium-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Monumental Medium","Sustainability Information",Other,Tubelite_Monumental_Entrance_Sustainability_Declare_Product_Label-1.pdf
+Tubelite,"Monumental Wide","Product Data Sheet","Product Data",Tubelite_Monumental-Wide-Entrance_Promotional-Brochure.pdf
+Tubelite,"Monumental Wide","Perimeter Sheet","Cut Sheet",Tubelite_Monumental-Wide-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Monumental Wide","Design Manual",Other,Tubelite_Monumental-Wide-Entrance_Design-Manual.pdf
+Tubelite,"Monumental Wide","Installation Instructions",Installation,Tubelite_Monumental-Wide-Entrance_Installation-Instructions.pdf
+Tubelite,"Monumental Wide","AWS Testing","Test Report",Tubelite_Monumental-Wide-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Monumental Wide","CRF Testing","Test Report",Tubelite_Monumental-Wide-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Monumental Wide","Sustainability Information",Other,Tubelite_Monumental_Entrance_Sustainability_Declare_Product_Label-1.pdf
+Tubelite,"Standard Narrow","Product Data Sheet","Product Data",Tubelite_Standard-Narrow-Entrance_Promotional-Brochure.pdf
+Tubelite,"Standard Narrow","Perimeter Sheet","Cut Sheet",Tubelite_Standard-Narrow-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Standard Narrow","Design Manual",Other,Tubelite_Standard-Narrow-Entrance_Design-Manual.pdf
+Tubelite,"Standard Narrow","Installation Instructions",Installation,Tubelite_Standard-Narrow-Entrance_Installation-Instructions.pdf
+Tubelite,"Standard Narrow","AWS Testing","Test Report",Tubelite_Standard-Narrow-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Standard Narrow","CRF Testing","Test Report",Tubelite_Standard-Narrow-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Standard Narrow","Sustainability Information",Other,Tubelite_Standard_Entrance_Sustainability_Declare_Product_Label.pdf
+Tubelite,"Standard Medium","Product Data Sheet","Product Data",Tubelite_Standard-Medium-Entrance_Promotional-Brochure.pdf
+Tubelite,"Standard Medium","Perimeter Sheet","Cut Sheet",Tubelite_Standard-Medium-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Standard Medium","Design Manual",Other,Tubelite_Standard-Medium-Entrance_Design-Manual.pdf
+Tubelite,"Standard Medium","Installation Instructions",Installation,Tubelite_Standard-Medium-Entrance_Installation-Instructions.pdf
+Tubelite,"Standard Medium","AWS Testing","Test Report",Tubelite_Standard-Medium-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Standard Medium","CRF Testing","Test Report",Tubelite_Standard-Medium-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Standard Medium","Sustainability Information",Other,Tubelite_Standard_Entrance_Sustainability_Declare_Product_Label.pdf
+Tubelite,"Optional Medium 4""","Product Data Sheet","Product Data",Tubelite_Standard-Medium-Entrance_4-Inch_Perimeter-Sheets.pdf
+Tubelite,"Optional Medium 4""","Perimeter Sheet","Cut Sheet",Tubelite_Standard-Medium-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Optional Medium 4""","Design Manual",Other,Tubelite_Standard-Medium-Entrance_Design-Manual.pdf
+Tubelite,"Optional Medium 4""","Installation Instructions",Installation,Tubelite_Standard-Medium-Entrance_Installation-Instructions.pdf
+Tubelite,"Optional Medium 4""","AWS Testing","Test Report",Tubelite_Standard-Medium-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Optional Medium 4""","CRF Testing","Test Report",Tubelite_Standard-Medium-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Optional Medium 4""","Sustainability Information",Other,Tubelite_Standard_Entrance_Sustainability_Declare_Product_Label.pdf
+Tubelite,"Standard Wide","Product Data Sheet","Product Data",Tubelite_Standard-Wide-Entrance_Promotional-Brochure.pdf
+Tubelite,"Standard Wide","Perimeter Sheet","Cut Sheet",Tubelite_Standard-Wide-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Standard Wide","Design Manual",Other,Tubelite_Standard-Wide-Entrance_Design-Manual.pdf
+Tubelite,"Standard Wide","Installation Instructions",Installation,Tubelite_Standard-Wide-Entrance_Installation-Instructions.pdf
+Tubelite,"Standard Wide","AWS Testing","Test Report",Tubelite_Standard-Wide-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Standard Wide","CRF Testing","Test Report",Tubelite_Standard-Wide-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Standard Wide","Sustainability Information",Other,Tubelite_Standard_Entrance_Sustainability_Declare_Product_Label.pdf
+Tubelite,"Thermal Narrow","Product Data Sheet","Product Data",Tubelite_Thermal-Narrow-Entrance_Promotional-Brochure.pdf
+Tubelite,"Thermal Narrow","Perimeter Sheet","Cut Sheet",Tubelite_Thermal-Narrow-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Thermal Narrow","Design Manual",Other,Tubelite_Thermal-Narrow-Entrance_Design-Manual.pdf
+Tubelite,"Thermal Narrow","Installation Instructions",Installation,Tubelite_Thermal-Narrow-Entrance_Installation-Instructions.pdf
+Tubelite,"Thermal Narrow","AWS Testing","Test Report",Tubelite_Thermal-Narrow-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Thermal Narrow","CRF Testing","Test Report",Tubelite_Thermal-Narrow-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Thermal Medium","Product Data Sheet","Product Data",Tubelite_Thermal-Medium-Entrance_Promotional-Brochure.pdf
+Tubelite,"Thermal Medium","Perimeter Sheet","Cut Sheet",Tubelite_Thermal-Medium-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Thermal Medium","Design Manual",Other,Tubelite_Thermal-Medium-Entrance_Design-Manual.pdf
+Tubelite,"Thermal Medium","Installation Instructions",Installation,Tubelite_Thermal-Medium-Entrance_Installation-Instructions.pdf
+Tubelite,"Thermal Medium","AWS Testing","Test Report",Tubelite_Thermal-Medium-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Thermal Medium","CRF Testing","Test Report",Tubelite_Thermal-Medium-Entrance_Test-Summary_CRF.pdf
+Tubelite,"Thermal Wide","Product Data Sheet","Product Data",Tubelite_Thermal-Wide-Entrance_Promotional-Brochure.pdf
+Tubelite,"Thermal Wide","Perimeter Sheet","Cut Sheet",Tubelite_Thermal-Wide-Entrance_Perimeter-Sheets.pdf
+Tubelite,"Thermal Wide","Design Manual",Other,Tubelite_Thermal-Wide-Entrance_Design-Manual.pdf
+Tubelite,"Thermal Wide","Installation Instructions",Installation,Tubelite_Thermal-Wide-Entrance_Installation-Instructions.pdf
+Tubelite,"Thermal Wide","AWS Testing","Test Report",Tubelite_Thermal-Wide-Entrance_Test-Summary_AWS.pdf
+Tubelite,"Thermal Wide","CRF Testing","Test Report",Tubelite_Thermal-Wide-Entrance_Test-Summary_CRF.pdf
+Tubelite,INT14,"Product Data Sheet","Product Data",Tubelite_INT14-Interior-Framing_Promotional-Brochure.pdf
+Tubelite,INT14,"Perimeter Sheet","Cut Sheet",Tubelite_INT14-Interior-Framing_Perimeter-Sheets.pdf
+Tubelite,INT14,"Design Manual",Other,Tubelite_INT14-Interior-Framing_Design-Manual.pdf
+Tubelite,INT14,"Installation Instructions",Installation,Tubelite_INT14-Interior-Framing_Installation-Instructions.pdf
+Tubelite,INT14,"Acoustic Testing","Test Report",Tubelite_INT14-Interior-Framing_Test-Summary_Acoustic.pdf
+Tubelite,INT45,"Product Data Sheet","Product Data",Tubelite_INT45-Interior-Storefront_Promotional-Brochure.pdf
+Tubelite,INT45,"Perimeter Sheet","Cut Sheet",Tubelite_INT45-Interior-Storefront_Perimeter-Sheets.pdf
+Tubelite,INT45,"Design Manual",Other,Tubelite_INT45-Interior-Storefront_Design-Manual.pdf
+Tubelite,INT45,"Installation Instructions",Installation,Tubelite_INT45-Interior-Storefront_Installation-Instructions.pdf
+Tubelite,INT45,"AWS Testing","Test Report",Tubelite_INT45-Interior-Storefront_Test-Summary_AWS.pdf
+Tubelite,INT67,"Product Data Sheet","Product Data",Tubelite_INT67-Interior-Framing_Promotional-Brochure.pdf
+Tubelite,INT67,"Perimeter Sheet","Cut Sheet",Tubelite_INT67-Interior-Framing_Perimeter-Sheets.pdf
+Tubelite,INT67,"Design Manual",Other,Tubelite_INT67-Interior-Framing_Design-Manual.pdf
+Tubelite,INT67,"Installation Instructions",Installation,Tubelite_INT67-Interior-Framing_Installation-Instructions.pdf
+Tubelite,INT67,"Acoustic Testing","Test Report",Tubelite_INT67-Interior-Framing_Test-Summary_Acoustic.pdf
+Tubelite,200CW,"Product Data Sheet","Product Data",Tubelite_200CW-Curtain-Wall_Promotional-Brochure.pdf
+Tubelite,200CW,"Perimeter Sheet 6","Cut Sheet",Tubelite_200CW-Curtain-Wall_Perimeter-Sheets_6in-depth.pdf
+Tubelite,200CW,"Perimeter Sheet 6-1/2","Cut Sheet",Tubelite_200CW-Curtain-Wall_Perimeter-Sheets_6.5in-depth.pdf
+Tubelite,200CW,"Perimeter Sheet 8","Cut Sheet",Tubelite_200CW-Curtain-Wall_Perimeter-Sheets_8in-depth.pdf
+Tubelite,200CW,"Optional Face Covers & Back Members","Cut Sheet",Tubelite-200CW-Optional-Face-Covers-Back-Members.pdf
+Tubelite,200CW,"Pressure Plate Catalog","Cut Sheet",Tubelite_200CW-Curtain-Wall_Pressure-Plate-Catalog.pdf
+Tubelite,200CW,"Design Manual",Other,Tubelite_200CW-Curtain-Wall_Design-Manual.pdf
+Tubelite,200CW,"Installation Instructions",Installation,Tubelite_200CW-Curtain-Wall_Installation-Instructions.pdf
+Tubelite,200CW,"Acoustic Testing","Test Report",Tubelite_200CW-Curtain-Wall_Test-Summary_Acoustic.pdf
+Tubelite,200CW,"AWS Testing","Test Report",Tubelite_200CW-Curtain-Wall_Test-Summary_AWS.pdf
+Tubelite,200CW,"CRF Testing","Test Report",Tubelite_200CW-Curtain-Wall_Test-Summary_CRF.pdf
+Tubelite,200CW,"Torque Guide",Other,Tubelite_200CW-Curtain-Wall_Torque-Guide.pdf
+Tubelite,200CW,"Windload Chart",Other,Tubelite_200CW-Curtain-Wall_Windload-Chart.pdf
+Tubelite,400CW,"Product Data Sheet","Product Data",Tubelite_400CW-Curtain-Wall_Promotional-Brochure.pdf
+Tubelite,400CW,"Perimeter Sheet 6 In. Depth","Cut Sheet",Tubelite_400CW-Curtain-Wall_Perimeter-Sheets_6in-Depth_Aluminum.pdf
+Tubelite,400CW,"Perimeter Sheet 7 In. Depth","Cut Sheet",Tubelite_400CW-Curtain-Wall_Perimeter-Sheets_7in-Depth_Aluminum.pdf
+Tubelite,400CW,"Perimeter Sheet 7-1/2 In. Depth","Cut Sheet",Tubelite_400CW-Curtain-Wall_Perimeter-Sheets_7.5in-Depth_Aluminum.pdf
+Tubelite,400CW,"Perimeter Sheet 9 In. Depth","Cut Sheet",Tubelite_400CW-Curtain-Wall_Perimeter-Sheets_9in-Depth_Aluminum.pdf
+Tubelite,400CW,"Perimeter Sheet 10 In. Depth","Cut Sheet",Tubelite_400CW-Curtain-Wall_Perimeter-Sheets_10in-Depth_Aluminum.pdf
+Tubelite,400CW,"Perimeter Sheet 6 In. Depth Thermal","Cut Sheet",Tubelite_400CW-Curtain-Wall_Perimeter-Sheets_6in-Depth_Thermal.pdf
+Kawneer,"451T CG SS OG","Product Data Sheet","Product Data","451T CG SS Flyer TRIFAB VG VERSAGLAZE_v4.2 1.pdf"
+Kawneer,"451T CG SS OG","Perimeter Sheet","Cut Sheet","451T CG SS OG Typ Framing Details KCDC050A SHEET 01 OF 19.pdf"
+Kawneer,"451T CG SS OG","Optional Vertical Mullions","Cut Sheet","451T CG SS Optional Vertical Mullion Details Model KCDC050A SHEET 08 OF 19.pdf"
+Kawneer,"451T CG SS OG","Typical Corners","Cut Sheet","451T CG SS Typical Corner Details Model KCDC050A SHEET 09 OF 19.pdf"
+Kawneer,"451T CG SS OG","Head & Jamb  Receptors","Cut Sheet","451T CG SS Head and Jamb Receptor Details Model KCDC050A SHEET 10 OF 19.pdf"
+Kawneer,"451T CG SS OG","4-1/2"" Head, Horizontal, & Sill","Cut Sheet","451T CG SS 4.5 Head, Horizontal, Sill Model KCDC050A SHEET 17 OF 19.pdf"
+Kawneer,"451T CG SS OG","Architectural Detail Manual",Other,"451+451T Architectural Detail Manual ADMC040EN.pdf"
+Kawneer,"451T CG SS OG","Environmental Product Declaration",Other,"Environmental Product Declaration Storefront EPD4789733794.107.1.pdf"
+Kawneer,"451T CG SS OG","Cradle to Cradle Certificate",Other,"Cradle to Cradle CERT11618.pdf"
+Kawneer,"451T CG SS OG","Material Health",Other,"Material Health MHC11618.pdf"
+Kawneer,"451T CG SS OG","Sustainability Green Guide",Other,"451T Sustainability Green Guide PGGC050EN.pdf"
+Kawneer,"451 CG SS OG","Product Data Sheet","Product Data","451 CG SS Flyer TRIFAB VG VERSAGLAZE_v4.2 1.pdf"
+Kawneer,"451 CG SS OG","Perimeter Sheet","Cut Sheet","451 CG SS Typ Framing Details  KCDC040A Sheet 01 of 21.pdf"
+Kawneer,"451 CG SS OG","Typical Corners","Cut Sheet","451 Typical Corners KCDC040A Sheet 10 of 21.pdf"
+Kawneer,"451 CG SS OG","Head & Jamb  Receptors","Cut Sheet","451 Head and Jamb Receptors KCDC040A Sheet 11 of 21.pdf"
+Kawneer,"451 CG SS OG","Sidelite Base Options","Cut Sheet","451 CG SS  Sidelite Base KCDC040A Sheet 09 of 21.pdf"
+Kawneer,"451 CG SS OG","Architectural Detail Manual",Other,"451+451T Architectural Detail Manual ADMC040EN.pdf"
+Kawneer,"451 CG SS OG","Environmental Product Declaration",Other,"Environmental Product Declaration Storefront EPD4789733794.107.1.pdf"
+Kawneer,"451 CG SS OG","Cradle to Cradle Certificate",Other,"Cradle to Cradle CERT11618.pdf"
+Kawneer,"451 CG SS OG","Material Health",Other,"Material Health MHC11618.pdf"
+Kawneer,"451 CG SS OG","Sustainability Green Guide",Other,"451 Sustainability Green Guide PGGC040EN.pdf"
+Kawneer,"451T FG SS OG","Product Data Sheet","Product Data","451T FS SS Flyer TRIFAB VG VERSAGLAZE_v4.2 1.pdf"
+Kawneer,"451T FG SS OG","Perimeter Sheet","Cut Sheet","451T FS SS KCDC050B SHEET 01 OF 11.pdf"
+Kawneer,"451T FG SS OG","Optional Vertical Mullions","Cut Sheet","451T Optional Vertical Mullion Details Model KCDC050A SHEET 08 OF 19.pdf"
+Kawneer,"451T FG SS OG","Typical Corners","Cut Sheet","451T Typical Corner Details Model KCDC050A SHEET 09 OF 19.pdf"
+Kawneer,"451T FG SS OG","Head & Jamb  Receptors","Cut Sheet","451T Head and Jamb Receptor Details Model KCDC050A SHEET 10 OF 19.pdf"
+Kawneer,"451T FG SS OG","4-1/2"" Head, Horizontal, & Sill","Cut Sheet","451T 4.5 Head, Horizontal, Sill Model KCDC050A SHEET 17 OF 19.pdf"
+Kawneer,"451T FG SS OG","Architectural Detail Manual",Other,"451+451T Architectural Detail Manual ADMC040EN.pdf"
+Kawneer,"451T FG SS OG","Environmental Product Declaration",Other,"Environmental Product Declaration Storefront EPD4789733794.107.1.pdf"
+Kawneer,"451T FG SS OG","Cradle to Cradle Certificate",Other,"Cradle to Cradle CERT11618.pdf"
+Kawneer,"451T FG SS OG","Material Health",Other,"Material Health MHC11618.pdf"
+Kawneer,"451T FG SS OG","Sustainability Green Guide",Other,"451T Sustainability Green Guide PGGC050EN.pdf"
+Kawneer,"451T BG SS OG","Product Data Sheet","Product Data","451T BS SS Flyer TRIFAB VG VERSAGLAZE_v4.2 1.pdf"
+Kawneer,"451T BG SS OG","Perimeter Sheet","Cut Sheet","451T BS SS KCDC050C SHEET 01 OF 07.pdf"
+Kawneer,"451T BG SS OG","Optional Vertical Mullions","Cut Sheet","451T Optional Vertical Mullion Details Model KCDC050A SHEET 08 OF 19.pdf"
+Kawneer,"451T BG SS OG","Typical Corners","Cut Sheet","451T Typical Corner Details Model KCDC050A SHEET 09 OF 19.pdf"
+Kawneer,"451T BG SS OG","Head & Jamb  Receptors","Cut Sheet","451T Head and Jamb Receptor Details Model KCDC050A SHEET 10 OF 19.pdf"
+Kawneer,"451T BG SS OG","4-1/2"" Head, Horizontal, & Sill","Cut Sheet","451T 4.5 Head, Horizontal, Sill Model KCDC050A SHEET 17 OF 19.pdf"
+Kawneer,"451T BG SS OG","Architectural Detail Manual",Other,"451+451T Architectural Detail Manual ADMC040EN.pdf"
+Kawneer,"451T BG SS OG","Environmental Product Declaration",Other,"Environmental Product Declaration Storefront EPD4789733794.107.1.pdf"
+Kawneer,"451T BG SS OG","Cradle to Cradle Certificate",Other,"Cradle to Cradle CERT11618.pdf"
+Kawneer,"451T BG SS OG","Material Health",Other,"Material Health MHC11618.pdf"
+Kawneer,"451T BG SS OG","Sustainability Green Guide",Other,"451T Sustainability Green Guide PGGC050EN.pdf"
+Kawneer,"451T CG SS IG","Product Data Sheet","Product Data","451T CG SS Flyer TRIFAB VG VERSAGLAZE_v4.2 1.pdf"
+Kawneer,"451T CG SS IG","Perimeter Sheet","Cut Sheet","451T CG SS IG Typ Framing Details KCDC050A SHEET 03 OF 19.pdf"
+Kawneer,"451T CG SS IG","Optional Vertical Mullions","Cut Sheet","451T CG SS Optional Vertical Mullion Details Model KCDC050A SHEET 08 OF 19.pdf"
+Kawneer,"451T CG SS IG","Typical Corners","Cut Sheet","451T CG SS Typical Corner Details Model KCDC050A SHEET 09 OF 19.pdf"
+Kawneer,"451T CG SS IG","Head & Jamb  Receptors","Cut Sheet","451T CG SS Head and Jamb Receptor Details Model KCDC050A SHEET 10 OF 19.pdf"
+Kawneer,"451T CG SS IG","4-1/2"" Head, Horizontal, & Sill","Cut Sheet","451T CG SS 4.5 Head, Horizontal, Sill Model KCDC050A SHEET 17 OF 19.pdf"
+Kawneer,"451T CG SS IG","Architectural Detail Manual",Other,"451+451T Architectural Detail Manual ADMC040EN.pdf"
+Kawneer,"451T CG SS IG","Environmental Product Declaration",Other,"Environmental Product Declaration Storefront EPD4789733794.107.1.pdf"
+Kawneer,"451T CG SS IG","Cradle to Cradle Certificate",Other,"Cradle to Cradle CERT11618.pdf"
+Kawneer,"451T CG SS IG","Material Health",Other,"Material Health MHC11618.pdf"
+Kawneer,"451T CG SS IG","Sustainability Green Guide",Other,"451T Sustainability Green Guide PGGC050EN.pdf"
+Tubelite,"P092 Standard Butt Hinge","P092 Standard Butt Hinge","Cut Sheet",P092_Standard_Butt_Hinge_Tubelite.pdf
+Tubelite,"P094W Heavy Duty Butt Hinge","P094W Heavy Duty Butt Hinge","Cut Sheet",P094W_Heavy_Duty_Butt_Hinge_Tubelite.pdf
+Tubelite,"P112HD Continuous Geared Hinge","P112HD Continuous Geared Hinge","Cut Sheet",P112HD_Continuous_Geared_Hinge_Tubelite.pdf
+Tubelite,"P112HDB Continuous Geared Hinge EPT","P112HDB Continuous Geared Hinge EPT","Cut Sheet",P112HDB_Continuous_Geared_Hinge_EPT_Tubelite.pdf
+Tubelite,"P1584 Continuous Geared Hinges","P1584 Continuous Geared Hinges","Cut Sheet",P1584_P1585_P1586_Continuous_Geared_Hinge_Tubelite.pdf
+Tubelite,"P1584B Continuous Power Transfer Geared Hinges","P1584B Continuous Power Transfer Geared Hinges","Cut Sheet",P1584B_P1585B_P1586B_Continuous_Geared_Hinge_EPT_Tubelite.pdf
+Tubelite,"P795DT Offset Pivot","P795DT Offset Pivot","Cut Sheet",P795DT_P795DB_P795H_P795I_P795LR_Offset_Pivot_Tubelite.pdf
+Tubelite,"P795I Offset Pivot - Intermediate","P795I Offset Pivot - Intermediate","Cut Sheet",P795DT_P795DB_P795H_P795I_P795LR_Offset_Pivot_Tubelite.pdf
+Tubelite,"P147 Offset Pivot Rixson","P147 Offset Pivot Rixson","Cut Sheet",P147_Top_And_Bottom_Offset_Pivot_Tubelite.pdf
+Tubelite,"P019 Offset Pivot - M19-3/4"" Int Pivot Rixson","P019 Offset Pivot - M19-3/4"" Int Pivot Rixson","Cut Sheet",P019_Interior_Offset_Pivot_Tubelite.pdf
+Tubelite,"P1565 Push Bar","P1565 Push Bar","Cut Sheet",P1565_E_G_Q_P_L_Push_Bar_Tubelite.pdf
+Tubelite,"P1564 Pull (Through bolt mount)","P1564 Pull (Through bolt mount)","Cut Sheet",P1564_P1567_P1568_Offset_ADA_Pull_Tubelite.pdf
+Tubelite,"P1567 Pull","P1567 Pull","Cut Sheet",P1564_P1567_P1568_Offset_ADA_Pull_Tubelite.pdf
+Tubelite,"P1568 Pull","P1568 Pull","Cut Sheet",P1564_P1567_P1568_Offset_ADA_Pull_Tubelite.pdf
+Tubelite,"P842A Bumper Guard Bar for 36"" Door","P842A Bumper Guard Bar for 36"" Door","Cut Sheet",P842_Aluminum_Bumper_Bars_Tubelite.pdf
+Tubelite,"P842B Bumper Guard Bar for 42"" Door","P842B Bumper Guard Bar for 42"" Door","Cut Sheet",P842_Aluminum_Bumper_Bars_Tubelite.pdf
+Tubelite,"P1420 Deadbolt (MS Lock)","P1420 Deadbolt (MS Lock)","Cut Sheet",P1420_Deadbolt_MS_Lock_Tubelite.pdf
+Tubelite,"P1422 Deadbolt (Short Throw)","P1422 Deadbolt (Short Throw)","Cut Sheet",P1422_AR_Short_Throw_Lock_Tubelite.pdf
+Tubelite,"P571 Lock Cylinder","P571 Lock Cylinder","Cut Sheet",P571_Keyed_Lock_Cylinder_Tubelite.pdf
+Tubelite,"P572 Lock Cylinder (Pair)","P572 Lock Cylinder (Pair)","Cut Sheet",P572_Keyed_Lock_Cylinders_Pair_Tubelite.pdf
+Tubelite,"P716 Cylinder Guard","P716 Cylinder Guard","Cut Sheet",P716_Cylinder-Guard_Tubelite.pdf
+Tubelite,"P573 Rim Cylinder","P573 Rim Cylinder","Cut Sheet",P573_P573KA_Keyed_Rim_Panic_Cylinder_Tubelite.pdf
+Tubelite,"P023 Thumb Turn","P023 Thumb Turn","Cut Sheet",P023_Thumb_Turn_Cylinder_Tubelite.pdf
+Tubelite,"P009 Dummy Cylinder","P009 Dummy Cylinder","Cut Sheet",P009_Dummy_Cylinder_Tubelite.pdf
+Tubelite,"P059 Flush Bolt","P059 Flush Bolt","Cut Sheet",P059_P062_FlushBolt_Tubelite.pdf
+Tubelite,"P062 Thermal Door Flushbolt","P062 Thermal Door Flushbolt","Cut Sheet",P059_P062_FlushBolt_Tubelite.pdf
+Tubelite,"P1750 Header Bolt (Pairs)","P1750 Header Bolt (Pairs)","Cut Sheet",P1750_Header_Bolt_Door_Pairs_Tubelite.pdf
+Tubelite,"P1010 Threshold Bolt","P1010 Threshold Bolt","Product Data",P1010_Threshold_Bolt_Tubelite.pdf
+Tubelite,"P1421L Latchlock","P1421L Latchlock","Cut Sheet",P1421_Latchlock_Tubelite.pdf
+Tubelite,"P1573L Heavy Duty Latchlock","P1573L Heavy Duty Latchlock","Cut Sheet",P1573_Heavy_Duty_Latchlock_Tubelite.pdf
+Tubelite,"P1424 Hookbolt","P1424 Hookbolt","Cut Sheet",P1424_Hookbolt_Tubelite.pdf
+Tubelite,"P348AL Lever Handle","P348AL Lever Handle","Cut Sheet",P348_Latchlock_Lever_Handle_Tubelite.pdf
+Tubelite,"P1008 Latch Paddle","P1008 Latch Paddle","Cut Sheet","P1008_1009_Deadlatch_Paddle_Push_Pull_Tubelite (1).pdf"
+Tubelite,"P4550 Interior Handle (MS Lock Lever Trim)","P4550 Interior Handle (MS Lock Lever Trim)","Cut Sheet",P4550_MS_Lock_Lever_Trim_Tubelite.pdf
+Tubelite,"P2454 Electric Strike (Pairs)","P2454 Electric Strike (Pairs)","Cut Sheet",P2454_Electric_Strike_Door_Pairs_Tubelite.pdf
+Tubelite,"P1580 Electric Strike (Frame)","P1580 Electric Strike (Frame)","Cut Sheet",P1580_P1581_Electric_Strike_Tubelite.pdf
+Tubelite,"P1581 Electric Strike (Inactive Door Leaf)","P1581 Electric Strike (Inactive Door Leaf)","Cut Sheet",P1580_P1581_Electric_Strike_Tubelite.pdf
+Tubelite,"P712 Exit Indicator","P712 Exit Indicator","Cut Sheet",P712_Exit_Indicator_Tubelite.pdf
+Tubelite,"P3692EL First Choice CVR Exit Device (Electric Latch Release)","P3692EL First Choice CVR Exit Device (Electric Latch Release)","Cut Sheet",P3692C_P3692EL_CVR_Panic_Tubelite.pdf
+Tubelite,"P3660R Lever Handle (Manual)","P3660R Lever Handle (Manual)","Cut Sheet","P3660_P3760_Panic_Lever_Handle_Trim_Tubelite (1).pdf"
+Tubelite,"P3792C Rim Exit Device (Manual)","P3792C Rim Exit Device (Manual)","Cut Sheet",P3792C_P3792EL_Rim_Panic_Tubelite.pdf
+Tubelite,"P3760R Lever Handle (Manual)","P3760R Lever Handle (Manual)","Product Data","P3660_P3760_Panic_Lever_Handle_Trim_Tubelite (1).pdf"
+Tubelite,"P3192 Mid-Panel Panic Exit Device (Manual)","P3192 Mid-Panel Panic Exit Device (Manual)","Cut Sheet",P3192_Mid_Panel_Panic_Tubelite.pdf
+Tubelite,"P3770 Security Mullion","P3770 Security Mullion","Cut Sheet",P3770_P3771_Security_Mullion_Tubelite.pdf
+Tubelite,"P3771 Security Mullion","P3771 Security Mullion","Cut Sheet",P3770_P3771_Security_Mullion_Tubelite.pdf
+Tubelite,"P3101 Electric Power Transfer","P3101 Electric Power Transfer","Cut Sheet",P3101_Electric_Power_Transfer_Tubelite.pdf
+Tubelite,"VDCVR3347A Von Duprin CVR Panics 33, 35 Series","VDCVR3347A Von Duprin CVR Panics 33, 35 Series","Cut Sheet",VDCVR_3347_3547_Von_Duprin_CVR_Panic_Tubelite.pdf
+Tubelite,"VDCVR9847 Von Duprin CVR Panics 98, 99 Series","VDCVR9847 Von Duprin CVR Panics 98, 99 Series","Cut Sheet",VDCVR_9847_9947_Von_Duprin_CVR_Panic_Tubelite.pdf
+Tubelite,"VDRIM33A Von Duprin Rim Exit Device","VDRIM33A Von Duprin Rim Exit Device","Cut Sheet",VDRIM_33A_35A_Von_Duprin_Rim_Panic_Tubelite.pdf
+Tubelite,"VDRIM98 Von Duprin Rim Exit Device","VDRIM98 Von Duprin Rim Exit Device","Cut Sheet",VDRIM_98_99_Von_Duprin_Rim_Panic_Tubelite.pdf
+Tubelite,"PEPT2 Electric Power Transfer Von Duprin 2-Wire EPT","PEPT2 Electric Power Transfer Von Duprin 2-Wire EPT","Cut Sheet",PEPT2_PEPT10_Von_Duprin_Power_Transfer_Tubelite.pdf
+Tubelite,"PEPT10 Electric Power Transfer Von Duprin 10-Wire EPT","PEPT10 Electric Power Transfer Von Duprin 10-Wire EPT","Cut Sheet",PEPT2_PEPT10_Von_Duprin_Power_Transfer_Tubelite.pdf
+Tubelite,"P1783 Surface Mounted Closer","P1783 Surface Mounted Closer","Cut Sheet",P1783_Surface_Mounted_Closer_Tubelite.pdf
+Tubelite,"P2200 Surface Mounted Closer","P2200 Surface Mounted Closer","Cut Sheet",P2200_Surface_Mounted_Closer_Tubelite.pdf
+Tubelite,"P2201 Surface Mounted Closer","P2201 Surface Mounted Closer","Cut Sheet",P2201_Surface_Mounted_Closer_Tubelite.pdf
+Tubelite,"P4041 Surface Mounted Closer (120° Only)","P4041 Surface Mounted Closer (120° Only)","Cut Sheet",P4041_Surface_Mounted_Closer_Tubelite.pdf
+Tubelite,"P4041H Surface Mounted Closer (90° to 140°)","P4041H Surface Mounted Closer (90° to 140°)","Product Data",P4041_Surface_Mounted_Closer_Tubelite.pdf
+Tubelite,"P2120 Overhead Concealed Closer (Standard Duty)","P2120 Overhead Concealed Closer (Standard Duty)","Product Data",P2120_P2130_Overhead_Concealed_Closers_Tubelite.pdf
+Tubelite,"P1077 Overhead Concealed Closer - Top offset arm & channel guide for 90° and 105°","P1077 Overhead Concealed Closer - Top offset arm & channel guide for 90° and 105°","Cut Sheet",P1077_Center_Pivot_Offset_Arm.pdf
+Tubelite,"P2077 Overhead Concealed Closer - DP Bottom Pivot Set","P2077 Overhead Concealed Closer - DP Bottom Pivot Set","Cut Sheet",P2077_DP_Bottom_Pivot.pdf
+Tubelite,"P2087 Overhead Concealed Closer - Center pivot arm/DP Bottom Pivot Set","P2087 Overhead Concealed Closer - Center pivot arm/DP Bottom Pivot Set","Cut Sheet",P2087_P1077P2077_Center_Pivot_Set.pdf
+Tubelite,"P2089 Center Pivot - Walking Beam","P2089 Center Pivot - Walking Beam","Cut Sheet",P2089_Center_TOP_Walking_Beam_Pivot.pdf
+Tubelite,"P2034 Overhead Concealed Closer","P2034 Overhead Concealed Closer","Cut Sheet",P2034_Surface_Mounted_Closer_Tubelite.pdf
+Tubelite,"P104S Concealed Overhead Door Stop","P104S Concealed Overhead Door Stop","Cut Sheet",P104S_Overhead_Stop_Tubelite.pdf
+Tubelite,"E2550 Standard Threshold","E2550 Standard Threshold","Cut Sheet",E2550_TA2550_Threshold_Tubelite.pdf
+Tubelite,"TA2550 Thermal Threshold","TA2550 Thermal Threshold","Cut Sheet",E2550_TA2550_Threshold_Tubelite.pdf
+Tubelite,"P1275 Screw Applied Sweeps (36"")","P1275 Screw Applied Sweeps (36"")","Cut Sheet",P1275_P1276_P1277_Weathersweep_Tubelite.pdf
+Tubelite,"P3660R Lever Handle (Electric)","P3660R Lever Handle (Electric)","Cut Sheet","P3660_P3760_Panic_Lever_Handle_Trim_Tubelite (1).pdf"
+Tubelite,"P3792EL Rim Exit Device (Electric)","P3792EL Rim Exit Device (Electric)","Cut Sheet",P3792C_P3792EL_Rim_Panic_Tubelite.pdf
+Tubelite,"P3760R Lever Handle (Electric)","P3760R Lever Handle (Electric)","Product Data","P3660_P3760_Panic_Lever_Handle_Trim_Tubelite (1).pdf"
+Tubelite,"P3192EL Mid-Panel Panice Exit Device (Electric)","P3192EL Mid-Panel Panice Exit Device (Electric)","Cut Sheet",P3192_Mid_Panel_Panic_Tubelite.pdf
+Tubelite,"P2130 Overhead Concealed Closer (Heavy Duty)","P2130 Overhead Concealed Closer (Heavy Duty)","Cut Sheet",P2120_P2130_Overhead_Concealed_Closers_Tubelite.pdf
+Tubelite,"P1276 Screw Applied Sweeps (42"")","P1276 Screw Applied Sweeps (42"")","Product Data",P1275_P1276_P1277_Weathersweep_Tubelite.pdf
+Tubelite,"P1277 Screw Applied Sweeps (48"")","P1277 Screw Applied Sweeps (48"")","Product Data",P1275_P1276_P1277_Weathersweep_Tubelite.pdf
+Guardian,"SunGuard SN68 #2","Clear SN68 #2","Product Data","Clear SN68 #2.pdf"
+Guardian,"SunGuard SN68 #2","GR Planning Email","GR Approval for 68% VLT","68% VLT - GR planning email.pdf"
+Guardian,"SunGuard SN68 #2 (Argon Fill)","Clear SN68 #2 w Argon","Product Data","Clear SN68 #2 w Argon.pdf"
+Guardian,"SunGuard SN68 #2 (Argon Fill)","GR Planning Email","GR Approval for 68% VLT","68% VLT - GR planning email.pdf"
+Guardian,"Clear IGU","Clear IGU","Product Data","Clear IGU.pdf"
+Guardian,"Clear IGU (Argon Fill)","Clear IGU w Argon","Product Data","Clear IGU w Argon.pdf"
+Guardian,"SunGuard SNX 62/27 #2","Clear 6227 #2","Product Data","Clear 6227 #2.pdf"
+Guardian,"SunGuard SNX 62/27 #2 (Argon Fill)","Clear 6227 #2 w Argon","Product Data","Clear 6227 #2 w Argon.pdf"
+Guardian,"SunGuard SNX 60+ #2","Clear SNX60+ #2","Product Data","Clear SNX60+ #2.pdf"
+Guardian,"SunGuard SNX 60+ #2 (Argon Fill)","Clear SNX60+ #2 w Argon","Product Data","Clear SNX60+ #2 w Argon.pdf"
+Guardian,"Clear Laminated IGU","Clear Laminated IGU","Product Data","Clear Laminated IGU.pdf"
+Vitro,"Solarban 60 #2","Clear SB60 #2","Product Data","Clear SB60 #2.pdf"
+Vitro,"Solarban 60 #2 (Argon Fill)","Clear SB60 #2 w Argon","Product Data","Clear SB60 #2 w Argon.pdf"
+Vitro,"Solarban 70 #2","Clear SB70 #2","Product Data","Clear SB70 #2.pdf"
+Vitro,"Solarban 70 #2 (Argon Fill)","Clear SB70 #2 w Argon","Product Data","Clear SB70 #2 w Argon.pdf"
+Pilkington,"Clear Energy Advantage #3","Clear ENAD #3","Product Data","Clear ENAD #3.pdf"
+Pilkington,"Clear Energy Advantage #3 (Argon Fill)","Clear ENAD #3 w Argon","Product Data","Clear ENAD #3 w Argon.pdf"
+Guardian,"Bronze SN68 #3","Bronze SN68 #3","Product Data","Bronze SN68 #3.pdf"
+Guardian,"Bronze SN68 #3 (Argon Fill)","Bronze SN68 #3 w Argon","Product Data","Bronze SN68 #3 w Argon.pdf"
+Guardian,"Bronze IGU","Bronze IGU","Product Data","Bronze IGU.pdf"
+Guardian,"Bronze IGU (Argon Fill)","Bronze IGU w Argon","Product Data","Bronze IGU w Argon.pdf"
+Pilkington,"Bronze Energy Advantage #3","Bronze ENAD #3","Product Data","Bronze ENAD #3.pdf"
+Pilkington,"Bronze Energy Advantage #3 (Argon Fill)","Bronze ENAD #3 w Argon","Product Data","Bronze ENAD #3 w Argon.pdf"
+Guardian,"Gray IGU","Gray IGU","Product Data","Gray IGU.pdf"
+Guardian,"Gray SN68 #3","Gray SN68 #3","Product Data","Gray SN68 #3.pdf"
+Guardian,"Gray SN68 #3 (Argon Fill)","Gray SN68 #3 w Argon","Product Data","Gray SN68 #3 w Argon.pdf"
+Pilkington,"Gray Energy Advantage #3","Gray ENAD #3","Product Data","Gray ENAD #3.pdf"
+Pilkington,"Gray Energy Advantage #3 (Argon Fill)","Gray ENAD #3 w Argon","Product Data","Gray ENAD #3 w Argon.pdf"
+Guardian,"1/4"" Clear Laminated",".5625 Laminated   .060 PVB","Product Data",".5625 Laminated - .060 PVB.pdf"
+Guardian,"7/16"" Clear Laminated",".4375 Laminated   .060 PVB","Product Data",".4375 Laminated - .060 PVB.pdf"
+Guardian,"9/16"" Clear Laminated",".5625 Laminated   .060 PVB","Product Data",".5625 Laminated - .060 PVB.pdf"
+Walker,"1/4"" Clear Mirror","Walker Mirror Information Packet .25 Mirror","Product Data","Walker Mirror Information Packet .25 Mirror.pdf"
+Guardian,"1/4"" Clear",".25 Clear","Product Data",".25 Clear.pdf"
+Guardian,"3/8"" Clear",".375 Clear","Product Data",".375 Clear.pdf"
+Guardian,"1/2"" Clear",".5 Clear","Product Data",".5 Clear.pdf"
+Guardian,"1/2"" UltraClear (Low-Iron)",".5 Low Iron","Product Data",".5 Low Iron.pdf"
+"Oldcastle BuildingEnvelope","Spandrel Glass","OBE Spandrel Sell Sheet 20210223","Color Chart",OBE_Spandrel-Sell-Sheet_20210223.pdf

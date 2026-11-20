@@ -88,7 +88,7 @@ class DrawingConfidence
             }
         }
 
-        $marks = $e->marks;
+        $marks = $e->marks->where('counted', true);   // readings beyond a sheet's break lines are context, judged on the sheet that owns them
         if ($e->ro_w === null && ! $marks->contains('kind', 'ro_w')) {
             $score -= 6;
             $reasons[] = 'R.O. width not read';
@@ -107,6 +107,11 @@ class DrawingConfidence
         if ($odd) {
             $score -= min(15, 5 * $odd);
             $reasons[] = "{$odd} implausible reading".($odd === 1 ? '' : 's');
+        }
+        $run = DrawingRunChecks::forElevation($e);
+        if ($run && ! $run['ok']) {
+            $score -= 20;
+            $reasons[] = 'The sheets of this run disagree with each other (see the run check)';
         }
         if ($e->manual_takeoff) {
             $score -= 10;

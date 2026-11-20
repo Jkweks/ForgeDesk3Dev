@@ -56,8 +56,8 @@ class DrawingChecks
         $payload = [
             'axis' => $axis,
             'fs' => $fs ? $eff($fs) : null,
-            'dos' => $marks->where('kind', "do_{$axis}")->map($eff)->values()->all(),
-            'dlos' => $marks->where('kind', "dlo_{$axis}")->map($eff)->values()->all(),
+            'dos' => $marks->where('kind', "do_{$axis}")->sortBy('idx')->map($eff)->values()->all(),
+            'dlos' => $marks->where('kind', "dlo_{$axis}")->sortBy('idx')->map($eff)->values()->all(),
         ];
         if ($axis === 'w') {
             $payload['printed_members'] = $row->printedMembers->groupBy('row')->map(fn ($g) => $g->pluck('value')->map(fn ($v) => (float) $v)->values()->all())->values()->all();

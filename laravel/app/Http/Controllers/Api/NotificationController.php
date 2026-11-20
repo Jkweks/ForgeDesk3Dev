@@ -10,22 +10,24 @@ class NotificationController extends Controller
 {
     /**
      * Active (undismissed) system notifications for the nav bar bell.
-     * Admin-only — these are ops alerts (e.g. backup health), not a
-     * per-user feed, so non-admins just get an empty list.
+     * The shared feed is ops alerts (admins) and requests waiting on an approver; on top of that anyone gets the
+     * notifications addressed to them personally (e.g. a PM told that Fabrication changed their work order request).
      */
     public function index(Request $request)
     {
         $user = $request->user();
+        // addressed to this person (anyone can have these), plus the shared ops feed they are allowed to see
+        $mine = SystemNotification::active()->where('user_id', $user?->id);
         if ($user?->isAdmin()) {
-            return response()->json(SystemNotification::active()->latest()->get());
-        }
-        // Approvers see only the requests waiting on them (shipping, work orders).
-        $types = $this->approverTypes($user);
-        if ($types) {
-            return response()->json(SystemNotification::active()->whereIn('type', $types)->latest()->get());
+            $shared = SystemNotification::active()->whereNull('user_id');
+        } elseif ($types = $this->approverTypes($user)) {
+            // Approvers see only the requests waiting on them (shipping, work orders).
+            $shared = SystemNotification::active()->whereNull('user_id')->whereIn('type', $types);
+        } else {
+            $shared = null;
         }
 
-        return response()->json([]);
+        return response()->json($user ? $mine->get()->concat($shared ? $shared->get() : collect())->sortByDesc('id')->values() : []);
     }
 
     /** Notification types a non-admin may see and dismiss, by the permission that lets them act on it. */
@@ -45,7 +47,9 @@ class NotificationController extends Controller
     public function dismiss(Request $request, SystemNotification $notification)
     {
         $user = $request->user();
-        $allowed = $user?->isAdmin() || in_array($notification->type, $this->approverTypes($user), true);
+        $allowed = $notification->user_id !== null
+            ? $notification->user_id === $user?->id          // a personal notification is dismissed by its person, nobody else
+            : ($user?->isAdmin() || in_array($notification->type, $this->approverTypes($user), true));
         if (! $allowed) {
             return response()->json([
                 'message' => 'You do not have permission to perform this action.',

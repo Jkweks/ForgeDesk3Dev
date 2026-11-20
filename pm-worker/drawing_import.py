@@ -656,7 +656,7 @@ def _merge_continued(elevations):
         # ForgeDesk addition (pm-worker): keep every elevation sheet's own dimension footprints so a viewer can
         # draw them over each page. The merge above keeps only the head sheet's `dims`.
         head['sheetDims'] = [{'page': r.get('page'), 'pageSize': r.get('pageSize'), 'dims': r.get('dims'),
-                              'titleRect': r.get('titleRect')} for r in elev]
+                              'titleRect': r.get('titleRect'), 'matchLines': r.get('matchLines') or []} for r in elev]
         # The frame closes per sheet, never across the join, so an axis check
         # on the merged record would be arithmetic on a thing that does not
         # exist. Left unjudged rather than passed or failed.
@@ -1943,6 +1943,44 @@ def _width_owner(callouts, ev, spans):
     return _nearest_by_x(callouts, ev['x0'], ev.get('top'))
 
 
+# ── ForgeDesk addition (pm-worker): which elevation does a HEIGHT chain belong to? ─
+#
+# The column rule (_nearest_by_x) hands a vertical dimension to the elevation whose bubble starts at-or-left of
+# it (20pt grace). On a 2-up sheet whose bubbles are inset from their frames, the second elevation's height
+# chain sits 100-170pt LEFT of its own bubble, so it went to the FIRST elevation: 46/E22 of Howell_SW_pairs_and_spans
+# had no heights at all, and 45/E22 carried 46's R.O., F.S. and two D.L.O.s. The chains of one elevation sit
+# together and next to its frame, so: group the sheet's vertical labels into chains-of-chains (a gap wider than
+# _HCHAIN_GAP starts a new group), and give each group to the elevation whose frame (the r545 span, from the
+# printed scale and R.O. width) is nearest. Only used when at least two frames can be placed and the answer is
+# clear; anything else falls back to the column rule, unchanged.
+_HCHAIN_GAP = 55.0        # pt between neighbouring chains of ONE elevation (measured 22-45)
+_HCHAIN_CLEAR = 20.0      # the nearest frame must beat the next by this much
+
+
+def _height_chain_owner(page, callouts, spans):
+    """f(event) -> the owning callout, or None to use the column rule."""
+    if len(callouts) < 2 or sum(1 for c in callouts if id(c) in spans) < 2:
+        return lambda ev: None
+    cols = sorted({(round(l['x0'], 1), max(c['x1'] for c in l['chars'])) for l in _vertical_lines(page.chars) if l['chars']})
+    groups = []
+    for x0, x1 in cols:
+        if groups and x0 - groups[-1][1] <= _HCHAIN_GAP:
+            groups[-1][1] = max(groups[-1][1], x1)
+        else:
+            groups.append([x0, x1])
+
+    def owner(ev):
+        x = ev.get('x0')
+        g = next((g for g in groups if g[0] - 0.5 <= x <= g[1] + 0.5), None)
+        if g is None:
+            return None
+        ranked = sorted(((max(spans[id(c)][0] - g[1], g[0] - spans[id(c)][1], 0.0), i) for i, c in enumerate(callouts) if id(c) in spans))
+        if len(ranked) < 2 or ranked[1][0] - ranked[0][0] < _HCHAIN_CLEAR:
+            return None
+        return callouts[ranked[0][1]]
+    return owner
+
+
 # ── r544: the elevation's TITLE BLOCK ────────────────────────────────────
 #
 # Jeremiah: "On the preview when importing an elevation I want to be able to
@@ -2366,15 +2404,18 @@ def _elevation_record(page, callout, page_no, other_callouts, page_text, page_ga
         rec['dims']['doWExtra'] = [{'v': e['value'], 'rect': e.get('rect')} for e in _extra]
 
     heights = _height_events(page, bare=_bare)
+    # ForgeDesk addition: a height chain goes to the elevation whose frame it sits beside (see _height_chain_owner)
+    _howner = _height_chain_owner(page, _wcs, _spans)
+    _h_mine = lambda ev: (_howner(ev) or _nearest_by_x([callout] + other, ev['x0'], ev.get('top'))) is callout
     roH_vals, fsH_vals, dloH = [], [], []
     for ev in heights['RO']:
-        if _nearest_by_x([callout] + other, ev['x0'], ev.get('top')) is callout:
+        if _h_mine(ev):
             roH_vals.append(ev)
     for ev in heights['FS']:
-        if _nearest_by_x([callout] + other, ev['x0'], ev.get('top')) is callout:
+        if _h_mine(ev):
             fsH_vals.append(ev)
     for ev in heights['DLO']:
-        if _nearest_by_x([callout] + other, ev['x0'], ev.get('top')) is callout and ev['value'] is not None:
+        if _h_mine(ev) and ev['value'] is not None:
             dloH.append(ev)
     if roH_vals:
         _e = min(roH_vals, key=lambda e: (bool(e.get('markup') and not e.get('over')), e['top']))   # r560: printed beats typed
@@ -2391,7 +2432,7 @@ def _elevation_record(page, callout, page_no, other_callouts, page_text, page_ga
     rec['dims']['dloHeights'] = [{'v': e['value'], 'rect': e.get('rect')} for e in dloH]
     # r505: the door opening's HEIGHT.
     doH_vals = [ev for ev in heights['DO']
-                if _nearest_by_x([callout] + other, ev['x0'], ev.get('top')) is callout
+                if _h_mine(ev)
                 and ev['value'] is not None]
     if doH_vals:
         _e = min(doH_vals, key=lambda e: (bool(e.get('markup') and not e.get('over')), e['top']))   # r560: printed beats typed
@@ -2416,6 +2457,11 @@ def _elevation_record(page, callout, page_no, other_callouts, page_text, page_ga
         _own = _owned_between([e for e in widths['DLO'] if e['value'] is not None],
                               _mls, float(page.width))
         rec['ownedDloWidths'] = [e['value'] for e in _own]
+        # ForgeDesk addition: say per reading whether it is inside this sheet's break lines. A sheet also draws a
+        # little of its neighbours for context; those readings are counted on the sheet that draws them whole.
+        _own_ids = {id(e) for e in _own}
+        for _e, _d in zip(dlo, rec['dims']['dloWidths']):
+            _d['owned'] = id(_e) in _own_ids
     else:
         rec['ownedDloWidths'] = list(rec.get('dloWidths') or [])
 
@@ -2702,7 +2748,9 @@ class _MarkupPage(object):
                 # touches the D.L.O. line's top but sits level with "F.S.".
                 mid = (m['x0'] + m['x1']) / 2.0
                 vc = (m['top'] + m['bottom']) / 2.0
-                beside = [l for l in labels if mid <= l['x0'] <= m['x1'] + 12
+                # (gap 24: Bluebeam boxes are often dropped a label-width-ish
+                # short of the label — WO 8 p10/p11 sat 13-20pt away)
+                beside = [l for l in labels if mid <= l['x0'] <= m['x1'] + 24
                           and l['top'] < m['bottom'] and l['bottom'] > m['top']]
                 lab = min(beside, key=lambda l: (round(abs((l['top'] + l['bottom']) / 2.0 - vc)),
                                                  abs(l['x0'] - m['x1']))) if beside else None
@@ -2731,9 +2779,64 @@ class _MarkupPage(object):
                         hit = (l, lbl)
                         break
                 if hit is None:
+                    hit = self._vertical_fallback(m, vlines, marks)
+                if hit is None:
                     continue
                 l, lbl = hit
                 self.markups.append(dict(m, value=v, axis='h', label=lbl, lrect=l.get('rect') or _wrect(l['chars'])))
+
+    @staticmethod
+    def _vertical_fallback(m, vlines, marks=()):
+        """A typed HEIGHT box the strict rule above did not place. Bluebeam
+        boxes are dropped by hand, so they land beside a rotated label as
+        often as under it (WO 8: 45 3/8" typed 2pt left of "TRANSOM D.L.O.";
+        three 42" boxes down a stack of lites whose bottom lite prints no
+        label at all). Tried in order, nearest wins within each:
+          A2 the label is directly above the box (x-aligned) but further off
+             than the strict rule's window — measured from the label's real
+             lower end, not its last letter's top;
+          B  the box is immediately beside the label (either side) and level
+             with it;
+          C  a D.L.O. box in a label's column, just past its end — the next
+             lite of a stack that has one label for several lites. Only when
+             the box has siblings (another typed vertical box in its column
+             within 80pt): a lone typed value 40pt past a label is a note,
+             not a lite (Howell SW p2's 30").
+        Returns (line, label) or None."""
+        def _rect(l):
+            return l.get('rect') or _wrect(l['chars'])
+        cands = []
+        for l in vlines:
+            lbl = next((t for t in _MARKUP_LABELS if t in l['text']), None)
+            if lbl:
+                cands.append((l, lbl, _rect(l)))
+        mx0, mt, mx1, mb = m['x0'], m['top'], m['x1'], m['bottom']
+        best = None
+        for l, lbl, r in cands:                      # A2
+            if not (mx0 - 2 <= l['x0'] <= mx1 + 2):
+                continue
+            gap = mt - r[3]
+            if -6 <= gap <= 22 and (best is None or gap < best[0]):
+                best = (gap, l, lbl)
+        if best:
+            return best[1], best[2]
+        for l, lbl, r in cands:                      # B
+            xgap = max(mx0 - r[2], r[0] - mx1)
+            overlap = min(mb, r[3]) - max(mt, r[1])
+            if xgap <= 14 and overlap >= 4 and (best is None or xgap < best[0]):
+                best = (xgap, l, lbl)
+        if best:
+            return best[1], best[2]
+        sibling = any(o is not m and o.get('vertical') and abs(o['x0'] - mx0) <= 4
+                      and max(mt - o['bottom'], o['top'] - mb) <= 80 for o in marks)
+        for l, lbl, r in cands:                      # C
+            if lbl != 'D.L.O.' or not sibling:
+                continue
+            xgap = max(mx0 - r[2], r[0] - mx1)
+            ygap = max(mt - r[3], r[1] - mb)
+            if xgap <= 14 and 0 <= ygap <= 45 and (best is None or ygap < best[0]):
+                best = (ygap, l, lbl)
+        return (best[1], best[2]) if best else None
 
     def __getattr__(self, name):
         return getattr(self._p, name)
@@ -2781,7 +2884,10 @@ def _merge_markups(page, out, axis):
                          and m['x0'] - 2 <= e['x0'] <= m['x1']
                          and m['top'] - 8 <= e['top'] <= m['bottom']]
         else:
-            hits = [e for e in out.get(key, []) if _rect_hits(e.get('rect'), centre)]
+            # (not another typed value on this label: a stack of lites shares
+            # one label, and its typed values are siblings, not conflicts)
+            hits = [e for e in out.get(key, []) if not e.get('markup')
+                    and _rect_hits(e.get('rect'), centre)]
         # A value printed BESIDE its label wins over a typed one (reported).
         # A value the reader only BORROWED from above the label (its stacked-
         # typesetting fallback, used when the label has nothing beside it) is

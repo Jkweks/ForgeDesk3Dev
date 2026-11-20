@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class WorkOrderRequest extends Model
 {
     protected $fillable = [
-        'business_job_id', 'release_code', 'requested_due_date', 'scope', 'notes', 'status',
+        'business_job_id', 'drawing_set_id', 'release_code', 'requested_due_date', 'scope', 'notes', 'status',
         'requested_by', 'decided_by', 'decided_at', 'decision_note', 'fd_work_order_id',
     ];
 
@@ -26,6 +26,21 @@ class WorkOrderRequest extends Model
     public function files()
     {
         return $this->hasMany(WorkOrderRequestFile::class)->with('file:id,original_name,size');
+    }
+
+    public function drawingSet()
+    {
+        return $this->belongsTo(DrawingSet::class, 'drawing_set_id');
+    }
+
+    public function elevations()
+    {
+        return $this->hasMany(WorkOrderRequestElevation::class)->orderBy('id');
+    }
+
+    public function changes()
+    {
+        return $this->hasMany(WorkOrderRequestChange::class)->with('user:id,name')->latest('id');
     }
 
     public function workOrder()

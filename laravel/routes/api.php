@@ -522,6 +522,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/pm/work-order-requests/{id}/files', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'addFile'])->middleware('permission:pm.jobs.manage');
         Route::post('/pm/work-order-requests/{id}/withdraw', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'withdraw'])->middleware('permission:pm.jobs.manage');
         Route::get('/work-order-requests', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'index'])->middleware('permission:fabrication.work-orders.view');
+        Route::patch('/work-order-requests/{id}', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'update'])->middleware('permission:fabrication.work-orders.create');
+        Route::get('/work-order-requests/{id}/available-elevations', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'availableElevations'])->middleware('permission:fabrication.work-orders.view');
         Route::post('/work-order-requests/{id}/approve', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'approve'])->middleware('permission:fabrication.work-orders.create');
         Route::post('/work-order-requests/{id}/reject', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'reject'])->middleware('permission:fabrication.work-orders.create');
         Route::get('/work-order-requests/{id}/files/{fileId}', [\App\Http\Controllers\Api\WorkOrderRequestController::class, 'downloadFile'])->middleware('permission:fabrication.work-orders.view');

@@ -26,7 +26,7 @@ class DrawingSetController extends Controller
     {
         $s->load('file:id,original_name,size');
         if ($full) {
-            $s->load(['elevations.dims', 'elevations.glassTags', 'elevations.sheets', 'elevations.marks', 'elevations.axisChecks', 'warnings', 'glazingTags']);
+            $s->load(['elevations.dims', 'elevations.glassTags', 'elevations.sheets.breaks', 'elevations.marks', 'elevations.axisChecks', 'warnings', 'glazingTags']);
         }
         $out = $s->toArray();
         if ($full) {
@@ -39,9 +39,12 @@ class DrawingSetController extends Controller
     /** An elevation with its checks and confidence (overall and per value). */
     private function presentElevation(DrawingElevation $e): array
     {
-        $e->loadMissing(['marks', 'axisChecks', 'sheets']);
+        $e->loadMissing(['marks', 'axisChecks', 'sheets.breaks', 'workOrderLines']);
         $axes = $e->axisChecks->keyBy('axis');
         $out = $e->toArray();
+        unset($out['work_order_lines']);
+        $out['run_checks'] = \App\Services\Pm\DrawingRunChecks::forElevation($e);     // do the sheets of a long run agree with each other
+        $out['requested_qty'] = $e->requestedQuantity();     // already covered by pending / approved work order requests
         $out['marks'] = $e->marks->map(fn ($m) => $m->toArray() + ['confidence' => DrawingConfidence::forMark($m, $axes[substr($m->kind, -1)]->state ?? null)])->all();
         $out['axis_checks'] = $e->axisChecks->map(fn ($c) => $c->toArray())->all();
         $out['confidence'] = DrawingConfidence::forElevation($e);
@@ -167,7 +170,7 @@ class DrawingSetController extends Controller
     {
         $job = PmJobScope::find($request->user(), $jobId);
         $elevs = DrawingElevation::whereHas('set', fn ($q) => $q->where('business_job_id', $job->id)->where('status', 'done'))
-            ->with(['set.file:id,original_name', 'marks', 'axisChecks', 'sheets', 'glassTags'])->get()
+            ->with(['set.file:id,original_name', 'marks', 'axisChecks', 'sheets.breaks', 'glassTags'])->get()
             ->map(function ($e) {
                 $p = $this->presentElevation($e);
                 $p['set'] = ['id' => $e->set->id, 'file' => $e->set->file?->original_name];
@@ -195,7 +198,7 @@ class DrawingSetController extends Controller
     {
         $set = $this->set($request, $jobId, $setId);
 
-        return DrawingElevation::with(['marks', 'axisChecks', 'sheets'])->where('drawing_set_id', $set->id)->findOrFail($id);
+        return DrawingElevation::with(['marks', 'axisChecks', 'sheets.breaks'])->where('drawing_set_id', $set->id)->findOrFail($id);
     }
 
     /** Approve, exclude or reopen one elevation. A frame that does not close blocks approval until it is dealt with. */
@@ -210,7 +213,7 @@ class DrawingSetController extends Controller
         $status = ['approve' => 'approved', 'exclude' => 'excluded', 'reopen' => 'pending'][$action];
         $e->update(['review_status' => $status, 'reviewed_by' => $status === 'pending' ? null : $request->user()->id, 'reviewed_at' => $status === 'pending' ? null : now()]);
 
-        return response()->json($this->presentElevation($e->fresh(['marks', 'axisChecks', 'sheets'])));
+        return response()->json($this->presentElevation($e->fresh(['marks', 'axisChecks', 'sheets.breaks'])));
     }
 
     /** Approve every pending elevation at or above a confidence level whose frames are not left unresolved. */
@@ -255,7 +258,7 @@ class DrawingSetController extends Controller
         $check->update(['resolution' => $data['mode'], 'resolution_reason' => $data['mode'] === 'accepted' ? trim($data['reason']) : null,
             'resolved_by' => $request->user()->id, 'resolved_at' => now()]);
 
-        return response()->json($this->presentElevation($e->fresh(['marks', 'axisChecks', 'sheets'])));
+        return response()->json($this->presentElevation($e->fresh(['marks', 'axisChecks', 'sheets.breaks'])));
     }
 
     public function clearAxisResolution(Request $request, int $jobId, int $setId, int $id, string $axis)
@@ -264,7 +267,7 @@ class DrawingSetController extends Controller
         $e = $this->elevation($request, $jobId, $setId, $id);
         $e->axisChecks()->where('axis', $axis)->update(['resolution' => null, 'resolution_reason' => null, 'resolved_by' => null, 'resolved_at' => null]);
 
-        return response()->json($this->presentElevation($e->fresh(['marks', 'axisChecks', 'sheets'])));
+        return response()->json($this->presentElevation($e->fresh(['marks', 'axisChecks', 'sheets.breaks'])));
     }
 
     /** Several drawing files at once (a full package): each is registered and queued; identical files are not read twice. */

@@ -19,6 +19,22 @@
   </div>
   <main id="content" class="page-body">
     <div class="container-xl">
+      <div class="row row-cards mb-3" id="pmStageCards">
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" data-stage="bidding" onclick="pickStage('bidding')"><div class="card-body">
+          <div class="subheader">Bidding</div><div class="h1 mb-0 text-azure" id="cntBidding">-</div></div></a></div>
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" data-stage="won" onclick="pickStage('won')"><div class="card-body">
+          <div class="subheader">Won, not yet active</div><div class="h1 mb-0 text-success" id="cntWon">-</div></div></a></div>
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" data-stage="active" onclick="pickStage('active')"><div class="card-body">
+          <div class="subheader">Active</div><div class="h1 mb-0 text-primary" id="cntActive">-</div></div></a></div>
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" data-stage="" onclick="pickStage('')"><div class="card-body">
+          <div class="subheader">All jobs</div><div class="h1 mb-0" id="cntAll">-</div></div></a></div>
+      </div>
+      <style>
+        .pm-row { cursor: pointer; }
+        .pm-row:hover > td { background: var(--tblr-bg-surface-secondary); }
+        .pm-row:focus-visible { outline: 2px solid var(--tblr-primary); outline-offset: -2px; }
+        #pmStageCards .card-link.active { border-color: var(--tblr-primary); box-shadow: 0 0 0 1px var(--tblr-primary); }
+      </style>
       <div class="card">
         <div class="card-header">
           <div class="row g-2 w-100">
@@ -35,7 +51,7 @@
         <div class="table-responsive">
           <table class="table table-vcenter card-table">
             <thead><tr><th>Job #</th><th>Name</th><th>Customer</th><th>Stage</th><th>Source</th><th class="w-1"></th></tr></thead>
-            <tbody id="pmJobsBody"><tr><td colspan="6" class="text-muted">Loading...</td></tr></tbody>
+            <tbody id="pmJobsBody" onclick="rowClick(event)" onkeydown="rowKey(event)"><tr><td colspan="6" class="text-muted">Loading...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -60,21 +76,41 @@
 <script>
   const NEXT = { bidding: [['won','Mark won'],['lost','Mark lost']], won: [['active','Activate (hand to Fabrication)'],['lost','Mark lost']], lost: [['bidding','Reopen bid']] };
   const BADGE = { bidding: 'bg-azure-lt', won: 'bg-green-lt', lost: 'bg-red-lt', active: 'bg-blue-lt' };
-  let pmJobs = [];
+  let pmJobs = [], pmAll = [];
 
+  // the whole list is fetched once (the API caps it at 500) and filtered here, so the stage cards always show true counts
   async function loadJobs() {
-    const params = new URLSearchParams(location.search);
-    const status = document.getElementById('pmStatus').value || params.get('status') || '';
-    if (status) document.getElementById('pmStatus').value = status;
-    const q = document.getElementById('pmSearch').value;
-    pmJobs = await authenticatedFetch('/pm/jobs?' + new URLSearchParams({ ...(status && { status }), ...(q && { search: q }) }));
+    pmAll = await authenticatedFetch('/pm/jobs');
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const status = document.getElementById('pmStatus').value, q = document.getElementById('pmSearch').value.trim().toLowerCase();
+    pmJobs = pmAll.filter(j => (!status || j.status === status)
+      && (!q || [j.job_number, j.job_name, j.customer_name].some(v => String(v || '').toLowerCase().includes(q))));
+    const n = (st) => pmAll.filter(j => j.status === st).length;
+    cntBidding.textContent = n('bidding'); cntWon.textContent = n('won'); cntActive.textContent = n('active'); cntAll.textContent = pmAll.length;
+    document.querySelectorAll('#pmStageCards [data-stage]').forEach(c => c.classList.toggle('active', c.dataset.stage === status));
     render();
+  }
+
+  function pickStage(st) { document.getElementById('pmStatus').value = st; applyFilters(); }
+
+  // anywhere on a row opens the job (Ctrl/Cmd-click: a new tab); the stage buttons and the job link do their own thing
+  function rowClick(ev) {
+    if (ev.target.closest('button, a, input, select, [data-noclick]')) return;
+    const tr = ev.target.closest('tr[data-href]'); if (!tr) return;
+    if (ev.ctrlKey || ev.metaKey) window.open(tr.dataset.href, '_blank'); else location.href = tr.dataset.href;
+  }
+  function rowKey(ev) {
+    if (ev.key !== 'Enter' || ev.target.closest('button, a, input, select')) return;
+    const tr = ev.target.closest('tr[data-href]'); if (tr) location.href = tr.dataset.href;
   }
 
   function render() {
     const body = document.getElementById('pmJobsBody');
     if (!pmJobs.length) { body.innerHTML = '<tr><td colspan="6" class="text-muted">No jobs.</td></tr>'; return; }
-    body.innerHTML = pmJobs.map(j => `<tr>
+    body.innerHTML = pmJobs.map(j => `<tr class="pm-row" tabindex="0" data-href="/pm/jobs/${j.id}" title="Open ${escapeHtml(j.job_number)}">
       <td><a href="/pm/jobs/${j.id}">${escapeHtml(j.job_number)}</a></td><td>${escapeHtml(j.job_name)}</td><td>${escapeHtml(j.customer_name || '')}</td>
       <td><span class="badge ${BADGE[j.status] || 'bg-secondary-lt'}">${escapeHtml(j.status_label || j.status)}</span></td>
       <td class="text-muted">${j.origin === 'pm' ? 'PM bid' : 'Fabrication'}</td>
@@ -102,8 +138,10 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('pmStatus').addEventListener('change', loadJobs);
-    let t; document.getElementById('pmSearch').addEventListener('input', () => { clearTimeout(t); t = setTimeout(loadJobs, 250); });
+    const fromUrl = new URLSearchParams(location.search).get('status');
+    if (fromUrl) document.getElementById('pmStatus').value = fromUrl;
+    document.getElementById('pmStatus').addEventListener('change', applyFilters);
+    document.getElementById('pmSearch').addEventListener('input', applyFilters);
     loadJobs().catch(console.error);
   });
 </script>

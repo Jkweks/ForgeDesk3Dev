@@ -43,6 +43,18 @@ class DrawingElevation extends Model
         return $this->belongsTo(DrawingSet::class, 'drawing_set_id');
     }
 
+    public function workOrderLines()
+    {
+        return $this->hasMany(WorkOrderRequestElevation::class)->with('request:id,status');
+    }
+
+    /** How many of this elevation pending or approved work order requests already cover. */
+    public function requestedQuantity(?int $exceptRequestId = null): int
+    {
+        return (int) $this->workOrderLines->filter(fn ($l) => $l->request && in_array($l->request->status, ['pending', 'approved'], true)
+            && $l->work_order_request_id !== $exceptRequestId)->sum('quantity');
+    }
+
     public function glassTags()
     {
         return $this->hasMany(DrawingElevationGlassTag::class);

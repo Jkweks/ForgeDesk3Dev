@@ -18,6 +18,172 @@
   <main id="content" class="page-body">
     <div class="container-xl">
 
+      <div id="jobNotice"></div>
+      <div class="row row-cards mb-3" id="jobStats">
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" href="#drawings" onclick="showJobTab('drawings'); setDrawTab('all'); return false"><div class="card-body">
+          <div class="subheader">Elevations</div><div class="h1 mb-0" id="statElevs">-</div></div></a></div>
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" href="#drawings" onclick="showJobTab('drawings'); setDrawTab('attention'); return false"><div class="card-body">
+          <div class="subheader">Need attention</div><div class="h1 mb-0 text-danger" id="statAttention">-</div></div></a></div>
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" href="#drawings" onclick="showJobTab('drawings'); setDrawTab('approved'); return false"><div class="card-body">
+          <div class="subheader">Approved</div><div class="h1 mb-0 text-success" id="statApproved">-</div>
+          <div class="progress progress-sm mt-2"><div class="progress-bar bg-success" id="statApprovedBar" style="width:0%"></div></div></div></a></div>
+        <div class="col-6 col-lg-3"><a class="card card-sm card-link" href="#workorders" onclick="showJobTab('workorders'); return false"><div class="card-body">
+          <div class="subheader">Work order requests pending</div><div class="h1 mb-0" id="statWo">-</div></div></a></div>
+      </div>
+      <ul class="nav nav-tabs mb-3" id="jobTabs">
+        <li class="nav-item"><a class="nav-link" href="#overview" data-tab="overview" onclick="showJobTab('overview'); return false">Overview</a></li>
+        <li class="nav-item"><a class="nav-link" href="#drawings" data-tab="drawings" onclick="showJobTab('drawings'); return false">Drawings <span class="badge bg-red-lt ms-1" id="tabAttention" style="display:none"></span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#estimate" data-tab="estimate" onclick="showJobTab('estimate'); return false">Estimate</a></li>
+        <li class="nav-item"><a class="nav-link" href="#submittals" data-tab="submittals" onclick="showJobTab('submittals'); return false">Submittals</a></li>
+        <li class="nav-item"><a class="nav-link" href="#workorders" data-tab="workorders" onclick="showJobTab('workorders'); return false">Work orders <span class="badge bg-orange-lt ms-1" id="tabWo" style="display:none"></span></a></li>
+        <li class="nav-item"><a class="nav-link" href="#forecast" data-tab="forecast" onclick="showJobTab('forecast'); return false">Forecast</a></li>
+      </ul>
+      <style>
+        .dw-pane { min-width: 0; }
+        /* a long list of values scrolls beside the sheet; the sheet stays in view */
+        @media (min-width: 1200px) { .dw-sticky { position: sticky; top: 0; align-self: flex-start; z-index: 2; } }
+        .dw-left, .dw-split > .col-lg-4 { height: calc(100vh - 330px); min-height: 520px; }
+        .dw-right { overflow-y: auto; height: calc(100vh - 330px); min-height: 520px; }
+        .dw-scroll { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+        .dw-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--tblr-border-radius); cursor: pointer; }
+        .dw-row:hover { background: var(--tblr-bg-surface-secondary); }
+        .dw-row.active { background: var(--tblr-primary-lt); }
+        .dw-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--tblr-border-color); }
+        .dw-dot.attention { background: var(--tblr-danger); } .dw-dot.pending { background: var(--tblr-yellow); }
+        .dw-dot.approved { background: var(--tblr-success); } .dw-dot.excluded { background: var(--tblr-secondary); }
+        .dw-label { flex: 1; min-width: 0; }
+        .dw-label .name { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dw-label .sub { display: block; font-size: .75rem; color: var(--tblr-secondary-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dw-set-head { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--tblr-border-radius); cursor: pointer; }
+        .dw-set-head:hover { background: var(--tblr-bg-surface-secondary); }
+        .dw-chev { width: 16px; text-align: center; color: var(--tblr-secondary-color); transition: transform .15s; flex: none; }
+        .dw-set.collapsed > .dw-set-head .dw-chev { transform: rotate(-90deg); }
+        .dw-set.collapsed > .dw-set-body { display: none; }
+        .dw-set-body { margin-left: 15px; padding-left: 4px; border-left: 1px solid var(--tblr-border-color); }
+        .dw-set-info { font-size: .75rem; color: var(--tblr-secondary-color); padding: 2px 8px 6px; }
+        .dw-group { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--tblr-secondary-color); padding: 8px 8px 2px; }
+        .min-w-0 { min-width: 0; }
+        @media (max-width: 991.98px) { .dw-split > .col-lg-4, .dw-right { height: auto; min-height: 0; } .dw-scroll { max-height: 320px; } }
+      </style>
+      <div class="job-pane" data-pane="overview" style="display:none">
+      <div class="card mb-3" id="detailsCard">
+        <div class="card-header"><h3 class="card-title">Job details</h3><div class="card-actions"><button class="btn btn-sm" data-permission="pm.jobs.manage" onclick="toggleDetailsEdit()">Edit</button></div></div>
+        <div class="card-body" id="detailsView"></div>
+        <form class="card-body border-top" id="detailsForm" style="display:none" onsubmit="saveDetails(event)">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label required">Job name</label><input class="form-control" id="dName" required></div>
+            <div class="col-md-6"><label class="form-label">Customer / GC</label><input class="form-control" id="dCustomer"></div>
+            <div class="col-md-6"><label class="form-label">Site address</label><input class="form-control" id="dAddress"></div>
+            <div class="col-md-6"><label class="form-label">Target completion</label><input type="date" class="form-control" id="dTarget"></div>
+            <div class="col-md-4"><label class="form-label">Contact</label><input class="form-control" id="dContact"></div>
+            <div class="col-md-4"><label class="form-label">Contact phone</label><input class="form-control" id="dPhone"></div>
+            <div class="col-md-4"><label class="form-label">Contact email</label><input type="email" class="form-control" id="dEmail"></div>
+            <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" id="dNotes" rows="2"></textarea></div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Save</button> <button type="button" class="btn" onclick="toggleDetailsEdit()">Cancel</button></div>
+        </form>
+      </div>
+
+      </div>
+
+      <div class="job-pane" data-pane="drawings" style="display:none">
+      <div class="card mb-3" id="drawCard">
+        <div class="card-header">
+          <h3 class="card-title">Shop drawings</h3>
+          <div class="card-actions btn-list" data-permission="pm.jobs.manage">
+            <button class="btn btn-sm" onclick="document.getElementById('drawFiles').click()"><i class="ti ti-upload me-1"></i>Upload drawings</button>
+            <button class="btn btn-sm" id="drawApproveBtn" onclick="approveHigh()">Approve all high confidence</button>
+          </div>
+        </div>
+        <div class="card-body border-bottom py-2" data-permission="pm.jobs.manage">
+          <div id="drawDrop" class="rounded px-3 py-2 text-center text-muted small" style="border:1px dashed var(--tblr-border-color)"
+               ondragover="event.preventDefault(); this.classList.add('bg-azure-lt')" ondragleave="this.classList.remove('bg-azure-lt')" ondrop="dropDrawings(event)">
+            Drop the whole drawing package here (several PDFs at once), or <a href="#" onclick="event.preventDefault(); drawFiles.click()">choose files</a>
+            <input type="file" accept=".pdf" multiple hidden id="drawFiles" onchange="uploadDrawings(this.files)">
+          </div>
+        </div>
+        <div class="card-body border-bottom py-2" id="drawSummary"></div>
+        <div class="card-body p-0">
+          <div class="row g-0 dw-split">
+            <div class="col-lg-4 border-end d-flex flex-column dw-pane">
+              <div class="p-2 border-bottom">
+                <div class="d-flex gap-2 mb-2">
+                  <div class="input-icon flex-fill"><span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                    <input type="search" class="form-control" id="drawSearch" placeholder="Search elevation, system, arch ref…" autocomplete="off" oninput="renderDrawReview()"></div>
+                  <div class="btn-group">
+                    <button class="btn btn-icon" title="Expand all files" onclick="setAllSets(true)"><i class="ti ti-arrows-diagonal"></i></button>
+                    <button class="btn btn-icon" title="Collapse all files" onclick="setAllSets(false)"><i class="ti ti-arrows-diagonal-minimize-2"></i></button>
+                  </div>
+                </div>
+                <div class="btn-group btn-group-sm w-100" id="drawTabs">
+                  <button class="btn" data-tab="attention" onclick="setDrawTab('attention')">Attention <span class="badge bg-red-lt ms-1" id="drawCntAttention">0</span></button>
+                  <button class="btn" data-tab="pending" onclick="setDrawTab('pending')">To review <span class="badge bg-yellow-lt ms-1" id="drawCntPending">0</span></button>
+                  <button class="btn" data-tab="approved" onclick="setDrawTab('approved')">Approved <span class="badge bg-green-lt ms-1" id="drawCntApproved">0</span></button>
+                  <button class="btn" data-tab="all" onclick="setDrawTab('all')">All</button>
+                </div>
+              </div>
+              <div class="dw-scroll p-2" id="drawList"><div class="text-muted small p-2">Loading...</div></div>
+              <div class="p-2 border-top text-muted small" id="drawCount"></div>
+            </div>
+            <div class="col-lg-8 dw-pane dw-right">
+              <div id="drawEmpty" class="d-flex flex-column align-items-center justify-content-center text-muted h-100 py-6">
+                <i class="ti ti-ruler-measure" style="font-size:3rem"></i>
+                <p class="mt-2 mb-0">Select an elevation to check its sizes</p>
+              </div>
+              <div id="drawDetail" class="d-none">
+                <div class="p-3 border-bottom d-flex flex-wrap gap-2 align-items-start">
+                  <div class="min-w-0">
+                    <div class="text-muted small" id="szCrumb"></div>
+                    <h3 class="mb-0" id="szTitle">Check sizes</h3>
+                    <div class="text-muted small" id="szMeta"></div>
+                  </div>
+                  <div class="ms-auto d-flex gap-2 align-items-center flex-wrap" id="szActions"></div>
+                </div>
+                <div class="p-3">
+                  <div class="row g-3">
+                    <div class="col-xl-8 dw-sticky">
+                      <div class="d-flex align-items-center gap-2 mb-2 flex-wrap"><select class="form-select form-select-sm w-auto" id="szPage" onchange="szLoadPage()"></select>
+                        <span class="text-muted small" id="szCap"></span>
+                        <span class="ms-auto d-flex gap-1">
+                          <button type="button" class="btn btn-sm" title="Previous value (←)" onclick="szStep(-1)">◀</button>
+                          <button type="button" class="btn btn-sm" title="Next value (→)" onclick="szStep(1)">▶</button>
+                          <button type="button" class="btn btn-sm btn-primary" title="Jump to the next value not yet checked" onclick="szStep(1, true)">Next unchecked</button>
+                        </span></div>
+                      <div id="szStage" style="position:relative;height:calc(100vh - 520px);min-height:360px;background:#39434f;border-radius:4px;overflow:hidden;touch-action:none;cursor:grab">
+                        <canvas id="szCanvas" style="position:absolute;left:0;top:0;width:100%;height:100%;display:block"></canvas>
+                        <div class="position-absolute d-flex gap-1" style="right:8px;top:8px" onpointerdown="event.stopPropagation()">
+                          <button type="button" class="btn btn-sm" title="Zoom out (−)" onclick="szZoomBy(1/1.4)">−</button>
+                          <button type="button" class="btn btn-sm" title="Zoom in (+)" onclick="szZoomBy(1.4)">+</button>
+                          <button type="button" class="btn btn-sm" onclick="szFrameElevation(true)">This elevation</button>
+                          <button type="button" class="btn btn-sm" onclick="szFrameSheet(true)">Whole sheet</button>
+                        </div>
+                      </div>
+                      <div class="d-flex gap-3 small text-muted mt-2 flex-wrap">
+                        <span><span class="badge" style="background:rgba(40,170,70,.5);border:1px solid #1e8c37">&nbsp;</span> confirmed</span>
+                        <span><span class="badge" style="background:rgba(255,215,0,.55);border:1px solid #d4a00a">&nbsp;</span> read by the parser, not yet checked</span>
+                        <span><span class="badge" style="background:rgba(225,45,35,.45);border:1px solid #cd281e">&nbsp;</span> corrected (differs from the reading)</span>
+                        <span class="ms-auto">scroll to zoom · drag to pan · click a value to jump to it · ← → step, Enter confirms</span>
+                      </div>
+                    </div>
+                    <div class="col-xl-4">
+                      <div id="szElevInfo" class="mb-3"></div>
+                      <div class="d-flex align-items-center mb-2"><h4 class="mb-0">Values on this sheet</h4>
+                        <button class="btn btn-sm btn-primary ms-auto" data-permission="pm.jobs.manage" onclick="szConfirmAll()">Confirm all</button></div>
+                      <div id="szList"></div>
+                      <div id="szNote" class="mt-2 small"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer text-muted small">Each set is read in the background (a large one can take a few minutes). The importer checks that every frame closes (frame size = openings + members) and rates how far to trust each reading. Nothing is applied to a work order until someone approves it.</div>
+      </div>
+
+      </div>
+
+      <div class="job-pane" data-pane="estimate" style="display:none">
       <div class="card mb-3">
         <div class="card-header"><h3 class="card-title">Estimate</h3></div>
         <div class="card-body">
@@ -41,99 +207,7 @@
               </div>
             </div>
           </div>
-          <div id="estNotice" class="mt-2"></div>
         </div>
-      </div>
-
-      <div class="card mb-3" id="detailsCard">
-        <div class="card-header"><h3 class="card-title">Job details</h3><div class="card-actions"><button class="btn btn-sm" data-permission="pm.jobs.manage" onclick="toggleDetailsEdit()">Edit</button></div></div>
-        <div class="card-body" id="detailsView"></div>
-        <form class="card-body border-top" id="detailsForm" style="display:none" onsubmit="saveDetails(event)">
-          <div class="row g-3">
-            <div class="col-md-6"><label class="form-label required">Job name</label><input class="form-control" id="dName" required></div>
-            <div class="col-md-6"><label class="form-label">Customer / GC</label><input class="form-control" id="dCustomer"></div>
-            <div class="col-md-6"><label class="form-label">Site address</label><input class="form-control" id="dAddress"></div>
-            <div class="col-md-6"><label class="form-label">Target completion</label><input type="date" class="form-control" id="dTarget"></div>
-            <div class="col-md-4"><label class="form-label">Contact</label><input class="form-control" id="dContact"></div>
-            <div class="col-md-4"><label class="form-label">Contact phone</label><input class="form-control" id="dPhone"></div>
-            <div class="col-md-4"><label class="form-label">Contact email</label><input type="email" class="form-control" id="dEmail"></div>
-            <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" id="dNotes" rows="2"></textarea></div>
-          </div>
-          <div class="mt-3"><button class="btn btn-primary">Save</button> <button type="button" class="btn" onclick="toggleDetailsEdit()">Cancel</button></div>
-        </form>
-      </div>
-
-      <div class="card mb-3" id="drawCard">
-        <div class="card-header">
-          <h3 class="card-title">Shop drawings</h3>
-          <div class="card-actions btn-list" data-permission="pm.jobs.manage">
-            <button class="btn btn-sm" id="drawApproveBtn" onclick="approveHigh()">Approve all high confidence</button>
-          </div>
-        </div>
-        <div class="card-body border-bottom" data-permission="pm.jobs.manage">
-          <div id="drawDrop" class="border border-dashed rounded p-3 text-center text-muted" style="border-style:dashed !important"
-               ondragover="event.preventDefault(); this.classList.add('bg-azure-lt')" ondragleave="this.classList.remove('bg-azure-lt')" ondrop="dropDrawings(event)">
-            Drop the whole drawing package here (several PDFs at once), or
-            <label class="btn btn-sm btn-primary ms-1 mb-0">Choose files<input type="file" accept=".pdf" multiple hidden id="drawFiles" onchange="uploadDrawings(this.files)"></label>
-          </div>
-        </div>
-        <div id="drawSets" class="list-group list-group-flush"></div>
-        <div class="card-body border-bottom py-2" id="drawSummary"></div>
-        <div class="card-body border-bottom py-2">
-          <div class="btn-group btn-group-sm" id="drawTabs">
-            <button class="btn" data-tab="attention" onclick="setDrawTab('attention')">Needs attention</button>
-            <button class="btn" data-tab="pending" onclick="setDrawTab('pending')">To review</button>
-            <button class="btn" data-tab="approved" onclick="setDrawTab('approved')">Approved</button>
-            <button class="btn" data-tab="all" onclick="setDrawTab('all')">All</button>
-          </div>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-vcenter card-table">
-            <thead><tr><th>Elevation</th><th>System / finish</th><th class="text-end">Qty</th><th>R.O. W × H</th><th>Width</th><th>Height</th><th>Confidence</th><th></th></tr></thead>
-            <tbody id="drawBody"><tr><td colspan="8" class="text-muted">Loading...</td></tr></tbody>
-          </table>
-        </div>
-        <div class="card-footer text-muted small">Each set is read in the background (a large one can take a few minutes). The importer checks that every frame closes (frame size = openings + members) and rates how far to trust each reading. Nothing is applied to a work order until someone approves it.</div>
-      </div>
-
-      <div class="card mb-3" id="woCard">
-        <div class="card-header">
-          <h3 class="card-title">Work order requests</h3>
-          <div class="card-actions"><button class="btn btn-sm btn-primary" data-permission="pm.jobs.manage" onclick="showWoForm()">Request work order</button></div>
-        </div>
-        <div class="list-group list-group-flush" id="woBody"><div class="list-group-item text-muted">Loading...</div></div>
-        <div class="card-footer text-muted small">Fabrication validates each request and turns it into a work order. The job must be active.</div>
-      </div>
-
-      <div class="card mb-3">
-        <div class="card-header">
-          <h3 class="card-title">Submittals</h3>
-          <div class="card-actions btn-list">
-            <label class="form-check form-switch m-0 me-2"><input class="form-check-input" type="checkbox" id="smNeeds" onchange="loadSubmittals()"><span class="form-check-label">Needs response</span></label>
-            <button class="btn btn-sm btn-primary" data-permission="pm.jobs.manage" onclick="showSubmittalForm()">+ Submittal</button>
-          </div>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-vcenter card-table">
-            <thead><tr><th>#</th><th>Name / section</th><th>Kind</th><th>POs</th><th>Sent</th><th style="width:190px">Status</th><th class="w-1"></th></tr></thead>
-            <tbody id="smBody"><tr><td colspan="7" class="text-muted">Loading...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card mb-3">
-        <div class="card-header">
-          <h3 class="card-title">Material forecast</h3>
-          <div class="card-actions"><label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="fcAll" onchange="loadForecast()"><span class="form-check-label">All cost codes</span></label></div>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-vcenter card-table">
-            <thead><tr><th>Code</th><th>Description</th><th class="text-end">Estimated</th><th class="text-end">Ordered</th><th class="text-end">Ordered %</th><th class="text-end">Planned (draft)</th><th class="text-end">Received</th><th>Status</th></tr></thead>
-            <tbody id="forecastBody"><tr><td colspan="8" class="text-muted">Loading...</td></tr></tbody>
-            <tfoot id="forecastFoot"></tfoot>
-          </table>
-        </div>
-        <div class="card-footer text-muted small">Ordered and received count issued job purchase orders only. Draft POs are shown as planned. Stock and internal POs are not job material.</div>
       </div>
 
       <div id="estimateBody" style="display:none">
@@ -172,48 +246,80 @@
           <div class="card-body" id="warningsBody"></div>
         </div>
       </div>
+      </div>
+
+      <div class="job-pane" data-pane="submittals" style="display:none">
+      <div class="card mb-3">
+        <div class="card-header">
+          <h3 class="card-title">Submittals</h3>
+          <div class="card-actions btn-list">
+            <label class="form-check form-switch m-0 me-2"><input class="form-check-input" type="checkbox" id="smNeeds" onchange="loadSubmittals()"><span class="form-check-label">Needs response</span></label>
+            <button class="btn btn-sm btn-primary" data-permission="pm.jobs.manage" onclick="showSubmittalForm()">+ Submittal</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table">
+            <thead><tr><th>#</th><th>Name / section</th><th>Kind</th><th>POs</th><th>Sent</th><th style="width:190px">Status</th><th class="w-1"></th></tr></thead>
+            <tbody id="smBody"><tr><td colspan="7" class="text-muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      </div>
+
+      <div class="job-pane" data-pane="workorders" style="display:none">
+      <div class="card mb-3" id="woCard">
+        <div class="card-header">
+          <h3 class="card-title">Work order requests</h3>
+          <div class="card-actions"><button class="btn btn-sm btn-primary" data-permission="pm.jobs.manage" onclick="showWoForm()">Request work order</button></div>
+        </div>
+        <div class="list-group list-group-flush" id="woBody"><div class="list-group-item text-muted">Loading...</div></div>
+        <div class="card-footer text-muted small">Fabrication validates each request and turns it into a work order. The job must be active.</div>
+      </div>
+
+      </div>
+
+      <div class="job-pane" data-pane="forecast" style="display:none">
+      <div class="card mb-3">
+        <div class="card-header">
+          <h3 class="card-title">Material forecast</h3>
+          <div class="card-actions"><label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="fcAll" onchange="loadForecast()"><span class="form-check-label">All cost codes</span></label></div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table">
+            <thead><tr><th>Code</th><th>Description</th><th class="text-end">Estimated</th><th class="text-end">Ordered</th><th class="text-end">Ordered %</th><th class="text-end">Planned (draft)</th><th class="text-end">Received</th><th>Status</th></tr></thead>
+            <tbody id="forecastBody"><tr><td colspan="8" class="text-muted">Loading...</td></tr></tbody>
+            <tfoot id="forecastFoot"></tfoot>
+          </table>
+        </div>
+        <div class="card-footer text-muted small">Ordered and received count issued job purchase orders only. Draft POs are shown as planned. Stock and internal POs are not job material.</div>
+      </div>
+
+      </div>
+
     </div>
   </main>
 </div>
 
-<div class="modal fade" id="szModal" tabindex="-1">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="szTitle">Check sizes</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-      <div class="row g-3">
-        <div class="col-lg-8">
-          <div class="d-flex align-items-center gap-2 mb-2"><select class="form-select form-select-sm w-auto" id="szPage" onchange="szLoadPage()"></select>
-            <span class="text-muted small" id="szCap"></span></div>
-          <canvas id="szCanvas" style="width:100%;display:block;background:#fff;border:1px solid var(--tblr-border-color);border-radius:4px;cursor:zoom-in" onclick="szCanvasClick(event)" onmousemove="szHoverMove(event)" onmouseleave="szSetHover(null)"></canvas>
-          <div class="d-flex gap-3 small text-muted mt-2 flex-wrap">
-            <span><span class="badge" style="background:rgba(40,170,70,.5);border:1px solid #1e8c37">&nbsp;</span> confirmed</span>
-            <span><span class="badge" style="background:rgba(255,215,0,.55);border:1px solid #d4a00a">&nbsp;</span> read by the parser, not yet checked</span>
-            <span><span class="badge" style="background:rgba(225,45,35,.45);border:1px solid #cd281e">&nbsp;</span> corrected (differs from the reading)</span>
-            <span class="ms-auto">hover a value to highlight it · click the sheet to zoom</span>
-          </div>
-        </div>
-        <div class="col-lg-4">
-          <div id="szElevInfo" class="mb-3"></div>
-          <div class="d-flex align-items-center mb-2"><h4 class="mb-0">Values on this sheet</h4>
-            <button class="btn btn-sm btn-primary ms-auto" data-permission="pm.jobs.manage" onclick="szConfirmAll()">Confirm all</button></div>
-          <div id="szList"></div>
-          <div id="szNote" class="mt-2 small"></div>
-        </div>
-      </div>
-    </div>
-  </div></div>
-</div>
-
 <div class="modal fade" id="woModal" tabindex="-1">
-  <div class="modal-dialog"><form class="modal-content" onsubmit="saveWo(event)">
+  <div class="modal-dialog modal-lg"><form class="modal-content" onsubmit="saveWo(event)">
     <div class="modal-header"><h5 class="modal-title">Request a work order</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
       <div class="row g-2 mb-3"><div class="col-6"><label class="form-label">Release code</label><input class="form-control" id="woCode" placeholder="e.g. A"></div>
         <div class="col-6"><label class="form-label">Needed by</label><input type="date" class="form-control" id="woDue"></div></div>
-      <div class="mb-3" id="woElevBox" style="display:none"><label class="form-label">Elevations from the approved drawings</label><div id="woElevList"></div></div>
+      <div class="mb-3"><label class="form-label">Drawing</label>
+        <select class="form-select" id="woSet" onchange="renderWoElevs()"><option value="">Not tied to a drawing</option></select>
+        <div class="form-hint" id="woSetHint"></div></div>
+      <div class="mb-3" id="woElevBox" style="display:none">
+        <label class="form-label">Elevations and quantity to release from this drawing</label>
+        <div class="table-responsive border rounded"><table class="table table-sm table-vcenter mb-0">
+          <thead><tr><th class="w-1"></th><th>Elevation</th><th>System / finish</th><th>R.O. W × H</th><th>Quantity</th></tr></thead>
+          <tbody id="woElevList"></tbody></table></div>
+        <div class="small text-muted mt-1">Only approved elevations can be released. The quantity cannot be more than the drawing calls for, less what other requests already cover.</div>
+      </div>
       <div class="mb-3"><label class="form-label">Scope</label><textarea class="form-control" id="woScope" rows="3" placeholder="Elevations, openings, what is being released"></textarea></div>
       <div class="mb-3"><label class="form-label">Notes</label><textarea class="form-control" id="woNotes" rows="2"></textarea></div>
-      <div class="mb-1"><label class="form-label">Drawings</label><input type="file" class="form-control" id="woFiles" multiple></div>
+      <div class="mb-1"><label class="form-label">Other drawings or files</label><input type="file" class="form-control" id="woFiles" multiple></div>
     </div>
     <div class="modal-footer"><button type="button" class="btn" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Send request</button></div>
   </form></div>
@@ -256,7 +362,17 @@
   const post = (url, body) => authenticatedFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const base = () => `/pm/jobs/${JOB_ID}/estimates`;
 
-  function notice(msg, type = 'info') { document.getElementById('estNotice').innerHTML = msg ? `<div class="alert alert-${type} mb-0">${esc(msg)}</div>` : ''; }
+  function notice(msg, type = 'info') { document.getElementById('jobNotice').innerHTML = msg ? `<div class="alert alert-${type} alert-dismissible mb-3" role="alert">${esc(msg)}<a class="btn-close" onclick="notice('')"></a></div>` : ''; }
+
+  // ---- tabs: the page was one long scroll; each area now has its own tab, remembered in the address (#drawings) ----
+  const JOB_TABS = ['overview', 'drawings', 'estimate', 'submittals', 'workorders', 'forecast'];
+  function showJobTab(name, push = true) {
+    if (!JOB_TABS.includes(name)) name = 'overview';
+    document.querySelectorAll('.job-pane').forEach(p => { p.style.display = p.dataset.pane === name ? '' : 'none'; });
+    document.querySelectorAll('#jobTabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    if (push) try { history.replaceState(null, '', '#' + name); } catch (_) {}
+    if (name === 'drawings' && typeof sz !== 'undefined' && sz) szDraw();
+  }
 
   let jobData = null;
   function renderDetails(job) {
@@ -383,23 +499,20 @@
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
 
-  function renderDrawSets() {
-    // finished sets stay out of the way; sets still being read (or failed) show with progress
-    const active = drawSetsList.filter(s => s.status !== 'done');
-    const done = drawSetsList.filter(s => s.status === 'done');
-    drawSets.innerHTML = done.map(s => `<div class="list-group-item py-2 small"><span class="text-muted">${esc(s.file ? s.file.original_name : 'Drawing set')}</span> · ${s.elevations_count ?? 0} elevations · ${s.page_count ?? '?'} pages
-      ${s.skip_summary ? ' · <span class="text-muted">' + esc(s.skip_summary) + '</span>' : ''}
-      ${(s.glazing_tags || []).length ? '<div class="mt-1">Glazing schedule: ' + s.glazing_tags.map(t => `<span class="badge bg-azure-lt" title="${esc(t.makeup || '')}">${esc(t.tag)}</span>`).join(' ') + '</div>' : ''}
-      <span class="float-end" data-permission="pm.jobs.manage"><button class="btn btn-sm btn-ghost-secondary" onclick="reimportDrawing(${s.id})">Read again</button> <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${s.id})">&times;</button></span></div>`).join('')
-      + active.map(s => { const [l, c] = DR_STATUS[s.status] || [s.status, 'bg-secondary-lt'];
-      const pct = s.progress_count ? Math.round(100 * s.progress_done / s.progress_count) : 0;
-      return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span><span>${esc(s.file ? s.file.original_name : 'Drawing set')}</span>
-        ${s.status === 'running' ? `<span class="text-muted small">page ${s.progress_done} of ${s.progress_count || '?'}${s.progress_note ? ' · found ' + esc(s.progress_note) : ''}</span>` : ''}
-        ${s.error ? `<span class="text-danger small">${esc(s.error)}</span>` : ''}
-        <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage">${s.status === 'failed' ? `<button class="btn btn-sm" onclick="reimportDrawing(${s.id})">Read again</button>` : ''}
-          <button class="btn btn-sm btn-ghost-danger" onclick="deleteDrawing(${s.id})">&times;</button></span></div>
-        ${s.status === 'running' ? `<div class="progress progress-sm mt-2"><div class="progress-bar" style="width:${pct}%"></div></div>` : ''}</div>`; }).join('');
-  }
+  function renderDrawSets() { renderDrawReview(); }   // the files are the headers of the list now
+
+  // ---- the list: each drawing file is a header that opens to its elevations ----
+  const drawCollapsedKey = () => `pm.job.${JOB_ID}.drawCollapsed`;
+  let drawCollapsed = new Set();
+  try { drawCollapsed = new Set(JSON.parse(localStorage.getItem(drawCollapsedKey()) || '[]')); } catch (_) {}
+  const saveCollapsed = () => { try { localStorage.setItem(drawCollapsedKey(), JSON.stringify([...drawCollapsed])); } catch (_) {} };
+  function toggleSet(id) { drawCollapsed.has(id) ? drawCollapsed.delete(id) : drawCollapsed.add(id); saveCollapsed(); renderDrawReview(); }
+  function setAllSets(open) { drawCollapsed = open ? new Set() : new Set(drawSetsList.map(s => s.id)); saveCollapsed(); renderDrawReview(); }
+
+  // which tab (needs attention / to review / approved / all) an elevation falls under
+  const needsAttention = (e) => e.review_status === 'pending' && (e.unresolved_axes.length || e.confidence.level === 'low');
+  const inTab = (e, t) => t === 'all' || (t === 'approved' && e.review_status === 'approved') || (t === 'pending' && e.review_status === 'pending') || (t === 'attention' && needsAttention(e));
+  let drawOrder = [];   // the elevations shown in the list, in order (to step to the next one after an approval)
 
   function renderDrawReview() {
     const sm = drawData.summary, els = drawData.elevations;
@@ -410,30 +523,77 @@
       <span class="text-muted">average confidence ${sm.average_confidence}%</span>` : '<span class="text-muted">No drawing sets read yet.</span>';
     drawApproveBtn.disabled = !(sm && sm.high);
     drawApproveBtn.textContent = sm && sm.high ? `Approve ${sm.high} high-confidence` : 'Approve high confidence';
+    // page header cards and tab badges
+    statElevs.textContent = sm ? sm.total : 0; statAttention.textContent = sm ? sm.needs_attention : 0; statApproved.textContent = sm ? sm.approved : 0;
+    statApprovedBar.style.width = sm && sm.total ? Math.round(100 * sm.approved / sm.total) + '%' : '0%';
+    tabAttention.textContent = sm ? sm.needs_attention : 0; tabAttention.style.display = sm && sm.needs_attention ? '' : 'none';
+    drawCntAttention.textContent = els.filter(needsAttention).length; drawCntPending.textContent = els.filter(e => e.review_status === 'pending').length;
+    drawCntApproved.textContent = els.filter(e => e.review_status === 'approved').length;
     document.querySelectorAll('#drawTabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === drawTab));
-    const show = els.filter(e => drawTab === 'all' || (drawTab === 'approved' && e.review_status === 'approved')
-      || (drawTab === 'pending' && e.review_status === 'pending')
-      || (drawTab === 'attention' && e.review_status === 'pending' && (e.unresolved_axes.length || e.confidence.level === 'low')));
-    drawBody.innerHTML = show.length ? show.map(e => `<tr${e.review_status === 'excluded' ? ' class="text-muted"' : ''}>
-      <td><strong>${esc(e.label)}</strong>${e.multi_sheet ? ' <span class="badge bg-azure-lt" title="Runs across several sheets">multi-sheet</span>' : ''}
-        <div class="text-muted small">${esc(e.arch_ref || '')} ${e.sheets.length ? '· sheet' + (e.sheets.length > 1 ? 's ' : ' ') + e.sheets.map(s => s.page).join(', ') : ''}</div></td>
-      <td>${esc(e.system || '')}<div class="text-muted small">${esc(e.finish || '')}</div></td>
-      <td class="text-end">${e.total_reqd ?? '—'}</td><td>${dim(e.ro_w)} × ${dim(e.ro_h)}</td>
-      <td>${axisChip(e, 'w')}</td><td>${axisChip(e, 'h')}</td><td>${confChip(e.confidence)}</td>
-      <td class="text-nowrap">${e.marks.length ? `<button class="btn btn-sm" onclick="openSheetViewer(${e.id})">Check sizes</button>` : ''}
-        <span data-permission="pm.jobs.manage">${e.review_status === 'pending' ? `<button class="btn btn-sm btn-primary" onclick="reviewElev(${e.id}, 'approve')">Approve</button> <button class="btn btn-sm btn-ghost-secondary" onclick="reviewElev(${e.id}, 'exclude')">Exclude</button>`
-          : `<span class="badge bg-${e.review_status === 'approved' ? 'green' : 'secondary'}-lt">${e.review_status}</span> <button class="btn btn-sm btn-ghost-secondary" onclick="reviewElev(${e.id}, 'reopen')">Reopen</button>`}</span></td></tr>`).join('')
-      : `<tr><td colspan="8" class="text-muted">${els.length ? 'Nothing in this view.' : 'Upload a drawing package to begin.'}</td></tr>`;
+
+    const q = (drawSearch.value || '').trim().toLowerCase();
+    const show = els.filter(e => inTab(e, drawTab) && (!q || [e.label, e.system, e.finish, e.arch_ref].some(v => String(v || '').toLowerCase().includes(q))));
+    drawOrder = show.map(e => e.id);
+    const state = (e) => e.review_status === 'approved' ? 'approved' : e.review_status === 'excluded' ? 'excluded' : needsAttention(e) ? 'attention' : 'pending';
+    const elevRow = (e) => `<div class="dw-row${sz && sz.elevId === e.id ? ' active' : ''}" onclick="openSheetViewer(${e.id})" title="${esc(e.confidence.reasons.join(' • '))}">
+        <span class="dw-dot ${state(e)}"></span>
+        <div class="dw-label"><span class="name">${esc(e.label)}${e.multi_sheet ? ' <span class="badge bg-azure-lt">multi-sheet</span>' : ''}</span>
+          <span class="sub">${esc([e.system, e.finish].filter(Boolean).join(' · ') || '—')} · ${e.total_reqd ?? '?'} lites · R.O. ${dim(e.ro_w)} × ${dim(e.ro_h)}</span></div>
+        <div class="text-end text-nowrap">${confChip(e.confidence)}<div class="mt-1">${axisChip(e, 'w')} ${axisChip(e, 'h')}</div></div></div>`;
+    const setHead = (st, shown, all) => {
+      const reading = st.status === 'queued' || st.status === 'running' || st.status === 'failed';
+      const [stLabel, stCls] = DR_STATUS[st.status] || [st.status, 'bg-secondary-lt'];
+      const attn = all.filter(needsAttention).length, pct = st.progress_count ? Math.round(100 * st.progress_done / st.progress_count) : 0;
+      const sub = reading ? (st.status === 'running' ? `page ${st.progress_done} of ${st.progress_count || '?'}${st.progress_note ? ' · found ' + esc(st.progress_note) : ''}` : st.error ? esc(st.error) : '')
+        : `${all.length} elevation${all.length === 1 ? '' : 's'}${st.page_count ? ' · ' + st.page_count + ' pages' : ''}${shown.length !== all.length ? ' · ' + shown.length + ' shown' : ''}`;
+      return `<div class="dw-set-head" onclick="toggleSet(${st.id})" title="${esc(st.file ? st.file.original_name : '')}">
+          <i class="ti ti-chevron-down dw-chev"></i><i class="ti ti-file-type-pdf text-red"></i>
+          <div class="dw-label"><span class="name">${esc(st.file ? st.file.original_name : 'Drawing set')}</span><span class="sub${st.status === 'failed' ? ' text-danger' : ''}">${sub}</span></div>
+          ${reading ? `<span class="badge ${stCls}">${stLabel}</span>` : attn ? `<span class="badge bg-red-lt" title="need attention">${attn}</span>` : ''}
+          <span class="text-nowrap" data-permission="pm.jobs.manage" onclick="event.stopPropagation()">
+            ${st.status === 'done' || st.status === 'failed' ? `<button class="btn btn-sm btn-icon btn-ghost-secondary" title="Read again" onclick="reimportDrawing(${st.id})"><i class="ti ti-refresh"></i></button>` : ''}
+            <button class="btn btn-sm btn-icon btn-ghost-danger" title="Delete this set and its results" onclick="deleteDrawing(${st.id})"><i class="ti ti-x"></i></button></span></div>
+        ${st.status === 'running' ? `<div class="progress progress-sm mx-2 mb-1"><div class="progress-bar" style="width:${pct}%"></div></div>` : ''}`;
+    };
+    const setInfo = (st) => (st.skip_summary || (st.glazing_tags || []).length)
+      ? `<div class="dw-set-info">${st.skip_summary ? esc(st.skip_summary) : ''}${(st.glazing_tags || []).length ? `<div class="mt-1">Glazing schedule: ${st.glazing_tags.map(t => `<span class="badge bg-azure-lt" title="${esc(t.makeup || '')}">${esc(t.tag)}</span>`).join(' ')}</div>` : ''}</div>` : '';
+    // a file stays listed while it is being read or has failed; a finished one only when something in it matches the view
+    const groups = drawSetsList.map(st => ({ st, all: els.filter(e => e.set.id === st.id), shown: show.filter(e => e.set.id === st.id) }))
+      .filter(g => g.st.status !== 'done' || g.shown.length);
+    drawList.innerHTML = groups.length ? groups.map(g => {
+      const open = !drawCollapsed.has(g.st.id) || (sz && g.shown.some(e => e.id === sz.elevId));
+      return `<div class="dw-set${open ? '' : ' collapsed'}">${setHead(g.st, g.shown, g.all)}
+        <div class="dw-set-body">${setInfo(g.st)}${g.shown.map(elevRow).join('')}</div></div>`;
+    }).join('') : `<div class="text-muted small p-2">${els.length || drawSetsList.length ? 'Nothing in this view.' : 'Upload a drawing package to begin.'}</div>`;
+    drawCount.textContent = els.length ? `${show.length} of ${els.length} elevations` : '';
+    if (sz && !elevById(sz.elevId)) { sz = null; drawDetail.classList.add('d-none'); drawEmpty.classList.remove('d-none'); }   // a re-read replaced it
+    if (sz) renderDrawHead();
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
+  }
+
+  // the selected elevation's heading: where it comes from, what it is, and the review actions
+  function renderDrawHead() {
+    const e = elevById(sz.elevId); if (!e) return;
+    szTitle.innerHTML = `${esc(e.label)} ${confChip(e.confidence)}`;
+    szCrumb.textContent = `${e.set.file || 'Drawing set'}${e.sheets.length ? ' · sheet' + (e.sheets.length > 1 ? 's ' : ' ') + e.sheets.map(s => s.page).join(', ') : ''}`;
+    szMeta.textContent = [e.arch_ref, e.system, e.finish, `${e.total_reqd ?? '?'} lites`, `R.O. ${dim(e.ro_w)} × ${dim(e.ro_h)}`].filter(Boolean).join(' · ');
+    szActions.innerHTML = `<span class="d-flex gap-2 align-items-center" data-permission="pm.jobs.manage">${e.review_status === 'pending'
+      ? `<button class="btn btn-primary" onclick="reviewElev(${e.id}, 'approve')">Approve</button><button class="btn btn-ghost-secondary" onclick="reviewElev(${e.id}, 'exclude')">Exclude</button>`
+      : `<span class="badge bg-${e.review_status === 'approved' ? 'green' : 'secondary'}-lt">${e.review_status}</span><button class="btn btn-ghost-secondary" onclick="reviewElev(${e.id}, 'reopen')">Reopen</button>`}</span>`;
   }
 
   function setDrawTab(t) { drawTab = t; renderDrawReview(); }
   const elevById = (id) => drawData.elevations.find(e => e.id === id);
 
   async function reviewElev(id, action) {
-    const e = elevById(id);
-    try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${e.set.id}/elevations/${id}/review`, { action }); await loadDrawings(); }
-    catch (err) { notice(err.message || 'Could not update', 'danger'); if (action === 'approve') openSheetViewer(id); }
+    const e = elevById(id), at = drawOrder.indexOf(id);
+    try {
+      await post(`/pm/jobs/${JOB_ID}/drawing-sets/${e.set.id}/elevations/${id}/review`, { action }); await loadDrawings();
+      if (action === 'approve' || action === 'exclude') {   // carry on down the list
+        const next = drawOrder.find(x => x !== id && drawOrder.indexOf(x) >= Math.max(at, 0)) ?? drawOrder.filter(x => x !== id).pop();
+        if (next != null && elevById(next)) openSheetViewer(next);
+      }
+    } catch (err) { notice(err.message || 'Could not update', 'danger'); if (action === 'approve') openSheetViewer(id); }
   }
   async function approveHigh() {
     try {
@@ -462,7 +622,7 @@
   // ---- visual size check (the sheet with each read dimension drawn over it) ----
   const SZ_KIND = { ro_w: 'R.O. width', fs_w: 'F.S. width', ro_h: 'R.O. height', fs_h: 'F.S. height', do_w: 'Door opening width', do_h: 'Door opening height', dlo_w: 'D.L.O. width', dlo_h: 'D.L.O. height' };
   const SZ_COLORS = { confirmed: ['rgba(40,170,70,0.28)', '#1e8c37'], suggested: ['rgba(255,215,0,0.34)', '#d4a00a'], mismatch: ['rgba(225,45,35,0.28)', '#cd281e'] };
-  let sz = null;   // { elevId, page, img, hover, selected, zoom }
+  let sz = null;   // { elevId, page, img, imgs, hover, selected, view: {s, tx, ty}, raf }
 
   // inches -> 38 1/4" (nearest 1/16)
   function fmtIn(v) { v = Number(v); const w = Math.floor(v), s = Math.round((v - w) * 16); const W = s === 16 ? w + 1 : w, S = s === 16 ? 0 : s;
@@ -472,18 +632,36 @@
     return (m[1] ? parseFloat(m[1]) : 0) + (m[2] ? parseInt(m[2]) / parseInt(m[3]) : 0); }
 
   const szElev = () => elevById(sz.elevId);
-  const szMarksOnPage = () => szElev().marks.filter(m => m.page === sz.page);
+  // On a run drawn across several sheets each sheet owns the values between ITS break lines; it also draws a little of
+  // its neighbours for context, and those are counted on the sheet that draws them whole (counted === false).
+  const szMarksOnPage = () => szElev().marks.filter(m => m.page === sz.page && m.counted !== false);
+  const szContextMarks = () => szElev().marks.filter(m => m.page === sz.page && m.counted === false);
+  // [lo, hi] in page points of the part this sheet owns; null = open on that side. One line: it bounds whichever end it is at.
+  function szOwnedRange(sheet, brk) {
+    if (!brk.length) return [null, null];
+    if (brk.length === 1) return brk[0].x < Number(sheet.width) / 2 ? [brk[0].x, null] : [null, brk[0].x];
+    return [brk[0].x, brk[brk.length - 1].x];
+  }
+  function szBreaks(sheet) { return ((sheet && sheet.breaks) || []).map(b => ({ num: b.num, x: Number(b.x) })).sort((a, b) => a.x - b.x); }
 
   async function openSheetViewer(elevId) {
-    const e = elevById(elevId);
-    sz = { elevId, page: e.sheets.length ? e.sheets[0].page : null, img: null, hover: null, selected: null, zoom: null };
-    szTitle.textContent = `Check sizes — elevation ${e.label}`;
+    const e = elevById(elevId); if (!e) return;
+    showJobTab('drawings', false);
+    // open on the first sheet that still has something to check
+    const first = (e.sheets.find(sh => e.marks.some(m => m.page === sh.page && m.counted !== false && m.status === 'suggested')) || e.sheets[0] || {}).page || null;
+    if (sz) cancelAnimationFrame(sz.raf);
+    sz = { elevId, page: first, img: null, imgs: {}, hover: null, selected: null, view: null };
+    if (drawCollapsed.delete(e.set.id)) saveCollapsed();   // its file opens so the selection is visible in the list
+    drawEmpty.classList.add('d-none'); drawDetail.classList.remove('d-none');
     szPage.innerHTML = e.sheets.map(s => `<option value="${s.page}">Sheet ${s.page}</option>`).join('');
+    szPage.value = first;
     szNote.innerHTML = '';
-    safeShowModal('szModal');
-    szRenderInfo();
-    setTimeout(szLoadPage, 150);   // let the modal lay out so the canvas has a width
+    szBindStage();
+    renderDrawHead(); renderDrawReview(); szRenderInfo();
+    szCap.textContent = e.marks.length ? '' : 'No dimension positions were stored for this elevation.';
+    setTimeout(() => { if (sz && sz.elevId === elevId) szLoadPage(); }, 0);   // let the pane lay out so the stage has a size
   }
+  const selectElevation = openSheetViewer;
 
   // elevation-level panel: confidence and why, and each frame's check with what to do about it
   function szRenderInfo() {
@@ -498,48 +676,214 @@
         : (c.state === 'accepted' || c.state === 'unverified') ? `<div class="mt-1" data-permission="pm.jobs.manage"><button class="btn btn-sm btn-ghost-secondary" onclick="szUnresolve('${axis}')">Undo</button></div>` : '';
       return `<div class="border rounded p-2 mb-2"><div class="d-flex align-items-center"><strong>${label}</strong><span class="badge ${cls} ms-2">${l}</span></div><div class="small text-muted">${detail}</div>${act}</div>`;
     };
+    // a long run is drawn across sheets; each owns the lites between its own break lines (the rest is context)
+    const runBlock = !e.multi_sheet ? '' : (() => {
+      const rc = e.run_checks, per = rc ? rc.sheets : e.sheets.map(sh => ({ page: sh.page, lites: e.marks.filter(m => m.page === sh.page && m.kind === 'dlo_w' && m.counted !== false).length }));
+      const total = rc ? rc.total_lites : per.reduce((a, x) => a + x.lites, 0);
+      const mark = (ok) => ok === true ? '<span class="text-success">✓</span>' : ok === false ? '<span class="text-danger">✗</span>' : '<span class="text-muted">–</span>';
+      const lines = !rc ? '' : rc.breaks.map(b => `<div>${mark(b.ok)} Break line ${b.num}: sheets ${b.sheets[0]} and ${b.sheets[1]} ` + (b.ok === true ? `agree on the ${b.compared} overlapping lite${b.compared === 1 ? '' : 's'}`
+          : b.ok === false ? 'disagree: ' + b.mismatches.map(m => `sheet ${m.drawn_on} draws ${fmtIn(m.drawn)} where sheet ${m.owned_on} has ${fmtIn(m.owned)}`).join('; ') : 'draw none of each other, nothing to compare') + '</div>').join('')
+        + rc.heights.map(h => `<div>${mark(h.ok)} ${h.label}: ${h.values.map(v => `p.${v.page} ${fmtIn(v.value)}`).join(', ')}${h.ok ? ' — the same on every sheet' : ' — the sheets differ'}</div>`).join('');
+      return `<div class="border rounded p-2 mb-2 small"><div class="d-flex align-items-center"><strong>Run across ${e.sheets.length} sheets</strong>
+        ${rc ? `<span class="badge ${rc.ok ? 'bg-green-lt' : 'bg-red-lt'} ms-auto">${rc.ok ? 'sheets agree' : 'sheets disagree'}</span>` : ''}</div>
+        <div class="text-muted">Each sheet owns the lites between its break lines: ${per.map(x => `p.${x.page}: ${x.lites}`).join(' + ')} = ${total} lites${rc ? ` · ${fmtIn(rc.total_width)} of lites in all` : ''}.</div>${lines}</div>`;
+    })();
     szElevInfo.innerHTML = `<div class="d-flex align-items-center mb-2"><h4 class="mb-0">Confidence</h4><span class="ms-auto">${confChip(cf)}</span></div>
       <ul class="small text-muted ps-3 mb-2">${cf.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
       ${e.manual_takeoff ? `<div class="alert alert-warning py-1 small">Manual takeoff: ${esc(e.manual_takeoff)}. The numbers are what the sheet printed; nothing was sized.</div>` : ''}
-      ${axisBlock('w', 'Width frame')}${axisBlock('h', 'Height frame')}`;
+      ${runBlock}${axisBlock('w', 'Width frame')}${axisBlock('h', 'Height frame')}`;
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
 
-  function szLoadPage() {
-    sz.page = parseInt(szPage.value || sz.page); sz.zoom = null; sz.selected = null; sz.img = null; sz.error = null;
-    const sheet = szElev().sheets.find(s => s.page === sz.page);
+  // ---- the sheet viewer: framed on the elevation, wheel zoom, drag pan, jump to a value ----
+  // The view is { s, tx, ty }: s CSS pixels per page point, (tx, ty) where the page's top-left sits in the stage.
+  const SZ_MAX_SCALE = 6;
+  const szSheet = () => szElev().sheets.find(s => s.page === sz.page);
+  const szBox = m => [Number(m.x0), Number(m.top), Number(m.x1), Number(m.bottom)];
+  const szStageSize = () => [szStage.clientWidth || 800, szStage.clientHeight || 500];
+
+  // The region of the sheet that holds THIS elevation (ported from the PM Suite's sheet crop). The printed dimensions
+  // sit outside the frame: width chains above or below it, height chains beside it, so their union misses the far side.
+  // The overall R.O. (else F.S.) text is centred on the frame, and the frame starts just past the innermost chain on
+  // the other axis, so mirroring that edge about the centre gives the far edge. The title block is included.
+  // [left, right] of the frame in page points, from the width values; null when it cannot be worked out.
+  // Each D.L.O./door text is centred over its opening, so the centres are spaced by the openings and the members between.
+  function szFrameExtentX(marks) {
+    const fs = marks.find(m => m.kind === 'fs_w'); if (!fs) return null;      // F.S. = openings + members, so it fixes the scale (R.O. adds joints)
+    const fsV = Number(fs.value);
+    const terms = marks.filter(m => m.kind === 'dlo_w' || m.kind === 'do_w');
+    if (terms.length < 2) return null;
+    // one chain: the row of openings printed at the same height (several stacked chains would overlap in x)
+    const top = Number(terms[0].top), row = terms.filter(m => Math.abs(Number(m.top) - top) <= 20)
+      .map(m => ({ c: (Number(m.x0) + Number(m.x1)) / 2, v: Number(m.value) })).sort((a, b) => a.c - b.c);
+    if (row.length < 2) return null;
+    const member = (fsV - row.reduce((a, r) => a + r.v, 0)) / (row.length + 1);   // the uniform member between openings
+    if (!(member >= 0.5 && member <= 6)) return null;
+    let inches = 0; for (let i = 0; i < row.length - 1; i++) inches += (row[i].v + row[i + 1].v) / 2 + member;
+    const scale = (row[row.length - 1].c - row[0].c) / inches;                 // page points per inch
+    if (!(scale > 0.05 && scale < 20)) return null;
+    const cx = (Number(fs.x0) + Number(fs.x1)) / 2, half = fsV * scale / 2;
+    return [cx - half, cx + half];
+  }
+  function szCropBox(sheet, marks) {
+    const full = [0, 0, Number(sheet.width), Number(sheet.height)];
+    if (!marks.length) return full;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    marks.forEach(m => { const b = szBox(m); x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); });
+    const ctr = kinds => { for (const k of kinds) { const m = marks.find(q => q.kind === k); if (m) { const b = szBox(m); return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; } } return null; };
+    const W = marks.filter(m => /_w$/.test(m.kind)), H = marks.filter(m => /_h$/.test(m.kind));
+    const far = (c, chains, lo, hi) => {
+      const mid = m => (szBox(m)[lo] + szBox(m)[hi]) / 2;
+      const before = chains.filter(m => mid(m) < c), after = chains.filter(m => mid(m) >= c);
+      if (before.length && before.length >= after.length) { const near = Math.max(...before.map(m => szBox(m)[hi])); return [near, 2 * c - near]; }
+      if (after.length) { const near = Math.min(...after.map(m => szBox(m)[lo])); return [2 * c - near, near]; }
+      return null;
+    };
+    const cw = ctr(['ro_w', 'fs_w']), ch = ctr(['ro_h', 'fs_h']);
+    if (cw) { const f = far(cw[0], H, 0, 2); if (f) { x0 = Math.min(x0, f[0], f[1]); x1 = Math.max(x1, f[0], f[1]); } }
+    if (ch) { const f = far(ch[1], W, 1, 3); if (f) { y0 = Math.min(y0, f[0], f[1]); y1 = Math.max(y1, f[0], f[1]); } }
+    // The marks only say where READ values sit, and a chain the parser missed (46/E22: no heights read) has none. So also
+    // measure the frame itself from the width values: points per inch from the spacing of the lites' centres, then the
+    // frame is the F.S. wide about the F.S. text's centre. The height chains and the R.O./B.O. notes sit just outside it,
+    // mostly on the left in this drafting style, so leave room on both sides (more on the left).
+    const fr = szFrameExtentX(marks);
+    if (fr) {
+      const fw = fr[1] - fr[0];
+      x0 = Math.min(x0, fr[0] - Math.max(130, 0.30 * fw)); x1 = Math.max(x1, fr[1] + Math.max(60, 0.12 * fw));
+    }
+    const t = [sheet.title_x0, sheet.title_top, sheet.title_x1, sheet.title_bottom].map(v => v == null ? NaN : Number(v));
+    if (t.every(isFinite)) { x0 = Math.min(x0, t[0]); y0 = Math.min(y0, t[1]); x1 = Math.max(x1, t[2]); y1 = Math.max(y1, t[3]); }
+    szBreaks(sheet).forEach(b => { x0 = Math.min(x0, b.x); x1 = Math.max(x1, b.x); });      // a run's break lines frame this sheet's own part
+    const pad = 0.10 * Math.max(x1 - x0, y1 - y0, 24);
+    return [Math.max(0, x0 - pad), Math.max(0, y0 - pad), Math.min(full[2], x1 + pad), Math.min(full[3], y1 + pad)];
+  }
+
+  function szViewFor(box, maxS) {
+    const [W, H] = szStageSize(), bw = Math.max(1, box[2] - box[0]), bh = Math.max(1, box[3] - box[1]);
+    const s = Math.min(maxS || SZ_MAX_SCALE, W / bw, H / bh);
+    return { s, tx: -box[0] * s + (W - bw * s) / 2, ty: -box[1] * s + (H - bh * s) / 2 };
+  }
+  // move the camera: instant, or a short ease (centre moves straight, scale changes geometrically)
+  function szGo(target, animate) {
+    cancelAnimationFrame(sz.raf);
+    if (!animate || !sz.view) { sz.view = target; szDraw(); return; }
+    const [W, H] = szStageSize(), a = sz.view, t0 = performance.now(), D = 280;
+    const ca = { x: (W / 2 - a.tx) / a.s, y: (H / 2 - a.ty) / a.s }, cb = { x: (W / 2 - target.tx) / target.s, y: (H / 2 - target.ty) / target.s };
+    const step = now => {
+      if (!sz) return;
+      const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3), s = a.s * Math.pow(target.s / a.s, e);
+      sz.view = { s, tx: W / 2 - (ca.x + (cb.x - ca.x) * e) * s, ty: H / 2 - (ca.y + (cb.y - ca.y) * e) * s };
+      szDraw(); if (k < 1) sz.raf = requestAnimationFrame(step);
+    };
+    sz.raf = requestAnimationFrame(step);
+  }
+  function szFrameSheet(animate) { const sh = szSheet(); if (sh) { sz.selected = null; szGo(szViewFor([0, 0, Number(sh.width), Number(sh.height)]), animate); szRenderList(); } }
+  function szFrameElevation(animate) { const sh = szSheet(); if (sh) { sz.selected = null; szGo(szViewFor(szCropBox(sh, szMarksOnPage())), animate); szRenderList(); } }
+  // frame one value with enough around it to read it: about 4 px per point, never a tiny sliver
+  function szFocus(id, animate) {
+    const m = szMarksOnPage().find(x => x.id === id), sh = szSheet(); if (!m || !sh) return;
+    sz.selected = id;
+    const b = szBox(m), pad = Math.max(60, 1.5 * Math.max(b[2] - b[0], b[3] - b[1]));
+    szGo(szViewFor([b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad], 4), animate !== false);
+    szRenderList();
+    const row = document.getElementById('szMark' + id); if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  function szZoomBy(f, px, py) {
+    const sh = szSheet(); if (!sh || !sz.view) return;
+    const [W, H] = szStageSize(), v = sz.view, fit = Math.min(W / sh.width, H / sh.height);
+    if (px == null) { px = W / 2; py = H / 2; }
+    const ns = Math.min(SZ_MAX_SCALE, Math.max(fit * 0.6, v.s * f));
+    cancelAnimationFrame(sz.raf);
+    sz.view = { s: ns, tx: px - (px - v.tx) * ns / v.s, ty: py - (py - v.ty) * ns / v.s }; szDraw();
+  }
+
+  // walk the elevation's values in order (across sheets); onlyUnchecked skips what is already confirmed or corrected
+  function szStep(dir, onlyUnchecked, fromId) {
+    const e = szElev(), seq = e.marks.filter(m => m.counted !== false).sort((a, b) => a.page - b.page || a.id - b.id);
+    if (!seq.length) return;
+    let i = seq.findIndex(m => m.id === (fromId ?? sz.selected));
+    if (i < 0) i = dir > 0 ? -1 : 0;
+    for (let n = 0; n < seq.length; n++) {
+      i = (i + dir + seq.length) % seq.length;
+      if (onlyUnchecked && seq[i].status !== 'suggested') continue;
+      const m = seq[i];
+      if (m.page !== sz.page) { szPage.value = m.page; szLoadPage(m.id); } else szFocus(m.id);
+      return;
+    }
+    if (onlyUnchecked) { szNote.innerHTML = '<div class="text-success">Every value on this elevation has been checked.</div>'; szFrameElevation(true); }
+  }
+
+  // "Sheet 2 — values between break lines 1 and 2": which part of the run this sheet owns
+  function szCapText() {
+    const sh = szSheet(), b = szBreaks(sh), n = x => x.num != null ? x.num : '?';
+    if (!b.length) return `Sheet ${sz.page}`;
+    const r = szOwnedRange(sh, b);
+    return `Sheet ${sz.page} — values ` + (b.length === 1 ? `${r[0] != null ? 'right' : 'left'} of break line ${n(b[0])}` : `between break lines ${n(b[0])} and ${n(b[b.length - 1])}`);
+  }
+
+  function szLoadPage(focusId) {
+    sz.page = parseInt(szPage.value || sz.page); sz.selected = focusId || null; sz.error = null;
+    const sheet = szSheet();
     szCap.textContent = sheet ? 'Loading the sheet…' : '';
-    szRenderList(); szDraw();
+    // frame first (the sheet's size and the printed positions are known before the picture arrives)
+    if (sheet) szGo(focusId ? (() => { const m = szMarksOnPage().find(x => x.id === focusId), b = szBox(m), pad = Math.max(60, 1.5 * Math.max(b[2] - b[0], b[3] - b[1])); return szViewFor([b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad], 4); })()
+      : szViewFor(szCropBox(sheet, szMarksOnPage())), false);
+    szRenderList();
+    const page = sz.page;
+    if (sz.imgs[page]) { sz.img = sz.imgs[page]; szCap.textContent = szCapText(); szDraw(); return; }
+    sz.img = null;
     const img = new Image();
-    img.onload = () => { sz.img = img; szCap.textContent = `Sheet ${sz.page}`; szDraw(); };
-    img.onerror = () => { sz.error = true; szCap.textContent = 'The sheet image could not be loaded (is the drawing worker running?). The values are still listed.'; szDraw(); };
-    img.src = `${location.origin}/api/v1/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/pages/${sz.page}/image`;
+    img.onload = () => { if (!sz) return; sz.imgs[page] = img; if (sz.page === page) { sz.img = img; szCap.textContent = szCapText(); szDraw(); } };
+    img.onerror = () => { if (!sz || sz.page !== page) return; sz.error = true; szCap.textContent = 'The sheet image could not be loaded (is the drawing worker running?). The values are still listed.'; szDraw(); };
+    img.src = `${location.origin}/api/v1/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/pages/${page}/image?dpi=160`;   // sharp enough to read printed dimensions when zoomed in
   }
 
   function szDraw() {
-    const cv = szCanvas, sheet = szElev().sheets.find(s => s.page === sz.page);
-    if (!sheet) return;
-    const W = cv.clientWidth || 800, ratio = sheet.height / sheet.width, dpr = window.devicePixelRatio || 1;
-    cv.width = W * dpr; cv.height = W * ratio * dpr; cv.style.height = (W * ratio) + 'px';
-    const ctx = cv.getContext('2d'), k = (cv.width / sheet.width);        // page points -> canvas pixels
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
-    const z = sz.zoom;
-    if (z) { ctx.translate(cv.width / 2 - z.cx * k * z.scale, cv.height / 2 - z.cy * k * z.scale); ctx.scale(z.scale, z.scale); }
-    if (sz.img) ctx.drawImage(sz.img, 0, 0, cv.width, cv.height);
+    if (!sz || !sz.view) return;
+    const sheet = szSheet(), cv = szCanvas; if (!sheet) return;
+    const [W, H] = szStageSize(), dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const ctx = cv.getContext('2d'), { s, tx, ty } = sz.view, u = 1 / s;   // u: one screen pixel in page points
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#39434f'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * tx, dpr * ty);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sheet.width, sheet.height);
+    ctx.imageSmoothingQuality = 'high';
+    if (sz.img) ctx.drawImage(sz.img, 0, 0, Number(sheet.width), Number(sheet.height));
+    // a run drawn across sheets: shade what lies beyond this sheet's break lines and draw the lines, numbered
+    const brk = szBreaks(sheet), range = szOwnedRange(sheet, brk);
+    if (brk.length) {
+      ctx.fillStyle = 'rgba(40,50,70,0.22)';
+      if (range[0] != null) ctx.fillRect(0, 0, range[0], Number(sheet.height));
+      if (range[1] != null) ctx.fillRect(range[1], 0, Number(sheet.width) - range[1], Number(sheet.height));
+      brk.forEach(b => {
+        ctx.save(); ctx.setLineDash([10 * u, 6 * u]); ctx.lineWidth = 2 * u; ctx.strokeStyle = '#206bc4';
+        ctx.beginPath(); ctx.moveTo(b.x, 0); ctx.lineTo(b.x, Number(sheet.height)); ctx.stroke(); ctx.restore();
+        const fs = Math.max(12 * u, 9), txt = 'Break line' + (b.num != null ? ' ' + b.num : '');
+        ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'top'; const tw = ctx.measureText(txt).width;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(b.x + 4 * u, 6 * u, tw + 8 * u, fs + 6 * u);
+        ctx.fillStyle = '#206bc4'; ctx.fillText(txt, b.x + 8 * u, 9 * u);
+      });
+    }
+    szContextMarks().forEach(m => {      // drawn beyond the lines for context: outlined only, counted on the neighbouring sheet
+      const b = szBox(m), pad = 3 * u;
+      ctx.save(); ctx.setLineDash([5 * u, 4 * u]); ctx.lineWidth = 1.5 * u; ctx.strokeStyle = '#6e7781';
+      ctx.strokeRect(b[0] - pad, b[1] - pad, b[2] - b[0] + pad * 2, b[3] - b[1] + pad * 2); ctx.restore();
+    });
     szMarksOnPage().forEach(m => {
-      const [fill, line] = SZ_COLORS[m.status] || SZ_COLORS.suggested, pad = 3;
-      const x = m.x0 * k - pad, y = m.top * k - pad, w = (m.x1 - m.x0) * k + pad * 2, h = (m.bottom - m.top) * k + pad * 2;
-      const hot = sz.hover === m.id || sz.selected === m.id;
+      const [fill, line] = SZ_COLORS[m.status] || SZ_COLORS.suggested, pad = 3 * u, b = szBox(m);
+      const x = b[0] - pad, y = b[1] - pad, w = b[2] - b[0] + pad * 2, h = b[3] - b[1] + pad * 2;
+      const hot = sz.hover === m.id, sel = sz.selected === m.id;
       ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
-      ctx.lineWidth = hot ? 3 : 1.5; ctx.strokeStyle = line; ctx.strokeRect(x, y, w, h);
-      if (hot) { ctx.shadowColor = line; ctx.shadowBlur = 12; ctx.strokeRect(x, y, w, h); ctx.shadowBlur = 0; }
+      ctx.lineWidth = (hot || sel ? 3 : 1.5) * u; ctx.strokeStyle = line; ctx.strokeRect(x, y, w, h);
+      if (sel) { const o = 5 * u; ctx.lineWidth = 2 * u; ctx.strokeStyle = '#206bc4'; ctx.strokeRect(x - o, y - o, w + o * 2, h + o * 2); }
+      else if (hot) { ctx.save(); ctx.shadowColor = line; ctx.shadowBlur = 12 * dpr; ctx.strokeRect(x, y, w, h); ctx.restore(); }
       if (m.status === 'mismatch') {   // the PM Suite's correction stamp: the printed value struck in red, the corrected one written beside it
-        ctx.strokeStyle = '#cd281e'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x, y + h / 2); ctx.lineTo(x + w, y + h / 2); ctx.stroke();
-        const fs = Math.max(11, h * 0.95), txt = fmtIn(m.confirmed_value), vertical = /_h$/.test(m.kind);
+        ctx.strokeStyle = '#cd281e'; ctx.lineWidth = 2.5 * u; ctx.beginPath(); ctx.moveTo(x, y + h / 2); ctx.lineTo(x + w, y + h / 2); ctx.stroke();
+        const fs = Math.max(11 * u, h * 0.95), txt = fmtIn(m.confirmed_value), vertical = /_h$/.test(m.kind);
         ctx.font = `bold ${fs}px sans-serif`; ctx.textBaseline = 'alphabetic';
-        const tx = vertical ? x + w + 4 : x, ty = vertical ? y + h / 2 + fs / 3 : y - 5, tw = ctx.measureText(txt).width;
-        ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(tx - 2, ty - fs, tw + 4, fs + 4);
-        ctx.fillStyle = '#111'; ctx.fillText(txt, tx, ty);
+        const tX = vertical ? x + w + 4 * u : x, tY = vertical ? y + h / 2 + fs / 3 : y - 5 * u, tw = ctx.measureText(txt).width;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(tX - 2 * u, tY - fs, tw + 4 * u, fs + 4 * u);
+        ctx.fillStyle = '#111'; ctx.fillText(txt, tX, tY);
       }
     });
   }
@@ -548,34 +892,61 @@
     const marks = szMarksOnPage();
     szList.innerHTML = marks.length ? marks.map(m => {
       const [, line] = SZ_COLORS[m.status] || SZ_COLORS.suggested;
-      return `<div class="border rounded p-2 mb-2" style="border-left:4px solid ${line} !important" onmouseenter="szSetHover(${m.id})" onmouseleave="szSetHover(null)" onclick="szSelect(${m.id})">
-        <div class="d-flex align-items-center"><div><div class="small text-muted">${esc(SZ_KIND[m.kind] || m.kind)}${/^dlo/.test(m.kind) ? ' #' + (m.idx + 1) : ''}
+      return `<div id="szMark${m.id}" class="border rounded p-2 mb-2${sz.selected === m.id ? ' bg-azure-lt' : ''}" style="border-left:4px solid ${line} !important;cursor:pointer" onmouseenter="szSetHover(${m.id})" onmouseleave="szSetHover(null)" onclick="szFocus(${m.id})">
+        <div class="d-flex align-items-center"><div><div class="small text-muted">${esc(SZ_KIND[m.kind] || m.kind)}${/^dlo/.test(m.kind) || (m.kind === 'do_w' && m.idx > 0) ? ' #' + (m.idx + 1) : ''}
             <span class="badge ${CONF_CLASS[m.confidence.level]} ms-1" title="${esc(m.confidence.reasons.join(' • '))}">${m.confidence.score}%</span></div>
           <strong>${fmtIn(m.value)}</strong>${m.status === 'mismatch' ? ` <span class="text-danger">→ ${fmtIn(m.confirmed_value)}</span>` : ''}</div>
           <span class="ms-auto text-nowrap" data-permission="pm.jobs.manage">
-            <button class="btn btn-sm ${m.status === 'confirmed' ? 'btn-success' : ''}" onclick="event.stopPropagation(); szMark([${m.id}], 'confirm')">✓</button>
+            <button class="btn btn-sm ${m.status === 'confirmed' ? 'btn-success' : ''}" onclick="event.stopPropagation(); szConfirmNext(${m.id})">✓</button>
             <button class="btn btn-sm" onclick="event.stopPropagation(); szCorrect(${m.id})">Correct</button>
             ${m.status !== 'suggested' ? `<button class="btn btn-sm btn-ghost-secondary" onclick="event.stopPropagation(); szMark([${m.id}], 'clear')">Clear</button>` : ''}</span></div></div>`;
     }).join('') : '<div class="text-muted small">No dimensions were located on this sheet.</div>';
+    const ctx = szContextMarks().length;
+    if (ctx) szList.innerHTML += `<div class="small text-muted border rounded p-2">${ctx} more reading${ctx === 1 ? '' : 's'} on this sheet lie beyond its break lines and are drawn dashed for context. They are counted on the neighbouring sheet.</div>`;
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
 
-  function szSetHover(id) { sz.hover = id; szDraw(); }
-  function szHoverMove(ev) {
-    const cv = szCanvas, r = cv.getBoundingClientRect(), sheet = szElev().sheets.find(s => s.page === sz.page);
-    if (!sheet || sz.zoom) return;
-    const px = (ev.clientX - r.left) / r.width * sheet.width, py = (ev.clientY - r.top) / r.height * sheet.height;
-    const hit = szMarksOnPage().find(m => px >= m.x0 - 3 && px <= m.x1 + 3 && py >= m.top - 3 && py <= m.bottom + 3);
-    if ((hit ? hit.id : null) !== sz.hover) szSetHover(hit ? hit.id : null);
+  function szSetHover(id) { if (sz.hover === id) return; sz.hover = id; szDraw(); }
+  const szHit = (cx, cy) => {   // stage pixel -> the value printed there, if any
+    const px = (cx - sz.view.tx) / sz.view.s, py = (cy - sz.view.ty) / sz.view.s, pad = Math.max(3, 4 / sz.view.s);
+    return szMarksOnPage().find(m => { const b = szBox(m); return px >= b[0] - pad && px <= b[2] + pad && py >= b[1] - pad && py <= b[3] + pad; });
+  };
+  let szBound = false;
+  function szBindStage() {
+    if (szBound) return; szBound = true;
+    let drag = null;
+    const pos = ev => { const r = szStage.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+    szStage.addEventListener('wheel', ev => { if (!sz || !sz.view) return; ev.preventDefault(); const [x, y] = pos(ev); szZoomBy(Math.exp(-ev.deltaY * 0.0015), x, y); }, { passive: false });
+    szStage.addEventListener('pointerdown', ev => { if (!sz || !sz.view) return; cancelAnimationFrame(sz.raf); drag = { x: ev.clientX, y: ev.clientY, tx: sz.view.tx, ty: sz.view.ty, moved: false };
+      try { szStage.setPointerCapture(ev.pointerId); } catch (_) {} });
+    szStage.addEventListener('pointermove', ev => {
+      if (!sz || !sz.view) return;
+      if (drag) {
+        if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) > 4) { drag.moved = true; szStage.style.cursor = 'grabbing'; }
+        if (drag.moved) { sz.view = { s: sz.view.s, tx: drag.tx + ev.clientX - drag.x, ty: drag.ty + ev.clientY - drag.y }; szDraw(); }
+        return;
+      }
+      const [x, y] = pos(ev), hit = szHit(x, y); szStage.style.cursor = hit ? 'pointer' : 'grab'; szSetHover(hit ? hit.id : null);
+    });
+    const up = ev => { if (!drag) return; const wasClick = !drag.moved; drag = null; szStage.style.cursor = 'grab';
+      if (wasClick && sz && sz.view) { const [x, y] = pos(ev), hit = szHit(x, y); if (hit) szFocus(hit.id); } };
+    szStage.addEventListener('pointerup', up);
+    szStage.addEventListener('pointercancel', () => { drag = null; szStage.style.cursor = 'grab'; });
+    szStage.addEventListener('pointerleave', () => { if (!drag && sz) szSetHover(null); });
+    if (window.ResizeObserver) new ResizeObserver(() => { if (sz) szDraw(); }).observe(szStage);
+    document.addEventListener('keydown', ev => {
+      if (!sz || drawDetail.classList.contains('d-none') || drawCard.closest('.job-pane').style.display === 'none' || /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); szStep(1); }
+      else if (ev.key === 'ArrowLeft') { ev.preventDefault(); szStep(-1); }
+      else if (ev.key === '+' || ev.key === '=') szZoomBy(1.4);
+      else if (ev.key === '-') szZoomBy(1 / 1.4);
+      else if (ev.key === 'Enter' && sz.selected && hasPermission('pm.jobs.manage')) { ev.preventDefault(); szConfirmNext(sz.selected); }
+    });
   }
-  function szSelect(id) {
-    const m = szMarksOnPage().find(x => x.id === id); if (!m) return;
-    sz.selected = id; sz.zoom = sz.zoom ? null : { cx: (m.x0 + m.x1) / 2, cy: (m.top + m.bottom) / 2, scale: 2.6 }; szDraw();
-  }
-  function szCanvasClick(ev) {
-    if (sz.zoom) { sz.zoom = null; szDraw(); return; }
-    const r = szCanvas.getBoundingClientRect(), sheet = szElev().sheets.find(s => s.page === sz.page);
-    sz.zoom = { cx: (ev.clientX - r.left) / r.width * sheet.width, cy: (ev.clientY - r.top) / r.height * sheet.height, scale: 2.6 }; szDraw();
+  // confirm a value and go straight to the next one still unchecked, which is the flow when working down a sheet
+  async function szConfirmNext(id) {
+    const ok = await szMark([id], 'confirm');
+    if (ok && sz) szStep(1, true, id);
   }
 
   // after any change the server re-runs the frame check and recomputes confidence: reload and repaint
@@ -584,8 +955,8 @@
     if (sz && elevById(sz.elevId)) { szRenderInfo(); szRenderList(); szDraw(); }
   }
   async function szMark(ids, action, value) {
-    try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/marks`, { ids, action, value }); szNote.innerHTML = ''; await szRefresh(); }
-    catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; }
+    try { await post(`/pm/jobs/${JOB_ID}/drawing-sets/${szElev().set.id}/marks`, { ids, action, value }); szNote.innerHTML = ''; await szRefresh(); return true; }
+    catch (err) { szNote.innerHTML = `<div class="text-danger">${esc(err.message || 'Could not save')}</div>`; return false; }
   }
   function szCorrect(id) {
     const m = szMarksOnPage().find(x => x.id === id), t = prompt(`What is the real ${SZ_KIND[m.kind]}? (the drawing read ${fmtIn(m.value)})`, fmtIn(m.confirmed_value ?? m.value));
@@ -609,34 +980,62 @@
   const WO_STATUS = { pending: ['Pending', 'bg-orange-lt'], approved: ['Approved', 'bg-green-lt'], rejected: ['Rejected', 'bg-red-lt'], withdrawn: ['Withdrawn', 'bg-secondary-lt'] };
   async function loadWo() {
     const rows = await authenticatedFetch(`/pm/jobs/${JOB_ID}/work-order-requests`);
+    const pendingWo = rows.filter(r => r.status === 'pending').length;
+    statWo.textContent = pendingWo; tabWo.textContent = pendingWo; tabWo.style.display = pendingWo ? '' : 'none';
     woBody.innerHTML = rows.length ? rows.map(r => { const [l, c] = WO_STATUS[r.status] || [r.status, 'bg-secondary-lt'];
       return `<div class="list-group-item"><div class="d-flex align-items-center gap-2"><span class="badge ${c}">${l}</span>
         <strong>${esc(r.release_code || 'Release')}</strong><span class="text-muted">${r.requested_due_date ? 'needed ' + esc(r.requested_due_date) : ''}</span>
         <span class="ms-auto">${r.status === 'pending' ? `<button class="btn btn-sm" data-permission="pm.jobs.manage" onclick="withdrawWo(${r.id})">Withdraw</button>` : ''}</span></div>
+        ${r.drawing_set ? `<div class="small mt-1"><i class="ti ti-file-type-pdf text-red"></i> ${esc(r.drawing_set.file ? r.drawing_set.file.original_name : 'Drawing set')}${(r.elevations || []).length ? ': ' + r.elevations.map(l => `<span class="badge bg-azure-lt">${esc(l.label)} × ${l.quantity}${l.total_reqd ? ' of ' + l.total_reqd : ''}</span>`).join(' ') : ''}</div>` : ''}
         ${r.scope ? `<div class="small mt-1">${esc(r.scope)}</div>` : ''}
-        ${r.files.length ? `<div class="small text-muted mt-1">${r.files.length} drawing(s) attached</div>` : ''}
+        ${r.files.length ? `<div class="small text-muted mt-1">${r.files.length} drawing file(s) attached</div>` : ''}
+        ${(r.changes || []).length ? `<div class="small mt-1 border-start border-warning ps-2"><strong>Changed by Fabrication</strong>${r.changes.map(c => `<div>${esc(c.user ? c.user.name : 'Fabrication')}, ${esc((c.created_at || '').slice(0, 10))}: ${esc(c.summary.split('\n').join('; '))}${c.note ? ` <em>— ${esc(c.note)}</em>` : ''}</div>`).join('')}</div>` : ''}
         ${r.decision_note ? `<div class="small mt-1"><em>Fabrication:</em> ${esc(r.decision_note)}</div>` : ''}
         ${r.work_order ? `<div class="small mt-1">Work order created (release ${r.work_order.release_number}).</div>` : ''}</div>`; }).join('') : '<div class="list-group-item text-muted">No requests yet.</div>';
     if (typeof applyActionPermissions === 'function') applyActionPermissions();
   }
+  // elevations still to release: what the drawing calls for, less what pending / approved requests already cover
+  const woRemaining = (e) => e.total_reqd == null ? null : Math.max(0, e.total_reqd - (e.requested_qty || 0));
   function showWoForm() {
     document.querySelector('#woModal form').reset();
-    const ok = (drawData.elevations || []).filter(e => e.review_status === 'approved');
-    woElevBox.style.display = ok.length ? '' : 'none';
-    woElevList.innerHTML = ok.map(e => `<label class="form-check"><input type="checkbox" class="form-check-input" value="${e.id}"><span class="form-check-label">${esc(e.label)} — ${e.total_reqd ?? '?'} lites · R.O. ${dim(e.ro_w)} × ${dim(e.ro_h)} <span class="badge ${CONF_CLASS[e.confidence.level]}">${e.confidence.score}%</span></span></label>`).join('');
+    // a drawing can be tied once it is finished and has at least one approved elevation
+    const usable = drawSetsList.filter(st => st.status === 'done' && (drawData.elevations || []).some(e => e.set.id === st.id && e.review_status === 'approved'));
+    woSet.innerHTML = '<option value="">Not tied to a drawing</option>' + usable.map(st => `<option value="${st.id}">${esc(st.file ? st.file.original_name : 'Drawing set ' + st.id)}</option>`).join('');
+    woSetHint.textContent = usable.length ? 'Tie the request to a shop drawing to choose which elevations, and how many of each, it releases.'
+      : 'Approve elevations on the Drawings tab to tie a drawing to a request.';
+    if (usable.length === 1) woSet.value = usable[0].id;
+    renderWoElevs();
     safeShowModal('woModal');
   }
-  // the chosen elevations become lines in the request's scope, with the sizes that were checked
-  function woElevScope() {
-    return [...woElevList.querySelectorAll('input:checked')].map(cb => { const e = elevById(+cb.value);
-      const size = (k) => { const m = (e.marks || []).filter(x => x.kind === k).map(x => fmtIn(x.confirmed_value ?? x.value)); return m.length === 1 ? m[0] : null; };
-      return `${e.label}: ${e.total_reqd ?? '?'} lites, R.O. ${dim(e.ro_w)} × ${dim(e.ro_h)}${size('fs_w') ? ', F.S. ' + size('fs_w') + ' × ' + (size('fs_h') || '—') : ''}${e.system ? ', ' + e.system : ''}${e.finish ? ' (' + e.finish + ')' : ''}${e.arch_ref ? ' [' + e.arch_ref + ']' : ''}`; }).join('\n'); }
+  function renderWoElevs() {
+    const sid = +woSet.value;
+    woElevBox.style.display = sid ? '' : 'none';
+    if (!sid) { woElevList.innerHTML = ''; return; }
+    const els = (drawData.elevations || []).filter(e => e.set.id === sid);
+    woElevList.innerHTML = els.map(e => {
+      const rem = woRemaining(e), ok = e.review_status === 'approved' && rem !== 0;
+      const why = e.review_status !== 'approved' ? 'not approved yet' : rem === 0 ? `all ${e.total_reqd} already requested` : '';
+      return `<tr class="${ok ? '' : 'text-muted'}"><td><input type="checkbox" class="form-check-input" id="woE${e.id}" value="${e.id}" ${ok ? '' : 'disabled'} onchange="woToggle(${e.id})"></td>
+        <td><label for="woE${e.id}" class="mb-0"><strong>${esc(e.label)}</strong><div class="small text-muted">${esc(e.arch_ref || '')}</div></label></td>
+        <td>${esc([e.system, e.finish].filter(Boolean).join(' · ') || '—')}</td><td>${dim(e.ro_w)} × ${dim(e.ro_h)}</td>
+        <td style="width:170px">${ok ? `<div class="input-group input-group-sm"><input type="number" class="form-control" id="woQ${e.id}" min="1" ${rem != null ? `max="${rem}"` : ''} value="${rem ?? 1}" disabled>${rem != null ? `<span class="input-group-text">of ${rem}</span>` : ''}</div>
+          ${e.requested_qty ? `<div class="small text-muted">${e.requested_qty} of ${e.total_reqd} already requested</div>` : ''}` : `<span class="small">${why}</span>`}</td></tr>`;
+    }).join('') || '<tr><td colspan="5" class="text-muted">No elevations were read from this drawing.</td></tr>';
+  }
+  function woToggle(id) { const q = document.getElementById('woQ' + id); q.disabled = !document.getElementById('woE' + id).checked; if (!q.disabled) q.focus(); }
+  // [{ drawing_elevation_id, quantity }] for the elevations ticked
+  function woSelection() {
+    return [...woElevList.querySelectorAll('input[type=checkbox]:checked')].map(cb => ({ drawing_elevation_id: +cb.value, quantity: +document.getElementById('woQ' + cb.value).value }));
+  }
   async function saveWo(e) {
     e.preventDefault();
+    const sel = woSelection(), sid = +woSet.value || null;
+    if (sid && !sel.length) { notice('Tick the elevations this request releases, or choose "Not tied to a drawing".', 'warning'); return; }
     try {
-      const r = await post(`/pm/jobs/${JOB_ID}/work-order-requests`, { release_code: woCode.value || null, requested_due_date: woDue.value || null, scope: [woElevScope(), woScope.value].filter(Boolean).join('\n\n') || null, notes: woNotes.value || null });
+      const r = await post(`/pm/jobs/${JOB_ID}/work-order-requests`, { release_code: woCode.value || null, requested_due_date: woDue.value || null, scope: woScope.value || null, notes: woNotes.value || null,
+        drawing_set_id: sid, elevations: sel });
       for (const f of woFiles.files) { const fd = new FormData(); fd.append('file', f); await authenticatedUpload(`/pm/work-order-requests/${r.id}/files`, fd); }
-      safeHideModal('woModal'); notice('Request sent to Fabrication.', 'success'); loadWo();
+      safeHideModal('woModal'); notice('Request sent to Fabrication.', 'success'); loadWo(); loadDrawings();   // the drawing's remaining quantities change
     } catch (err) { notice(err.message || 'Could not send the request', 'danger'); }
   }
   async function withdrawWo(id) { if (confirm('Withdraw this request?')) { try { await post(`/pm/work-order-requests/${id}/withdraw`, {}); loadWo(); } catch (e) { notice(e.message, 'danger'); } } }
@@ -799,6 +1198,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
+    showJobTab((location.hash || '').slice(1) || 'overview', false);
     document.getElementById('sheetPick').addEventListener('change', (ev) => showSheet(ev.target.value));
     try {
       [costCodes] = await Promise.all([authenticatedFetch('/pm/cost-codes'), loadJob()]);
