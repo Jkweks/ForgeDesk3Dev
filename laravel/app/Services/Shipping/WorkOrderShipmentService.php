@@ -129,14 +129,21 @@ class WorkOrderShipmentService
         $rows = $ids->isEmpty() ? collect() : DB::table('shipment_elevations as se')
             ->join('shipments as s', 's.id', '=', 'se.shipment_id')
             ->whereIn('se.elevation_id', $ids)->whereNull('s.deleted_at')->where('s.status', '!=', 'cancelled')
-            ->orderBy('s.id')->get(['se.elevation_id', 'se.partial', 's.id as shipment_id', 's.shipment_number', 's.status']);
+            ->orderBy('s.id')->get(['se.elevation_id', 'se.partial', 'se.partial_note', 's.id as shipment_id', 's.shipment_number', 's.status', 's.ship_date', 's.shipped_at']);
+        $prior = $ids->isEmpty() ? collect() : DB::table('fd_wo_elevations')->whereIn('id', $ids)->whereNotNull('previously_delivered_marked_at')
+            ->get(['id', 'previously_delivered_on', 'previously_delivered_note'])->keyBy('id');
 
         $out = [];
         foreach ($ids as $id) {
             $mine = $rows->where('elevation_id', $id);
-            $received = $mine->whereIn('status', self::RECEIVED);
-            $open = $mine->whereIn('status', self::OPEN);
+            // A partial tag on a shipment that is already on the road means that truck carried only part of it:
+            // it behaves like a received partial (still owed), not like a full load in transit.
+            $onRoadPartial = fn ($r) => $r->status === 'shipped' && (bool) $r->partial;
+            $received = $mine->filter(fn ($r) => in_array($r->status, self::RECEIVED, true) || $onRoadPartial($r));
+            $open = $mine->whereIn('status', self::OPEN)->reject($onRoadPartial);
+            $previous = $prior->get($id);
             $state = match (true) {
+                $previous !== null => 'delivered',
                 $received->contains(fn ($r) => ! $r->partial) => 'delivered',
                 $open->contains(fn ($r) => $r->status === 'shipped') => 'in_transit',
                 $open->isNotEmpty() => 'scheduled',
@@ -146,11 +153,83 @@ class WorkOrderShipmentService
             $out[$id] = [
                 'state' => $state,
                 'partial_history' => $received->contains(fn ($r) => (bool) $r->partial),
+                // What earlier trips said was delivered/outstanding, for whoever loads the next one.
+                'outstanding' => $received->filter(fn ($r) => (bool) $r->partial)->map(fn ($r) => [
+                    'id' => (int) $r->shipment_id, 'number' => $r->shipment_number, 'note' => $r->partial_note,
+                    'date' => $r->ship_date ? substr((string) $r->ship_date, 0, 10) : ($r->shipped_at ? substr((string) $r->shipped_at, 0, 10) : null),
+                ])->values()->all(),
+                'previously_delivered' => $previous ? ['on' => $previous->previously_delivered_on, 'note' => $previous->previously_delivered_note] : null,
                 'shipments' => $mine->map(fn ($r) => ['id' => (int) $r->shipment_id, 'number' => $r->shipment_number, 'status' => $r->status, 'partial' => (bool) $r->partial])->values()->all(),
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * Marks elevations delivered outside the shipment system (or clears the mark). Marked elevations come off any
+     * shipment that hasn't shipped yet and count as delivered everywhere. Refuses ones on a truck or received.
+     *
+     * @param  int[]  $elevationIds
+     * @return string|null  an error message, or null on success
+     */
+    public function markPreviouslyDelivered(array $elevationIds, bool $delivered, ?string $on, ?string $note, ?int $userId): ?string
+    {
+        $ids = collect($elevationIds)->unique()->values();
+        if ($delivered) {
+            $busy = DB::table('shipment_elevations as se')->join('shipments as s', 's.id', '=', 'se.shipment_id')
+                ->whereIn('se.elevation_id', $ids)->whereNull('s.deleted_at')->whereIn('s.status', ['shipped', ...self::RECEIVED])
+                ->join('fd_wo_elevations as e', 'e.id', '=', 'se.elevation_id')->first(['e.elevation_tag', 's.shipment_number']);
+            if ($busy) {
+                return ($busy->elevation_tag ?: 'An elevation').' is on '.$busy->shipment_number.' already; use that shipment instead.';
+            }
+        }
+
+        DB::transaction(function () use ($ids, $delivered, $on, $note, $userId) {
+            DB::table('fd_wo_elevations')->whereIn('id', $ids)->update($delivered ? [
+                'previously_delivered_on' => $on, 'previously_delivered_note' => $note ? trim($note) : null,
+                'previously_delivered_by' => $userId, 'previously_delivered_marked_at' => now(),
+            ] : [
+                'previously_delivered_on' => null, 'previously_delivered_note' => null, 'previously_delivered_by' => null, 'previously_delivered_marked_at' => null,
+            ]);
+            if ($delivered) {
+                DB::table('shipment_elevations')->whereIn('elevation_id', $ids)
+                    ->whereIn('shipment_id', Shipment::whereIn('status', self::EDITABLE)->select('id'))->delete();
+            }
+        });
+
+        return null;
+    }
+
+    /**
+     * Elevations a received shipment tagged partial still owe a delivery: put them on the work order's next open
+     * (draft / pre-check) shipment, or open a new draft trip for them. Idempotent: only elevations that are on no
+     * open shipment and not fully delivered are moved. Returns the receiving shipment, or null if nothing to do.
+     */
+    public function carryOverPartials(Shipment $source, ?int $userId = null): ?Shipment
+    {
+        $partials = DB::table('shipment_elevations')->where('shipment_id', $source->id)->where('partial', true)->pluck('elevation_id');
+        if ($partials->isEmpty()) {
+            return null;
+        }
+        $states = $this->states($partials);
+        $need = $partials->filter(fn ($id) => $states[$id]['state'] === 'partial')->values();
+        if ($need->isEmpty()) {
+            return null;
+        }
+
+        $target = $source->work_order_id
+            ? Shipment::where('work_order_id', $source->work_order_id)->whereIn('status', self::EDITABLE)->where('id', '!=', $source->id)->orderBy('id')->first()
+            : null;
+        $target ??= $this->split($source, [], $userId);
+        foreach ($need as $id) {
+            DB::table('shipment_elevations')->updateOrInsert(
+                ['shipment_id' => $target->id, 'elevation_id' => $id],
+                ['partial' => false, 'partial_note' => null, 'created_at' => now(), 'updated_at' => now()],
+            );
+        }
+
+        return $target;
     }
 
     /** "Trip n of m" for shipments of the same work order (cancelled ones don't count). */

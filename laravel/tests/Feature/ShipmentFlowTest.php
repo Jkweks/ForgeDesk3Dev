@@ -206,6 +206,108 @@ class ShipmentFlowTest extends TestCase
         $this->assertTrue($svc->states([$e1->id])[$e1->id]['partial_history']);
     }
 
+    // ---- previously delivered + partial carry-over ----
+
+    public function test_previously_delivered_elevations_leave_open_shipments_and_read_as_delivered(): void
+    {
+        $this->admin();
+        $wo = $this->wo();
+        $e1 = $this->elev($wo, 'E1');
+        $e2 = $this->elev($wo, 'E2');
+        $s = Shipment::where('work_order_id', $wo->id)->first();
+        $svc = app(\App\Services\Shipping\WorkOrderShipmentService::class);
+
+        $this->postJson('/api/v1/shipments/elevations/previously-delivered', [
+            'elevation_ids' => [$e1->id], 'delivered' => true, 'delivered_on' => '2026-10-01', 'note' => 'Hand delivered',
+        ])->assertOk();
+
+        $this->assertSame([$e2->id], $s->elevations()->pluck('fd_wo_elevations.id')->all());
+        $st = $svc->states([$e1->id])[$e1->id];
+        $this->assertSame('delivered', $st['state']);
+        $this->assertSame('Hand delivered', $st['previously_delivered']['note']);
+        $this->assertSame([], collect($this->getJson('/api/v1/shipments/unscheduled')->json())->flatMap(fn ($w) => collect($w['elevations'])->pluck('id'))->diff([$e2->id])->all());
+
+        // cannot be put back on a shipment while marked
+        $this->putJson("/api/v1/shipments/{$s->id}/elevations", ['elevation_ids' => [$e1->id, $e2->id]])->assertStatus(422);
+
+        // un-marking makes it schedulable again
+        $this->postJson('/api/v1/shipments/elevations/previously-delivered', ['elevation_ids' => [$e1->id], 'delivered' => false])->assertOk();
+        $this->assertSame('unscheduled', $svc->states([$e1->id])[$e1->id]['state']);
+    }
+
+    public function test_cannot_mark_an_elevation_on_a_truck_as_previously_delivered(): void
+    {
+        $this->admin();
+        $wo = $this->wo();
+        $e = $this->elev($wo, 'E1');
+        Shipment::where('work_order_id', $wo->id)->first()->update(['status' => 'shipped']);
+
+        $this->postJson('/api/v1/shipments/elevations/previously-delivered', ['elevation_ids' => [$e->id], 'delivered' => true])->assertStatus(422);
+    }
+
+    public function test_partial_elevations_carry_over_to_the_next_open_shipment_when_received(): void
+    {
+        $this->admin();
+        $wo = $this->wo();
+        $e1 = $this->elev($wo, 'E1');
+        $e2 = $this->elev($wo, 'E2');
+        $s = Shipment::where('work_order_id', $wo->id)->first();
+        $svc = app(\App\Services\Shipping\WorkOrderShipmentService::class);
+
+        $this->patchJson("/api/v1/shipments/{$s->id}/elevations/{$e1->id}", ['partial' => true, 'partial_note' => 'Glass only'])->assertOk();
+        $this->assertNull($svc->carryOverPartials($s), 'not received yet: nothing owed');
+
+        $s->update(['status' => 'awaiting_verification']);
+        $target = $svc->carryOverPartials($s->fresh());
+        $this->assertNotNull($target);
+        $this->assertNotSame($s->id, $target->id);
+        $this->assertSame('draft', $target->status);
+        $this->assertSame($wo->id, $target->work_order_id);
+        $this->assertSame([$e1->id], $target->elevations()->pluck('fd_wo_elevations.id')->all());
+        $this->assertFalse((bool) $target->elevations()->first()->pivot->partial);
+        $this->assertSame('scheduled', $svc->states([$e1->id])[$e1->id]['state']);
+
+        // idempotent
+        $this->assertNull($svc->carryOverPartials($s->fresh()));
+        $this->assertSame(1, $target->elevations()->count());
+
+        // the next trip's detail tells the loader what is still owed
+        $d = $this->getJson("/api/v1/shipments/{$target->id}")->assertOk()->json('elevations.0.outstanding');
+        $this->assertSame('Glass only', $d[0]['note']);
+        $this->assertSame($s->id, $d[0]['id']);
+        $this->assertArrayHasKey('date', $d[0]);
+        $picker = collect($this->getJson("/api/v1/shipments/{$target->id}/elevations")->json('work_orders.0.elevations'))->firstWhere('id', $e1->id);
+        $this->assertSame([$s->id], collect($picker['outstanding'])->pluck('id')->all());
+
+        // a second partial goes onto the same open draft rather than a third trip
+        $this->patchJson("/api/v1/shipments/{$s->id}/elevations/{$e2->id}", ['partial' => true, 'partial_note' => 'Frame only'])->assertOk();
+        // (flagging on an already-received shipment carries it over straight away)
+        $this->assertSame(2, $target->elevations()->count());
+        $this->assertSame(2, Shipment::where('work_order_id', $wo->id)->count(), 'no third trip was opened');
+    }
+
+    public function test_partial_on_a_shipped_truck_can_be_added_to_another_shipment(): void
+    {
+        $this->admin();
+        $wo = $this->wo();
+        $e = $this->elev($wo, 'E1');
+        $s = Shipment::where('work_order_id', $wo->id)->first();
+        $svc = app(\App\Services\Shipping\WorkOrderShipmentService::class);
+        $n = Shipment::create(['shipment_number' => Shipment::nextNumber(), 'status' => 'draft', 'work_order_id' => $wo->id]);
+        $n->jobs()->sync([$wo->business_job_id]);
+
+        // Full load on a truck: blocked.
+        $s->update(['status' => 'shipped']);
+        $this->putJson("/api/v1/shipments/{$n->id}/elevations", ['elevation_ids' => [$e->id]])->assertStatus(422);
+        $this->assertSame('in_transit', $svc->states([$e->id])[$e->id]['state']);
+
+        // Tagged partial while on the road: the rest is still owed and can ride another shipment.
+        $s->elevations()->updateExistingPivot($e->id, ['partial' => true, 'partial_note' => 'Glass only']);
+        $this->assertSame('partial', $svc->states([$e->id])[$e->id]['state']);
+        $this->putJson("/api/v1/shipments/{$n->id}/elevations", ['elevation_ids' => [$e->id]])->assertOk();
+        $this->assertSame('scheduled', $svc->states([$e->id])[$e->id]['state']);
+    }
+
     public function test_cancelled_shipments_free_their_elevations(): void
     {
         $wo = $this->wo();

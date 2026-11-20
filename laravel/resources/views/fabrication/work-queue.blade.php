@@ -296,15 +296,12 @@ function wqSearchDebounce() { clearTimeout(wqSearchTimer); wqSearchTimer = setTi
 
 // Filters the board applies client-side (job / work order are server-side)
 function wqCardVisible(c) {
-  const q = (document.getElementById('wq-search')?.value || '').trim().toLowerCase();
+  const q = (document.getElementById('wq-search')?.value || '').trim();
   const step = document.getElementById('wq-step')?.value;
   if (step && c.name !== step) return false;
   if (document.getElementById('wq-overdue-only')?.checked && !isPast(c.due_date)) return false;
   if (document.getElementById('wq-hide-locked')?.checked && c.gated) return false;
-  if (q) {
-    const hay = `${c.name} ${c.release_label || ''} ${(c.elevation_tags || [c.elevation_tag]).join(' ')} ${c.job_name || ''}`.toLowerCase();
-    if (!q.split(/\s+/).every(t => hay.includes(t))) return false;
-  }
+  if (q && !fdSearch.match(q, c.name, c.release_label, c.elevation_tags || [c.elevation_tag], c.job_name)) return false;
   return true;
 }
 

@@ -49,10 +49,16 @@
               <option>In progress</option>
               <option>Done</option>
             </select>
+            <label class="form-check form-switch ms-auto mb-0" title="Cut lists of completed work orders">
+              <input class="form-check-input" type="checkbox" id="cl-archived" onchange="clLoadList()">
+              <span class="form-check-label">Archived <span class="badge bg-secondary-lt" id="cl-archived-count"></span></span>
+            </label>
           </div>
           <div class="table-responsive">
             <table class="table table-vcenter card-table">
-              <thead><tr><th>Job</th><th>Work order</th><th class="text-end">Lines</th><th class="text-end">Cut / Total</th><th>Status</th><th>Updated</th></tr></thead>
+              <thead><tr id="cl-head">
+                <th data-sort="job">Job</th><th data-sort="wo">Work order</th><th data-sort="lines" class="text-end">Lines</th><th data-sort="cut" class="text-end">Cut / Total</th><th data-sort="status">Status</th><th data-sort="updated">Updated</th>
+              </tr></thead>
               <tbody id="cl-list-body"><tr><td colspan="6" class="text-center text-muted py-4">Loading…</td></tr></tbody>
             </table>
           </div>
@@ -243,24 +249,63 @@ async function clJson(r) {
 // ── List ────────────────────────────────────────────────────────────────
 async function clLoadList() {
   try {
-    clLists = (await clJson(await API('/cut-lists'))).cut_lists || [];
+    const arch = document.getElementById('cl-archived')?.checked;
+    const res = await clJson(await API('/cut-lists' + (arch ? '?archived=1' : '')));
+    clLists = res.cut_lists || [];
+    document.getElementById('cl-archived-count').textContent = res.archived_count || '';
     clRenderList();
   } catch (e) { clToast(e.message, false); }
 }
 
+// Sortable columns. Default: status (In progress → Not cut → Done), then job name.
+const CL_STATUS_RANK = { 'In progress': 0, 'Not cut': 1, 'Done': 2 };
+const CL_SORTS = {
+  job:     l => (l.job_name || l.name || '').toLowerCase(),
+  wo:      l => (l.work_order_label || '').toLowerCase(),
+  lines:   l => l.parts_count || 0,
+  cut:     l => (l.qty_original ? l.qty_cut / l.qty_original : 0),
+  status:  l => CL_STATUS_RANK[l.status] ?? 9,
+  updated: l => l.updated_at ? Date.parse(l.updated_at) : 0,
+};
+let clSort = { key: 'status', dir: 1 };
+function clSortBy(key) {
+  clSort = clSort.key === key ? { key, dir: -clSort.dir } : { key, dir: 1 };
+  clRenderList();
+}
+function clCompare(a, b) {
+  const f = CL_SORTS[clSort.key];
+  const x = f(a), y = f(b);
+  let c = typeof x === 'string' ? x.localeCompare(y, undefined, { numeric: true }) : x - y;
+  c *= clSort.dir;
+  if (c) return c;
+  // stable tie-breakers: status rank, then job name
+  return (CL_SORTS.status(a) - CL_SORTS.status(b)) || CL_SORTS.job(a).localeCompare(CL_SORTS.job(b), undefined, { numeric: true });
+}
+function clRenderHead() {
+  document.querySelectorAll('#cl-head th[data-sort]').forEach(th => {
+    th.style.cursor = 'pointer'; th.style.userSelect = 'none';
+    th.onclick = () => clSortBy(th.dataset.sort);
+    const on = th.dataset.sort === clSort.key;
+    th.setAttribute('aria-sort', on ? (clSort.dir === 1 ? 'ascending' : 'descending') : 'none');
+    th.querySelector('.cl-arrow')?.remove();
+    if (on) th.insertAdjacentHTML('beforeend', `<span class="cl-arrow ms-1">${clSort.dir === 1 ? '▲' : '▼'}</span>`);
+  });
+}
+
 function clRenderList() {
-  const q = document.getElementById('cl-filter').value.trim().toLowerCase();
+  clRenderHead();
+  const q = document.getElementById('cl-filter').value.trim();
   const st = document.getElementById('cl-status').value;
-  const rows = clLists.filter(l => (!q || [l.name, l.job_name, l.work_order_label].some(v => (v || '').toLowerCase().includes(q))) && (!st || l.status === st));
+  const rows = clLists.filter(l => fdSearch.match(q, l.name, l.job_name, l.work_order_label) && (!st || l.status === st)).sort(clCompare);
   document.getElementById('cl-list-body').innerHTML = rows.length ? rows.map(l => `
     <tr style="cursor:pointer" onclick="clOpen(${l.id})">
-      <td class="fw-medium">${esc(l.job_name || l.name)}${l.job_name ? `<div class="text-muted small fw-normal">${esc(l.name)}</div>` : ''}</td>
+      <td class="fw-medium">${esc(l.job_name || l.name)}${l.sequence > 1 ? ' <span class="badge bg-azure-lt">Add-on</span>' : ''}${l.job_name ? `<div class="text-muted small fw-normal">${esc(l.name)}</div>` : ''}</td>
       <td>${esc(l.work_order_label) || '<span class="text-muted">—</span>'}</td>
       <td class="text-end">${l.parts_count}</td>
       <td class="text-end">${l.qty_cut} / ${l.qty_original}</td>
       <td><span class="badge ${statusClass(l.status)}">${l.status}</span></td>
       <td class="text-muted">${l.updated_at ? new Date(l.updated_at).toLocaleDateString() : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted py-4">No cut lists found.</td></tr>';
+    </tr>`).join('') : `<tr><td colspan="6" class="text-center text-muted py-4">${document.getElementById('cl-archived')?.checked ? 'No archived cut lists — they appear here once their work order is complete.' : 'No cut lists found.'}</td></tr>`;
 }
 
 function clShowList() {

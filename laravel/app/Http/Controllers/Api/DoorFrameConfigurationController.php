@@ -1587,7 +1587,7 @@ class DoorFrameConfigurationController extends Controller
             // CutJob per work order rather than one per opening.
             $cutFlowResult = null;
             try {
-                $cutFlowResult = app(\App\Services\Configurator\CutFlowExportService::class)->exportWorkOrder($workOrder);
+                $cutFlowResult = app(\App\Services\Configurator\CutFlowExportService::class)->exportWorkOrder($workOrder, $config);
             } catch (\Throwable $e) {
                 Log::warning('Failed to export cut list to CutFlow on release', [
                     'config_id' => $id,
@@ -1707,7 +1707,7 @@ class DoorFrameConfigurationController extends Controller
 
         $cutFlowResult = null;
         try {
-            $cutFlowResult = app(\App\Services\Configurator\CutFlowExportService::class)->exportWorkOrder($workOrder);
+            $cutFlowResult = app(\App\Services\Configurator\CutFlowExportService::class)->exportWorkOrder($workOrder, $config);
         } catch (\Throwable $e) {
             Log::warning('Failed to export cut list to CutFlow on cut release', ['config_id' => $id, 'work_order_id' => $workOrder->id, 'message' => $e->getMessage()]);
         }
@@ -1754,7 +1754,7 @@ class DoorFrameConfigurationController extends Controller
             return response()->json(['error' => 'Nothing to send', 'message' => 'Leave at least one of the frame or door cut lists to send.'], 422);
         }
 
-        $cut = $config->workOrder ? $cutFlow->status($config->workOrder) : null;
+        $cut = $config->workOrder ? $cutFlow->status($config->workOrder, (int) $config->cutflow_supplement) : null;
         if ($cut && $cut['cut_started']) {
             return response()->json(['error' => 'Cutting has started', 'message' => 'Cutting has started on this work order, so what is sent can no longer change.'], 422);
         }
@@ -1769,7 +1769,7 @@ class DoorFrameConfigurationController extends Controller
         DB::transaction(function () use ($config, $data, $cutFlow) {
             $config->update($data);
             if ($config->workOrder) {
-                $cutFlow->rebuildWorkOrder($config->workOrder);
+                $cutFlow->rebuildWorkOrder($config->workOrder, (int) $config->cutflow_supplement);
             }
         });
 
@@ -1874,9 +1874,12 @@ class DoorFrameConfigurationController extends Controller
             $warnings[] = "{$specialOrder} special-order hardware item(s) will print on the package but are not reserved from stock.";
         }
 
-        $cutList = $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder) : null;
+        $cutList = $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder, (int) $config->cutflow_supplement) : null;
         if ($cutList && $cutList['diverged']) {
             $warnings[] = 'This work order\'s cut list has hand edits; releasing adds generated lines alongside them.';
+        }
+        if ($config->workOrder?->isClosed() && ! $config->cutflow_supplement) {
+            $warnings[] = 'This work order is complete, so releasing this opening starts a new add-on cut list for it; the finished cut list is not changed.';
         }
 
         return [
@@ -1910,7 +1913,7 @@ class DoorFrameConfigurationController extends Controller
             ], 422);
         }
 
-        $cut = $config->workOrder ? $cutFlow->status($config->workOrder) : null;
+        $cut = $config->workOrder ? $cutFlow->status($config->workOrder, (int) $config->cutflow_supplement) : null;
         if ($cut && $cut['cut_started']) {
             return response()->json([
                 'error' => 'Cutting has started',
@@ -1931,7 +1934,7 @@ class DoorFrameConfigurationController extends Controller
             $config->save();
             $reservationBridge->syncJob($config->businessJob, auth()->user());
             if ($config->workOrder) {
-                $cutFlow->rebuildWorkOrder($config->workOrder);
+                $cutFlow->rebuildWorkOrder($config->workOrder, (int) $config->cutflow_supplement);
             }
         });
 
@@ -2365,7 +2368,7 @@ class DoorFrameConfigurationController extends Controller
             'cutflow_include_frame' => (bool) $config->cutflow_include_frame,
             'cutflow_include_door' => (bool) $config->cutflow_include_door,
             'applied_hardware_sets' => $config->appliedHardwareSets->map(fn ($set) => ['id' => $set->id, 'name' => $set->name, 'is_pair' => (bool) $set->is_pair])->values(),
-            'cut_list' => $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder) : null,
+            'cut_list' => $config->workOrder ? app(\App\Services\Configurator\CutFlowExportService::class)->status($config->workOrder, (int) $config->cutflow_supplement) : null,
             'validation_errors' => $config->getValidationErrors(),
             'created_at' => $config->created_at->format('Y-m-d H:i:s'),
             'updated_at' => $config->updated_at->format('Y-m-d H:i:s'),

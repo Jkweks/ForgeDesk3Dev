@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\JobDocument;
@@ -34,11 +35,7 @@ class BusinessJobController extends Controller
             // Search by job number or name
             if ($request->has('search')) {
                 $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('job_number', 'like', "%{$search}%")
-                        ->orWhere('job_name', 'like', "%{$search}%")
-                        ->orWhere('customer_name', 'like', "%{$search}%");
-                });
+                Search::apply($query, $search, ['job_number', 'job_name', 'customer_name']);
             }
 
             $jobs = $query

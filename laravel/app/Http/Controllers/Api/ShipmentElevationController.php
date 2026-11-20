@@ -38,7 +38,7 @@ class ShipmentElevationController extends Controller
         $states = $this->svc->states($ids);
         foreach ($elevs as $e) {
             $s = $states[$e->id];
-            $elsewhere = collect($s['shipments'])->first(fn ($x) => $x['id'] !== $shipment->id && $x['status'] === 'shipped');
+            $elsewhere = collect($s['shipments'])->first(fn ($x) => $x['id'] !== $shipment->id && $x['status'] === 'shipped' && ! $x['partial']);
             if ($s['state'] === 'delivered' && ! collect($s['shipments'])->contains('id', $shipment->id)) {
                 return response()->json(['message' => ($e->elevation_tag ?: 'An elevation').' has already been delivered.'], 422);
             }
@@ -82,8 +82,27 @@ class ShipmentElevationController extends Controller
         $shipment->elevations()->updateExistingPivot($elevationId, [
             'partial' => $data['partial'], 'partial_note' => $data['partial'] ? trim($data['partial_note']) : null,
         ]);
+        // Already received: the outstanding part needs a later trip, so queue it on one right away.
+        if (in_array($shipment->status, [...Svc::RECEIVED, 'shipped'], true)) {
+            $this->svc->carryOverPartials($shipment->fresh(), $request->user()->id);
+        }
 
         return response()->json($this->payload($shipment));
+    }
+
+    /** Mark (or un-mark) elevations as delivered outside the shipment system, e.g. before shipments were tracked here. */
+    public function previouslyDelivered(Request $request)
+    {
+        $data = $request->validate([
+            'elevation_ids' => 'required|array|min:1|max:500', 'elevation_ids.*' => 'integer|distinct|exists:fd_wo_elevations,id',
+            'delivered' => 'required|boolean', 'delivered_on' => 'nullable|date', 'note' => 'nullable|string|max:1000',
+        ]);
+        $error = $this->svc->markPreviouslyDelivered($data['elevation_ids'], (bool) $data['delivered'], $data['delivered_on'] ?? null, $data['note'] ?? null, $request->user()->id);
+        if ($error) {
+            return response()->json(['message' => $error], 422);
+        }
+
+        return response()->json(['updated' => count($data['elevation_ids'])]);
     }
 
     /** New sibling draft for the same work order; `elevation_ids` (optional) move onto it. */
@@ -156,6 +175,7 @@ class ShipmentElevationController extends Controller
                     return [
                         'id' => $e->id, 'tag' => $e->elevation_tag, 'type' => $e->elevationType?->name, 'color' => $e->elevationType?->color,
                         'quantity' => $e->quantity, 'state' => $st['state'], 'partial_history' => $st['partial_history'],
+                        'outstanding' => collect($st['outstanding'])->reject(fn ($o) => $o['id'] === $shipment->id)->values()->all(), 'previously_delivered' => $st['previously_delivered'],
                         'on_this' => $onThis->has($e->id),
                         'partial' => (bool) $onThis->get($e->id)?->pivot->partial, 'partial_note' => $onThis->get($e->id)?->pivot->partial_note,
                         'other_shipments' => collect($st['shipments'])->reject(fn ($x) => $x['id'] === $shipment->id)->values(),

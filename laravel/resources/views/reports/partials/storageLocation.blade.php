@@ -198,16 +198,11 @@ function filterStorageLocationReport(searchTerm) {
     renderStorageLocationAccordion(storageLocationData);
     return;
   }
-  const term = searchTerm.toLowerCase();
+  const term = searchTerm.trim();
   const filtered = storageLocationData
     .map(loc => {
-      const nameMatch = loc.name.toLowerCase().includes(term) ||
-                        (loc.code || '').toLowerCase().includes(term);
-      const matchedItems = loc.items.filter(item =>
-        item.sku.toLowerCase().includes(term) ||
-        item.description.toLowerCase().includes(term) ||
-        (item.part_number || '').toLowerCase().includes(term)
-      );
+      const nameMatch = fdSearch.match(term, loc.name, loc.code);
+      const matchedItems = loc.items.filter(item => fdSearch.match(term, item.sku, item.description, item.part_number));
       if (!nameMatch && matchedItems.length === 0) return null;
       return { ...loc, items: nameMatch ? loc.items : matchedItems,
                item_count: nameMatch ? loc.item_count : matchedItems.length,

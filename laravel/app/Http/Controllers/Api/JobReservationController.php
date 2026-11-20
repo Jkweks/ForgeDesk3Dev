@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryLocation;
 use App\Models\InventoryTransaction;
@@ -987,19 +988,7 @@ class JobReservationController extends Controller
 
             // Every word must match SKU, part number, finish or description (case-insensitive),
             // so "1000 c2" finds part 1000 in C2 finish.
-            $terms = array_values(array_filter(preg_split('/\s+/', strtolower(trim($query)))));
-
-            $products = Product::where(function ($outer) use ($terms) {
-                foreach ($terms as $term) {
-                    $like = '%'.$term.'%';
-                    $outer->where(function ($q) use ($like) {
-                        $q->whereRaw('LOWER(sku) LIKE ?', [$like])
-                            ->orWhereRaw('LOWER(COALESCE(part_number, \'\')) LIKE ?', [$like])
-                            ->orWhereRaw('LOWER(COALESCE(finish, \'\')) LIKE ?', [$like])
-                            ->orWhereRaw('LOWER(COALESCE(description, \'\')) LIKE ?', [$like]);
-                    });
-                }
-            })
+            $products = Search::apply(Product::query(), $query, ['sku', 'part_number', 'finish', 'description'])
                 ->orderBy('sku')
                 ->limit($perPage)
                 ->get();

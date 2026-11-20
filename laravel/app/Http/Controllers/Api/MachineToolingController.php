@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Machine;
 use App\Models\MachineTooling;
@@ -106,11 +107,7 @@ class MachineToolingController extends Controller
         // Search by SKU or description
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('sku', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%")
-                    ->orWhere('part_number', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['sku', 'description', 'part_number']);
         }
 
         $tools = $query->with([

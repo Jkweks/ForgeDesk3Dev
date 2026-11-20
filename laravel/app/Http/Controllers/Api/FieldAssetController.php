@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\Search;
 use App\Models\FieldAsset;
 use App\Models\FieldAssetType;
 use App\Models\User;
@@ -23,12 +24,7 @@ class FieldAssetController extends Controller
             ->withCount(['workOrders as open_work_orders_count' => fn ($w) => $w->open()]);
 
         if ($s = trim((string) $request->query('search'))) {
-            $like = '%'.mb_strtolower(str_replace(['%', '_'], ['\%', '\_'], $s)).'%';
-            $q->where(function ($w) use ($like) {
-                foreach (['asset_number', 'name', 'vin', 'license_plate', 'serial_number'] as $col) {
-                    $w->orWhereRaw("lower({$col}) like ?", [$like]);
-                }
-            });
+            Search::apply($q, $s, ['asset_number', 'name', 'vin', 'license_plate', 'serial_number']);
         }
         if ($request->filled('type_id')) {
             $q->where('field_asset_type_id', $request->query('type_id'));

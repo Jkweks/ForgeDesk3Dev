@@ -405,6 +405,12 @@ class FdWorkOrder extends Model
         return $reasons;
     }
 
+    /** Completed or archived: new releases no longer merge into its cut list, they open an add-on list. */
+    public function isClosed(): bool
+    {
+        return $this->status === 'complete' || (bool) $this->archived;
+    }
+
     public function scopeActive($query)
     {
         return $query->where('archived', false);

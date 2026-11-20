@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Supplier;
@@ -26,12 +27,7 @@ class SupplierController extends Controller
         // Search by name, code, or contact name
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%")
-                    ->orWhere('contact_name', 'like', "%{$search}%")
-                    ->orWhere('contact_email', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['name', 'code', 'contact_name', 'contact_email']);
         }
 
         // Filter by country

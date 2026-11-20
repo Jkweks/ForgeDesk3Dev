@@ -22,6 +22,7 @@ class DoorFrameConfiguration extends Model
         'archived_at',
         'cutflow_include_frame',
         'cutflow_include_door',
+        'cutflow_supplement',
         'notes',
         'created_by_id',
     ];

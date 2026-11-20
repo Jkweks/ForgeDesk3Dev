@@ -199,6 +199,8 @@ class ShipmentInspectionService
             // A completed (non-failed) pre-check ships the load automatically; a failed one leaves it in draft.
             if ($inspection->result !== 'fail' && in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
                 $shipment->update(['status' => 'shipped', 'shipped_at' => now(), 'ship_date' => $shipment->ship_date ?? now()->toDateString()]);
+                // Elevations tagged partial for this load are only partly on the truck: queue the rest on another trip.
+                app(WorkOrderShipmentService::class)->carryOverPartials($shipment->fresh(), $inspection->performed_by_user_id);
             }
             if ($inspection->result === 'fail') {
                 $this->notify('shipment_pre_fail', 'danger', "Pre-shipment check failed: {$shipment->shipment_number}",
@@ -210,6 +212,7 @@ class ShipmentInspectionService
 
         // A received delivery does not close the shipment: the office verifies it (see verify()).
         $shipment->update(['status' => 'awaiting_verification']);
+        app(WorkOrderShipmentService::class)->carryOverPartials($shipment->fresh(), $inspection->performed_by_user_id);
         $label = $shipment->jobLabel() ? ' ('.$shipment->jobLabel().')' : '';
         if (! $ok) {
             $this->notify('shipment_post_issues', $inspection->result === 'fail' ? 'danger' : 'warning',

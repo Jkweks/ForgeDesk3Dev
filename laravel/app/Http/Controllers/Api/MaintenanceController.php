@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\Category;
@@ -61,11 +62,7 @@ class MaintenanceController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('sku', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%")
-                    ->orWhere('part_number', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['sku', 'description', 'part_number']);
         }
 
         $consumables = $query->with(['inventoryLocations.storageLocation', 'supplier'])

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\StorageLocation;
 use Illuminate\Http\Request;
@@ -43,11 +44,7 @@ class StorageLocationController extends Controller
         // Search by name or code
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'LIKE', "%{$search}%")
-                    ->orWhere('code', 'LIKE', "%{$search}%")
-                    ->orWhere('description', 'LIKE', "%{$search}%");
-            });
+            Search::apply($query, $search, ['name', 'code', 'description']);
         }
 
         // Load relationships
@@ -427,7 +424,7 @@ class StorageLocationController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where('name', 'LIKE', "%{$search}%");
+            Search::apply($query, $search, ['name', 'code']);
         }
 
         $locations = $query->ordered()->limit(50)->pluck('name');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\CycleCountItem;
 use App\Models\CycleCountSession;
@@ -47,11 +48,7 @@ class CycleCountController extends Controller
             // Search
             if ($request->has('search')) {
                 $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('session_number', 'like', "%{$search}%")
-                        ->orWhere('location', 'like', "%{$search}%")
-                        ->orWhere('notes', 'like', "%{$search}%");
-                });
+                Search::apply($query, $search, ['session_number', 'location', 'notes']);
             }
 
             $sessions = $query->orderBy('scheduled_date', 'desc')

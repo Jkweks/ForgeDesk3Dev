@@ -30,7 +30,7 @@ use Illuminate\Validation\ValidationException;
  */
 class CutListController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $jobs = CutJob::withCount('parts')
             ->withSum('parts as qty_original', 'qty_original')
@@ -42,8 +42,24 @@ class CutListController extends Controller
             ->whereIn('id', $jobs->pluck('work_order_id')->filter())
             ->get()->keyBy('id');
 
+        // Archived = linked to a work order that is complete or archived (derived, so reopening a
+        // work order brings its cut list straight back). Standalone lists are never archived.
+        // A list that still has pieces to cut (e.g. an add-on added after completion) is not archived.
+        $isArchived = fn (CutJob $job) => (int) $job->qty_remaining <= 0
+            && (bool) ($wo = $workOrders->get($job->work_order_id))
+            && $wo->isClosed();
+        $archivedCount = $jobs->filter($isArchived)->count();
+        if ($request->filled('work_order_id')) {
+            // A work order's own tab shows all of its lists, archived or not.
+            $jobs = $jobs->where('work_order_id', (int) $request->query('work_order_id'))->values();
+        } else {
+            $showArchived = $request->boolean('archived');
+            $jobs = $jobs->filter(fn (CutJob $job) => $isArchived($job) === $showArchived)->values();
+        }
+
         return response()->json([
-            'cut_lists' => $jobs->map(function (CutJob $job) use ($workOrders) {
+            'archived_count' => $archivedCount,
+            'cut_lists' => $jobs->map(function (CutJob $job) use ($workOrders, $isArchived) {
                 $original = (int) $job->qty_original;
                 $remaining = (int) $job->qty_remaining;
 
@@ -51,6 +67,8 @@ class CutListController extends Controller
                     'id' => $job->id,
                     'name' => $job->name,
                     'work_order_id' => $job->work_order_id,
+                    'archived' => $isArchived($job),
+                    'sequence' => (int) ($job->sequence ?? 1),
                     'bom_diverged' => $job->bom_diverged_at !== null,
                     'job_name' => $workOrders->get($job->work_order_id)?->businessJob?->job_name,
                     'work_order_label' => $workOrders->get($job->work_order_id)?->releaseLabel(),
@@ -67,7 +85,7 @@ class CutListController extends Controller
     /** Active work orders that don't have a cut list yet, for the "New cut list" picker. */
     public function workOrderOptions()
     {
-        $taken = CutJob::whereNotNull('work_order_id')->pluck('work_order_id')->all();
+        $taken = CutJob::whereNotNull('work_order_id')->where('sequence', 1)->pluck('work_order_id')->all();
 
         $orders = FdWorkOrder::active()->with('businessJob')
             ->whereNotIn('id', $taken)
@@ -100,7 +118,7 @@ class CutListController extends Controller
             if (! $workOrder) {
                 throw ValidationException::withMessages(['work_order_id' => 'Work order not found.']);
             }
-            if ($existing = CutJob::where('work_order_id', $workOrder->id)->first()) {
+            if ($existing = CutJob::where('work_order_id', $workOrder->id)->where('sequence', 1)->first()) {
                 return response()->json([
                     'error' => 'That work order already has a cut list.',
                     'existing_id' => $existing->id,
@@ -138,6 +156,7 @@ class CutListController extends Controller
                 'id' => $job->id,
                 'name' => $job->name,
                 'work_order_id' => $job->work_order_id,
+                'sequence' => (int) ($job->sequence ?? 1),
                 'bom_diverged' => $job->bom_diverged_at !== null,
                 'has_sill_report' => $sillReport->hasStoredUpload($job->id),
                 'status' => $this->jobStatus($original, $remaining),

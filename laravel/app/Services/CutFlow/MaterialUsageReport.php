@@ -6,6 +6,7 @@ use App\Models\CutFlow\CutConsumption;
 use App\Models\CutFlow\CutJob;
 use App\Models\FdWorkOrder;
 use App\Models\Product;
+use App\Support\Search;
 
 /**
  * Stock lengths cut per work order, rolled up per job, from the cut_consumptions ledger. Covers every work
@@ -23,8 +24,7 @@ class MaterialUsageReport
         $workOrders = FdWorkOrder::with('businessJob:id,job_number,job_name')
             ->when($businessJobId, fn ($q) => $q->where('business_job_id', $businessJobId))
             ->when($workOrderId, fn ($q) => $q->whereKey($workOrderId))
-            ->when($search, fn ($q) => $q->whereHas('businessJob', fn ($j) => $j
-                ->where('job_number', 'like', "%{$search}%")->orWhere('job_name', 'like', "%{$search}%")))
+            ->when($search, fn ($q) => Search::apply($q, $search, ['businessJob.job_number', 'businessJob.job_name']))
             ->orderBy('business_job_id')->orderBy('release_number')
             ->get();
 

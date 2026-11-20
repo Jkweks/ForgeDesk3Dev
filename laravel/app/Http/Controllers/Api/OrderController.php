@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\CommittedInventory;
 use App\Models\Order;
@@ -29,10 +30,7 @@ class OrderController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('order_number', 'like', "%{$search}%")
-                    ->orWhere('customer_name', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['order_number', 'customer_name']);
         }
 
         return response()->json($query->latest('order_date')->paginate(50));

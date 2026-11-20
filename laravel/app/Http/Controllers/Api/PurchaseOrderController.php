@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Mail\PurchaseOrderSubmittedForApproval;
 use App\Models\CompanyLocation;
@@ -51,13 +52,7 @@ class PurchaseOrderController extends Controller
         // Search
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('po_number', 'like', "%{$search}%")
-                    ->orWhere('notes', 'like', "%{$search}%")
-                    ->orWhereHas('supplier', function ($sq) use ($search) {
-                        $sq->where('name', 'like', "%{$search}%");
-                    });
-            });
+            Search::apply($query, $search, ['po_number', 'notes', 'supplier.name']);
         }
 
         $orders = $query->orderBy('order_date', 'desc')

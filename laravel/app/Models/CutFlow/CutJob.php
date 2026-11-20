@@ -13,6 +13,7 @@ class CutJob extends Model
     protected $fillable = [
         'name',
         'work_order_id',
+        'sequence',
         'bom_diverged_at',
     ];
 
@@ -50,7 +51,11 @@ class CutJob extends Model
             $wo = $job->work_order_id ? $workOrders->get($job->work_order_id) : null;
 
             $job->setAttribute('job_title', trim((string) $wo?->businessJob?->job_name) ?: $job->name);
-            $job->setAttribute('release_label', $wo ? trim((string) ($wo->release_code ?: ($wo->release_number ? 'Rel '.$wo->release_number : ''))) : '');
+            $release = $wo ? trim((string) ($wo->release_code ?: ($wo->release_number ? 'Rel '.$wo->release_number : ''))) : '';
+            if ($wo && ($job->sequence ?? 1) > 1) {
+                $release = trim($release.' · Add-on '.($job->sequence - 1));
+            }
+            $job->setAttribute('release_label', $release);
             $job->setAttribute('release_sort', (int) ($wo?->release_number ?? 0));
         })->sortBy([
             fn ($a, $b) => strcasecmp($a->job_title, $b->job_title),

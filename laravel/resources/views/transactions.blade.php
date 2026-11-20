@@ -383,7 +383,7 @@
       const typeFilter = document.getElementById('typeFilter').value;
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
-      const search = document.getElementById('searchInput').value.toLowerCase();
+      const search = document.getElementById('searchInput').value.trim();
 
       filteredTransactions = allTransactions.filter(trans => {
         // Type filter
@@ -401,15 +401,7 @@
 
         // Search filter
         if (search) {
-          const searchableText = [
-            trans.product?.sku,
-            trans.product?.description,
-            trans.reference_number,
-            trans.notes,
-            trans.user_display_name
-          ].filter(Boolean).join(' ').toLowerCase();
-
-          if (!searchableText.includes(search)) return false;
+          if (!fdSearch.match(search, trans.product?.sku, trans.product?.description, trans.reference_number, trans.notes, trans.user_display_name)) return false;
         }
 
         return true;

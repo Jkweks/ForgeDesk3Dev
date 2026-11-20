@@ -1668,9 +1668,8 @@
       if (document.getElementById('storageLocationId').value && input.dataset.picked !== input.value) {
         document.getElementById('storageLocationId').value = '';
       }
-      const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const matches = allStorageLocations
-        .filter(l => terms.every(t => `${l.path} ${l.code || ''}`.toLowerCase().includes(t)))
+        .filter(l => fdSearch.match(query, l.path, l.code))
         .slice(0, 12);
       storageLocationActiveIdx = matches.length ? 0 : -1;
       results.innerHTML = matches.length ? matches.map((l, i) => `

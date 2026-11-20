@@ -450,15 +450,11 @@
         }
 
         function filterResults() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const searchTerm = document.getElementById('searchInput').value.trim();
             const statusFilter = document.getElementById('statusFilter').value;
 
             filteredResults = checkResults.filter(item => {
-                const matchesSearch = !searchTerm ||
-                    item.part_number.toLowerCase().includes(searchTerm) ||
-                    (item.finish && item.finish.toLowerCase().includes(searchTerm)) ||
-                    (item.sku && item.sku.toLowerCase().includes(searchTerm)) ||
-                    (item.description && item.description.toLowerCase().includes(searchTerm));
+                const matchesSearch = fdSearch.match(searchTerm, item.part_number, item.finish, item.sku, item.description);
 
                 const matchesStatus = !statusFilter || item.status === statusFilter;
 

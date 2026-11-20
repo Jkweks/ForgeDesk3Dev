@@ -829,14 +829,11 @@ th.sortable.sort-active .sort-icon { opacity: 1; }
         }
 
         function filterReservations() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const searchTerm = document.getElementById('searchInput').value.trim();
             const statusFilter = document.getElementById('statusFilter').value;
 
             filteredReservations = reservations.filter(res => {
-                const matchesSearch = !searchTerm ||
-                    res.job_number.toLowerCase().includes(searchTerm) ||
-                    res.job_name.toLowerCase().includes(searchTerm) ||
-                    res.requested_by.toLowerCase().includes(searchTerm);
+                const matchesSearch = fdSearch.match(searchTerm, res.job_number, res.job_name, res.requested_by);
 
                 const matchesStatus = !statusFilter || res.status === statusFilter;
 

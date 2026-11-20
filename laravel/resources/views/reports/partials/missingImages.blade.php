@@ -75,9 +75,9 @@ async function loadMissingImagesReport() {
 }
 
 function renderMissingImagesTable(page = 1) {
-  const term = missingImagesSearchTerm.toLowerCase();
+  const term = missingImagesSearchTerm;
   let data = getProcessedReportData('missingImages');
-  if (term) data = data.filter(p => [p.sku, p.part_number, p.description, p.category].some(v => (v || '').toLowerCase().includes(term)));
+  if (term) data = data.filter(p => fdSearch.match(term, p.sku, p.part_number, p.description, p.category));
   const pagination = paginateData(data, page);
   const tbody = document.getElementById('missingImagesBody');
   updateReportSortIcons('missingImages');

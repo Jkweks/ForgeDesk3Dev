@@ -79,9 +79,9 @@ function showReport(reportType) {
 
 // Report menu search: hides non-matching reports, and categories left empty
 function filterReportMenu(query) {
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   document.querySelectorAll('.report-menu-item').forEach(el => {
-    el.style.display = !q || el.dataset.title.includes(q) ? '' : 'none';
+    el.style.display = fdSearch.match(q, el.dataset.title) ? '' : 'none';
   });
   document.querySelectorAll('.report-category').forEach(cat => {
     cat.style.display = cat.querySelector('.report-menu-item:not([style*="none"])') ? '' : 'none';
@@ -149,11 +149,9 @@ function sortReportData(data, sortBy, sortDir) {
 // Filter data by search term
 function filterReportData(data, searchTerm) {
   if (!searchTerm) return data;
-  const term = searchTerm.toLowerCase();
+  const term = searchTerm.trim();
   return data.filter(item => {
-    const sku = (item.sku || '').toLowerCase();
-    const description = (item.description || '').toLowerCase();
-    return sku.includes(term) || description.includes(term);
+    return fdSearch.match(term, item.sku, item.description);
   });
 }
 

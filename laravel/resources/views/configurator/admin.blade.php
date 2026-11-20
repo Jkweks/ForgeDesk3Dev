@@ -1473,7 +1473,7 @@
   function hwtApply(key, data) {
     const t = HWT[key];
     if (!t || !t.bar) return data;
-    const st = t.state, q = st.q.trim().toLowerCase();
+    const st = t.state, q = st.q.trim();
 
     // Dropdown options follow the data; only rewrite when they change so an open select isn't disturbed.
     t.filters.forEach(f => {
@@ -1488,7 +1488,7 @@
       sel.value = st.f[f.id] || '';
     });
 
-    let list = data.filter(r => (!q || t.text(r).toLowerCase().includes(q))
+    let list = data.filter(r => fdSearch.match(q, t.text(r))
       && t.filters.every(f => !st.f[f.id] || f.test(r, st.f[f.id])));
 
     if (st.sort !== null && t.cols[st.sort]?.sort) {

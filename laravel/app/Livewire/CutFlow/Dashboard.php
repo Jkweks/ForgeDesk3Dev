@@ -2,6 +2,7 @@
 
 namespace App\Livewire\CutFlow;
 
+use App\Support\Search;
 use App\Models\CutFlow\CutFlowSetting;
 use App\Models\CutFlow\CutJob;
 use App\Models\CutFlow\CutLogEntry;
@@ -293,15 +294,13 @@ class Dashboard extends Component
     protected function jobGroups()
     {
         $completed = CutJob::completedIds();
-        $needle = strtolower($this->jobSearch);
-
         return $this->groupedCutJobs()->groupBy('group_key')->map(fn ($lists, $key) => (object) [
             'key' => $key,
             'title' => $lists->first()->job_title,
             'open' => $lists->reject(fn ($j) => in_array($j->id, $completed, true))->count(),
             'total' => $lists->count(),
         ])->filter(fn ($g) => ($g->open > 0 || $this->showCompletedJobs)
-            && ($needle === '' || str_contains(strtolower($g->title), $needle)))
+            && Search::matches($this->jobSearch, $g->title))
             ->sortBy('title', SORT_NATURAL | SORT_FLAG_CASE)->values();
     }
 
@@ -384,12 +383,7 @@ class Dashboard extends Component
 
         // Matches the job name, the release code, or the raw cut-job name
         // (job number + release for work-order jobs, e.g. "3260901-WO1").
-        $needle = strtolower($this->jobSearch);
-
-        return $jobs->filter(fn ($job) => str_contains(
-            strtolower("{$job->job_title} {$job->release_label} {$job->name}"),
-            $needle
-        ))->values();
+        return $jobs->filter(fn ($job) => Search::matches($this->jobSearch, $job->job_title, $job->release_label, $job->name))->values();
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
@@ -111,13 +112,7 @@ class DashboardController extends Controller
             });
         }
         if ($search) {
-            $searchLower = strtolower($search);
-            $statsQuery->where(function ($q) use ($searchLower) {
-                $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
-                    ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                    ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
-                    ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
-            });
+            Search::apply($statsQuery, $search, ['sku', 'description', 'part_number', 'status']);
         }
 
         // ONE query for all count stats + on-hand sum (replaces 4 separate queries)
@@ -154,13 +149,7 @@ class DashboardController extends Controller
         }
 
         if ($search) {
-            $searchLower = strtolower($search);
-            $inventoryQuery->where(function ($q) use ($searchLower) {
-                $q->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
-                    ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                    ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
-                    ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
-            });
+            Search::apply($inventoryQuery, $search, ['sku', 'description', 'part_number', 'status']);
         }
 
         // Enrich callback — shared between both branches
@@ -251,14 +240,7 @@ class DashboardController extends Controller
                 });
             })
             ->when($search, function ($q) use ($search) {
-                $searchLower = strtolower($search);
-
-                return $q->where(function ($sq) use ($searchLower) {
-                    $sq->whereRaw('LOWER(sku) LIKE ?', ["%{$searchLower}%"])
-                        ->orWhereRaw('LOWER(description) LIKE ?', ["%{$searchLower}%"])
-                        ->orWhereRaw('LOWER(part_number) LIKE ?', ["%{$searchLower}%"])
-                        ->orWhereRaw('LOWER(status) LIKE ?', ["%{$searchLower}%"]);
-                });
+                return Search::apply($q, $search, ['sku', 'description', 'part_number', 'status']);
             })
             ->with(['categories', 'inventoryLocations']);
         $this->applyNoLocationFilter($query, $request);

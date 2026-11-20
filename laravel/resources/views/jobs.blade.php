@@ -1310,17 +1310,13 @@
         }
 
         function filterJobs() {
-            const search = document.getElementById('searchInput').value.toLowerCase().trim();
+            const search = document.getElementById('searchInput').value.trim();
             const statusFilter = document.getElementById('filterStatus').value;
 
             let filtered = allJobs;
 
             if (search) {
-                filtered = filtered.filter(job =>
-                    job.job_number.toLowerCase().includes(search) ||
-                    job.job_name.toLowerCase().includes(search) ||
-                    (job.customer_name && job.customer_name.toLowerCase().includes(search))
-                );
+                filtered = fdSearch.filter(filtered, search, job => [job.job_number, job.job_name, job.customer_name]);
             }
 
             if (statusFilter === 'overdue') {

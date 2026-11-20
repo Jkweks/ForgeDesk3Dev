@@ -448,7 +448,7 @@ function isOvercommitted(p) {
 
 async function applyFilters() {
   const vendor = document.getElementById('filterVendor').value;
-  const search = document.getElementById('filterSearch').value.toLowerCase().trim();
+  const search = document.getElementById('filterSearch').value.trim();
   const showSpecialOrder = activeStatuses.has('__special_order__');
   const showBoneyard = activeStatuses.has('__boneyard__');
 
@@ -476,10 +476,7 @@ async function applyFilters() {
 
   filteredItems = sourceItems.filter(p => {
     if (vendor && String(p.supplier_id) !== vendor) return false;
-    if (search) {
-      const haystack = `${p.sku} ${p.description} ${p.part_number || ''}`.toLowerCase();
-      if (!haystack.includes(search)) return false;
-    }
+    if (search && !fdSearch.match(search, p.sku, p.description, p.part_number)) return false;
     return true;
   });
 

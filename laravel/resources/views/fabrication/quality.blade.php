@@ -771,11 +771,7 @@ function qrSearchSelectInit(id) {
   sel._qrSearch = { input, list };
 
   const render = (query) => {
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const matches = [...sel.options].filter(o => {
-      const hay = ((o.dataset.search || '') + ' ' + o.text).toLowerCase();
-      return terms.every(t => hay.includes(t));
-    });
+    const matches = [...sel.options].filter(o => fdSearch.match(query, o.dataset.search, o.text));
     list.innerHTML = '';
     matches.slice(0, 50).forEach(o => {
       const b = document.createElement('button');

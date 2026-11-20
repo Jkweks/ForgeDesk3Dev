@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use Illuminate\Http\Request;
@@ -39,10 +40,7 @@ class CategoryController extends Controller
         // Search by name or code
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['name', 'code']);
         }
 
         // Include subcategories count
@@ -219,10 +217,7 @@ class CategoryController extends Controller
         // Search by name or code
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['name', 'code']);
         }
 
         $categories = $query
@@ -235,10 +230,7 @@ class CategoryController extends Controller
                 }
                 if ($request->has('search') && $request->search !== '') {
                     $search = $request->search;
-                    $query->where(function ($q) use ($search) {
-                        $q->where('name', 'like', "%{$search}%")
-                            ->orWhere('code', 'like', "%{$search}%");
-                    });
+                    Search::apply($query, $search, ['name', 'code']);
                 }
             }])
             ->withCount('products')

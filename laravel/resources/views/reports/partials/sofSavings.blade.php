@@ -89,9 +89,9 @@ async function loadSofSavingsReport(refresh = false) {
 }
 
 function renderSofSavingsTable(page = 1) {
-  const term = sofSavingsSearchTerm.toLowerCase();
+  const term = sofSavingsSearchTerm;
   let data = getProcessedReportData('sofSavings');
-  if (term) data = data.filter(j => [j.job_number, j.job_name].some(v => (v || '').toLowerCase().includes(term)));
+  if (term) data = data.filter(j => fdSearch.match(term, j.job_number, j.job_name));
   const pagination = paginateData(data, page);
   const tbody = document.getElementById('sofSavingsBody');
   updateReportSortIcons('sofSavings');

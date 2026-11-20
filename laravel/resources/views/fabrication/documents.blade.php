@@ -542,7 +542,7 @@ function fabClearFilters(){
 }
 
 function fabFiltered(){
-  const q = document.getElementById('fab-search').value.trim().toLowerCase();
+  const q = document.getElementById('fab-search').value.trim();
   const terms = q.split(/\s+/).filter(Boolean);
   const out = fabDocs.filter(d=>{
     if(fabFilterType!=='all' && d.type!==fabFilterType) return false;
@@ -550,8 +550,7 @@ function fabFiltered(){
     if(fabFilterMfr && d.manufacturer!==fabFilterMfr)   return false;
     if(fabFilterTag && !(d.tags||[]).includes(fabFilterTag)) return false;
     if(terms.length){
-      const hay = `${d.title} ${d.hwtype||''} ${d.manufacturer||''} ${d.revision||''} ${(d.tags||[]).join(' ')} ${d.notes||''} ${d.file?.name||''}`.toLowerCase();
-      if(!terms.every(t=>hay.includes(t))) return false;
+      if(!fdSearch.match(q, d.title, d.hwtype, d.manufacturer, d.revision, d.tags, d.notes, d.file?.name)) return false;
     }
     return true;
   });

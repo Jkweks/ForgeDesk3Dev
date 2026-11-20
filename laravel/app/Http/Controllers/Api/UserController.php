@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
@@ -53,12 +54,7 @@ class UserController extends Controller
         // Search by name or email
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['name', 'first_name', 'last_name', 'email']);
         }
 
         $users = $query->orderBy('created_at', 'desc')->get();

@@ -97,10 +97,8 @@ async function sqLoad(fromPoll) {
 }
 
 function sqVisible(r) {
-  const q = document.getElementById('sq-search').value.trim().toLowerCase();
-  if (!q) return true;
-  const hay = `${r.shipment_number} ${r.jobs.map(j => j.job_name + ' ' + j.job_number).concat(r.custom_jobs || []).join(' ')} ${r.destination || ''} ${r.loads.map(l => l.type.name).join(' ')}`.toLowerCase();
-  return q.split(/\s+/).every(t => hay.includes(t));
+  const q = document.getElementById('sq-search').value.trim();
+  return fdSearch.match(q, r.shipment_number, r.jobs.map(j => j.job_name + ' ' + j.job_number).concat(r.custom_jobs || []), r.destination, r.loads.map(l => l.type.name));
 }
 
 function sqCard(r, late) {
@@ -143,10 +141,8 @@ function sqRender() {
 const sqCan = p => typeof hasPermission !== 'function' || hasPermission(p);
 const reqsOn = d => sqReqs.filter(r => r.requested_date === d && sqReqVisible(r));
 function sqReqVisible(r) {
-  const q = document.getElementById('sq-search').value.trim().toLowerCase();
-  if (!q) return true;
-  const hay = `${r.job ? r.job.job_name + ' ' + r.job.job_number : ''} ${r.custom_job || ''} ${r.destination || ''} ${(r.type_names || []).join(' ')}`.toLowerCase();
-  return q.split(/\s+/).every(t => hay.includes(t));
+  const q = document.getElementById('sq-search').value.trim();
+  return fdSearch.match(q, r.job ? r.job.job_name + ' ' + r.job.job_number : '', r.custom_job, r.destination, r.type_names);
 }
 const reqJob = r => r.job ? `${r.job.job_name} (${r.job.job_number})` : (r.custom_job || 'No job');
 function sqReqCard(r) {

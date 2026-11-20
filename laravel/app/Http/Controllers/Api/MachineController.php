@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\Machine;
 use App\Models\MachineType;
@@ -15,12 +16,7 @@ class MachineController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('equipment_type', 'like', "%{$search}%")
-                    ->orWhere('manufacturer', 'like', "%{$search}%")
-                    ->orWhere('model', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['name', 'equipment_type', 'manufacturer', 'model']);
         }
 
         if ($request->has('location')) {

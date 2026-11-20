@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\Shipment;
@@ -41,10 +42,7 @@ class ShipmentController extends Controller
             $q->whereHas('jobs', fn ($j) => $j->where('business_jobs.id', (int) $request->query('job_id')));
         }
         if ($request->filled('search')) {
-            $s = '%'.$request->query('search').'%';
-            $q->where(fn ($w) => $w->where('shipment_number', 'like', $s)->orWhere('destination', 'like', $s)
-                ->orWhereRaw('CAST(custom_jobs AS TEXT) like ?', [$s])
-                ->orWhereHas('jobs', fn ($j) => $j->where('job_number', 'like', $s)->orWhere('job_name', 'like', $s)));
+            Search::apply($q, $request->query('search'), ['shipment_number', 'destination', 'custom_jobs', 'jobs.job_number', 'jobs.job_name']);
         }
 
         $rows = $q->limit(500)->get();
@@ -120,8 +118,7 @@ class ShipmentController extends Controller
             $q->where('id', (int) $request->query('id'));
         }
         if ($request->filled('search')) {
-            $s = '%'.mb_strtolower($request->query('search')).'%';
-            $q->where(fn ($w) => $w->whereRaw('LOWER(job_number) like ?', [$s])->orWhereRaw('LOWER(job_name) like ?', [$s]));
+            Search::apply($q, $request->query('search'), ['job_number', 'job_name']);
         }
 
         return response()->json($q->limit(30)->get(['id', 'job_number', 'job_name', 'site_address']));
@@ -519,11 +516,14 @@ class ShipmentController extends Controller
 
         $svc = app(\App\Services\Shipping\WorkOrderShipmentService::class);
         $elevs = $shipment->elevations()->with('elevationType:id,name')->get();
+        $states = $svc->states($elevs->pluck('id'));
 
         return $shipment->toArray() + [
             'trip' => $svc->tripLabels(collect([$shipment]))[$shipment->id] ?? null,
             'elevations' => $elevs->map(fn ($e) => ['id' => $e->id, 'tag' => $e->elevation_tag, 'type' => $e->elevationType?->name, 'quantity' => $e->quantity,
-                'partial' => (bool) $e->pivot->partial, 'partial_note' => $e->pivot->partial_note])->values(),
+                'partial' => (bool) $e->pivot->partial, 'partial_note' => $e->pivot->partial_note,
+                // Earlier trips' "what's still outstanding" notes (excluding this shipment's own).
+                'outstanding' => collect($states[$e->id]['outstanding'])->reject(fn ($o) => $o['number'] === $shipment->shipment_number)->values()->all()])->values(),
             'pre_checklist' => $this->inspections->checklist($shipment, 'pre'),
             'post_checklist' => $this->inspections->checklist($shipment, 'post'),
         ];

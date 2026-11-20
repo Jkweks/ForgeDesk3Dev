@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessJob;
 use App\Models\FdWorkOrder;
@@ -45,10 +46,7 @@ class WorkOrderController extends Controller
 
             if ($request->filled('q')) {
                 $q = $request->q;
-                $query->whereHas('businessJob', function ($sub) use ($q) {
-                    $sub->where('job_number', 'like', "%{$q}%")
-                        ->orWhere('job_name', 'like', "%{$q}%");
-                });
+                Search::apply($query, $q, ['businessJob.job_number', 'businessJob.job_name']);
             }
 
             if ($request->filled('material')) {

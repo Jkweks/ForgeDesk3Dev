@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\ConfiguratorDoorType;
 use App\Models\ConfiguratorGlassSpec;
@@ -49,10 +50,7 @@ class ConfiguratorDoorCatalogController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $like = '%'.strtolower($term).'%';
-
-        $products = Product::whereNotNull('part_number')
-            ->whereRaw('LOWER(part_number) LIKE ?', [$like])
+        $products = Search::apply(Product::whereNotNull('part_number'), $term, ['part_number'])
             ->orderBy('part_number')
             ->limit(20)
             ->get(['id', 'part_number', 'description', 'finish']);

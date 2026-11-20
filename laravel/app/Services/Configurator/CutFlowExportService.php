@@ -29,14 +29,39 @@ class CutFlowExportService
     /**
      * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int}
      */
-    public function exportWorkOrder(FdWorkOrder $workOrder): array
+    public function exportWorkOrder(FdWorkOrder $workOrder, ?DoorFrameConfiguration $trigger = null): array
     {
-        $rows = $this->buildRows($workOrder);
+        return $this->exportSequence($workOrder, $this->sequenceFor($workOrder, $trigger));
+    }
+
+    /**
+     * Which of the work order's cut lists a released opening feeds. An opening keeps the list it was
+     * first sent to. A work order that is already complete never takes new lines into its finished
+     * list: the opening starts the next add-on list instead (sequence 2, 3, …).
+     */
+    private function sequenceFor(FdWorkOrder $workOrder, ?DoorFrameConfiguration $trigger): int
+    {
+        if ($trigger && $trigger->cutflow_supplement) {
+            return (int) $trigger->cutflow_supplement;
+        }
+        if ($trigger && $workOrder->isClosed()) {
+            $next = max(1, (int) CutJob::where('work_order_id', $workOrder->id)->max('sequence')) + 1;
+            $trigger->forceFill(['cutflow_supplement' => $next])->save();
+
+            return $next;
+        }
+
+        return 1;
+    }
+
+    private function exportSequence(FdWorkOrder $workOrder, int $sequence): array
+    {
+        $rows = $this->buildRows($workOrder, $sequence);
         if ($rows->isEmpty()) {
             return ['sent' => false, 'reason' => 'No released lineal cut-list parts to export yet.'];
         }
 
-        return $this->sendRows($workOrder, $rows->values()->all(), 'configurator');
+        return $this->sendRows($workOrder, $rows->values()->all(), 'configurator', $sequence);
     }
 
     /**
@@ -44,9 +69,9 @@ class CutFlowExportService
      *
      * @return array{exists: bool, cut_started: bool, diverged: bool, diverged_at: ?string, manual_lines: int}
      */
-    public function status(FdWorkOrder $workOrder): array
+    public function status(FdWorkOrder $workOrder, int $sequence = 1): array
     {
-        $job = CutJob::where('work_order_id', $workOrder->id)->first();
+        $job = CutJob::where('work_order_id', $workOrder->id)->where('sequence', $sequence ?: 1)->first();
         if (! $job) {
             return ['exists' => false, 'cut_started' => false, 'diverged' => false, 'diverged_at' => null, 'manual_lines' => 0];
         }
@@ -67,9 +92,10 @@ class CutFlowExportService
      *
      * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int, discarded_edits: bool}
      */
-    public function rebuildWorkOrder(FdWorkOrder $workOrder): array
+    public function rebuildWorkOrder(FdWorkOrder $workOrder, int $sequence = 1): array
     {
-        $job = CutJob::where('work_order_id', $workOrder->id)->first();
+        $sequence = $sequence ?: 1;
+        $job = CutJob::where('work_order_id', $workOrder->id)->where('sequence', $sequence)->first();
         $discarded = (bool) $job?->bom_diverged_at;
 
         if ($job) {
@@ -85,7 +111,7 @@ class CutFlowExportService
             $job->update(['bom_diverged_at' => $job->parts()->where('source', 'manual')->exists() ? $job->bom_diverged_at : null]);
         }
 
-        $result = $this->exportWorkOrder($workOrder);
+        $result = $this->exportSequence($workOrder, $sequence);
 
         return $result + ['discarded_edits' => $discarded];
     }
@@ -101,7 +127,7 @@ class CutFlowExportService
      * @param  array<int, array>  $rows
      * @return array{sent: bool, reason?: string, cut_job_id?: int, cut_job_name?: string, line_count?: int}
      */
-    public function sendRows(FdWorkOrder $workOrder, array $rows, string $source = 'csv'): array
+    public function sendRows(FdWorkOrder $workOrder, array $rows, string $source = 'csv', int $sequence = 1): array
     {
         if (empty($rows)) {
             return ['sent' => false, 'reason' => 'No cut-list rows to send.'];
@@ -109,8 +135,11 @@ class CutFlowExportService
 
         $job = $workOrder->businessJob;
         $jobName = trim(($job?->job_number ?? 'Job').'-'.$workOrder->release_token);
+        if ($sequence > 1) {
+            $jobName .= ' – Add-on '.($sequence - 1);
+        }
 
-        $result = $this->ingest->ingest($rows, $jobName, $workOrder->id, $source);
+        $result = $this->ingest->ingest($rows, $jobName, $workOrder->id, $source, $sequence);
 
         return [
             'sent' => true,
@@ -164,13 +193,18 @@ class CutFlowExportService
      * list only" filter DoorFrameConfigurationController::exportCsv() uses
      * (component/fastener rows and hardware are never lineal stock cuts).
      */
-    private function buildRows(FdWorkOrder $workOrder): \Illuminate\Support\Collection
+    private function buildRows(FdWorkOrder $workOrder, int $sequence = 1): \Illuminate\Support\Collection
     {
         $configs = DoorFrameConfiguration::with([
             'doors', 'frameConfig.parts.product', 'doorConfigs.parts.product',
         ])
             ->where('work_order_id', $workOrder->id)
             ->whereIn('status', ['cut_released', 'released', 'in_progress', 'completed'])
+            ->when(
+                $sequence > 1,
+                fn ($q) => $q->where('cutflow_supplement', $sequence),
+                fn ($q) => $q->where(fn ($w) => $w->whereNull('cutflow_supplement')->orWhere('cutflow_supplement', 1)),
+            )
             ->get();
 
         $rows = collect();

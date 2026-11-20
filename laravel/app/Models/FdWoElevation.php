@@ -14,7 +14,7 @@ class FdWoElevation extends Model
 
     protected $fillable = [
         'work_order_id', 'elevation_type_id', 'template_set_id', 'door_frame_configuration_id', 'elevation_tag',
-        'quantity', 'joint_qty', 'date_requested', 'date_completed', 'completed_by_id', 'notes', 'scope',
+        'quantity', 'joint_qty', 'date_requested', 'previously_delivered_on', 'previously_delivered_note', 'previously_delivered_by', 'previously_delivered_marked_at', 'date_completed', 'completed_by_id', 'notes', 'scope',
     ];
 
     protected $casts = [

@@ -169,15 +169,12 @@ function pqFillAssignees() {
 function pqVisible(r) {
   const who = document.getElementById('pq-assignee').value;
   const st = document.getElementById('pq-status').value;
-  const q = document.getElementById('pq-search').value.trim().toLowerCase();
+  const q = document.getElementById('pq-search').value.trim();
   if (who === 'none' && r.assignee_ids.length) return false;
   if (who && who !== 'none' && !r.assignee_ids.includes(parseInt(who))) return false;
   if (st && r.status !== st) return false;
   if (document.getElementById('pq-hide-locked').checked && r.gated) return false;
-  if (q) {
-    const hay = `${r.job_name || ''} ${r.job_number || ''} ${r.release_label} ${r.elevation_tag} ${r.elevation_type || ''}`.toLowerCase();
-    if (!q.split(/\s+/).every(t => hay.includes(t))) return false;
-  }
+  if (q && !fdSearch.match(q, r.job_name, r.job_number, r.release_label, r.elevation_tag, r.elevation_type)) return false;
   return true;
 }
 
@@ -195,9 +192,9 @@ function pqRender() {
   document.getElementById('pq-manual').style.display = pqRows.some(r => r.programming_rank != null) ? '' : 'none';
   const rows = pqRows.filter(pqVisible);
   // Draft configurations trail the queue; a search narrows them, the status/programmer/locked filters don't apply.
-  const q = document.getElementById('pq-search').value.trim().toLowerCase();
+  const q = document.getElementById('pq-search').value.trim();
   const drafts = pqDrafts.filter(d => !document.getElementById('pq-assignee').value && !document.getElementById('pq-status').value
-    && (!q || q.split(/\s+/).every(t => `${d.job_name || ''} ${d.job_number || ''} ${d.tags.join(' ')}`.toLowerCase().includes(t))));
+    && fdSearch.match(q, d.job_name, d.job_number, d.tags));
   // One collapsible group per job; a search that matches drafts opens their groups so hits aren't hidden.
   const byJob = new Map();
   drafts.forEach(d => { if (!byJob.has(d.business_job_id)) byJob.set(d.business_job_id, []); byJob.get(d.business_job_id).push(d); });

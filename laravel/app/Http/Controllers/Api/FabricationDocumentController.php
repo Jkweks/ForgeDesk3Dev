@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\FabricationDocument;
 use App\Models\FabricationDocumentRevision;
@@ -42,12 +43,7 @@ class FabricationDocumentController extends Controller
         // Text search (title, hwtype, manufacturer, notes)
         if ($request->filled('search')) {
             $q = $request->search;
-            $query->where(function ($sub) use ($q) {
-                $sub->where('title', 'like', "%{$q}%")
-                    ->orWhere('hwtype', 'like', "%{$q}%")
-                    ->orWhere('manufacturer', 'like', "%{$q}%")
-                    ->orWhere('notes', 'like', "%{$q}%");
-            });
+            Search::apply($query, $q, ['title', 'hwtype', 'manufacturer', 'notes']);
         }
 
         // Sorting

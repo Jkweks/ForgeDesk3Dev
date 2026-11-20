@@ -175,6 +175,9 @@
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-details" type="button" role="tab">Details</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-checklist" type="button" role="tab">Checklist</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-drawings" type="button" role="tab">Drawings</button></li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-cutlists" type="button" role="tab" onclick="loadWoCutLists()">Cut Lists</button>
+      </li>
       <li class="nav-item" data-permission="jobs.documents.view">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#wo-tab-documents" type="button" role="tab" onclick="loadWoJobDocuments()">Job Documents</button>
       </li>
@@ -351,6 +354,17 @@
           <div id="drawings-list">
             <div class="text-muted small">No drawings attached.</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Cut Lists (main list + add-on lists for this work order) -->
+      <div class="tab-pane fade" id="wo-tab-cutlists" role="tabpanel">
+        <div class="wo-block">
+          <div class="wo-block-head">
+            <h6>Cut Lists</h6>
+            <a class="btn btn-sm btn-ghost-primary" href="/fabrication/cut-lists"><i class="ti ti-external-link me-1"></i>All cut lists</a>
+          </div>
+          <div id="wo-cutlists-content"><div class="text-muted small">No cut list yet.</div></div>
         </div>
       </div>
 
@@ -1590,6 +1604,75 @@ function populateDetail(wo) {
     woJobDocsLoaded = false;
     document.getElementById('wo-job-doc-content').innerHTML = '<div class="text-muted small">No documents yet.</div>';
     hideWoJobDocForm();
+    woCutListsLoaded = false;
+    document.getElementById('wo-cutlists-content').innerHTML = '<div class="text-muted small">No cut list yet.</div>';
+}
+
+// ===== CUT LISTS TAB (this work order's main + add-on cut lists, expandable to their lines) =====
+let woCutListsLoaded = false;
+const woCutStatusClass = s => s === 'Done' ? 'bg-green-lt' : s === 'In progress' ? 'bg-orange-lt' : 'bg-secondary-lt';
+
+async function loadWoCutLists() {
+    if (woCutListsLoaded) return;
+    const el = document.getElementById('wo-cutlists-content');
+    const woId = currentWO?.id;
+    if (!woId) return;
+    woCutListsLoaded = true;
+    el.innerHTML = '<div class="text-muted small">Loading…</div>';
+    try {
+        const r = await API(`/cut-lists?work_order_id=${woId}`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const lists = ((await r.json()).cut_lists || []).sort((a, b) => a.sequence - b.sequence);
+        if (!lists.length) {
+            el.innerHTML = '<div class="text-muted small">No cut list yet — one is created when an opening is released to CutFlow.</div>';
+            return;
+        }
+        el.innerHTML = `<table class="table table-sm table-vcenter mb-0">
+            <thead><tr><th>Cut list</th><th class="text-end">Lines</th><th class="text-end">Cut / Total</th><th>Status</th><th></th></tr></thead>
+            <tbody>${lists.map(l => `
+              <tr style="cursor:pointer" onclick="toggleWoCutList(${l.id})">
+                <td class="fw-medium"><i class="ti ti-chevron-right me-1" id="wo-cl-caret-${l.id}"></i>${esc(l.name)}
+                  ${l.sequence > 1 ? '<span class="badge bg-azure-lt ms-1">Add-on</span>' : ''}
+                  ${l.archived ? '<span class="badge bg-secondary-lt ms-1">Archived</span>' : ''}</td>
+                <td class="text-end">${l.parts_count}</td>
+                <td class="text-end">${l.qty_cut} / ${l.qty_original}</td>
+                <td><span class="badge ${woCutStatusClass(l.status)}">${esc(l.status)}</span></td>
+                <td class="text-end"><a href="/fabrication/cut-lists#${l.id}" onclick="event.stopPropagation()">Open</a></td>
+              </tr>
+              <tr id="wo-cl-detail-${l.id}" style="display:none"><td colspan="5" class="bg-body-secondary"></td></tr>`).join('')}
+            </tbody></table>`;
+    } catch (e) {
+        console.error(e);
+        woCutListsLoaded = false;
+        el.innerHTML = '<div class="text-muted small">Failed to load cut lists.</div>';
+    }
+}
+
+async function toggleWoCutList(id) {
+    const row = document.getElementById('wo-cl-detail-' + id);
+    const caret = document.getElementById('wo-cl-caret-' + id);
+    const open = row.style.display === 'none';
+    row.style.display = open ? '' : 'none';
+    caret.className = 'ti me-1 ' + (open ? 'ti-chevron-down' : 'ti-chevron-right');
+    if (!open || row.dataset.loaded) return;
+    const cell = row.firstElementChild;
+    cell.innerHTML = '<span class="text-muted small">Loading…</span>';
+    try {
+        const r = await API('/cut-lists/' + id);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const parts = (await r.json()).cut_list.parts || [];
+        row.dataset.loaded = '1';
+        cell.innerHTML = parts.length ? `<table class="table table-sm mb-0">
+            <thead><tr><th>Part</th><th>Finish</th><th>Length</th><th>Elevation</th><th>Use</th><th class="text-end">Cut / Qty</th><th>Status</th></tr></thead>
+            <tbody>${parts.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.finish || '')}</td><td>${esc(p.dimension_label)}</td>
+                <td>${esc(p.phase || '')}</td><td>${esc(p.description || '')}</td>
+                <td class="text-end">${p.qty_original - p.qty_remaining} / ${p.qty_original}</td>
+                <td><span class="badge ${woCutStatusClass(p.status)}">${esc(p.status)}</span></td></tr>`).join('')}</tbody></table>`
+            : '<span class="text-muted small">No lines on this cut list yet.</span>';
+    } catch (e) {
+        console.error(e);
+        cell.innerHTML = '<span class="text-danger small">Failed to load lines.</span>';
+    }
 }
 
 // ===== JOB DOCUMENTS (read-only-ish view of the job's SOF/EZ Estimate/PO/Other docs) =====
@@ -3381,7 +3464,7 @@ function filterWizardJobs(query) {
         const hay = `${j.job_number || ''} ${j.job_name || ''} ${j.customer_name || ''}`.toLowerCase();
         const tokenHit = tokens.length && tokens.every(t => hay.includes(t));
         const reHit = re && re.test(hay);
-        if (!q || tokenHit || reHit) {
+        if (!q || tokenHit || reHit || fdSearch.match(q, j.job_number, j.job_name, j.customer_name)) {
             const nnum = normJobNum(j.job_number);
             let rank = 3;
             if (nq && nnum === nq) rank = 0;

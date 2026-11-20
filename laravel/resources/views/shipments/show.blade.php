@@ -350,26 +350,35 @@
     el.innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Elevations${S.trip ? ' <span class="text-muted fs-5">· ' + esc(S.trip) + '</span>' : ''}</h3>
       <div class="card-actions btn-list" data-permission="shipments.manage">
         ${canChangeElevs() ? `<button class="btn btn-sm btn-primary" onclick="pickElevations()"><i class="ti ti-list-check me-1"></i>Select elevations</button>
-        <button class="btn btn-sm" onclick="splitShipment()" ${rows.length ? '' : 'disabled'}><i class="ti ti-arrows-split me-1"></i>Split into another trip</button>` : ''}</div></div>
+        <button class="btn btn-sm" onclick="splitShipment()" ${rows.length ? '' : 'disabled'}><i class="ti ti-arrows-split me-1"></i>Split into another trip</button>` : ''}
+        ${canFlagElevs() ? `<button class="btn btn-sm" onclick="previouslyDelivered()"><i class="ti ti-truck-delivery me-1"></i>Previously delivered…</button>` : ''}</div></div>
       <div class="table-responsive"><table class="table card-table table-vcenter"><thead><tr><th>Elevation</th><th>Type</th><th>Qty</th><th>Delivery</th><th></th></tr></thead><tbody>
       ${rows.map(e => `<tr><td class="fw-bold">${esc(e.tag || '#' + e.id)}</td><td>${esc(e.type || '—')}</td><td>${e.quantity ?? ''}</td>
-        <td>${e.partial ? flBadge('Partial', 'warning') + `<div class="small text-muted">${esc(e.partial_note || '')}</div>` : '<span class="text-muted">Complete</span>'}</td>
+        <td>${e.partial ? flBadge('Partial', 'warning') + `<div class="small text-muted">${esc(e.partial_note || '')}</div>` : '<span class="text-muted">Complete</span>'}
+          ${(e.outstanding || []).map(o => `<div class="small text-warning"><i class="ti ti-corner-down-right me-1"></i>Still owed from ${esc(o.number)}: ${esc(o.note || 'partial delivery')}</div>`).join('')}</td>
         <td class="text-end">${canFlagElevs() ? `<button class="btn btn-sm" data-permission="shipments.manage" onclick="flagElevation(${e.id})">${e.partial ? 'Edit partial' : 'Mark partial'}</button>` : ''}</td></tr>`).join('')
         || '<tr><td colspan="5" class="text-center text-muted py-4">No elevations on this shipment yet.</td></tr>'}
       </tbody></table></div>
-      <div class="card-footer small text-muted">A partially delivered elevation stays available to put on a later shipment.</div></div>`;
+      <div class="card-footer small text-muted">A partially delivered elevation is added to the next open shipment for its work order (or a new trip) once this one is received, and can also be picked by hand.</div></div>`;
   }
 
   async function pickElevations() {
     const data = await flApi(`/shipments/${SHIPMENT_ID}/elevations`);
     const body = data.work_orders.map(wo => `<div class="col-12"><div class="fw-bold mb-1">${esc(wo.label)}</div>${wo.elevations.map(e => {
       const st = ELEV_STATE[e.state] || [e.state, 'secondary'];
-      const shippedElsewhere = e.other_shipments.some(x => x.status === 'shipped');
+      const shippedElsewhere = e.other_shipments.some(x => x.status === 'shipped' && !x.partial);
       const blocked = !e.on_this && (e.state === 'delivered' || shippedElsewhere);
+      const prev = e.previously_delivered;
       const other = e.other_shipments.filter(x => ['draft', 'pre_check_done'].includes(x.status));
-      return `<label class="form-check d-flex align-items-center gap-2 ${blocked ? 'opacity-50' : ''}"><input type="checkbox" class="form-check-input mt-0" data-elev="${e.id}" ${e.on_this ? 'checked' : ''} ${blocked ? 'disabled' : ''}>
-        <span class="form-check-label">${esc(e.tag || '#' + e.id)} <span class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</span></span>
-        ${flBadge(st[0], st[1])}${e.partial_history ? flBadge('Short-delivered before', 'warning') : ''}${other.length && !e.on_this ? `<span class="small text-muted">moves from ${other.map(x => esc(x.number)).join(', ')}</span>` : ''}</label>`;
+      const notes = [...(e.outstanding || []).filter(o => o.note).map(o => ({ date: o.date, note: o.note, id: o.id, number: o.number })),
+        ...(prev && prev.note ? [{ date: prev.on, note: prev.note, id: null, number: 'Marked previously delivered' }] : [])];
+      return `<div><label class="form-check d-flex align-items-center gap-2 mb-0 ${blocked ? 'opacity-50' : ''}"><input type="checkbox" class="form-check-input mt-0" data-elev="${e.id}" ${e.on_this ? 'checked' : ''} ${blocked ? 'disabled' : ''}>
+        <span class="form-check-label fw-bold">${esc(e.tag || '#' + e.id)}</span>
+        ${prev ? flBadge('Delivered earlier' + (prev.on ? ' ' + flDate(prev.on) : ''), 'success') : flBadge(st[0], st[1])}
+        ${other.length && !e.on_this ? `<span class="small text-muted">moves from ${other.map(x => esc(x.number)).join(', ')}</span>` : ''}
+        ${notes.length ? `<button type="button" class="btn btn-sm btn-icon btn-ghost-secondary ms-auto" title="Notes from earlier shipments" onclick="event.preventDefault(); document.getElementById('elevnotes-${e.id}').classList.toggle('d-none')"><i class="ti ti-notes"></i></button>` : ''}</label>
+        ${notes.length ? `<div class="d-none small border rounded p-2 ms-4 mb-1 bg-body-tertiary" id="elevnotes-${e.id}">${notes.map(n => `<div class="mb-1"><span class="text-muted">${n.date ? flDate(n.date) : 'No ship date'}</span> ·
+          ${n.id ? `<a href="/shipments/${n.id}#elevations" target="_blank">${esc(n.number)}</a>` : esc(n.number)}: ${esc(n.note)}</div>`).join('')}</div>` : ''}</div>`;
     }).join('') || '<div class="text-muted small">No elevations on this work order yet.</div>'}</div>`).join('') || '<div class="col-12 text-muted">This shipment has no work order. Link a job (Edit) first.</div>';
     flModal('Select elevations for ' + S.shipment_number, body, async f => {
       const ids = [...f.querySelectorAll('[data-elev]:checked')].map(c => +c.dataset.elev);
@@ -386,6 +395,30 @@
       showNotification('Created ' + r.shipment_number, 'success');
       location.href = '/shipments/' + r.id;
     }, 'Split');
+  }
+
+  // Elevations delivered outside this system (e.g. before shipments were tracked): they drop off every open shipment and read as delivered.
+  async function previouslyDelivered() {
+    const data = await flApi(`/shipments/${SHIPMENT_ID}/elevations`);
+    const row = (e, attr, label) => `<label class="form-check d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input mt-0" ${attr}="${e.id}">
+      <span class="form-check-label">${esc(e.tag || '#' + e.id)} <span class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</span></span>${label || ''}</label>`;
+    const open = [], marked = [];
+    data.work_orders.forEach(wo => wo.elevations.forEach(e => {
+      if (e.previously_delivered) marked.push([wo, e]);
+      else if (e.state !== 'delivered' && !e.other_shipments.some(x => ['shipped', 'awaiting_verification', 'delivered', 'delivered_issues'].includes(x.status))) open.push([wo, e]);
+    }));
+    const group = list => [...new Set(list.map(([wo]) => wo.label))].map(l => `<div class="col-12"><div class="fw-bold mb-1">${esc(l)}</div>${list.filter(([wo]) => wo.label === l).map(([, e]) => row(e, list === marked ? 'data-unmark' : 'data-mark', e.previously_delivered ? flBadge('Delivered ' + (e.previously_delivered.on ? flDate(e.previously_delivered.on) : 'earlier'), 'success') : (e.on_this ? flBadge('On this shipment', 'blue') : ''))).join('')}</div>`).join('');
+    const body = (open.length ? `<div class="col-12 small text-muted">Tick elevations that were already delivered. They are taken off any shipment that has not shipped.</div>${group(open)}
+        <div class="col-md-4"><label class="form-label">Delivered on</label><input type="date" class="form-control" name="delivered_on"></div>` + flText('note', 'Note (optional)', '', 2) : '<div class="col-12 text-muted">Nothing left to mark on this shipment\'s work orders.</div>')
+      + (marked.length ? `<div class="col-12 mt-2"><div class="fw-bold">Already marked as previously delivered</div><div class="small text-muted mb-1">Tick to un-mark.</div>${group(marked)}</div>` : '');
+    flModal('Previously delivered', body, async f => {
+      const mark = [...f.querySelectorAll('[data-mark]:checked')].map(c => +c.dataset.mark);
+      const unmark = [...f.querySelectorAll('[data-unmark]:checked')].map(c => +c.dataset.unmark);
+      const d = flFormData(f);
+      if (mark.length) await flApi('/shipments/elevations/previously-delivered', 'POST', { elevation_ids: mark, delivered: true, delivered_on: d.delivered_on || null, note: d.note || null });
+      if (unmark.length) await flApi('/shipments/elevations/previously-delivered', 'POST', { elevation_ids: unmark, delivered: false });
+      load();
+    }, 'Save', 'modal-lg');
   }
 
   function flagElevation(id) {

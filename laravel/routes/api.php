@@ -594,6 +594,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/shipments/job-options', [$sh, 'jobOptions'])->middleware('permission:shipments.view');
         $se = \App\Http\Controllers\Api\ShipmentElevationController::class;
         Route::get('/shipments/unscheduled', [$se, 'unscheduled'])->middleware('permission:shipments.view');
+        Route::post('/shipments/elevations/previously-delivered', [$se, 'previouslyDelivered'])->middleware('permission:shipments.manage');
         Route::post('/shipments', [$sh, 'store'])->middleware('permission:shipments.manage');
         Route::get('/shipments/{id}/report', [$sh, 'report'])->middleware('permission:shipments.view');
         Route::get('/shipments/{id}', [$sh, 'show'])->middleware('permission:shipments.view');

@@ -564,8 +564,7 @@ function render() {
     if (!woVisible) return;
 
     if (sfSearch) {
-      const hay = `${wo.release_label} ${wo.job_name} ${wo.job_number} ${wo.elevations.map(e => e.elevation_tag).join(' ')}`.toLowerCase();
-      if (!sfSearch.split(/\s+/).every(t => hay.includes(t))) return;
+      if (!fdSearch.match(sfSearch, wo.release_label, wo.job_name, wo.job_number, wo.elevations.map(e => e.elevation_tag))) return;
     }
 
     const visStages = allStages.filter(s => !(hideDone && ['complete','not_required'].includes(s.status)));
@@ -1178,7 +1177,7 @@ function renderMyQueue() {
 function sfOnSearch() {
   clearTimeout(sfSearchTimer);
   sfSearchTimer = setTimeout(() => {
-    sfSearch = document.getElementById('sf-search').value.trim().toLowerCase();
+    sfSearch = document.getElementById('sf-search').value.trim();
     if (sfView === 'all') render();
   }, 200);
 }

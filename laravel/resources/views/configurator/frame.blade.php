@@ -1827,7 +1827,7 @@ function fbToggleJob(jobId) {
 function fbRenderTree() {
   const host = document.getElementById('fb-tree');
   if (!host) return;
-  const q = document.getElementById('fb-tree-search').value.trim().toLowerCase();
+  const q = document.getElementById('fb-tree-search').value.trim();
   const status = document.getElementById('fb-tree-status').value;
   const filtering = !!(q || status);
 
@@ -1841,9 +1841,8 @@ function fbRenderTree() {
   const jobs = new Map();
   fbConfigs.forEach(c => {
     if (status && c.status !== status) return;
-    const jobText = `${c.job_number} ${c.job_name}`.toLowerCase();
-    const jobHit = !q || jobText.includes(q);
-    const entryHit = !q || jobHit || `${c.door_tags} ${c.scope_label} ${c.work_order_release_token || ''}`.toLowerCase().includes(q);
+    const jobHit = fdSearch.match(q, c.job_number, c.job_name);
+    const entryHit = jobHit || fdSearch.match(q, c.door_tags, c.scope_label, c.work_order_release_token);
     if (!entryHit) return;
     if (!jobs.has(c.business_job_id)) jobs.set(c.business_job_id, { id: c.business_job_id, number: c.job_number, name: c.job_name, entries: [] });
     jobs.get(c.business_job_id).entries.push(c);

@@ -402,15 +402,14 @@
       if (f.usage === 'used' && !(st.products_count > 0)) return false;
       if (f.usage === 'empty' && st.products_count > 0) return false;
       if (f.q) {
-        const hay = `${node.name} ${node.code || ''} ${loc.full_path || ''} ${node.description || ''}`.toLowerCase();
-        if (!hay.includes(f.q)) return false;
+        if (!fdSearch.match(f.q, node.name, node.code, loc.full_path, node.description)) return false;
       }
       return true;
     }
 
     function renderTree() {
       const f = {
-        q: document.getElementById('searchInput').value.trim().toLowerCase(),
+        q: document.getElementById('searchInput').value.trim(),
         type: document.getElementById('typeFilter').value,
         usage: document.getElementById('usageFilter').value,
       };
@@ -436,7 +435,7 @@
     function highlight(text, q) {
       const safe = escapeHtml(text);
       if (!q) return safe;
-      const i = text.toLowerCase().indexOf(q);
+      const i = text.toLowerCase().indexOf(q.toLowerCase());
       if (i < 0) return safe;
       return escapeHtml(text.slice(0, i)) + '<mark>' + escapeHtml(text.slice(i, i + q.length)) + '</mark>' + escapeHtml(text.slice(i + q.length));
     }
@@ -673,9 +672,8 @@
       const input = document.getElementById('transferDest');
       const box = document.getElementById('transferDestResults');
       document.getElementById('transferDestId').value = '';
-      const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const matches = currentLocations
-        .filter(l => l.is_active && l.id !== selectedId && terms.every(t => `${l.full_path || l.name} ${l.code || ''}`.toLowerCase().includes(t)))
+        .filter(l => l.is_active && l.id !== selectedId && fdSearch.match(input.value, l.full_path || l.name, l.code))
         .slice(0, 10);
       box.innerHTML = matches.length ? matches.map(l => `
         <button type="button" class="list-group-item list-group-item-action" data-id="${l.id}" data-path="${escapeHtml(l.full_path || l.name)}">

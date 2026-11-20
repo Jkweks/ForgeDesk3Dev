@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Search;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
@@ -50,10 +51,7 @@ class InventoryTransactionController extends Controller
         // Search by reference number or notes
         if ($request->has('search') && $request->search !== '') {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('reference_number', 'like', "%{$search}%")
-                    ->orWhere('notes', 'like', "%{$search}%");
-            });
+            Search::apply($query, $search, ['reference_number', 'notes']);
         }
 
         // Order by most recent first

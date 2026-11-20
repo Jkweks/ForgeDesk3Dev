@@ -46,9 +46,10 @@ class CutlistIngestService
      *   never drops lines that came from an earlier call.
      * @param  string  $source  'configurator' | 'csv' — stamped on lines this call creates (an existing
      *   line keeps the source it already had, so a hand-added line never turns into a generated one).
+     * @param  int  $sequence  Which of the work order's cut lists: 1 = main, 2+ = add-on lists.
      * @return array{job: CutJob, line_count: int}
      */
-    public function ingest(array $rawRows, ?string $fallbackJobName, ?int $workOrderId = null, string $source = 'csv'): array
+    public function ingest(array $rawRows, ?string $fallbackJobName, ?int $workOrderId = null, string $source = 'csv', int $sequence = 1): array
     {
         $lines = collect();
         $jobName = null;
@@ -101,7 +102,7 @@ class CutlistIngestService
         $jobName ??= 'Untitled Job';
 
         $job = $workOrderId
-            ? CutJob::updateOrCreate(['work_order_id' => $workOrderId], ['name' => $jobName])
+            ? CutJob::updateOrCreate(['work_order_id' => $workOrderId, 'sequence' => $sequence], ['name' => $jobName])
             : CutJob::firstOrCreate(['name' => $jobName]);
 
         foreach ($lines as $line) {
