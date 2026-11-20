@@ -966,6 +966,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/fab-users', [\App\Http\Controllers\Api\FabUserController::class, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::put('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'update'])->middleware('permission:fabrication.work-orders.edit');
             Route::delete('/fab-users/{id}', [\App\Http\Controllers\Api\FabUserController::class, 'destroy'])->middleware('permission:fabrication.work-orders.edit');
+            Route::get('/fab-users/{id}/pin', [\App\Http\Controllers\Api\FabUserController::class, 'showPin'])->middleware('permission:users.edit');
             Route::post('/fab-users/{id}/set-pin', [\App\Http\Controllers\Api\FabUserController::class, 'setPin'])->middleware('permission:fabrication.work-orders.edit');
 
             Route::get('/work-orders/{workOrderId}/steps', [\App\Http\Controllers\Api\JobStepController::class, 'index']);

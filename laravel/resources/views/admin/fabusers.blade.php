@@ -76,6 +76,7 @@
                 <input type="password" class="form-control" id="fabUserPin" placeholder="Leave blank to keep / clear"
                   inputmode="numeric" maxlength="8" autocomplete="new-password">
                 <div class="form-text" id="fabUserPinHint">Set a PIN to allow this user to log in on the shop floor tablet.</div>
+                <div class="mt-2" id="fabUserPinView" style="display:none"></div>
               </div>
               <div class="col-md-6 d-flex align-items-end">
                 <button type="button" class="btn btn-ghost-danger btn-sm" id="fabUserClearPinBtn" style="display:none"
@@ -173,6 +174,7 @@
         document.getElementById('fabUserPin').value = '';
         document.getElementById('fabUserClearPinBtn').style.display = 'none';
         _fabUserHasPin = false; _fabUserClearPin = false;
+        renderFabPinView(null);
         showFabUserModal();
       }
 
@@ -196,8 +198,33 @@
           document.getElementById('fabUserPinHint').textContent = _fabUserHasPin
             ? 'PIN is set. Enter a new value to replace it, or click "Clear existing PIN".'
             : 'Set a PIN to allow this user to log in on the shop floor tablet.';
+          renderFabPinView(u);
           showFabUserModal();
         } catch (e) { console.error(e); }
+      }
+
+      // Show the current PIN on request. Only PINs set since the encrypted copy was added can be shown.
+      function renderFabPinView(u) {
+        const box = document.getElementById('fabUserPinView');
+        const canSee = typeof hasPermission !== 'function' || hasPermission('users.edit');
+        if (!u || !u.has_pin || !canSee) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        box.style.display = '';
+        box.innerHTML = u.pin_viewable
+          ? `<span class="text-muted small me-2">Current PIN:</span><code id="fabPinShown">••••</code>
+             <button type="button" class="btn btn-sm btn-ghost-secondary ms-2" id="fabPinToggle" onclick="toggleFabPin(${u.id})"><i class="ti ti-eye me-1"></i>Show</button>`
+          : `<span class="text-muted small">Set before PIN viewing was added, so it can't be shown. Enter a new PIN above to replace it and it will be viewable from then on.</span>`;
+      }
+
+      async function toggleFabPin(id) {
+        const shown = document.getElementById('fabPinShown'), btn = document.getElementById('fabPinToggle');
+        if (btn.dataset.on) { shown.textContent = '••••'; btn.dataset.on = ''; btn.innerHTML = '<i class="ti ti-eye me-1"></i>Show'; return; }
+        try {
+          const r = await fabUserAPI(`/fab-users/${id}/pin`);
+          if (!r.ok) throw new Error();
+          const d = await r.json();
+          shown.textContent = d.pin || 'not available';
+          btn.dataset.on = '1'; btn.innerHTML = '<i class="ti ti-eye-off me-1"></i>Hide';
+        } catch (e) { fabToast('Could not load the PIN.', 'error'); }
       }
 
       async function clearFabPin() {

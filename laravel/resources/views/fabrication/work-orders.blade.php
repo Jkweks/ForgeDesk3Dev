@@ -957,6 +957,25 @@
     </div>
   </div>
 </div>
+
+<!-- Mark elevations previously delivered (from the Shipments tab) -->
+<div class="modal modal-blur fade" id="woPrevDelModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Mark previously delivered</h5></div>
+      <div class="modal-body">
+        <p class="text-muted small" id="wo-prev-summary"></p>
+        <div class="mb-2"><label class="form-label">Delivered on <span class="text-muted small">(optional)</span></label><input type="date" class="form-control" id="wo-prev-date"></div>
+        <div><label class="form-label">Note <span class="text-muted small">(optional)</span></label><textarea class="form-control" rows="2" id="wo-prev-note" maxlength="1000"></textarea></div>
+        <div class="text-danger small mt-2" id="wo-prev-err"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" onclick="hideModal(document.getElementById('woPrevDelModal'))">Cancel</button>
+        <button type="button" class="btn btn-success" id="wo-prev-save" onclick="woPrevDelSave()">Mark delivered</button>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -1638,6 +1657,43 @@ const woShipBadge = (s, pickup) => {
     return `<span class="badge bg-${m[1]}-lt text-${m[1]}">${esc(m[0])}</span>`;
 };
 
+let _woPrevDelIds = [];
+function woPrevDelOpen(ids) {
+    _woPrevDelIds = ids;
+    document.getElementById('wo-prev-summary').textContent = ids.length === 1
+        ? 'This elevation was already delivered outside the shipment system. It comes off any shipment that has not shipped and counts as delivered.'
+        : `${ids.length} elevations will be marked as already delivered outside the shipment system. They come off any shipment that has not shipped and count as delivered.`;
+    document.getElementById('wo-prev-date').value = '';
+    document.getElementById('wo-prev-note').value = '';
+    document.getElementById('wo-prev-err').textContent = '';
+    showModal(document.getElementById('woPrevDelModal'));
+}
+
+async function woPrevDelSave() {
+    const btn = document.getElementById('wo-prev-save');
+    btn.disabled = true;
+    try {
+        const r = await API('/shipments/elevations/previously-delivered', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ elevation_ids: _woPrevDelIds, delivered: true,
+                delivered_on: document.getElementById('wo-prev-date').value || null, note: document.getElementById('wo-prev-note').value.trim() || null }),
+        });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); document.getElementById('wo-prev-err').textContent = j.message || 'Could not save.'; return; }
+        hideModal(document.getElementById('woPrevDelModal'));
+        fabToast('Marked previously delivered.', 'success');
+        woShipmentsLoaded = false; loadWoShipments();
+    } finally { btn.disabled = false; }
+}
+
+async function woPrevDelUndo(id) {
+    const r = await API('/shipments/elevations/previously-delivered', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elevation_ids: [id], delivered: false }),
+    });
+    if (!r.ok) { fabToast('Could not undo.', 'error'); return; }
+    fabToast('Previously delivered removed.', 'success');
+    woShipmentsLoaded = false; loadWoShipments();
+}
+
 async function loadWoShipments() {
     if (woShipmentsLoaded) return;
     const el = document.getElementById('wo-shipments-content');
@@ -1658,6 +1714,10 @@ async function loadWoShipments() {
               <td class="text-end"><a href="/shipments/${s.id}#elevations">Elevations</a></td></tr>`).join('')}</tbody></table>`
             : '<div class="text-muted small mb-3">No shipments yet.</div>';
 
+        const canManage = typeof hasPermission !== 'function' || hasPermission('shipments.manage');
+        // Can be marked unless already marked or already on a truck / received shipment (the server enforces the same).
+        const eligible = e => !e.previously_delivered && !(e.shipments || []).some(x => ['shipped', 'awaiting_verification', 'delivered', 'delivered_issues', 'picked_up'].includes(x.status));
+        const eligibleIds = d.elevations.filter(eligible).map(e => e.id);
         const rows = d.elevations.map(e => {
             const prev = e.previously_delivered;
             const st = WO_ELEV_STATE[e.state] || [e.state, 'secondary'];
@@ -1668,11 +1728,14 @@ async function loadWoShipments() {
                 <td class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</td>
                 <td>${prev ? `<span class="badge bg-success-lt text-success">Delivered earlier${prev.on ? ' ' + esc(fmtDate(String(prev.on).substring(0, 10))) : ''}</span>` : `<span class="badge bg-${st[1]}-lt text-${st[1]}">${esc(st[0])}</span>`}</td>
                 <td class="small">${on || '<span class="text-muted">—</span>'}</td>
-                <td class="text-end">${notes.length ? `<button type="button" class="btn btn-sm btn-icon btn-ghost-secondary" title="Notes from earlier shipments" onclick="document.getElementById('wo-elevnotes-${e.id}').classList.toggle('d-none')"><i class="ti ti-notes"></i></button>` : ''}</td></tr>
+                <td class="text-end text-nowrap">${notes.length ? `<button type="button" class="btn btn-sm btn-icon btn-ghost-secondary" title="Notes from earlier shipments" onclick="document.getElementById('wo-elevnotes-${e.id}').classList.toggle('d-none')"><i class="ti ti-notes"></i></button>` : ''}
+                  ${canManage && prev ? `<button type="button" class="btn btn-sm btn-ghost-secondary" onclick="woPrevDelUndo(${e.id})">Undo previously delivered</button>` : ''}
+                  ${canManage && eligible(e) ? `<button type="button" class="btn btn-sm" onclick="woPrevDelOpen([${e.id}])">Previously delivered…</button>` : ''}</td></tr>
                 ${notes.length ? `<tr id="wo-elevnotes-${e.id}" class="d-none"><td colspan="5" class="small bg-body-tertiary">${notes.map(n => `<div class="mb-1"><span class="text-muted">${n.date ? esc(fmtDate(String(n.date).substring(0, 10))) : 'No ship date'}</span> ·
                     ${n.id ? `<a href="/shipments/${n.id}#elevations">${esc(n.number)}</a>` : esc(n.number)}: ${esc(n.note)}</div>`).join('')}</td></tr>` : ''}`;
         }).join('');
-        el.innerHTML = ships + `<h6 class="mb-2">Elevations</h6>` + (d.elevations.length
+        el.innerHTML = ships + `<div class="d-flex align-items-center mb-2"><h6 class="mb-0">Elevations</h6>
+            ${canManage && eligibleIds.length ? `<button type="button" class="btn btn-sm ms-auto" onclick="woPrevDelOpen([${eligibleIds.join(',')}])"><i class="ti ti-truck-delivery me-1"></i>Mark all unshipped previously delivered…</button>` : ''}</div>` + (d.elevations.length
             ? `<table class="table table-sm table-vcenter mb-0"><thead><tr><th>Elevation</th><th>Type</th><th>Status</th><th>Shipments</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
             : '<div class="text-muted small">No elevations on this work order yet.</div>');
     } catch (e) {

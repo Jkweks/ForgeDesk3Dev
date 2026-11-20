@@ -62,9 +62,14 @@
                     <div class="tab-pane" id="tab-permissions" role="tabpanel">
                       <div class="mb-3 d-flex justify-content-between align-items-center">
                         <h3 class="mb-0">Roles & Permissions</h3>
-                        <button class="btn btn-primary" onclick="showAddRoleModal()" data-permission="roles.create">
-                          <i class="ti ti-plus me-1"></i>Add Role
-                        </button>
+                        <div class="btn-list">
+                          <button class="btn" onclick="showPermChart()" data-permission="roles.view">
+                            <i class="ti ti-table me-1"></i>Permissions chart
+                          </button>
+                          <button class="btn btn-primary" onclick="showAddRoleModal()" data-permission="roles.create">
+                            <i class="ti ti-plus me-1"></i>Add Role
+                          </button>
+                        </div>
                       </div>
 
                       <div class="loading" id="loadingRoles">
@@ -78,6 +83,20 @@
 
 
 @push('scripts')
+    <!-- Permissions chart (roles x permissions), printable -->
+    <div class="modal modal-blur fade" id="permChartModal" tabindex="-1" style="display: none;" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Permissions chart</h5>
+            <button type="button" class="btn btn-sm ms-auto me-2" onclick="printPermChart()"><i class="ti ti-printer me-1"></i>Print</button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0" id="permChartBody"><div class="text-muted p-3">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Add User Modal -->
     <div class="modal modal-blur fade" id="addUserModal" tabindex="-1" style="display: none;" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
@@ -826,6 +845,73 @@
         } finally {
           btn.disabled = false;
         }
+      }
+
+      // ---- Permissions chart: every permission, grouped by area, against every role ----
+      async function permChartData() {
+        const [groups, rl] = await Promise.all([authenticatedFetch('/permissions'), authenticatedFetch('/roles')]);
+        return { groups, roles: rl };
+      }
+
+      function permChartHtml({ groups, roles }, forPrint = false) {
+        const cat = c => String(c || 'other').replace(/[-_]/g, ' ').replace(/\b\w/g, m => m.toUpperCase());
+        const sets = roles.map(r => new Set(r.permissions || []));
+        const head = `<tr><th class="perm-name">Permission</th>${roles.map(r => `<th class="perm-role"><div>${escapeHtml(r.display_name || r.name)}</div>
+          <div class="perm-sub">${r.user_count ?? 0} user${(r.user_count ?? 0) === 1 ? '' : 's'}</div></th>`).join('')}</tr>`;
+        const body = groups.map(g => `<tr class="perm-cat"><td colspan="${roles.length + 1}">${escapeHtml(cat(g.category))}
+            <span class="perm-sub">(${g.permissions.length})</span></td></tr>` + g.permissions.map(p => `<tr>
+          <td class="perm-name">${escapeHtml(p.display_name || p.name)} <span class="perm-code">${escapeHtml(p.name)}</span>
+            ${p.description ? `<div class="perm-sub">${escapeHtml(p.description)}</div>` : ''}</td>
+          ${sets.map(s => `<td class="perm-yes">${s.has(p.name) ? '&#9679;' : ''}</td>`).join('')}</tr>`).join('')).join('');
+        const total = groups.reduce((n, g) => n + g.permissions.length, 0);
+        const counts = `<tr class="perm-total"><td class="perm-name">Total granted (of ${total})</td>${sets.map(s => `<td class="perm-yes">${s.size}</td>`).join('')}</tr>`;
+        return `<table class="perm-table">${forPrint ? '' : ''}<thead>${head}</thead><tbody>${body}${counts}</tbody></table>`;
+      }
+
+      const PERM_CHART_CSS = `
+        .perm-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+        .perm-table th, .perm-table td { border: 1px solid #cfd4da; padding: 3px 8px; vertical-align: top; }
+        .perm-table thead th { background: #f1f3f5; text-align: center; position: sticky; top: 0; }
+        .perm-table .perm-name { text-align: left; }
+        .perm-table .perm-role { min-width: 88px; }
+        .perm-table .perm-cat td { background: #e9ecef; font-weight: 700; letter-spacing: .03em; }
+        .perm-table .perm-yes { text-align: center; width: 88px; }
+        .perm-table .perm-total td { font-weight: 700; background: #f8f9fa; }
+        .perm-table tbody tr:nth-child(even):not(.perm-cat):not(.perm-total) { background: #fafbfc; }
+        .perm-sub { color: #6c757d; font-weight: 400; font-size: 11px; }
+        .perm-code { color: #6c757d; font-family: monospace; font-size: 11px; margin-left: 6px; }`;
+
+      async function showPermChart() {
+        const body = document.getElementById('permChartBody');
+        body.innerHTML = '<div class="text-muted p-3">Loading…</div>';
+        showModal(document.getElementById('permChartModal'));
+        try {
+          const d = await permChartData();
+          window._permChartData = d;
+          body.innerHTML = `<style>${PERM_CHART_CSS}</style>${permChartHtml(d)}`;
+        } catch (e) {
+          console.error(e);
+          body.innerHTML = '<div class="text-danger p-3">Could not load permissions.</div>';
+        }
+      }
+
+      // Prints the chart from its own window so only the table (landscape, repeating header) goes to paper.
+      function printPermChart() {
+        const d = window._permChartData;
+        if (!d) return;
+        const w = window.open('', '_blank');
+        if (!w) { showNotification('Allow pop-ups to print the chart.', 'warning'); return; }
+        const when = new Date().toLocaleString();
+        w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>ForgeDesk permissions</title>
+          <style>@page { size: landscape; margin: 12mm; } body { font-family: Arial, sans-serif; color: #212529; }
+            h1 { font-size: 18px; margin: 0 0 2px; } .meta { color: #6c757d; font-size: 11px; margin-bottom: 10px; }
+            thead { display: table-header-group; } tr { page-break-inside: avoid; } .perm-table thead th { position: static; }
+            ${PERM_CHART_CSS}</style></head><body>
+          <h1>ForgeDesk permissions by role</h1><div class="meta">Generated ${escapeHtml(when)} &middot; ${d.roles.length} roles &middot; ● = granted</div>
+          ${permChartHtml(d, true)}</body></html>`);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 250);
       }
 
       async function loadRoles() {

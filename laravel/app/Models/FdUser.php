@@ -11,7 +11,7 @@ class FdUser extends Model
 
     protected $fillable = ['name', 'initials', 'role', 'email', 'active', 'fab_pin'];
 
-    protected $hidden = ['fab_pin'];
+    protected $hidden = ['fab_pin', 'fab_pin_enc'];
 
     protected $casts = ['active' => 'boolean'];
 
