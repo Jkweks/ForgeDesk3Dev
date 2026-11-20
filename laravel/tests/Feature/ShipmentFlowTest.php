@@ -308,6 +308,74 @@ class ShipmentFlowTest extends TestCase
         $this->assertSame('scheduled', $svc->states([$e->id])[$e->id]['state']);
     }
 
+    // ---- picked up by others ----
+
+    public function test_pickup_by_others_needs_no_loads_locations_or_inspection_and_can_be_marked_picked_up(): void
+    {
+        $this->admin();
+        $wo = $this->wo();
+        $e1 = $this->elev($wo, 'E1');
+        $e2 = $this->elev($wo, 'E2');
+        $svc = app(\App\Services\Shipping\WorkOrderShipmentService::class);
+
+        // No categories, no pickup/drop-off legs.
+        $id = $this->postJson('/api/v1/shipments', ['pickup_by_others' => true, 'job_ids' => [$wo->business_job_id], 'picked_up_by' => 'ACME Glazing'])
+            ->assertCreated()->json('id');
+        $s = Shipment::find($id);
+        $this->assertTrue($s->pickup_by_others);
+        $this->assertSame('draft', $s->status);
+        $this->assertSame(0, $s->loads()->count());
+
+        // A normal shipment still needs them.
+        $this->postJson('/api/v1/shipments', ['job_ids' => [$wo->business_job_id]])->assertStatus(422);
+
+        // No inspections, no shipping.
+        $this->postJson("/api/v1/shipments/$id/pre-inspection", ['answers' => '{}'])->assertStatus(422);
+        $this->postJson("/api/v1/shipments/$id/ship")->assertStatus(422);
+
+        // Elevations ride along; E2 is tagged partial.
+        $this->putJson("/api/v1/shipments/$id/elevations", ['elevation_ids' => [$e1->id, $e2->id]])->assertOk();
+        $this->patchJson("/api/v1/shipments/$id/elevations/{$e2->id}", ['partial' => true, 'partial_note' => 'Frame only'])->assertOk();
+
+        $this->postJson("/api/v1/shipments/$id/picked-up", ['note' => 'x'])->assertStatus(422); // who?
+        $r = $this->postJson("/api/v1/shipments/$id/picked-up", ['picked_up_by' => 'ACME Glazing', 'picked_up_at' => '2026-11-18', 'note' => 'Signed at the dock'])->assertOk();
+        $this->assertSame('picked_up', $r->json('status'));
+        $this->assertSame('ACME Glazing', $r->json('picked_up_by'));
+        $s->refresh();
+        $this->assertSame('2026-11-18', $s->ship_date->toDateString());
+        $this->assertStringContainsString('Signed at the dock', (string) $s->notes);
+
+        $st = $svc->states([$e1->id, $e2->id]);
+        $this->assertSame('delivered', $st[$e1->id]['state']);
+        $this->assertSame('scheduled', $st[$e2->id]['state'], 'partial pickup carried over to a new trip');
+
+        // Closed: cannot be cancelled or deleted, but can be undone.
+        $this->postJson("/api/v1/shipments/$id/cancel", ['reason' => 'oops'])->assertStatus(422);
+        $this->deleteJson("/api/v1/shipments/$id")->assertStatus(422);
+        $this->postJson("/api/v1/shipments/$id/reopen-pickup")->assertOk()->assertJsonPath('status', 'draft');
+        $this->assertNull($s->fresh()->picked_up_at);
+    }
+
+    public function test_pickup_shipments_accept_photos_before_and_after_pickup(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $this->admin();
+        $wo = $this->wo();
+        $id = $this->postJson('/api/v1/shipments', ['pickup_by_others' => true, 'job_ids' => [$wo->business_job_id]])->assertCreated()->json('id');
+        $photo = fn () => \Illuminate\Http\UploadedFile::fake()->image('load.jpg', 40, 40);
+
+        $this->post("/api/v1/shipments/$id/documents", ['files' => [$photo()]], ['Accept' => 'application/json'])->assertCreated();
+        $this->postJson("/api/v1/shipments/$id/picked-up", ['picked_up_by' => 'Rita'])->assertOk();
+        $r = $this->post("/api/v1/shipments/$id/documents", ['files' => [$photo()]], ['Accept' => 'application/json'])->assertCreated();
+        $this->assertCount(2, $r->json('documents'));
+        $this->assertSame('pickup_photo', $r->json('documents.0.kind'));
+
+        // A normal draft shipment still refuses tickets until it has shipped.
+        $other = $this->wo('2002');
+        $nid = Shipment::where('work_order_id', $other->id)->value('id');
+        $this->post("/api/v1/shipments/$nid/documents", ['files' => [$photo()]], ['Accept' => 'application/json'])->assertStatus(422);
+    }
+
     public function test_cancelled_shipments_free_their_elevations(): void
     {
         $wo = $this->wo();

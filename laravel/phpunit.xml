@@ -18,6 +18,10 @@
         </include>
     </source>
     <php>
+        <!-- The container caches routes (entrypoint route:cache). A cached file hides routes added since, and each
+             test app re-reading it exhausts memory part-way through the suite, so tests always use the live routes. -->
+        <env name="APP_ROUTES_CACHE" value="/nonexistent/routes-v7.php" force="true"/>
+        <server name="APP_ROUTES_CACHE" value="/nonexistent/routes-v7.php" force="true"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

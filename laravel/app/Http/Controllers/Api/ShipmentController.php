@@ -91,6 +91,7 @@ class ShipmentController extends Controller
         return response()->json(['from' => $from, 'to' => $to, 'shipments' => $rows->map(fn (Shipment $r) => [
             'trip' => $trips[$r->id] ?? null, 'id' => $r->id, 'shipment_number' => $r->shipment_number, 'status' => $r->status,
             'ship_date' => $r->ship_date?->format('Y-m-d'), 'destination' => $r->destination, 'carrier' => $r->carrier,
+            'pickup_by_others' => (bool) $r->pickup_by_others, 'picked_up_by' => $r->picked_up_by,
             'jobs' => $r->jobs, 'custom_jobs' => $r->custom_jobs ?? [], 'loads' => $r->loads,
             'pre_result' => $r->inspections->firstWhere('phase', 'pre')?->result,
             'post_result' => $r->inspections->firstWhere('phase', 'post')?->result,
@@ -203,7 +204,7 @@ class ShipmentController extends Controller
             }
             $loc = $data["{$p}_location_id"] ? ShipmentLocation::find($data["{$p}_location_id"]) : null;
             if (! $loc) {
-                if ($creating) {
+                if ($creating && ! ($data['pickup_by_others'] ?? false)) {
                     throw ValidationException::withMessages(["{$p}_location_id" => 'Choose a '.($p === 'pickup' ? 'pickup' : 'drop-off').' location.']);
                 }
                 foreach (['address', 'lat', 'lng'] as $f) {
@@ -242,7 +243,7 @@ class ShipmentController extends Controller
                 'shipment_number' => Shipment::nextNumber(), 'status' => 'draft', 'created_by' => $request->user()->id,
             ] + collect($data)->except('loads', 'job_ids', 'pickup_new_name', 'dropoff_new_name', 'save_site_to_job_id')->all());
             $s->jobs()->sync($data['job_ids'] ?? []);
-            $s->loads()->createMany($data['loads']);
+            $s->loads()->createMany($data['loads'] ?? []);
 
             return $s;
         });
@@ -286,7 +287,7 @@ class ShipmentController extends Controller
     public function destroy(int $id)
     {
         $shipment = Shipment::findOrFail($id);
-        if (in_array($shipment->status, ['shipped', 'awaiting_verification', 'delivered', 'delivered_issues'], true)) {
+        if (in_array($shipment->status, ['shipped', 'awaiting_verification', 'delivered', 'delivered_issues', 'picked_up'], true)) {
             return response()->json(['message' => 'A shipped shipment cannot be deleted. Cancel it instead.'], 422);
         }
         $shipment->delete();
@@ -298,7 +299,7 @@ class ShipmentController extends Controller
     {
         $data = $request->validate(['reason' => 'required|string|min:3|max:1000']);
         $shipment = Shipment::findOrFail($id);
-        if (in_array($shipment->status, ['awaiting_verification', 'delivered', 'delivered_issues', 'cancelled'], true)) {
+        if (in_array($shipment->status, ['awaiting_verification', 'delivered', 'delivered_issues', 'picked_up', 'cancelled'], true)) {
             return response()->json(['message' => 'This shipment can no longer be cancelled.'], 422);
         }
         $shipment->update([
@@ -309,10 +310,50 @@ class ShipmentController extends Controller
         return response()->json(['message' => 'Shipment cancelled']);
     }
 
+    /**
+     * Collected by the customer or another carrier: closes the shipment as `picked_up`. No inspection is needed
+     * (photos are optional, see uploadDocuments). Its elevations count as delivered, a partial one carries over.
+     */
+    public function markPickedUp(Request $request, int $id)
+    {
+        $shipment = Shipment::findOrFail($id);
+        if (! in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
+            return response()->json(['message' => 'Only a shipment that has not shipped can be marked picked up.'], 422);
+        }
+        $data = $request->validate([
+            'picked_up_by' => 'required|string|min:2|max:255', 'picked_up_at' => 'nullable|date', 'note' => 'nullable|string|max:2000',
+        ]);
+        $at = isset($data['picked_up_at']) ? Carbon::parse($data['picked_up_at']) : now();
+
+        $shipment->update([
+            'status' => 'picked_up', 'pickup_by_others' => true, 'picked_up_by' => trim($data['picked_up_by']), 'picked_up_at' => $at,
+            'shipped_at' => $at, 'ship_date' => $at->toDateString(),
+            'notes' => filled($data['note'] ?? null) ? trim(($shipment->notes ? $shipment->notes."\n" : '').'Picked up: '.trim($data['note'])) : $shipment->notes,
+        ]);
+        app(\App\Services\Shipping\WorkOrderShipmentService::class)->carryOverPartials($shipment->fresh(), $request->user()->id);
+
+        return response()->json($this->detail($shipment->fresh()));
+    }
+
+    /** Undo a pickup that was marked by mistake: back to a draft that is still flagged picked up by others. */
+    public function reopenPickup(int $id)
+    {
+        $shipment = Shipment::findOrFail($id);
+        if ($shipment->status !== 'picked_up') {
+            return response()->json(['message' => 'This shipment is not marked picked up.'], 422);
+        }
+        $shipment->update(['status' => 'draft', 'picked_up_at' => null, 'shipped_at' => null]);
+
+        return response()->json($this->detail($shipment->fresh()));
+    }
+
     /** Mark the truck as gone: this is what publishes it to the field app for the post-delivery check. */
     public function ship(int $id)
     {
         $shipment = Shipment::findOrFail($id);
+        if ($shipment->pickup_by_others) {
+            return response()->json(['message' => 'This shipment is picked up by others. Mark it picked up instead of shipping it.'], 422);
+        }
         if ($shipment->status !== 'pre_check_done') {
             return response()->json(['message' => 'Complete a passing pre-shipment inspection before shipping.'], 422);
         }
@@ -342,6 +383,9 @@ class ShipmentController extends Controller
     private function recordInspection(Request $request, int $id, string $phase)
     {
         $shipment = Shipment::findOrFail($id);
+        if ($shipment->pickup_by_others) {
+            return response()->json(['message' => 'Shipments picked up by others do not need an inspection.'], 422);
+        }
         if ($phase === 'pre' && ! in_array($shipment->status, ['draft', 'pre_check_done'], true)) {
             return response()->json(['message' => 'This shipment has already shipped.'], 422);
         }
@@ -387,7 +431,7 @@ class ShipmentController extends Controller
     public function uploadDocuments(Request $request, int $id)
     {
         $shipment = Shipment::findOrFail($id);
-        if (in_array($shipment->status, ['draft', 'pre_check_done', 'cancelled'], true)) {
+        if ($shipment->status === 'cancelled' || (! $shipment->pickup_by_others && in_array($shipment->status, ['draft', 'pre_check_done'], true))) {
             return response()->json(['message' => 'Tickets can be attached once the shipment has shipped.'], 422);
         }
         $request->validate([
@@ -418,7 +462,7 @@ class ShipmentController extends Controller
             $path = "shipments/{$shipment->id}/tickets/".Str::uuid().".$ext";
             Storage::disk('local')->put($path, $bytes);
             $shipment->documents()->create([
-                'kind' => 'signed_ticket', 'original_name' => $name, 'file_path' => $path, 'file_mime' => $mime,
+                'kind' => $shipment->pickup_by_others ? 'pickup_photo' : 'signed_ticket', 'original_name' => $name, 'file_path' => $path, 'file_mime' => $mime,
                 'file_size' => strlen($bytes), 'uploaded_by' => $request->user()->id,
             ]);
         }
@@ -489,12 +533,15 @@ class ShipmentController extends Controller
     private function validated(Request $request, bool $creating): array
     {
         $req = $creating ? 'required' : 'sometimes';
+        // Picked up by others: no checklist categories and no pickup/drop-off legs are needed.
+        $others = $request->boolean('pickup_by_others');
 
         return $request->validate([
+            'pickup_by_others' => 'sometimes|boolean', 'picked_up_by' => 'nullable|string|max:255',
             'job_ids' => 'nullable|array|max:50',
             'job_ids.*' => ['integer', 'distinct', Rule::exists('business_jobs', 'id')],
-            'pickup_location_id' => ($creating ? 'required' : 'sometimes').'|nullable|integer|exists:shipment_locations,id',
-            'dropoff_location_id' => ($creating ? 'required' : 'sometimes').'|nullable|integer|exists:shipment_locations,id',
+            'pickup_location_id' => ($creating && ! $others ? 'required' : 'sometimes').'|nullable|integer|exists:shipment_locations,id',
+            'dropoff_location_id' => ($creating && ! $others ? 'required' : 'sometimes').'|nullable|integer|exists:shipment_locations,id',
             'pickup_new_name' => 'nullable|string|max:120', 'dropoff_new_name' => 'nullable|string|max:120',
             'save_site_to_job_id' => 'nullable|integer',
             'pickup_address' => 'nullable|string|max:500', 'dropoff_address' => 'nullable|string|max:500',
@@ -503,7 +550,7 @@ class ShipmentController extends Controller
             'custom_jobs' => 'nullable|array|max:20', 'custom_jobs.*' => 'string|max:120',
             'ship_date' => 'nullable|date', 'destination' => 'nullable|string|max:255',
             'carrier' => 'nullable|string|max:255', 'notes' => 'nullable|string|max:5000',
-            'loads' => "$req|array|min:1|max:20",
+            'loads' => ($others ? 'nullable' : $req).'|array|'.($others ? '' : 'min:1|').'max:20',
             'loads.*.shipment_type_id' => ['required', 'distinct', Rule::exists('shipment_types', 'id')->where('is_active', true)],
             'loads.*.description' => 'nullable|string|max:255', 'loads.*.piece_count' => 'nullable|integer|min:0|max:100000',
         ]);

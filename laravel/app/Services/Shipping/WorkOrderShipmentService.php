@@ -19,7 +19,7 @@ class WorkOrderShipmentService
     public const OPEN = ['draft', 'pre_check_done', 'shipped'];
 
     /** Shipments in these statuses have put the material on site. */
-    public const RECEIVED = ['awaiting_verification', 'delivered', 'delivered_issues'];
+    public const RECEIVED = ['awaiting_verification', 'delivered', 'delivered_issues', 'picked_up'];
 
     /** Editable membership: elevations can still be added/removed/moved. */
     public const EDITABLE = ['draft', 'pre_check_done'];

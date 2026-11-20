@@ -115,7 +115,7 @@
         <td>${(r.work_orders || []).map(w => `<span class="badge bg-blue-lt me-1 mb-1" title="${esc(w.tags.join(', '))}${w.partial ? ' (partial)' : ''}">${esc(w.label)} · ${w.elevations} elev${w.partial ? ' (partial)' : ''}</span>`).join('') || '<span class="text-muted">—</span>'}</td>
         <td>${r.loads.map(l => flBadge(l.type.name, 'azure')).join(' ')}</td>
         <td>${r.elevations_count || '<span class="text-muted">0</span>'}</td>
-        <td>${shStatus(r.status)}</td><td>${flDate(r.ship_date)}</td><td class="text-muted">${esc(r.destination || '')}</td></tr>`).join('')
+        <td>${shStatus(r.status, r.pickup_by_others)}</td><td>${flDate(r.ship_date)}</td><td class="text-muted">${esc(r.destination || '')}</td></tr>`).join('')
       : '<tr><td colspan="8" class="text-center text-muted py-4">No shipments.</td></tr>';
   }
   async function loadShipments() {

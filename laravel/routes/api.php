@@ -601,6 +601,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/shipments/{id}', [$sh, 'update'])->middleware('permission:shipments.manage');
         Route::delete('/shipments/{id}', [$sh, 'destroy'])->middleware('permission:shipments.manage');
         Route::patch('/shipments/{id}/schedule', [$sh, 'schedule'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/picked-up', [$sh, 'markPickedUp'])->middleware('permission:shipments.manage');
+        Route::post('/shipments/{id}/reopen-pickup', [$sh, 'reopenPickup'])->middleware('permission:shipments.manage');
         Route::get('/shipments/{id}/elevations', [$se, 'index'])->middleware('permission:shipments.view');
         Route::put('/shipments/{id}/elevations', [$se, 'sync'])->middleware('permission:shipments.manage');
         Route::patch('/shipments/{id}/elevations/{elevationId}', [$se, 'flag'])->middleware('permission:shipments.manage');

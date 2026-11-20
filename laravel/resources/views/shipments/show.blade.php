@@ -55,7 +55,7 @@
 
   function render() {
     document.getElementById('hdrNumber').textContent = S.shipment_number + (S.trip ? ' · ' + S.trip : '');
-    document.getElementById('hdrStatus').innerHTML = shStatus(S.status);
+    document.getElementById('hdrStatus').innerHTML = shStatus(S.status, S.pickup_by_others);
     document.getElementById('hdrJob').textContent = S.jobs.map(j => `${j.job_name} (${j.job_number})`).concat(S.custom_jobs || []).join(', ');
     renderDetails();
     renderElevations();
@@ -64,9 +64,11 @@
 
     const acts = [];
     if (S.status === 'awaiting_verification') acts.push(`<button class="btn btn-success" data-permission="shipments.manage" onclick="verifyDelivery()"><i class="ti ti-circle-check me-1"></i>Verify delivery</button>`);
-    if (S.status === 'pre_check_done') acts.push(`<button class="btn btn-success" data-permission="shipments.manage" onclick="markShipped()"><i class="ti ti-truck me-1"></i>Mark shipped</button>`);
-    if (!['awaiting_verification', 'delivered', 'delivered_issues', 'cancelled'].includes(S.status)) acts.push(`<button class="btn btn-outline-danger" data-permission="shipments.manage" onclick="cancelShipment()">Cancel</button>`);
-    if (!['awaiting_verification', 'delivered', 'delivered_issues', 'cancelled'].includes(S.status)) acts.unshift(`<button class="btn" data-permission="shipments.manage" onclick="shipmentForm(S)"><i class="ti ti-edit me-1"></i>Edit</button>`);
+    if (S.pickup_by_others && ['draft', 'pre_check_done'].includes(S.status)) acts.push(`<button class="btn btn-success" data-permission="shipments.manage" onclick="markPickedUp()"><i class="ti ti-package-export me-1"></i>Mark picked up</button>`);
+    if (S.status === 'picked_up') acts.push(`<button class="btn btn-outline-secondary" data-permission="shipments.manage" onclick="reopenPickup()">Undo picked up</button>`);
+    if (S.status === 'pre_check_done' && !S.pickup_by_others) acts.push(`<button class="btn btn-success" data-permission="shipments.manage" onclick="markShipped()"><i class="ti ti-truck me-1"></i>Mark shipped</button>`);
+    if (!['awaiting_verification', 'delivered', 'delivered_issues', 'picked_up', 'cancelled'].includes(S.status)) acts.push(`<button class="btn btn-outline-danger" data-permission="shipments.manage" onclick="cancelShipment()">Cancel</button>`);
+    if (!['awaiting_verification', 'delivered', 'delivered_issues', 'picked_up', 'cancelled'].includes(S.status)) acts.unshift(`<button class="btn" data-permission="shipments.manage" onclick="shipmentForm(S)"><i class="ti ti-edit me-1"></i>Edit</button>`);
     acts.unshift(`<button class="btn" onclick="openReport(this)"><i class="ti ti-file-type-pdf me-1"></i>Report PDF</button>`);
     document.getElementById('hdrActions').innerHTML = acts.join('');
 
@@ -247,19 +249,39 @@
 
   function renderTickets() {
     const docs = S.documents || [];
-    const canUpload = !['draft', 'pre_check_done', 'cancelled'].includes(S.status);
+    const pick = !!S.pickup_by_others;
+    const canUpload = S.status !== 'cancelled' && (pick || !['draft', 'pre_check_done'].includes(S.status));
     const locked = ['delivered', 'delivered_issues'].includes(S.status);
-    document.querySelector('[data-section="tickets"]').innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Signed shipping tickets</h3></div>
-      <div class="card-body">${canUpload ? `<div data-permission="shipments.manage" class="mb-3"><label class="btn btn-primary"><i class="ti ti-upload me-1"></i>Upload PDF or photo
+    document.querySelector('[data-section="tickets"]').innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">${pick ? 'Photos &amp; documents' : 'Signed shipping tickets'}</h3></div>
+      <div class="card-body">${canUpload ? `<div data-permission="shipments.manage" class="mb-3"><label class="btn btn-primary"><i class="ti ti-upload me-1"></i>${pick ? 'Add photos or documents' : 'Upload PDF or photo'}
           <input type="file" class="d-none" id="ticketInput" accept="application/pdf,image/*" multiple></label>
-          <span class="text-muted small ms-2">PDF, JPG, PNG or WebP, up to 15 MB each.</span></div>` : '<div class="text-muted mb-3">Tickets can be attached once the shipment has shipped.</div>'}
+          <span class="text-muted small ms-2">${pick ? 'Optional. ' : ''}PDF, JPG, PNG or WebP, up to 15 MB each.</span></div>` : '<div class="text-muted mb-3">Tickets can be attached once the shipment has shipped.</div>'}
         ${docs.length ? `<div class="list-group list-group-flush">${docs.map(d => `<div class="list-group-item d-flex align-items-center gap-2 px-0">
-          <i class="ti ${d.file_mime === 'application/pdf' ? 'ti-file-type-pdf text-danger' : 'ti-photo text-azure'} fs-2"></i>
+          ${pick && d.file_mime !== 'application/pdf' ? `<a href="${docUrl(d)}" target="_blank" rel="noopener"><img src="${docUrl(d)}" alt="" style="width:72px;height:56px;object-fit:cover" class="rounded border"></a>`
+            : `<i class="ti ${d.file_mime === 'application/pdf' ? 'ti-file-type-pdf text-danger' : 'ti-photo text-azure'} fs-2"></i>`}
           <div class="flex-grow-1"><a href="${docUrl(d)}" target="_blank" rel="noopener">${esc(d.original_name)}</a>
             <div class="small text-muted">${docKb(d.file_size)} &middot; ${esc(d.uploader?.name || '')} &middot; ${flDate(d.created_at)}</div></div>
           ${locked ? '' : `<button class="btn btn-sm btn-outline-danger" data-permission="shipments.manage" onclick="deleteTicket(${d.id})"><i class="ti ti-trash"></i></button>`}</div>`).join('')}</div>`
-          : '<div class="text-muted">No tickets uploaded yet.</div>'}</div></div>`;
+          : `<div class="text-muted">${pick ? 'No photos added yet.' : 'No tickets uploaded yet.'}</div>`}</div></div>`;
     document.getElementById('ticketInput')?.addEventListener('change', uploadTickets);
+  }
+
+  function markPickedUp() {
+    flModal('Mark picked up by others',
+      `<div class="col-12 small text-muted">Records that someone else collected this shipment. No inspection is needed; you can add photos afterwards.</div>` +
+      flField('picked_up_by', 'Picked up by (company / person)', S.picked_up_by || '', 'text', '', 'col-12') +
+      flField('picked_up_at', 'Picked up on', new Date().toISOString().substring(0, 10), 'date') +
+      flText('note', 'Note (optional)', '', 2),
+      async f => {
+        const d = flFormData(f);
+        if (!(d.picked_up_by || '').trim()) { showNotification('Who picked it up?', 'warning'); throw new Error('no name'); }
+        await flApi(`/shipments/${SHIPMENT_ID}/picked-up`, 'POST', { picked_up_by: d.picked_up_by, picked_up_at: d.picked_up_at || null, note: d.note || null });
+        showNotification('Marked picked up.', 'success'); load();
+      }, 'Mark picked up');
+  }
+
+  async function reopenPickup() {
+    await flApi(`/shipments/${SHIPMENT_ID}/reopen-pickup`, 'POST', {}); showNotification('Pickup undone.', 'success'); load();
   }
 
   async function uploadTickets(e) {
@@ -297,6 +319,8 @@
     ['pre-photos', 'Pre-shipment photos', 'ti-camera'], ['post', 'Post-delivery inspection', 'ti-truck-delivery'],
     ['post-photos', 'Post-delivery photos', 'ti-photo'], ['tickets', 'Signed tickets', 'ti-file-certificate']];
 
+  // Pickups by others have no inspections: only details, elevations and photos/documents.
+  const sectionsNow = () => S && S.pickup_by_others ? SECTIONS.filter(x => ['details', 'elevations', 'tickets'].includes(x[0])) : SECTIONS;
   const byPhase = ph => S.inspections.filter(n => n.phase === ph);
   const photoCount = ph => byPhase(ph).reduce((t, n) => t + n.photos.length, 0);
 
@@ -312,13 +336,13 @@
   }
 
   function renderNav() {
-    document.getElementById('reportNav').innerHTML = SECTIONS.map(([key, label, icon]) => `<a href="#${key}" data-nav="${key}"
+    document.getElementById('reportNav').innerHTML = sectionsNow().map(([key, label, icon]) => `<a href="#${key}" data-nav="${key}"
       class="list-group-item list-group-item-action d-flex align-items-center gap-2"><i class="ti ${icon}"></i><span class="flex-grow-1">${label}</span>${sectionBadge(key)}</a>`).join('');
     document.querySelectorAll('[data-nav]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); history.replaceState(null, '', '#' + a.dataset.nav); showSection(a.dataset.nav); }));
   }
 
   function showSection(key) {
-    if (!SECTIONS.some(x => x[0] === key)) key = 'details';
+    if (!sectionsNow().some(x => x[0] === key)) key = 'details';
     section = key;
     document.querySelectorAll('[data-section]').forEach(p => p.classList.toggle('d-none', p.dataset.section !== key));
     document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === key));
@@ -330,12 +354,13 @@
     document.querySelector('[data-section="details"]').innerHTML = `<div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body"><dl class="row mb-0">
       <dt class="col-sm-3">${S.jobs.length + (S.custom_jobs || []).length > 1 ? 'Jobs' : 'Job'}</dt><dd class="col-sm-9">${(S.jobs.length || (S.custom_jobs || []).length) ? S.jobs.map(j => esc(j.job_name) + ' <span class="text-muted">' + esc(j.job_number) + '</span>').concat((S.custom_jobs || []).map(n => esc(n) + ' <span class="text-muted">(custom)</span>')).join('<br>') : '—'}</dd>
       ${S.status === 'cancelled' ? `<dt class="col-sm-3 text-danger">Cancelled</dt><dd class="col-sm-9">${esc(S.cancel_reason || '—')}<div class="text-muted small">${S.canceller ? esc(S.canceller.name) + ' · ' : ''}${flDate(S.cancelled_at)}</div></dd>` : ''}
-      <dt class="col-sm-3">Pickup</dt><dd class="col-sm-9">${placeLine(S.pickup_location, S.pickup_address)}</dd>
-      <dt class="col-sm-3">Drop off</dt><dd class="col-sm-9">${placeLine(S.dropoff_location, S.dropoff_address)}</dd>
+      ${S.pickup_by_others ? `<dt class="col-sm-3">Pickup by others</dt><dd class="col-sm-9">${flBadge('No inspection needed', 'teal')} ${esc(S.picked_up_by || 'Not yet named')}${S.picked_up_at ? ' <span class="text-muted">· collected ' + flDate(S.picked_up_at) + '</span>' : ' <span class="text-muted">· waiting to be collected</span>'}</dd>`
+        : `<dt class="col-sm-3">Pickup</dt><dd class="col-sm-9">${placeLine(S.pickup_location, S.pickup_address)}</dd>
+      <dt class="col-sm-3">Drop off</dt><dd class="col-sm-9">${placeLine(S.dropoff_location, S.dropoff_address)}</dd>`}
       <dt class="col-sm-3">Ship date</dt><dd class="col-sm-9">${flDate(S.ship_date)}</dd>
       <dt class="col-sm-3">Carrier</dt><dd class="col-sm-9">${esc(S.carrier || '—')}</dd>
       <dt class="col-sm-3">Destination</dt><dd class="col-sm-9">${esc(S.destination || '—')}</dd>
-      <dt class="col-sm-3">Loads</dt><dd class="col-sm-9">${S.loads.map(l => `${flBadge(l.type.name, 'azure')}${l.piece_count ? ' ×' + l.piece_count : ''}`).join(' &nbsp; ')}</dd>
+      ${S.pickup_by_others && !S.loads.length ? '' : `<dt class="col-sm-3">Loads</dt><dd class="col-sm-9">${S.loads.map(l => `${flBadge(l.type.name, 'azure')}${l.piece_count ? ' ×' + l.piece_count : ''}`).join(' &nbsp; ')}</dd>`}
       <dt class="col-sm-3">Notes</dt><dd class="col-sm-9">${esc(S.notes || '—')}</dd></dl></div></div>`;
   }
 

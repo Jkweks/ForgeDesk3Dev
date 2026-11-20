@@ -67,24 +67,34 @@ class CutStationJobPickerTest extends TestCase
 
     public function test_picker_hides_completed_lists_until_asked(): void
     {
+        // Step 1 lists jobs; a job whose lists are all completed is hidden until asked for.
         $page = $this->station([$this->pending->id])->call('openJobsModal');
 
-        $names = fn () => $page->viewData('jobs')->pluck('job_title')->all();
-        $this->assertEqualsCanonicalizing(['Pending Job', 'Partial Job'], $names());
+        $titles = fn () => $page->viewData('jobGroups')->pluck('title')->all();
+        $this->assertEqualsCanonicalizing(['Pending Job', 'Partial Job'], $titles());
 
         $page->call('toggleShowCompletedJobs');
-        $this->assertCount(4, $names());
+        $this->assertCount(4, $titles());
 
         // Closing and reopening the picker goes back to hiding them.
         $page->call('closeModal')->call('openJobsModal');
-        $this->assertCount(2, $names());
+        $this->assertCount(2, $titles());
+
+        // Step 2 (work orders) of a checked job hides its completed lists the same way.
+        $page->call('togglePickJob', 'n:Done Job A')->call('continueToWorkOrders');
+        $this->assertEqualsCanonicalizing(['Pending Job'], $page->viewData('jobs')->pluck('job_title')->all());
+        $page->call('toggleShowCompletedJobs');
+        $this->assertEqualsCanonicalizing(['Pending Job', 'Done Job A'], $page->viewData('jobs')->pluck('job_title')->all());
     }
 
-    public function test_default_selection_is_an_open_list_not_a_completed_one(): void
+    public function test_nothing_is_selected_by_default_and_the_job_picker_opens(): void
     {
+        // A fresh sign-in asks which jobs/work orders to cut instead of loading a default list.
         $page = $this->station([]);
 
-        $this->assertSame([$this->pending->id], $page->get('activeJobIds'));
+        $this->assertSame([], $page->get('activeJobIds'));
+        $this->assertSame('jobs', $page->get('modal'));
+        $this->assertSame('jobs', $page->get('pickStep'));
     }
 
     public function test_open_lists_stack_but_completed_lists_are_one_at_a_time(): void
@@ -109,7 +119,9 @@ class CutStationJobPickerTest extends TestCase
     public function test_select_all_only_takes_open_lists(): void
     {
         $page = $this->station([$this->doneA->id])
-            ->call('openJobsModal')->call('toggleShowCompletedJobs')->call('selectVisibleJobs');
+            ->call('openJobsModal')->call('toggleShowCompletedJobs')
+            ->call('togglePickJob', 'n:Pending Job')->call('togglePickJob', 'n:Partial Job')
+            ->call('continueToWorkOrders')->call('selectVisibleJobs');
 
         $this->assertEqualsCanonicalizing([$this->pending->id, $this->inProgress->id], $page->get('activeJobIds'));
     }

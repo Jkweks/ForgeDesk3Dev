@@ -134,7 +134,7 @@ class FieldSync
     private function publishShipments(Connection $remote): int
     {
         $now = now()->toDateTimeString();
-        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name'])->whereIn('status', Shipment::OPEN_STATUSES)->get()
+        $rows = Shipment::with(['jobs:id,job_number,job_name', 'loads.type:id,name', 'pickupLocation:id,name', 'dropoffLocation:id,name'])->whereIn('status', Shipment::OPEN_STATUSES)->where('pickup_by_others', false)->get()
             ->map(fn (Shipment $s) => [
                 'shipment_number' => $s->shipment_number,
                 'job_label' => $s->jobLabel(),
@@ -361,6 +361,9 @@ class FieldSync
         }
         if ($shipment->status === 'cancelled') {
             return ['rejected', 'Shipment was cancelled.', null];
+        }
+        if ($shipment->pickup_by_others) {
+            return ['rejected', 'Shipment is picked up by others: no inspection is needed.', null];
         }
         if ($phase === 'pre' ? ! in_array($shipment->status, ['draft', 'pre_check_done'], true) : $shipment->status !== 'shipped') {
             return ['needs_review', "Shipment is {$shipment->status}, not awaiting a ".($phase === 'pre' ? 'pre-shipment' : 'delivery').' inspection.', null];

@@ -9,7 +9,7 @@ class Shipment extends Model
 {
     use SoftDeletes;
 
-    public const STATUSES = ['draft', 'pre_check_done', 'shipped', 'awaiting_verification', 'delivered', 'delivered_issues', 'cancelled'];
+    public const STATUSES = ['draft', 'pre_check_done', 'shipped', 'awaiting_verification', 'delivered', 'delivered_issues', 'picked_up', 'cancelled'];
 
     /** Not yet delivered or cancelled: what the field app is shown. */
     public const OPEN_STATUSES = ['draft', 'pre_check_done', 'shipped'];
@@ -19,9 +19,10 @@ class Shipment extends Model
         'created_by', 'work_order_id', 'shipped_at', 'cancel_reason', 'cancelled_at', 'cancelled_by', 'verified_at', 'verified_by', 'verification_notes',
         'pickup_location_id', 'pickup_address', 'pickup_lat', 'pickup_lng',
         'dropoff_location_id', 'dropoff_address', 'dropoff_lat', 'dropoff_lng',
+        'pickup_by_others', 'picked_up_by', 'picked_up_at',
     ];
 
-    protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime', 'cancelled_at' => 'datetime', 'verified_at' => 'datetime',
+    protected $casts = ['ship_date' => 'date:Y-m-d', 'shipped_at' => 'datetime', 'cancelled_at' => 'datetime', 'verified_at' => 'datetime', 'picked_up_at' => 'datetime', 'pickup_by_others' => 'boolean',
         'pickup_lat' => 'float', 'pickup_lng' => 'float', 'dropoff_lat' => 'float', 'dropoff_lng' => 'float', 'custom_jobs' => 'array'];
 
     public function jobs()

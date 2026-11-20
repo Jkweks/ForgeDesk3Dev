@@ -3,12 +3,16 @@
   const SH = {
     STATUS: {
       draft: ['Draft', 'secondary'], pre_check_done: ['Pre-check done', 'blue'], shipped: ['Shipped', 'cyan'], awaiting_verification: ['Awaiting verification', 'orange'],
-      delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], cancelled: ['Cancelled', 'secondary'],
+      delivered: ['Delivered', 'success'], delivered_issues: ['Delivered – issues', 'danger'], picked_up: ['Picked up by others', 'teal'], cancelled: ['Cancelled', 'secondary'],
     },
     RESULT: { pass: ['Pass', 'success'], pass_with_issues: ['Pass with issues', 'warning'], fail: ['Fail', 'danger'] },
     INPUTS: { pass_fail: 'Pass / Fail / N/A', number: 'Number', text: 'Text', choice: 'Choice list', photo: 'Photos' },
   };
-  const shStatus = s => { const m = SH.STATUS[s] || [s, 'secondary']; return flBadge(m[0], m[1]); };
+  const shStatus = (s, pickupByOthers) => {
+    // A planned pickup by others reads as such instead of "Draft" / "Pre-check done".
+    const m = pickupByOthers && ['draft', 'pre_check_done'].includes(s) ? ['Pickup by others', 'teal'] : (SH.STATUS[s] || [s, 'secondary']);
+    return flBadge(m[0], m[1]);
+  };
   const shResult = s => { const m = SH.RESULT[s] || [s, 'secondary']; return flBadge(m[0], m[1]); };
   const shPhotoUrl = (shipmentId, photoId) => `/api/v1/shipments/${shipmentId}/photos/${photoId}`;
 
@@ -142,6 +146,11 @@
         <input type="text" id="jobSearchInput" class="form-control form-control-sm mb-1" placeholder="Search jobs, or type a name to add a custom one…" oninput="jobSearch(this.value)" autocomplete="off">
         <div id="jobList" class="list-group" style="max-height:11rem;overflow:auto"></div></div>` +
       placeHtml('pickup', 'Pickup from') + placeHtml('dropoff', 'Drop off at') +
+      `<div class="col-12"><label class="form-check mb-0"><input type="checkbox" class="form-check-input" id="pickupCb" ${S?.pickup_by_others ? 'checked' : ''}
+          onchange="document.getElementById('pickupBy').classList.toggle('d-none', !this.checked)"><span class="form-check-label fw-bold">Picked up by others</span>
+          <span class="text-muted small ms-1">(customer or another carrier collects it: no inspection, no pickup / drop-off legs or categories needed)</span></label>
+          <div id="pickupBy" class="mt-2 ${S?.pickup_by_others ? '' : 'd-none'}"><label class="form-label">Picked up by <span class="text-muted small">(company / person, optional until it is collected)</span></label>
+          <input type="text" class="form-control" name="picked_up_by" value="${esc(S?.picked_up_by || '')}" maxlength="255"></div></div>` +
       flField('ship_date', 'Ship date', S ? String(S.ship_date || '').substring(0, 10) : '', 'date') + flField('carrier', 'Carrier / driver', S?.carrier || '') +
       flField('destination', 'Destination', S?.destination || '', 'text', '', 'col-12') +
       `<div class="col-12"><label class="form-label">What is on this shipment?</label>` + loadRow(main) +
@@ -152,14 +161,18 @@
       flText('notes', 'Notes', S?.notes || '', 2),
       async f => {
         const d = flFormData(f);
+        const others = f.querySelector('#pickupCb').checked;
+        d.pickup_by_others = others;
+        d.picked_up_by = others ? (d.picked_up_by || null) : null;
         d.loads = [...f.querySelectorAll('.load-cb:checked')].map(c => ({ shipment_type_id: +c.value, piece_count: f.querySelector(`[data-pieces="${c.value}"]`).value || null }));
-        if (!d.loads.length) { showNotification('Pick at least one load type.', 'warning'); throw new Error('no loads'); }
+        if (!d.loads.length && !others) { showNotification('Pick at least one load type.', 'warning'); throw new Error('no loads'); }
         delete d.undefined;
         d.job_ids = [...picked.keys()];
         d.custom_jobs = customs;
         d.save_site_to_job_id = place.dropoff.src === 'search' && place.dropoff.saveJob ? +place.dropoff.saveJob : null;
         for (const w of ['pickup', 'dropoff']) {
           const p = place[w], l = locOf(p.id);
+          if (!l && others) { d[w + '_location_id'] = null; d[w + '_address'] = null; d[w + '_lat'] = null; d[w + '_lng'] = null; d[w + '_new_name'] = null; continue; }
           if (!l) { showNotification('Choose a ' + (w === 'pickup' ? 'pickup' : 'drop-off') + ' location.', 'warning'); throw new Error('no ' + w); }
           if (l.requires_address && !p.address) { showNotification('Search for and pick the ' + l.name + ' address.', 'warning'); throw new Error('no address'); }
           if (l.saves_visits && !(p.newName || '').trim()) { showNotification('Enter the business name to save this location under.', 'warning'); throw new Error('no name'); }

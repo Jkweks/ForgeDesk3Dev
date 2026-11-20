@@ -16,7 +16,8 @@ class ConfiguratorEntryBarTest extends TestCase
 
     public function test_entry_builder_selects_entries_from_a_wide_top_bar(): void
     {
-        $html = $this->get('/config')->assertOk()->getContent();
+        // /config is the split layout now; the wide top bar is the classic layout.
+        $html = $this->get('/config/classic')->assertOk()->getContent();
 
         // Job -> entry selection lives in one full-width bar...
         foreach (['id="fb-entry-bar"', 'id="fb-list-job-filter"', 'id="fb-entry-select"', 'id="fb-entry-prev"', 'id="fb-entry-next"', 'id="fb-empty"'] as $needle) {
@@ -27,6 +28,9 @@ class ConfiguratorEntryBarTest extends TestCase
         $this->assertStringNotContainsString('col-lg-4', $html);
         $this->assertStringContainsString('<div class="col-12" id="fb-detail-col"', $html);
         $this->assertStringContainsString('onchange="fbOnJobChange()"', $html);
+
+        // The default layout keeps the builder beside the job/entry tree instead.
+        $this->assertStringContainsString('class="col-lg-9 col-xl-10" id="fb-detail-col"', $this->get('/config')->assertOk()->getContent());
     }
 
     /** The bar's labels are built in JS from these list fields, so the API contract is pinned here. */
