@@ -93,6 +93,14 @@
           </div>
         </div>
 
+        <div class="card mb-3" id="cl-links-card">
+          <div class="card-header">
+            <h3 class="card-title">Elevation links</h3>
+            <div class="card-subtitle text-muted ms-2 small">Ties this list's phases to work-order elevations so their Cut step starts and completes automatically.</div>
+          </div>
+          <div id="cl-links-body" class="card-body"><span class="text-muted small">Loading…</span></div>
+        </div>
+
         <div class="card">
           <div class="card-header"><h3 class="card-title">Cut history</h3></div>
           <div class="table-responsive">
@@ -327,6 +335,7 @@ async function clOpen(id) {
     document.getElementById('cl-back').style.display = '';
     history.replaceState(null, '', '#' + id);
     clRenderDetail(l.entries || []);
+    clLoadLinks();
   } catch (e) { clToast(e.message, false); }
 }
 
@@ -673,6 +682,83 @@ async function clSaveBulk() {
     await clReload();
   } catch (e) { err.textContent = e.message; }
   finally { btn.disabled = false; }
+}
+
+// ── Elevation links (phase → work-order elevations, for lists whose tags don't match on their own) ──
+let clLinks = null;
+
+async function clLoadLinks() {
+  const box = document.getElementById('cl-links-body');
+  if (!box || !clCurrent) return;
+  try {
+    clLinks = await clJson(await API(`/cut-lists/${clCurrent.id}/elevation-links`));
+    clRenderLinks();
+  } catch (e) { box.innerHTML = '<span class="text-danger small">Could not load links.</span>'; }
+}
+
+function clRenderLinks() {
+  const box = document.getElementById('cl-links-body');
+  const edit = canEditCL(), d = clLinks;
+  const wo = d.work_order;
+  const head = wo
+    ? `<div class="mb-2">Work order: <strong>${esc(wo.label)}</strong>${wo.job_name ? ' – ' + esc(wo.job_name) : ''}${wo.by_name ? ' <span class="text-muted small">(matched from the list name)</span>' : ''}
+        ${edit ? `<a href="#" class="ms-2 small" onclick="clPickWorkOrder(); return false;">Change</a>` : ''}</div>`
+    : `<div class="alert alert-warning py-2 d-flex align-items-center">This list isn't tied to a work order, so its cutting can't update any elevation.
+        ${edit ? `<button class="btn btn-sm btn-primary ms-auto" onclick="clPickWorkOrder()">Link to a work order…</button>` : ''}</div>`;
+  const rows = d.phases.length ? `<div class="table-responsive"><table class="table table-sm table-vcenter mb-0">
+      <thead><tr><th>Phase</th><th class="text-end">Lines</th><th class="text-end">Remaining</th><th>Elevations</th><th></th></tr></thead><tbody>
+      ${d.phases.map((p, i) => `<tr><td class="fw-medium">${esc(p.phase)}</td><td class="text-end">${p.lines}</td><td class="text-end">${p.remaining} / ${p.qty}</td>
+        <td>${p.auto.map(e => `<span class="badge bg-green-lt me-1" title="Matched automatically">${esc(e.tag)}</span>`).join('')}${p.manual.map(e => `<span class="badge bg-azure-lt me-1" title="Linked by hand">${esc(e.tag)}</span>`).join('')}
+          ${p.linked ? '' : '<span class="badge bg-orange-lt">Not linked</span>'}</td>
+        <td class="text-end">${edit && wo ? `<button class="btn btn-sm" onclick="clOpenLink(${i})">${p.manual.length ? 'Edit link' : 'Link…'}</button>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="text-muted small">No phases on this list (lines have no elevation tag), so there is nothing to link.</div>';
+  box.innerHTML = head + rows;
+}
+
+async function clPickWorkOrder() {
+  let opts;
+  try { opts = (await clJson(await API('/cut-lists/work-order-options?all=1'))).work_orders || []; } catch (e) { clToast(e.message, false); return; }
+  const cur = clLinks?.work_order?.id;
+  const html = `<div class="col-12"><label class="form-label">Work order</label><select id="cl-lw-sel" class="form-select">
+      <option value="">— none (unlink) —</option>${opts.map(w => `<option value="${w.id}" ${w.id === cur ? 'selected' : ''}>${esc(w.label)} – ${esc(w.job_name || '')}</option>`).join('')}</select></div>`;
+  clLinkModal('Link to a work order', html, async () => {
+    const v = document.getElementById('cl-lw-sel').value;
+    clLinks = await clJson(await API(`/cut-lists/${clCurrent.id}/work-order`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ work_order_id: v ? +v : null }) }));
+    clRenderLinks();
+    clToast(v ? 'Linked to the work order.' : 'Unlinked.');
+  });
+}
+
+function clOpenLink(i) {
+  const p = clLinks.phases[i];
+  const on = new Set([...p.auto, ...p.manual].map(e => e.id));
+  const html = `<div class="col-12 small text-muted mb-1">Tick the elevations that phase <strong>${esc(p.phase)}</strong> belongs to. Cutting already done on its lines counts straight away.</div>` +
+    (clLinks.elevations.map(e => `<div class="col-12"><label class="form-check mb-0"><input type="checkbox" class="form-check-input cl-lk" value="${e.id}" ${on.has(e.id) ? 'checked' : ''} ${p.auto.some(a => a.id === e.id) ? 'disabled' : ''}>
+      <span class="form-check-label"><strong>${esc(e.tag || '#' + e.id)}</strong> <span class="text-muted">${esc(e.type || '')}${e.quantity ? ' ×' + e.quantity : ''}</span>${p.auto.some(a => a.id === e.id) ? ' <span class="badge bg-green-lt">auto</span>' : ''}</span></label></div>`).join('')
+      || '<div class="col-12 text-muted">This work order has no elevations yet.</div>');
+  clLinkModal('Link ' + p.phase, html, async () => {
+    const ids = [...document.querySelectorAll('.cl-lk:checked:not(:disabled)')].map(c => +c.value);
+    clLinks = await clJson(await API(`/cut-lists/${clCurrent.id}/elevation-links`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phase: p.phase, elevation_ids: ids }) }));
+    clRenderLinks();
+    clToast('Links saved.');
+  });
+}
+
+// Small self-contained modal (the page's other overlays are fixed forms).
+function clLinkModal(title, bodyHtml, onSave) {
+  document.getElementById('cl-link-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'cl-link-overlay'; ov.className = 'cl-overlay'; ov.style.display = 'flex';
+  ov.innerHTML = `<div class="card" style="width:min(560px,94vw);max-height:90vh;display:flex;flex-direction:column;">
+    <div class="card-header"><h3 class="card-title">${esc(title)}</h3><button type="button" class="btn-close ms-auto"></button></div>
+    <div class="card-body" style="overflow-y:auto;"><div class="row g-2">${bodyHtml}</div><div class="text-danger small mt-2" id="cl-link-err"></div></div>
+    <div class="card-footer text-end"><button class="btn btn-link" data-x>Cancel</button><button class="btn btn-primary" data-save>Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector('.btn-close').onclick = close; ov.querySelector('[data-x]').onclick = close;
+  ov.querySelector('[data-save]').onclick = async () => {
+    try { await onSave(); close(); } catch (e) { document.getElementById('cl-link-err').textContent = e.message; }
+  };
 }
 
 document.addEventListener('DOMContentLoaded', () => {

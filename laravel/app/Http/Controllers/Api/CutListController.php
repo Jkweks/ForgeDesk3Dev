@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CutFlow\CutJob;
 use App\Models\CutFlow\CutLogEntry;
+use App\Models\CutFlow\CutPhaseLink;
 use App\Models\CutFlow\Part;
 use App\Models\FdUser;
+use App\Models\FdWoElevation;
 use App\Models\FdWorkOrder;
 use App\Services\CutFlow\CutConsumptionService;
+use App\Services\CutFlow\CutStepSync;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use App\Services\CutFlow\SillQuarterPointService;
@@ -83,9 +86,10 @@ class CutListController extends Controller
     }
 
     /** Active work orders that don't have a cut list yet, for the "New cut list" picker. */
-    public function workOrderOptions()
+    public function workOrderOptions(Request $request)
     {
-        $taken = CutJob::whereNotNull('work_order_id')->where('sequence', 1)->pluck('work_order_id')->all();
+        // `all=1` (linking an uploaded list to a work order) also offers work orders that already have a list.
+        $taken = $request->boolean('all') ? [] : CutJob::whereNotNull('work_order_id')->where('sequence', 1)->pluck('work_order_id')->all();
 
         $orders = FdWorkOrder::active()->with('businessJob')
             ->whereNotIn('id', $taken)
@@ -178,6 +182,90 @@ class CutListController extends Controller
                 ])->values(),
             ],
         ]);
+    }
+
+    /**
+     * How this list's phases (the elevation/door tags on its lines) tie to work-order elevations: what matched on
+     * its own, what was linked by hand, and what is still unlinked. Drives the "Elevation links" card.
+     */
+    public function elevationLinks(int $id)
+    {
+        $job = CutJob::findOrFail($id);
+        $woId = CutStepSync::workOrderIdFor($job);
+        $wo = $woId ? FdWorkOrder::with('businessJob:id,job_number,job_name')->find($woId) : null;
+        $elevs = $wo ? FdWoElevation::with('elevationType:id,name')->where('work_order_id', $wo->id)->orderBy('id')->get() : collect();
+        $tagOf = fn ($eid) => $elevs->firstWhere('id', $eid)?->elevation_tag ?: '#'.$eid;
+        $match = $wo ? CutStepSync::phaseMatcher($wo->id, [$job->id]) : null;
+
+        $phases = $job->parts()->whereNotNull('phase')->get()->groupBy('phase')->map(function ($parts, $phase) use ($match, $job, $tagOf) {
+            $auto = $match ? $match($phase, $job->id, false) : [];
+            $manual = $match ? array_values(array_diff($match($phase, $job->id, true), $auto)) : [];
+
+            return [
+                'phase' => $phase, 'lines' => $parts->count(),
+                'qty' => (int) $parts->sum('qty_original'), 'remaining' => (int) $parts->sum('qty_remaining'),
+                'auto' => array_map(fn ($e) => ['id' => $e, 'tag' => $tagOf($e)], $auto),
+                'manual' => array_map(fn ($e) => ['id' => $e, 'tag' => $tagOf($e)], $manual),
+                'linked' => $auto || $manual,
+            ];
+        })->values();
+
+        return response()->json([
+            'work_order' => $wo ? ['id' => $wo->id, 'label' => $wo->releaseLabel(), 'job_name' => $wo->businessJob?->job_name, 'by_name' => ! $job->work_order_id] : null,
+            'phases' => $phases,
+            'elevations' => $elevs->map(fn ($e) => ['id' => $e->id, 'tag' => $e->elevation_tag, 'type' => $e->elevationType?->name, 'quantity' => $e->quantity])->values(),
+        ]);
+    }
+
+    /** Replace the manual links for one phase of this list (empty `elevation_ids` clears them). */
+    public function saveElevationLinks(Request $request, int $id)
+    {
+        $job = CutJob::findOrFail($id);
+        $data = $request->validate(['phase' => 'required|string|max:255', 'elevation_ids' => 'present|array|max:200', 'elevation_ids.*' => 'integer|distinct']);
+        $woId = CutStepSync::workOrderIdFor($job);
+        if (! $woId) {
+            return response()->json(['message' => 'Link this cut list to a work order first.'], 422);
+        }
+        $valid = FdWoElevation::where('work_order_id', $woId)->whereIn('id', $data['elevation_ids'])->pluck('id');
+        if ($valid->count() !== count($data['elevation_ids'])) {
+            return response()->json(['message' => 'Some elevations are not on this cut list\'s work order.'], 422);
+        }
+        $phase = CutStepSync::norm($data['phase']);
+        if (! $job->parts()->whereNotNull('phase')->get()->contains(fn ($p) => CutStepSync::norm($p->phase) === $phase)) {
+            return response()->json(['message' => 'That phase is not on this cut list.'], 422);
+        }
+
+        CutPhaseLink::where('cut_job_id', $job->id)->where('phase', $phase)->delete();
+        foreach ($valid as $eid) {
+            CutPhaseLink::create(['cut_job_id' => $job->id, 'phase' => $phase, 'elevation_id' => $eid, 'linked_by' => $request->user()->id]);
+        }
+        CutStepSync::syncJob($job);   // cutting already done on these lines moves the elevations' Cut steps now
+
+        return $this->elevationLinks($id);
+    }
+
+    /** Link an unlinked (e.g. uploaded) cut list to a work order, or unlink it (`work_order_id` null). */
+    public function linkWorkOrder(Request $request, int $id)
+    {
+        $job = CutJob::findOrFail($id);
+        $data = $request->validate(['work_order_id' => 'present|nullable|integer']);
+        if ($data['work_order_id'] === null) {
+            $job->update(['work_order_id' => null, 'sequence' => 1]);
+            CutPhaseLink::where('cut_job_id', $job->id)->delete();
+
+            return $this->elevationLinks($id);
+        }
+        if (! FdWorkOrder::whereKey($data['work_order_id'])->exists()) {
+            return response()->json(['message' => 'Work order not found.'], 422);
+        }
+        // The work order's first list is sequence 1; anything linked after that is an add-on list.
+        $sequence = CutJob::where('work_order_id', $data['work_order_id'])->where('id', '!=', $job->id)->exists()
+            ? max(1, (int) CutJob::where('work_order_id', $data['work_order_id'])->where('id', '!=', $job->id)->max('sequence')) + 1
+            : 1;
+        $job->update(['work_order_id' => $data['work_order_id'], 'sequence' => $sequence]);
+        CutStepSync::syncJob($job);
+
+        return $this->elevationLinks($id);
     }
 
     /** Active shop users, for the "who cut it" picker. */

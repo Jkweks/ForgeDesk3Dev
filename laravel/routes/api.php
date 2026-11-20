@@ -901,6 +901,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/cut-lists', [$cl, 'store'])->middleware('permission:fabrication.work-orders.edit');
             Route::get('/cut-lists/{id}', [$cl, 'show']);
             Route::get('/cut-lists/{id}/log', [$cl, 'log']);
+            Route::get('/cut-lists/{id}/elevation-links', [$cl, 'elevationLinks']);
+            Route::put('/cut-lists/{id}/elevation-links', [$cl, 'saveElevationLinks'])->middleware('permission:fabrication.work-orders.edit');
+            Route::put('/cut-lists/{id}/work-order', [$cl, 'linkWorkOrder'])->middleware('permission:fabrication.work-orders.edit');
             Route::get('/cut-lists-cutters', [$cl, 'cutters']);
             Route::post('/cut-lists/{id}/mark-cut', [$cl, 'markCut'])->middleware('permission:fabrication.work-orders.edit');
             Route::get('/cut-lists/{id}/sill-quarter-points', [$cl, 'sillQuarterPoints']);
