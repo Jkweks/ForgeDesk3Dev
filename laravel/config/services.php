@@ -69,6 +69,9 @@ return [
         'media' => env('LABEL_PRINTER_MEDIA', 'na_index-4x6_4x6in'),
         // No printer reachable (e.g. dev away from the shop): log instead of sending.
         'fake' => env('LABEL_PRINTER_FAKE', false),
+        // Rasterize PDFs to PWG raster here (Ghostscript) instead of sending the PDF. Tried 2026-11-21: NOT faster on the shop CUPS box (84s vs 59s), so off.
+        'rasterize' => env('LABEL_PRINTER_RASTERIZE', false),
+        'dpi' => env('LABEL_PRINTER_DPI', 203),
     ],
 
 ];
