@@ -201,7 +201,8 @@ class StorageLocationController extends Controller
             'count' => 'required|integer|min:1|max:100',
             'start' => 'nullable|integer|min:0',
             'prefix' => 'nullable|string|max:200',
-            'type' => 'required|in:aisle,rack,shelf,bin,warehouse,zone,other',
+            'code_prefix' => 'nullable|string|max:40',
+            'type' => 'required|in:aisle,rack,shelf,bin,box,warehouse,zone,other',
             'description' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
@@ -233,11 +234,27 @@ class StorageLocationController extends Controller
             ], 422);
         }
 
-        $created = \Illuminate\Support\Facades\DB::transaction(function () use ($names, $request, $parent, $start) {
-            return collect($names)->map(function ($name, $i) use ($request, $parent, $start) {
+        // Optional explicit code prefix: "FAB-E" + 1..N -> FAB-E-1, FAB-E-2, …
+        $codePrefix = $this->normalizeCode($request->input('code_prefix'));
+        $codes = [];
+        if ($codePrefix !== null) {
+            foreach (array_keys($names) as $i) {
+                $codes[$i] = $codePrefix.'-'.($start + $i);
+            }
+            $clash = StorageLocation::withTrashed()->whereIn('code', $codes)->pluck('code')->all();
+            if ($clash) {
+                return response()->json([
+                    'message' => 'These codes already exist: '.implode(', ', array_slice($clash, 0, 5)).(count($clash) > 5 ? '…' : ''),
+                    'errors' => ['code_prefix' => ['Some generated codes already exist.']],
+                ], 422);
+            }
+        }
+
+        $created = \Illuminate\Support\Facades\DB::transaction(function () use ($names, $codes, $request, $parent, $start) {
+            return collect($names)->map(function ($name, $i) use ($codes, $request, $parent, $start) {
                 return StorageLocation::create([
                     'name' => $name,
-                    'code' => $this->generateLocationCode($name),
+                    'code' => $codes[$i] ?? $this->generateLocationCode($name),
                     'type' => $request->type,
                     'parent_id' => $parent->id,
                     'description' => $request->description,
@@ -258,7 +275,7 @@ class StorageLocationController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:storage_locations,name',
             'code' => 'nullable|string|max:50|unique:storage_locations,code',
-            'type' => 'required|in:aisle,rack,shelf,bin,warehouse,zone,other',
+            'type' => 'required|in:aisle,rack,shelf,bin,box,warehouse,zone,other',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:storage_locations,id',
             'aisle' => 'nullable|string|max:50',
@@ -276,12 +293,15 @@ class StorageLocationController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Auto-generate code if not provided
-        if (empty($request->code)) {
-            $request->merge(['code' => $this->generateLocationCode($request->name)]);
+        // Normalize a typed code; auto-generate from the name if left blank
+        $data = $validator->validated();
+        $code = $this->normalizeCode($data['code'] ?? null);
+        if ($code !== null && StorageLocation::withTrashed()->where('code', $code)->exists()) {
+            return response()->json(['errors' => ['code' => ['That code is already in use.']]], 422);
         }
+        $data['code'] = $code ?? $this->generateLocationCode($data['name']);
 
-        $location = StorageLocation::create($validator->validated());
+        $location = StorageLocation::create($data);
 
         return response()->json($location, 201);
     }
@@ -361,7 +381,7 @@ class StorageLocationController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255|unique:storage_locations,name,'.$storageLocation->id,
             'code' => 'nullable|string|max:50|unique:storage_locations,code,'.$storageLocation->id,
-            'type' => 'sometimes|required|in:aisle,rack,shelf,bin,warehouse,zone,other',
+            'type' => 'sometimes|required|in:aisle,rack,shelf,bin,box,warehouse,zone,other',
             'description' => 'nullable|string',
             'parent_id' => 'nullable|exists:storage_locations,id',
             'aisle' => 'nullable|string|max:50',
@@ -392,7 +412,20 @@ class StorageLocationController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $storageLocation->update($validator->validated());
+        $data = $validator->validated();
+        if (array_key_exists('code', $data)) {
+            // Blank keeps the current code; a typed one is normalized and must be unique
+            $code = $this->normalizeCode($data['code']);
+            if ($code === null) {
+                unset($data['code']);
+            } elseif (StorageLocation::withTrashed()->where('code', $code)->where('id', '!=', $storageLocation->id)->exists()) {
+                return response()->json(['errors' => ['code' => ['That code is already in use.']]], 422);
+            } else {
+                $data['code'] = $code;
+            }
+        }
+
+        $storageLocation->update($data);
 
         return response()->json($storageLocation);
     }
@@ -534,16 +567,22 @@ class StorageLocationController extends Controller
         return $pdf->stream('shelf-label-'.preg_replace('/[^A-Za-z0-9\-_.]/', '_', $shelfId).'.pdf');
     }
 
+    /** Typed codes are stored uppercase with single hyphens, trimmed ("fab e 2 4" -> "FAB-E-2-4"). */
+    private function normalizeCode(?string $code): ?string
+    {
+        $code = trim(preg_replace('/[^A-Z0-9]+/', '-', strtoupper((string) $code)), '-');
+
+        return $code === '' ? null : $code;
+    }
+
     /**
-     * Generate a location code from name
+     * Generate a location code from name: uppercase, with runs of separators kept as single
+     * hyphens ("Fab E.2.4" -> "FAB-E-2-4") so segments stay readable and unambiguous.
      */
     private function generateLocationCode($name)
     {
-        // Remove special characters and convert to uppercase
-        $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $name));
-
-        // Limit to 10 characters
-        $code = substr($code, 0, 10);
+        $code = trim(preg_replace('/[^A-Z0-9]+/', '-', strtoupper($name)), '-');
+        $code = substr($code, 0, 30);
 
         // Ensure uniqueness
         $originalCode = $code;
@@ -554,5 +593,75 @@ class StorageLocationController extends Controller
         }
 
         return $code;
+    }
+
+    /**
+     * 4x6 box label (name, parts + qty, QR to this location's page) as a PDF — preview/download.
+     */
+    public function boxLabelPdf(StorageLocation $storageLocation)
+    {
+        return $this->renderBoxLabel($storageLocation)->stream('box-label-'.$storageLocation->id.'.pdf');
+    }
+
+    /**
+     * Render the box label and send it to the CUPS label printer.
+     */
+    public function boxLabelPrint(StorageLocation $storageLocation, \App\Services\LabelPrinterClient $printer)
+    {
+        try {
+            $result = $printer->printPdf(
+                $this->renderBoxLabel($storageLocation)->output(),
+                'Box '.($storageLocation->code ?: $storageLocation->name)
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Could not print: '.$e->getMessage()], 502);
+        }
+
+        return response()->json(['printed' => 1, 'job_id' => $result['job_id'], 'fake' => $result['fake']]);
+    }
+
+    private function renderBoxLabel(StorageLocation $location)
+    {
+        $rows = \App\Models\InventoryLocation::where('storage_location_id', $location->id)
+            ->whereNull('deleted_at')
+            ->with('product')
+            ->get()
+            ->filter(fn ($il) => $il->quantity > 0 && $il->product)
+            ->sortBy(fn ($il) => $il->product->sku, SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        // Where each part's primary stock lives (this box is overflow), so it can be returned.
+        $shown = $rows->take(7);
+        $homes = \App\Models\InventoryLocation::whereIn('product_id', $shown->pluck('product_id'))
+            ->where('is_primary', true)
+            ->where('storage_location_id', '!=', $location->id)
+            ->whereNull('deleted_at')
+            ->with('storageLocation')
+            ->get()
+            ->keyBy('product_id');
+
+        $items = $shown->map(fn ($il) => [
+            'home' => ($h = $homes->get($il->product_id)?->storageLocation) ? ($h->code ?: $h->name) : null,
+            'sku' => $il->product->sku,
+            'qty' => rtrim(rtrim(number_format((float) $il->quantity, 2, '.', ''), '0'), '.'),
+        ])->all();
+
+        $qr = (new \Endroid\QrCode\Builder\Builder(writer: new \Endroid\QrCode\Writer\PngWriter))->build(
+            data: url('/storage-locations?location='.$location->id),
+            errorCorrectionLevel: \Endroid\QrCode\ErrorCorrectionLevel::Medium,
+            size: 300,
+            margin: 0,
+        )->getDataUri();
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('pdfs.box-label', [
+            'name' => $location->name,
+            'code' => $location->code,
+            'path' => $location->full_path,
+            'items' => $items,
+            'more' => max(0, $rows->count() - count($items)),
+            'qr' => $qr,
+        ])->setPaper([0, 0, 288, 432]);
     }
 }

@@ -398,6 +398,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/storage-locations-names', [App\Http\Controllers\Api\StorageLocationController::class, 'locationNames'])->middleware('permission:inventory.view');
         Route::get('/storage-locations/bulk-shelf-labels-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'bulkShelfLabelsPdf'])->middleware('permission:inventory.view');
         Route::get('/storage-locations/{storageLocation}/shelf-label-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'shelfLabelPdf'])->middleware('permission:inventory.view');
+        Route::get('/storage-locations/{storageLocation}/box-label-pdf', [App\Http\Controllers\Api\StorageLocationController::class, 'boxLabelPdf'])->middleware('permission:inventory.view');
+        Route::post('/storage-locations/{storageLocation}/box-label-print', [App\Http\Controllers\Api\StorageLocationController::class, 'boxLabelPrint'])->middleware('permission:inventory.view');
         Route::post('/inventory-locations/transfer', [InventoryLocationController::class, 'transferToStorageLocation'])->middleware('permission:inventory.adjust');
         Route::post('/storage-locations/bulk-children', [App\Http\Controllers\Api\StorageLocationController::class, 'storeBulk'])->middleware('permission:inventory.create');
         Route::apiResource('storage-locations', App\Http\Controllers\Api\StorageLocationController::class)
@@ -732,6 +734,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Door fabrication labels (label data; sheet layout lives in the /config/labels page)
         Route::get('/config/labels/sources', [\App\Http\Controllers\Api\DoorLabelController::class, 'sources'])->middleware('permission:configurator.view');
+        Route::get('/config/labels/pdf', [\App\Http\Controllers\Api\DoorLabelController::class, 'pdf'])->middleware('permission:configurator.view');
+        Route::post('/config/labels/print', [\App\Http\Controllers\Api\DoorLabelController::class, 'print'])->middleware('permission:configurator.view');
         Route::get('/config/labels', [\App\Http\Controllers\Api\DoorLabelController::class, 'index'])->middleware('permission:configurator.view');
 
         // Fabricator package (door/frame sheets + cut list / stock / BOM / field-install) and its layout template

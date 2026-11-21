@@ -52,7 +52,11 @@
           <p class="text-muted mb-0">4" x 2" door leaf checklist labels (10 per sheet) for the doors you select.</p>
         </div>
         <div class="col-auto ms-auto">
-          <button class="btn btn-primary" onclick="window.print()"><i class="ti ti-printer me-1"></i>Print</button>
+          <div class="btn-list">
+            <button class="btn btn-primary" id="lb-print-label" onclick="lbPrintLabel()"><i class="ti ti-tag me-1"></i>Print to label printer (4x6)</button>
+            <button class="btn" onclick="lbPdf()"><i class="ti ti-file-type-pdf me-1"></i>4x6 PDF</button>
+            <button class="btn" onclick="window.print()"><i class="ti ti-printer me-1"></i>Print sheets</button>
+          </div>
         </div>
       </div>
     </div>
@@ -144,6 +148,39 @@ async function lbLoad() {
   const data = await authenticatedFetch(`/config/labels?${qs.toString()}`);
   lbLabels = data.labels || [];
   lbRender();
+}
+
+function lbSelectedIds() {
+  return [...document.querySelectorAll('.lb-cfg:checked')].map(b => b.value);
+}
+
+function lbPdf() {
+  const ids = lbSelectedIds();
+  if (!ids.length) { alert('Select doors first.'); return; }
+  const qs = new URLSearchParams();
+  ids.forEach(i => qs.append('configuration_ids[]', i));
+  window.open(`/api/v1/config/labels/pdf?${qs.toString()}`, '_blank');
+}
+
+async function lbPrintLabel() {
+  const ids = lbSelectedIds();
+  if (!ids.length) { alert('Select doors first.'); return; }
+  if (!lbLabels.length) { alert('No door leaves found for the selected configurations.'); return; }
+  if (!confirm(`Send ${lbLabels.length} label(s) to the label printer?`)) return;
+  const btn = document.getElementById('lb-print-label');
+  btn.disabled = true;
+  try {
+    const data = await authenticatedFetch('/config/labels/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ configuration_ids: ids.map(Number) }),
+    });
+    alert(data.fake ? `Simulated print of ${data.printed} label(s) (printer disabled).` : `Sent ${data.printed} label(s) to the label printer.`);
+  } catch (e) {
+    alert(e.message || 'Could not print.');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function lbHandBadge(cls, l) {

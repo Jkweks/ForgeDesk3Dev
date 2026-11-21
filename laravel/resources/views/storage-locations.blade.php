@@ -54,7 +54,7 @@
                       <option value="">All types</option>
                       <option value="warehouse">Warehouse</option><option value="zone">Zone</option>
                       <option value="aisle">Aisle</option><option value="rack">Rack</option>
-                      <option value="shelf">Shelf</option><option value="bin">Bin</option><option value="other">Other</option>
+                      <option value="shelf">Shelf</option><option value="bin">Bin</option><option value="box">Box</option><option value="other">Other</option>
                     </select>
                     <select class="form-select form-select-sm" id="usageFilter">
                       <option value="">In use + empty</option>
@@ -95,6 +95,7 @@
                       <div class="btn-list">
                         <button class="btn btn-sm" id="detailAddChild"><i class="ti ti-plus me-1"></i>Child</button>
                         <button class="btn btn-sm" id="detailEdit"><i class="ti ti-edit me-1"></i>Edit</button>
+                        <button class="btn btn-sm btn-primary d-none" id="printBoxLabelBtn" onclick="printBoxLabel()"><i class="ti ti-tag me-1"></i>Print box label</button>
                         <button class="btn btn-sm" id="printShelfTagBtn" onclick="printShelfLabel()"><i class="ti ti-file-type-pdf me-1"></i>Label</button>
                         <button class="btn btn-sm btn-outline-danger" id="detailDelete"><i class="ti ti-trash"></i></button>
                       </div>
@@ -149,6 +150,11 @@
               <input type="text" class="form-control" id="locationName" name="name" placeholder="e.g., Aisle A, Rack 1, Shelf 2, Bin 5" required>
               <small class="form-text">Enter a unique name for this storage location</small>
             </div>
+            <div class="mb-3" id="codeSection">
+              <label class="form-label">Location Code <span class="text-muted">(printed on labels)</span></label>
+              <input type="text" class="form-control text-uppercase" id="locationCode" name="code" maxlength="50" placeholder="Auto from name" autocomplete="off">
+              <small class="form-text" id="codeHint">Leave blank to use the name, e.g. FAB-E-2-4. Letters, numbers and hyphens only.</small>
+            </div>
             <div class="mb-3">
               <label class="form-label">Parent Location</label>
               <select class="form-select" id="locationParent" name="parent_id">
@@ -163,11 +169,12 @@
                 <option value="rack">Rack</option>
                 <option value="shelf">Shelf</option>
                 <option value="bin" selected>Bin</option>
+                <option value="box">Box (top-of-shelf storage)</option>
                 <option value="warehouse">Warehouse</option>
                 <option value="zone">Zone</option>
                 <option value="other">Other</option>
               </select>
-              <small class="form-text">Hierarchy: Aisle → Rack → Shelf → Bin</small>
+              <small class="form-text">Hierarchy: Aisle → Rack → Shelf → Bin or Box</small>
             </div>
             <div class="mb-3">
               <label class="form-label">Description</label>
@@ -186,6 +193,10 @@
                     <input type="number" class="form-control" id="bulkStart" min="0" value="1"></div>
                   <div class="col-4"><label class="form-label">Prefix</label>
                     <input type="text" class="form-control" id="bulkPrefix"></div>
+                </div>
+                <div class="row g-2 mt-1">
+                  <div class="col-12"><label class="form-label">Code prefix <span class="text-muted">(codes become PREFIX-1, PREFIX-2…)</span></label>
+                    <input type="text" class="form-control text-uppercase" id="bulkCodePrefix" placeholder="Auto from name prefix" autocomplete="off"></div>
                 </div>
                 <div class="form-text mt-2" id="bulkPreview"></div>
               </div>
@@ -300,7 +311,7 @@
   </style>
 
   <script>
-    const TYPE_ICONS = { warehouse: 'ti-building-warehouse', zone: 'ti-map-2', aisle: 'ti-road', rack: 'ti-columns', shelf: 'ti-layout-rows', bin: 'ti-box', other: 'ti-dots' };
+    const TYPE_ICONS = { warehouse: 'ti-building-warehouse', zone: 'ti-map-2', aisle: 'ti-road', rack: 'ti-columns', shelf: 'ti-layout-rows', bin: 'ti-box', box: 'ti-package', other: 'ti-dots' };
     let currentLocations = [];
     let locationTree = [];
     let statsById = new Map();
@@ -328,7 +339,11 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      loadLocations();
+      // ?location=ID deep link (the QR on box labels points here)
+      loadLocations().then(() => {
+        const id = parseInt(new URLSearchParams(window.location.search).get('location'), 10);
+        if (id) selectLocation(id, true);
+      });
       document.getElementById('searchInput').addEventListener('input', debounce(renderTree, 200));
       document.getElementById('typeFilter').addEventListener('change', renderTree);
       document.getElementById('usageFilter').addEventListener('change', renderTree);
@@ -506,6 +521,7 @@
         ? `<li class="breadcrumb-item active">${escapeHtml(l.name)}</li>`
         : `<li class="breadcrumb-item"><a href="#" data-id="${l.id}">${escapeHtml(l.name)}</a></li>`).join('');
 
+      document.getElementById('printBoxLabelBtn').classList.toggle('d-none', location.type !== 'box');
       document.getElementById('detailName').innerHTML = `<i class="ti ${TYPE_ICONS[location.type] || 'ti-map-pin'} me-2 text-secondary"></i>${escapeHtml(location.name)}`;
       document.getElementById('detailMeta').innerHTML = `
         <span class="badge bg-azure-lt">${escapeHtml(location.type)}</span>
@@ -599,6 +615,22 @@
       }
     }
 
+    async function printBoxLabel() {
+      if (!currentViewLocationId) return;
+      const btn = document.getElementById('printBoxLabelBtn');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Printing…';
+      try {
+        const data = await authenticatedFetch(`/storage-locations/${currentViewLocationId}/box-label-print`, { method: 'POST' });
+        showNotification(data.fake ? 'Simulated box label print (printer disabled).' : 'Box label sent to the label printer.', 'success');
+      } catch (e) {
+        showNotification(e.message || 'Could not print box label.', 'danger');
+      } finally {
+        btn.disabled = false; btn.innerHTML = original;
+      }
+    }
+
     function printShelfLabel() {
       if (!currentViewLocationId) return;
       const loc = currentLocations.find(l => l.id === currentViewLocationId);
@@ -613,6 +645,16 @@
     }
 
 
+    // Mirrors StorageLocationController::generateLocationCode — "Fab E.2.4" -> "FAB-E-2-4"
+    function codeFromText(text) {
+      return String(text || '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function updateCodePlaceholder() {
+      const auto = codeFromText(document.getElementById('locationName').value);
+      document.getElementById('locationCode').placeholder = auto ? `Auto: ${auto}` : 'Auto from name';
+    }
+
     // ---------- Bulk child creation ----------
     function bulkPrefixDefault() {
       const parent = currentLocations.find(l => l.id === Number(document.getElementById('locationParent').value));
@@ -625,8 +667,11 @@
       const prefix = document.getElementById('bulkPrefix').value;
       const names = Array.from({ length: Math.min(count, 3) }, (_, i) => prefix + (start + i));
       const last = prefix + (start + count - 1);
+      const codePrefix = codeFromText(document.getElementById('bulkCodePrefix').value) || codeFromText(prefix);
+      const codes = Array.from({ length: Math.min(count, 3) }, (_, i) => `${codePrefix}-${start + i}`);
+      document.getElementById('bulkCodePrefix').placeholder = codeFromText(prefix) ? `Auto: ${codeFromText(prefix)}` : 'Auto from name prefix';
       document.getElementById('bulkPreview').textContent = count
-        ? `Will create ${count}: ${names.join(', ')}${count > 3 ? ', … ' + last : ''}` : '';
+        ? `Will create ${count}: ${names.join(', ')}${count > 3 ? ', … ' + last : ''} — codes ${codes.join(', ')}${count > 3 ? ', … ' + `${codePrefix}-${start + count - 1}` : ''}` : '';
     }
 
     function setBulkMode(on, resetPrefix = false) {
@@ -636,13 +681,15 @@
       const name = document.getElementById('locationName');
       name.required = !on;
       name.disabled = on;
+      document.getElementById('codeSection').style.display = on ? 'none' : '';
       if (on && resetPrefix) document.getElementById('bulkPrefix').value = bulkPrefixDefault();
       if (on) updateBulkPreview();
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('locationName').addEventListener('input', updateCodePlaceholder);
       document.getElementById('bulkEnabled').addEventListener('change', e => setBulkMode(e.target.checked, true));
-      ['bulkCount', 'bulkStart', 'bulkPrefix'].forEach(id => document.getElementById(id).addEventListener('input', updateBulkPreview));
+      ['bulkCount', 'bulkStart', 'bulkPrefix', 'bulkCodePrefix'].forEach(id => document.getElementById(id).addEventListener('input', updateBulkPreview));
       document.getElementById('locationParent').addEventListener('change', () => {
         if (document.getElementById('bulkEnabled').checked) {
           document.getElementById('bulkPrefix').value = bulkPrefixDefault();
@@ -760,6 +807,7 @@
       document.getElementById('locationActive').checked = true;
       document.getElementById('bulkSection').style.display = 'none';
       setBulkMode(false);
+      updateCodePlaceholder();
       showModal(document.getElementById('addLocationModal'));
     }
 
@@ -781,6 +829,8 @@
       setBulkMode(false);
       document.getElementById('locationModalTitle').textContent = 'Edit Storage Location';
       document.getElementById('locationName').value = location.name || '';
+      document.getElementById('locationCode').value = location.code || '';
+      updateCodePlaceholder();
       document.getElementById('locationParent').value = location.parent_id || '';
       document.getElementById('locationDescription').value = location.description || '';
       document.getElementById('locationType').value = location.type || 'bin';
@@ -797,6 +847,7 @@
       const fd = new FormData(e.target);
       const data = {
         name: fd.get('name'),
+        code: fd.get('code') || null,
         parent_id: fd.get('parent_id') || null,
         type: fd.get('type'),
         description: fd.get('description'),
@@ -843,6 +894,7 @@
             count: parseInt(document.getElementById('bulkCount').value),
             start: parseInt(document.getElementById('bulkStart').value) || 0,
             prefix: document.getElementById('bulkPrefix').value,
+            code_prefix: document.getElementById('bulkCodePrefix').value || null,
             type: data.type,
             description: data.description || null,
             is_active: data.is_active,

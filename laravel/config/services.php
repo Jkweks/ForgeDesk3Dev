@@ -62,4 +62,13 @@ return [
         'fake_limit_max' => env('TIGER_BRIDGE_FAKE_LIMIT_MAX') !== null ? (float) env('TIGER_BRIDGE_FAKE_LIMIT_MAX') : null,
     ],
 
+    // CUPS label printer (Raspberry Pi, 4x6 thermal) that door labels print to over IPP.
+    // Use the IP: mDNS names like kprint.local don't resolve inside the Docker container.
+    'label_printer' => [
+        'url' => env('LABEL_PRINTER_URL', 'http://192.168.4.31:631/printers/label'),
+        'media' => env('LABEL_PRINTER_MEDIA', 'na_index-4x6_4x6in'),
+        // No printer reachable (e.g. dev away from the shop): log instead of sending.
+        'fake' => env('LABEL_PRINTER_FAKE', false),
+    ],
+
 ];

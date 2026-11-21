@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DoorFrameConfiguration;
 use App\Services\Configurator\DoorLabelService;
+use App\Services\LabelPrinterClient;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 
 class DoorLabelController extends Controller
@@ -57,5 +59,47 @@ class DoorLabelController extends Controller
         return response()->json([
             'labels' => $service->build($configs),
         ]);
+    }
+
+    /** 4x6 PDF, one leaf per page — what gets sent to the label printer (also handy as a preview). */
+    public function pdf(Request $request, DoorLabelService $service)
+    {
+        $labels = $this->labelsFor($request, $service);
+
+        return $this->render($labels)->stream('door-labels.pdf');
+    }
+
+    /** Render the 4x6 labels and send them to the CUPS label printer. */
+    public function print(Request $request, DoorLabelService $service, LabelPrinterClient $printer)
+    {
+        $labels = $this->labelsFor($request, $service);
+
+        try {
+            $result = $printer->printPdf($this->render($labels)->output(), 'Door labels', 1);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Could not print: '.$e->getMessage()], 502);
+        }
+
+        return response()->json(['printed' => count($labels), 'job_id' => $result['job_id'], 'fake' => $result['fake']]);
+    }
+
+    private function labelsFor(Request $request, DoorLabelService $service): array
+    {
+        $data = $request->validate([
+            'configuration_ids' => 'required|array|min:1',
+            'configuration_ids.*' => 'integer|exists:door_frame_configurations,id',
+        ]);
+
+        $labels = $service->build(DoorFrameConfiguration::whereIn('id', $data['configuration_ids'])->get());
+        abort_if(empty($labels), 422, 'No door leaves found for the selected configurations.');
+
+        return $labels;
+    }
+
+    private function render(array $labels)
+    {
+        return Pdf::loadView('pdfs.door-labels', ['labels' => $labels])->setPaper([0, 0, 288, 432]);
     }
 }
