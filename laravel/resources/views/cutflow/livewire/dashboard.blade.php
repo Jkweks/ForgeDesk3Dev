@@ -238,6 +238,16 @@
                 <span style="font-size:16px;color:var(--faint);">&#8250;</span>
             </div>
 
+            @if ($canDropLabel)
+            <div class="override-bar" wire:click="openDropLabel">
+                <span style="width:28px;height:28px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;">&#127991;</span>
+                <span class="title">Drop Label</span>
+                <span class="sub">&mdash; print a drop-rack tag for a part, color and length</span>
+                <div style="flex-grow:1;"></div>
+                <span style="font-size:16px;color:var(--faint);">&#8250;</span>
+            </div>
+            @endif
+
             @if (! $signedIn)
                 <div class="empty-state">
                     <span style="width:52px;height:52px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:24px;">&#128274;</span>
@@ -722,8 +732,47 @@
         </div>
     @endif
 
+    {{-- Drop Label: one-off drop-rack tag from part number + color + length. --}}
+    @if ($modal === 'droplabel' && $canDropLabel)
+        <div class="modal-overlay" wire:keydown.window.escape="closeModal">
+            <div class="modal" style="width:480px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <div class="display" style="font-size:18px;font-weight:700;">Drop Label</div>
+                        <div style="font-size:12px;color:var(--muted);">Only parts with a drop rack set up. Tag shows the length rounded down to the nearest {{ \App\Services\CutFlow\DropPlanner::TAG_STEP }}".</div>
+                    </div>
+                    <div wire:click="closeModal" style="cursor:pointer;width:40px;height:40px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;">&#10005;</div>
+                </div>
+
+                <input type="text" wire:model.live.debounce.250ms="dropPart" placeholder="Part number" autofocus autocomplete="off" autocapitalize="characters"
+                       style="padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:16px;">
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;min-height:48px;align-items:center;">
+                    @forelse ($dropFinishOptions as $code => $label)
+                        <button type="button" wire:click="$set('dropFinish', '{{ $code }}')"
+                                class="btn {{ $dropFinish === $code ? 'btn-accent' : 'btn-outline' }}" style="min-height:48px;">{{ $code }} &middot; {{ $label }}</button>
+                    @empty
+                        <span style="font-size:13px;color:var(--muted);">{{ trim($dropPart) === '' ? 'Enter a part number to choose a color.' : 'No drop-rack part with that number.' }}</span>
+                    @endforelse
+                </div>
+
+                <input type="text" wire:model="dropLength" wire:keydown.enter="printManualDropLabel" placeholder='Length in inches (e.g. 37 1/2)' autocomplete="off"
+                       style="padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:16px;">
+
+                @if ($dropError)
+                    <div style="font-size:13px;color:var(--danger, #b3261e);">{{ $dropError }}</div>
+                @endif
+
+                <div style="display:flex;gap:10px;">
+                    <button class="btn btn-outline" style="flex:1;min-height:48px;" wire:click="closeModal">Cancel</button>
+                    <button class="btn btn-accent" style="flex:1.4;min-height:48px;" wire:click="printManualDropLabel" wire:loading.attr="disabled" wire:target="printManualDropLabel">Print Label</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Shared modal: operator login, manual override entry, or new stick length entry --}}
-    @if ($modal && ! in_array($modal, ['jobs', 'recut', 'progress'], true))
+    @if ($modal && ! in_array($modal, ['jobs', 'recut', 'progress', 'droplabel'], true))
         <div class="modal-overlay"
              wire:keydown.window.enter="confirmModal"
              wire:keydown.window.escape="closeModal"

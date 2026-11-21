@@ -10,9 +10,11 @@ use App\Models\CutFlow\Part;
 use App\Models\CutFlow\StickItem;
 use App\Models\CutFlow\StickSession;
 use App\Models\FdUser;
+use App\Models\Product;
 use App\Services\CutFlow\CutListProgress;
 use App\Services\CutFlow\CutPlanner;
 use App\Services\CutFlow\DropLabel;
+use App\Services\CutFlow\DropPlanner;
 use App\Services\CutFlow\TigerBridgeClient;
 use App\Support\Dimension;
 use App\Support\IpAllowlist;
@@ -20,6 +22,7 @@ use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -38,6 +41,15 @@ class Dashboard extends Component
     public array $importWarnings = [];
 
     public string $keypadValue = '';
+
+    // Drop Label modal: part number + finish + length for a one-off drop-rack tag.
+    public string $dropPart = '';
+
+    public ?string $dropFinish = null;
+
+    public string $dropLength = '';
+
+    public string $dropError = '';
 
     public ?int $activeStickId = null;
 
@@ -549,6 +561,133 @@ class Dashboard extends Component
     {
         $this->modal = 'manual';
         $this->keypadValue = '';
+    }
+
+    /** Drop labels are manager/admin only: the active signed-in operator's ForgeDesk role decides. */
+    protected function canDropLabel(): bool
+    {
+        $id = $this->activeOperatorId();
+
+        return $id !== null
+            && in_array(FdUser::where('active', true)->whereKey($id)->value('role'), ['manager', 'admin'], true);
+    }
+
+    public function openDropLabel(): void
+    {
+        if (! $this->canDropLabel()) {
+            $this->lastError = 'Drop labels are limited to managers and admins - sign in as one first.';
+
+            return;
+        }
+
+        $this->modal = 'droplabel';
+        $this->dropPart = '';
+        $this->dropFinish = null;
+        $this->dropLength = '';
+        $this->dropError = '';
+    }
+
+    /**
+     * Finishes available for the typed part number: only products with a drop rack set up.
+     * A baked-in suffix ("E14025-BL") is accepted and stripped.
+     *
+     * @return \Illuminate\Support\Collection<int, string> finish code => label
+     */
+    public function dropFinishOptions(): Collection
+    {
+        [$partNumber] = Part::profileKey(trim($this->dropPart), null);
+
+        if (! $partNumber) {
+            return collect();
+        }
+
+        return Product::whereRaw('LOWER(part_number) = ?', [strtolower($partNumber)])
+            ->where('drop_rack_enabled', true)
+            ->whereNotNull('finish')
+            ->orderBy('finish')
+            ->get()
+            ->mapWithKeys(fn (Product $p) => [$p->finish => Product::$finishCodes[$p->finish] ?? $p->finish]);
+    }
+
+    public function updatedDropPart(): void
+    {
+        $options = $this->dropFinishOptions();
+
+        if ($this->dropFinish && ! $options->has($this->dropFinish)) {
+            $this->dropFinish = null;
+        }
+        if ($options->count() === 1) {
+            $this->dropFinish = (string) $options->keys()->first();
+        }
+        $this->dropError = '';
+    }
+
+    public function printManualDropLabel(TigerBridgeClient $bridge, Request $request): void
+    {
+        if (! $this->canDropLabel()) {
+            $this->lastError = 'Drop labels are limited to managers and admins.';
+            $this->modal = null;
+
+            return;
+        }
+
+        if (! $this->authorizedTabletRequest($request)) {
+            $this->lastError = 'This action is only available from the cut station tablet.';
+            $this->modal = null;
+
+            return;
+        }
+
+        $options = $this->dropFinishOptions();
+        $length = Dimension::parse($this->dropLength);
+
+        if ($options->isEmpty()) {
+            $this->dropError = 'No drop-rack part found with that part number.';
+
+            return;
+        }
+        if (! $this->dropFinish || ! $options->has($this->dropFinish)) {
+            $this->dropError = 'Select a color.';
+
+            return;
+        }
+        if ($length <= 0) {
+            $this->dropError = 'Enter the drop length.';
+
+            return;
+        }
+
+        // Rack tags carry the floored length, so anything under one tag step can't be racked.
+        if (DropPlanner::tagFor($length) <= 0) {
+            $this->dropError = 'Drop is shorter than '.DropPlanner::TAG_STEP.'" - too short to rack.';
+
+            return;
+        }
+
+        [$partNumber] = Part::profileKey(trim($this->dropPart), null);
+        $partNumber = Product::whereRaw('LOWER(part_number) = ?', [strtolower($partNumber)])->value('part_number') ?? $partNumber;
+
+        CutLogEntry::create([
+            'uuid' => (string) Str::uuid(),
+            'part_id' => null,
+            'part_name' => $partNumber,
+            'finish' => $this->dropFinish,
+            'operator_id' => $this->activeOperatorId(),
+            'operator_name' => $this->activeOperatorName(),
+            'description' => 'Drop (manual label)',
+            'dimension_inches' => $length,
+            'type' => 'drop',
+        ]);
+
+        $result = $this->printDropTag($bridge, 'drop', $partNumber, $this->dropFinish, $length);
+
+        if (! $result['ok']) {
+            $this->dropError = $result['error'] ?? 'Drop label print failed';
+
+            return;
+        }
+
+        $this->modal = null;
     }
 
     public function openStick(): void
@@ -1796,6 +1935,8 @@ class Dashboard extends Component
                 ? Part::photoProductFor($this->activeProfileName, $this->activeProfileFinish)?->photo_url
                 : null,
             'recutGroups' => $recutGroups,
+            'canDropLabel' => $this->canDropLabel(),
+            'dropFinishOptions' => $this->modal === 'droplabel' ? $this->dropFinishOptions() : collect(),
             'nextProfiles' => ($signedIn && ! $this->activeStickId && ! $this->activeProfileName)
                 ? $planner->activeProfiles($this->activeJobIds)->each(fn ($p) => $p->photo_url = Part::photoProductFor($p->name, $p->finish)?->photo_url)
                 : collect(),
